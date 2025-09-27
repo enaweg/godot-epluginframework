@@ -1,0 +1,28 @@
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2012
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EPlugin Framework", "EPlugin Framework.csproj", "{4CF98149-DFDF-4131-95E8-C37941A3520E}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "External Files", "External Files", "{9D1367A2-6BC6-4031-8768-191BA1247833}"
+	ProjectSection(SolutionItems) = preProject
+		..\..\LICENSE = ..\..\LICENSE
+		..\..\README.md = ..\..\README.md
+		..\..\.editorconfig = ..\..\.editorconfig
+		..\..\.gitattributes = ..\..\.gitattributes
+		..\..\.gitignore = ..\..\.gitignore
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+	Debug|Any CPU = Debug|Any CPU
+	ExportDebug|Any CPU = ExportDebug|Any CPU
+	ExportRelease|Any CPU = ExportRelease|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4CF98149-DFDF-4131-95E8-C37941A3520E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4CF98149-DFDF-4131-95E8-C37941A3520E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4CF98149-DFDF-4131-95E8-C37941A3520E}.ExportDebug|Any CPU.ActiveCfg = ExportDebug|Any CPU
+		{4CF98149-DFDF-4131-95E8-C37941A3520E}.ExportDebug|Any CPU.Build.0 = ExportDebug|Any CPU
+		{4CF98149-DFDF-4131-95E8-C37941A3520E}.ExportRelease|Any CPU.ActiveCfg = ExportRelease|Any CPU
+		{4CF98149-DFDF-4131-95E8-C37941A3520E}.ExportRelease|Any CPU.Build.0 = ExportRelease|Any CPU
+	EndGlobalSection
+EndGlobal
