@@ -53,7 +53,7 @@ This needs more external plugins and testing to move forward. Feel free to parti
 
 Tested on:
 
-+ Godot 4.5 + .NET 9 (regression was introduced, does not work as expected, )
++ Godot 4.5 + .NET 9 (regression [Issue #110971](https://github.com/godotengine/godot/issues/110971))
 + Godot 4.4.x + .NET 9
 
 gdUnit is used as the test framework, but editor tests are not possible right now ([Issue #911](https://github.com/MikeSchulze/gdUnit4/issues/911))
