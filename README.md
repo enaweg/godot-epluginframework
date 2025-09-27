@@ -56,7 +56,9 @@ Tested on:
 + Godot 4.5 + .NET 9 (regression was introduced, does not work as expected, )
 + Godot 4.4.x + .NET 9
 
-# Example Code (Basic Plugin)
+## Examples
+
+### Example Code (Basic Plugin)
 
 ```C#
 #if TOOLS
@@ -99,7 +101,7 @@ public partial class plugin : EEditorPlugin
 #endif
 ```
 
-## Example Code (Persisted Plugin)
+### Example Code (Persisted Plugin)
 
 ```C#
 #if TOOLS
@@ -146,3 +148,6 @@ Feel free to contribute with Documentation, Testing, or PRs.
     * Automatic plugin update system using source URL
     * Plugin specific UI templates (licenses, feedback, Welcome screen)
 
+## License
+
+Licensed under the MIT license, see `LICENSE` for more information.
