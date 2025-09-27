@@ -13,7 +13,7 @@ config_version=5
 config/name="EPlugin Framework"
 config/description="Extended C# Godot Plugins"
 config/version="1.0"
-config/features=PackedStringArray("4.4", "C#", "GL Compatibility")
+config/features=PackedStringArray("4.5", "C#", "GL Compatibility")
 config/icon="res://icon.svg"
 
 [dotnet]
@@ -22,7 +22,7 @@ project/assembly_name="EPlugin Framework"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/gdUnit4/plugin.cfg")
+enabled=PackedStringArray("res://addons/ePlugin/plugin.cfg")
 
 [gdunit4]
 
