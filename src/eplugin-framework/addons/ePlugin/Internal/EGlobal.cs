@@ -55,7 +55,7 @@ internal sealed class EGlobal
     /// <param name="context"></param>
     private void StopProcessingInternal(AssemblyLoadContext? context)
     {
-        
+        GD.Print("Unloading of AssemblyContext triggered!");
         _shouldProcess = false;
         _ePluginContext = null;
         _contexts.Clear();
