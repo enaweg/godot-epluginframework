@@ -20,6 +20,15 @@ config/icon="res://icon.svg"
 
 project/assembly_name="EPlugin Framework"
 
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/gdUnit4/plugin.cfg")
+
+[gdunit4]
+
+settings/test/test_lookup_folder="Tests"
+settings/test/test_discovery=true
+
 [rendering]
 
 renderer/rendering_method="gl_compatibility"
