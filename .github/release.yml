@@ -1,0 +1,16 @@
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+      - github-actions
+  categories:
+    - title: Breaking Changes 🛠
+      labels:
+        - breaking-change
+    - title: New Features 🎉
+      labels:
+        - enhancement
+        - feature
+    - title: Other Changes 🔄
+      labels:
+        - "*"
