@@ -5,7 +5,7 @@ using Godot;
 namespace Enaweg.Plugin;
 
 [Tool]
-public partial class EPluginPlugin : EEditorPluginBase
+public partial class EPluginPlugin : EditorPlugin
 {
 
     public override void _EnterTree()
