@@ -11,6 +11,17 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "External Files", "External 
 		..\..\.gitignore = ..\..\.gitignore
 	EndProjectSection
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".github", ".github", "{E722F3FC-CFB9-4B42-9131-B67A60C067F0}"
+	ProjectSection(SolutionItems) = preProject
+		..\..\.github\dependabot.yml = ..\..\.github\dependabot.yml
+		..\..\.github\release.yml = ..\..\.github\release.yml
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "workflows", "workflows", "{053CA8FC-A7A7-40EC-9AB1-555853AB5AE1}"
+	ProjectSection(SolutionItems) = preProject
+		..\..\.github\workflows\release.yml = ..\..\.github\workflows\release.yml
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 	Debug|Any CPU = Debug|Any CPU
@@ -24,5 +35,9 @@ Global
 		{4CF98149-DFDF-4131-95E8-C37941A3520E}.ExportDebug|Any CPU.Build.0 = ExportDebug|Any CPU
 		{4CF98149-DFDF-4131-95E8-C37941A3520E}.ExportRelease|Any CPU.ActiveCfg = ExportRelease|Any CPU
 		{4CF98149-DFDF-4131-95E8-C37941A3520E}.ExportRelease|Any CPU.Build.0 = ExportRelease|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{E722F3FC-CFB9-4B42-9131-B67A60C067F0} = {9D1367A2-6BC6-4031-8768-191BA1247833}
+		{053CA8FC-A7A7-40EC-9AB1-555853AB5AE1} = {E722F3FC-CFB9-4B42-9131-B67A60C067F0}
 	EndGlobalSection
 EndGlobal
