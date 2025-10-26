@@ -62,7 +62,6 @@ internal sealed class EGlobal
         if (_eventsRegistered)
         {
             _eventsRegistered = false;
-            EditorInterface.Singleton.GetEditorMainScreen().GetTree().ProcessFrame -= GlobalProcessor;
             AssemblyLoadContext.GetLoadContext(GetType().Assembly).Unloading -= StopProcessingInternal;
         }
     }
