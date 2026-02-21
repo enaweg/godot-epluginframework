@@ -5,9 +5,10 @@ Extended C# Godot Plugins.
 ![Godot 4.3](https://img.shields.io/badge/Godot-v4.3-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
 ![Godot 4.4](https://img.shields.io/badge/Godot-v4.4-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
 ![Godot 4.5](https://img.shields.io/badge/Godot-v4.5-202020?logo=godot-engine&logoColor=blue&color=darkorange&labelColor=202020)
-![Godot 4.6-dev](https://img.shields.io/badge/Godot-v4.6--dev-202020?logo=godot-engine&logoColor=blue&color=darkorange&labelColor=202020)
+![Godot 4.6](https://img.shields.io/badge/Godot-v4.6-202020?logo=godot-engine&logoColor=blue&color=darkorange&labelColor=202020)
 
 ![Dotnet 9](https://img.shields.io/badge/9-02020?logo=dotnet&logoSize=auto&logoColor=purple&color=darkgreen&labelColor=E0E0E0)
+![Dotnet 10](https://img.shields.io/badge/10-02020?logo=dotnet&logoSize=auto&logoColor=purple&color=darkgreen&labelColor=E0E0E0)
 
 **NOTE**: This is currently in an experimental state and very much WIP!
 
@@ -54,6 +55,7 @@ This needs more external plugins and testing to move forward. Feel free to parti
 
 Tested on:
 
++ Godot 4.6.x + .NET 10 (regression [Issue #110971](https://github.com/godotengine/godot/issues/110971)
 + Godot 4.5 + .NET 9 (regression [Issue #110971](https://github.com/godotengine/godot/issues/110971))
 + Godot 4.4.x + .NET 9
 
