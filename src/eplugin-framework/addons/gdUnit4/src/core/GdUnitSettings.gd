@@ -21,6 +21,7 @@ const TEST_SUITE_NAMING_CONVENTION = GROUP_TEST + "/test_suite_naming_convention
 const TEST_DISCOVER_ENABLED = GROUP_TEST + "/test_discovery"
 const TEST_FLAKY_CHECK = GROUP_TEST + "/flaky_check_enable"
 const TEST_FLAKY_MAX_RETRIES = GROUP_TEST + "/flaky_max_retries"
+const TEST_RERUN_UNTIL_FAILURE_RETRIES = GROUP_TEST + "/rerun_until_failure_retries"
 
 
 # Report Setiings
@@ -38,6 +39,23 @@ const REPORT_ASSERT_STRICT_NUMBER_TYPE_COMPARE = GROUP_ASSERT + "/strict_number_
 const CATEGORY_LOGGING := "debug/file_logging/"
 const STDOUT_ENABLE_TO_FILE = CATEGORY_LOGGING + "enable_file_logging"
 const STDOUT_WITE_TO_FILE = CATEGORY_LOGGING + "log_path"
+
+# Godot GDScript warning settings
+const CATEGORY_GDSCRIPT_WARNINGS := "debug/gdscript/warnings/"
+const GDSCRIPT_WARNINGS_INFERRED_DECLARATION := CATEGORY_GDSCRIPT_WARNINGS + "inferred_declaration"
+const GDSCRIPT_WARNINGS_EXCLUDE_ADDONS := CATEGORY_GDSCRIPT_WARNINGS + "exclude_addons"
+const GDSCRIPT_WARNINGS_DIRECTORY_RULES := CATEGORY_GDSCRIPT_WARNINGS + "directory_rules"
+
+enum GdScriptWarningMode {
+	IGNORE = 0,
+	WARN = 1,
+	ERROR = 2,
+}
+
+enum GdScriptWarningDirectoryMode {
+	EXCLUDE = 0,
+	INCLUDE = 1,
+}
 
 
 # GdUnit Templates
@@ -62,6 +80,7 @@ const SHORTCUT_INSPECTOR_RERUN_TEST = GROUP_SHORTCUT_INSPECTOR + "/rerun_test"
 const SHORTCUT_INSPECTOR_RERUN_TEST_DEBUG = GROUP_SHORTCUT_INSPECTOR + "/rerun_test_debug"
 const SHORTCUT_INSPECTOR_RUN_TEST_OVERALL = GROUP_SHORTCUT_INSPECTOR + "/run_test_overall"
 const SHORTCUT_INSPECTOR_RUN_TEST_STOP = GROUP_SHORTCUT_INSPECTOR + "/run_test_stop"
+const SHORTCUT_INSPECTOR_RERUN_TEST_UNTIL_FAILURE = GROUP_SHORTCUT_INSPECTOR + "/rerun_test_until_failure"
 
 const GROUP_SHORTCUT_EDITOR = SHORTCUT_SETTINGS + "/editor"
 const SHORTCUT_EDITOR_RUN_TEST = GROUP_SHORTCUT_EDITOR + "/run_test"
@@ -79,7 +98,7 @@ const INSPECTOR_TOOLBAR_BUTTON_RUN_OVERALL = GROUP_UI_TOOLBAR + "/run_overall"
 
 # Feature flags
 const GROUP_FEATURE = MAIN_CATEGORY + "/feature"
-const HOOK_SETTINGS_VISIBLE = GROUP_FEATURE + "/hook_settings_visible"
+
 
 # defaults
 # server connection timeout in minutes
@@ -112,6 +131,7 @@ static func setup() -> void:
 	create_property_if_need(TEST_DISCOVER_ENABLED, false, "Automatically detect new tests in test lookup folders at runtime")
 	create_property_if_need(TEST_FLAKY_CHECK, false, "Rerun tests on failure and mark them as FLAKY")
 	create_property_if_need(TEST_FLAKY_MAX_RETRIES, 3, "Sets the number of retries for rerunning a flaky test")
+	create_property_if_need(TEST_RERUN_UNTIL_FAILURE_RETRIES, 10, "The number of reruns until the test fails.")
 	# report settings
 	create_property_if_need(REPORT_PUSH_ERRORS, false, "Report push_error() as failure")
 	create_property_if_need(REPORT_SCRIPT_ERRORS, true, "Report script errors as failure")
@@ -130,7 +150,7 @@ static func setup() -> void:
 		"Show 'Run overall Tests' button in the inspector toolbar")
 	create_property_if_need(TEMPLATE_TS_GD, GdUnitTestSuiteTemplate.default_GD_template(), "Test suite template to use")
 	create_shortcut_properties_if_need()
-	create_property_if_need(SESSION_HOOKS, PackedStringArray())
+	create_property_if_need(SESSION_HOOKS, {} as Dictionary[String,bool])
 	migrate_properties()
 
 
@@ -148,6 +168,7 @@ static func create_shortcut_properties_if_need() -> void:
 	# inspector
 	create_property_if_need(SHORTCUT_INSPECTOR_RERUN_TEST, GdUnitShortcut.default_keys(GdUnitShortcut.ShortCut.RERUN_TESTS), "Rerun the most recently executed tests")
 	create_property_if_need(SHORTCUT_INSPECTOR_RERUN_TEST_DEBUG, GdUnitShortcut.default_keys(GdUnitShortcut.ShortCut.RERUN_TESTS_DEBUG), "Rerun the most recently executed tests (Debug mode)")
+	create_property_if_need(SHORTCUT_INSPECTOR_RERUN_TEST_UNTIL_FAILURE, GdUnitShortcut.default_keys(GdUnitShortcut.ShortCut.RERUN_TESTS_UNTIL_FAILURE), "Rerun tests until failure occurs")
 	create_property_if_need(SHORTCUT_INSPECTOR_RUN_TEST_OVERALL, GdUnitShortcut.default_keys(GdUnitShortcut.ShortCut.RUN_TESTS_OVERALL), "Runs all tests (Debug mode)")
 	create_property_if_need(SHORTCUT_INSPECTOR_RUN_TEST_STOP, GdUnitShortcut.default_keys(GdUnitShortcut.ShortCut.STOP_TEST_RUN), "Stop the current test execution")
 	# script editor
@@ -155,8 +176,8 @@ static func create_shortcut_properties_if_need() -> void:
 	create_property_if_need(SHORTCUT_EDITOR_RUN_TEST_DEBUG, GdUnitShortcut.default_keys(GdUnitShortcut.ShortCut.RUN_TESTCASE_DEBUG), "Run the currently selected test (Debug mode).")
 	create_property_if_need(SHORTCUT_EDITOR_CREATE_TEST, GdUnitShortcut.default_keys(GdUnitShortcut.ShortCut.CREATE_TEST), "Create a new test case for the currently selected function")
 	# filesystem
-	create_property_if_need(SHORTCUT_FILESYSTEM_RUN_TEST, GdUnitShortcut.default_keys(GdUnitShortcut.ShortCut.NONE), "Run all test suites in the selected folder or file")
-	create_property_if_need(SHORTCUT_FILESYSTEM_RUN_TEST_DEBUG, GdUnitShortcut.default_keys(GdUnitShortcut.ShortCut.NONE), "Run all test suites in the selected folder or file (Debug)")
+	create_property_if_need(SHORTCUT_FILESYSTEM_RUN_TEST, GdUnitShortcut.default_keys(GdUnitShortcut.ShortCut.RUN_TESTSUITE), "Run all test suites in the selected folder or file")
+	create_property_if_need(SHORTCUT_FILESYSTEM_RUN_TEST_DEBUG, GdUnitShortcut.default_keys(GdUnitShortcut.ShortCut.RUN_TESTSUITE_DEBUG), "Run all test suites in the selected folder or file (Debug)")
 
 
 static func create_property_if_need(name :String, default :Variant, help :="", value_set := PackedStringArray()) -> void:
@@ -207,12 +228,15 @@ static func set_log_path(path :String) -> void:
 	ProjectSettings.save()
 
 
-static func get_session_hooks() -> PackedStringArray:
+static func get_session_hooks() -> Dictionary[String, bool]:
 	var property := get_property(SESSION_HOOKS)
-	return property.value() if property != null else []
+	if property == null:
+		return {}
+	var hooks: Dictionary[String, bool] = property.value()
+	return hooks
 
 
-static func set_session_hooks(hooks: PackedStringArray) -> void:
+static func set_session_hooks(hooks: Dictionary[String, bool]) -> void:
 	var property := get_property(SESSION_HOOKS)
 	property.set_value(hooks)
 	update_property(property)
@@ -303,6 +327,10 @@ static func get_flaky_max_retries() -> int:
 	return get_setting(TEST_FLAKY_MAX_RETRIES, 3)
 
 
+static func get_rerun_max_retries() -> int:
+	return get_setting(TEST_RERUN_UNTIL_FAILURE_RETRIES, 10)
+
+
 static func set_test_discover_enabled(enable :bool) -> void:
 	var property := get_property(TEST_DISCOVER_ENABLED)
 	property.set_value(enable)
@@ -311,6 +339,32 @@ static func set_test_discover_enabled(enable :bool) -> void:
 
 static func is_log_enabled() -> bool:
 	return ProjectSettings.get_setting(STDOUT_ENABLE_TO_FILE)
+
+
+static func validate_is_inferred_declaration_enabled() -> GdUnitResult:
+	if ProjectSettings.get_setting(GDSCRIPT_WARNINGS_INFERRED_DECLARATION) == GdScriptWarningMode.IGNORE:
+		return GdUnitResult.success()
+
+	if Engine.get_version_info().hex >= 0x40600:
+		var directory_rules: Dictionary = ProjectSettings.get_setting(GDSCRIPT_WARNINGS_DIRECTORY_RULES)
+		# Find the most specific matching rule (longest path wins)
+		var best_match := ""
+		for path: String in directory_rules.keys():
+			if "res://addons/gdUnit4".begins_with(path) and path.length() > best_match.length():
+				best_match = path
+		var is_excluded :bool = not best_match.is_empty() and directory_rules[best_match] == GdScriptWarningDirectoryMode.EXCLUDE
+		if not is_excluded:
+			return GdUnitResult.error("""
+				GdUnit4: 'inferred_declaration' is set to Warning/Error!
+				GdUnit4 is not 'inferred_declaration' safe, you have to exclude the addon (debug/gdscript/warnings/directory_rules)
+				""".dedent().strip_edges())
+	else:
+		if not ProjectSettings.get_setting(GDSCRIPT_WARNINGS_EXCLUDE_ADDONS):
+			return GdUnitResult.error("""
+				GdUnit4: 'inferred_declaration' is set to Warning/Error!
+				GdUnit4 is not 'inferred_declaration' safe, you have to exclude addons (debug/gdscript/warnings/exclude_addons)
+				""".dedent().strip_edges())
+	return GdUnitResult.success()
 
 
 static func list_settings(category: String) -> Array[GdUnitProperty]:
@@ -428,5 +482,10 @@ static func dump_to_tmp() -> void:
 
 
 static func restore_dump_from_tmp() -> void:
-	@warning_ignore("return_value_discarded")
-	DirAccess.copy_absolute("user://project_settings.godot", "res://project.godot")
+	# Only restore if the current project.godot differs from the backup to avoid
+	# triggering a "file newer on disk" dialog in the editor
+	var backup := FileAccess.get_file_as_bytes("user://project_settings.godot")
+	var current := FileAccess.get_file_as_bytes("res://project.godot")
+	if backup == current:
+		return
+	var _error := DirAccess.copy_absolute("user://project_settings.godot", "res://project.godot")
