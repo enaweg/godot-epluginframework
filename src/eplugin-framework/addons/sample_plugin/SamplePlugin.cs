@@ -1,8 +1,6 @@
 #if TOOLS
 using Godot;
-using System;
 using Enaweg.Plugin;
-using Enaweg.Plugin.Internal;
 
 [Tool]
 public partial class SamplePlugin : EditorPlugin, IEEditorPlugin
@@ -17,19 +15,18 @@ public partial class SamplePlugin : EditorPlugin, IEEditorPlugin
     public override void _EnterTree()
     {
         base._EnterTree();
-        EGlobal.Instance.EnsureEEditorPluginEnabled();
-        EGlobal.Instance.Register(this);
+        this.EPluginService.Register();
     }
 
     public override void _EnablePlugin()
     {
         base._EnablePlugin();
-        EGlobal.Instance.Activate(this);
+        this.EPluginService.Activate();
     }
 
     public override void _DisablePlugin()
     {
-        EGlobal.Instance.Deactivate(this);
+        this.EPluginService.Deactivate();
         base._DisablePlugin();
     }
 }

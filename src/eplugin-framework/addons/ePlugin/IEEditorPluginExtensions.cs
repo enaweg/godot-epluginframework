@@ -1,5 +1,6 @@
 #if TOOLS
 using Enaweg.Plugin.Internal;
+using EPluginFramework.addons.ePlugin.Internal;
 using Godot;
 
 namespace Enaweg.Plugin;
@@ -7,67 +8,72 @@ namespace Enaweg.Plugin;
 [Tool]
 public static class IEEditorPluginExtensions
 {
-    public static IDotnet Cli(this IEEditorPlugin editorPlugin)
+    extension(IEEditorPlugin ePlugin)
     {
-        var context = EGlobal.Instance.GetContext(editorPlugin);
+        public IEEditorPluginService EPluginService => new IntegrationWrapper(ePlugin);
         
-        var cli = EGlobal.Instance.GetCli(editorPlugin);
-        cli.UseLogger(context?.Logger);
-        return cli;
-    }
-
-    public static bool AddNuget(this IEEditorPlugin plugin, string nugetName, string? version = null,
-        string? source = null)
-    {
-        return plugin.Cli().Call.AddNugetToProject(nugetName, version, source);
-    }
-
-    public static void RemoveNuget(this IEEditorPlugin plugin, params string[] nugetNames)
-    {
-        foreach (var nugetName in nugetNames)
+        public IDotnet Cli()
         {
-            plugin.Cli().Call.RemoveNugetFromProject(nugetName);
-        }
-    }
+            var context = EGlobal.Instance.GetContext(ePlugin);
 
-    public static void AddProject(this IEEditorPlugin plugin, string projectPath, string? virtualFolderName = null,
-        bool addReference = true)
-    {
-        plugin.Cli().Call.AddProjectToSolution(projectPath, virtualFolderName);
-        if (addReference)
+            var cli = EGlobal.Instance.GetCli(ePlugin);
+            cli.UseLogger(context?.Logger);
+            return cli;
+        }
+
+        public bool AddNuget(string nugetName, string? version = null,
+            string? source = null)
         {
-            plugin.Cli().Call.AddProjectReference(projectPath);
+            return ePlugin.Cli().Call.AddNugetToProject(nugetName, version, source);
         }
-    }
 
-    public static void RemoveProject(this IEEditorPlugin plugin, params string[] projectPaths)
-    {
-        foreach (var projectPath in projectPaths)
+        public void RemoveNuget(params string[] nugetNames)
         {
-            plugin.Cli().Call.RemoveProjectReference(projectPath);
-            plugin.Cli().Call.RemoveProjectFromSolution(projectPath);
+            foreach (var nugetName in nugetNames)
+            {
+                ePlugin.Cli().Call.RemoveNugetFromProject(nugetName);
+            }
         }
-    }
 
-    public static void AddProjectReference(this IEEditorPlugin plugin, params string[] projectReference)
-    {
-        foreach (var reference in projectReference)
+        public void AddProject(string projectPath, string? virtualFolderName = null,
+            bool addReference = true)
         {
-            plugin.Cli().Call.AddProjectReference(reference);
+            ePlugin.Cli().Call.AddProjectToSolution(projectPath, virtualFolderName);
+            if (addReference)
+            {
+                ePlugin.Cli().Call.AddProjectReference(projectPath);
+            }
         }
-    }
 
-    public static void RemoveProjectReference(this IEEditorPlugin plugin, params string[] projectReference)
-    {
-        foreach (var reference in projectReference)
+        public void RemoveProject(params string[] projectPaths)
         {
-            plugin.Cli().Call.RemoveProjectReference(reference);
+            foreach (var projectPath in projectPaths)
+            {
+                ePlugin.Cli().Call.RemoveProjectReference(projectPath);
+                ePlugin.Cli().Call.RemoveProjectFromSolution(projectPath);
+            }
         }
-    }
 
-    public static void RebuildAll(this IEEditorPlugin plugin)
-    {
-        plugin.Cli().Call.RebuildSolution();
+        public void AddProjectReference(params string[] projectReference)
+        {
+            foreach (var reference in projectReference)
+            {
+                ePlugin.Cli().Call.AddProjectReference(reference);
+            }
+        }
+
+        public void RemoveProjectReference(params string[] projectReference)
+        {
+            foreach (var reference in projectReference)
+            {
+                ePlugin.Cli().Call.RemoveProjectReference(reference);
+            }
+        }
+
+        public void RebuildAll()
+        {
+            ePlugin.Cli().Call.RebuildSolution();
+        }
     }
 }
 #endif
