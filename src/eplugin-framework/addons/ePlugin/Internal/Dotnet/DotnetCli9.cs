@@ -7,7 +7,7 @@ using Godot;
 
 namespace Enaweg.Plugin.Internal.Dotnet;
 
-internal sealed class DotnetCli9(ILogger logger) : DotnetCliBase(logger), IDotnetCli
+internal sealed class DotnetCli9(ILogger? logger) : DotnetCliBase(logger), IDotnetCli
 {
     private const string CmdDotNet = "dotnet";
 
@@ -33,7 +33,7 @@ internal sealed class DotnetCli9(ILogger logger) : DotnetCliBase(logger), IDotne
         ]);
     }
 
-    public override void AddProjectToSolution(string projectPath, string virtualFolderName = null)
+    public override void AddProjectToSolution(string projectPath, string? virtualFolderName = null)
     {
         var pathToSolution = ProjectSettings.GlobalizePath("res://");
 
@@ -58,7 +58,7 @@ internal sealed class DotnetCli9(ILogger logger) : DotnetCliBase(logger), IDotne
         }
     }
 
-    public override bool AddNugetToProject(string nugetName, string version = null, string source = null,
+    public override bool AddNugetToProject(string nugetName, string? version = null, string? source = null,
         bool prerelease = false)
     {
         var globalSourcePath = ProjectSettings.GlobalizePath(source);

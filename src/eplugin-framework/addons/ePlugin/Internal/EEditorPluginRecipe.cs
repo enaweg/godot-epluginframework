@@ -1,16 +1,17 @@
-﻿using System.Collections.Generic;
+﻿#if TOOLS
+using System.Collections.Generic;
 
 namespace GContainer.addons.ePlugin.Internal;
 
 internal sealed class EEditorPluginRecipe
 {
-    internal record Plugin(string slug, string? version);
+    internal record Plugin(string Slug, string? Version);
 
-    internal record Project(string path, string? folderName, bool reference);
+    internal record Project(string Path, string? FolderName, bool Reference);
 
-    internal record Nuget(string name, string? version, string? source);
+    internal record Nuget(string Name, string? Version, string? Source);
 
-    internal record Autoload(string name, string path);
+    internal record Autoload(string Name, string Path);
 
     public List<Plugin> PluginDependencies { get; init; } = [];
     public List<Project> Projects { get; init; } = [];
@@ -20,3 +21,4 @@ internal sealed class EEditorPluginRecipe
     
     public List<string> Directories { get; init; } = [];
 }
+#endif

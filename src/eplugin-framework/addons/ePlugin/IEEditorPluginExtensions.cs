@@ -5,22 +5,24 @@ using Godot;
 namespace Enaweg.Plugin;
 
 [Tool]
-public static class EEditorPluginExtensions
+public static class IEEditorPluginExtensions
 {
-    public static IDotnet Cli(this EEditorPlugin editorPlugin)
+    public static IDotnet Cli(this IEEditorPlugin editorPlugin)
     {
+        var context = EGlobal.Instance.GetContext(editorPlugin);
+        
         var cli = EGlobal.Instance.GetCli(editorPlugin);
-        cli.UseLogger(editorPlugin.Logger);
+        cli.UseLogger(context?.Logger);
         return cli;
     }
 
-    public static bool AddNuget(this EEditorPlugin plugin, string nugetName, string? version = null,
+    public static bool AddNuget(this IEEditorPlugin plugin, string nugetName, string? version = null,
         string? source = null)
     {
         return plugin.Cli().Call.AddNugetToProject(nugetName, version, source);
     }
 
-    public static void RemoveNuget(this EEditorPlugin plugin, params string[] nugetNames)
+    public static void RemoveNuget(this IEEditorPlugin plugin, params string[] nugetNames)
     {
         foreach (var nugetName in nugetNames)
         {
@@ -28,7 +30,7 @@ public static class EEditorPluginExtensions
         }
     }
 
-    public static void AddProject(this EEditorPlugin plugin, string projectPath, string? virtualFolderName = null,
+    public static void AddProject(this IEEditorPlugin plugin, string projectPath, string? virtualFolderName = null,
         bool addReference = true)
     {
         plugin.Cli().Call.AddProjectToSolution(projectPath, virtualFolderName);
@@ -38,7 +40,7 @@ public static class EEditorPluginExtensions
         }
     }
 
-    public static void RemoveProject(this EEditorPlugin plugin, params string[] projectPaths)
+    public static void RemoveProject(this IEEditorPlugin plugin, params string[] projectPaths)
     {
         foreach (var projectPath in projectPaths)
         {
@@ -47,7 +49,7 @@ public static class EEditorPluginExtensions
         }
     }
 
-    public static void AddProjectReference(this EEditorPlugin plugin, params string[] projectReference)
+    public static void AddProjectReference(this IEEditorPlugin plugin, params string[] projectReference)
     {
         foreach (var reference in projectReference)
         {
@@ -55,7 +57,7 @@ public static class EEditorPluginExtensions
         }
     }
 
-    public static void RemoveProjectReference(this EEditorPlugin plugin, params string[] projectReference)
+    public static void RemoveProjectReference(this IEEditorPlugin plugin, params string[] projectReference)
     {
         foreach (var reference in projectReference)
         {
@@ -63,7 +65,7 @@ public static class EEditorPluginExtensions
         }
     }
 
-    public static void RebuildAll(this EEditorPlugin plugin)
+    public static void RebuildAll(this IEEditorPlugin plugin)
     {
         plugin.Cli().Call.RebuildSolution();
     }

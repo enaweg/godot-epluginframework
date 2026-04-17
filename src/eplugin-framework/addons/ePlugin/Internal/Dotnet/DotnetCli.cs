@@ -10,7 +10,7 @@ internal sealed class DotnetCli : ExecuteCliBase, IDotnet
 {
     private const string CmdDotNet = "dotnet";
 
-    private ILogger _logger;
+    private ILogger? _logger;
 
     private string? _dotnetVersion = null;
     private bool? _isDotnetAvailable = null;
@@ -74,7 +74,7 @@ internal sealed class DotnetCli : ExecuteCliBase, IDotnet
         get => _call;
     }
 
-    public DotnetCli(ILogger logger)
+    public DotnetCli(ILogger? logger)
     {
         _logger = logger;
 
@@ -91,12 +91,12 @@ internal sealed class DotnetCli : ExecuteCliBase, IDotnet
 
         if (!IsDotnetAvailable)
         {
-            _logger.Error(
+            _logger?.Error(
                 "The dotnet command line tool could not be executed, make sure it is installed and accessible.");
         }
     }
 
-    public void UseLogger(ILogger logger)
+    public void UseLogger(ILogger? logger)
     {
         _logger = logger;
         _call.UseLogger(logger);
@@ -114,7 +114,7 @@ internal sealed class DotnetCli : ExecuteCliBase, IDotnet
         }
         catch (Exception ex)
         {
-            _logger.Error(ex.Message);
+            _logger?.Error(ex.Message);
         }
 
         return false;

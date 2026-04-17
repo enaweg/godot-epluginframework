@@ -1,4 +1,4 @@
-﻿#if TOOLS
+﻿
 namespace Enaweg.Plugin.Logging;
 
 /// <summary>
@@ -18,4 +18,3 @@ public sealed class NullLogger : ILogger
     {
     }
 }
-#endif

@@ -1,4 +1,4 @@
-﻿#if TOOLS
+﻿
 namespace Enaweg.Plugin.Logging;
 
 /// <summary>
@@ -24,4 +24,3 @@ public interface ILogger
     /// <param name="message"></param>
     void Error(string message);
 }
-#endif

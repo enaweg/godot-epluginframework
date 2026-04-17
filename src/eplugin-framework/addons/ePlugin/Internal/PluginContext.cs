@@ -2,19 +2,23 @@
 using System;
 using Enaweg.Plugin.Logging;
 using GContainer.addons.ePlugin;
+using Godot;
 
 namespace Enaweg.Plugin.Internal;
 
-internal sealed class PluginContext(EEditorPlugin plugin)
+[Tool]
+internal sealed class PluginContext(IEEditorPlugin plugin, ILogger? logger)
 {
-    public string Slug { get; init; } = plugin.PluginSlug;
-    public string Name { get; init; } = plugin.Metadata?.Name ?? plugin.PluginSlug;
-    public string Version { get; init; } = plugin.Metadata?.Version ?? string.Empty;
-    public string Description { get; init; } = plugin.Metadata?.Description ?? string.Empty;
+    public string Slug { get; init; } = plugin.GodotPlugin.GetPluginSlug();
+    public string Name { get; init; } = plugin.GodotPlugin.ReadMetadata()?.Name ?? plugin.GodotPlugin.GetPluginSlug();
+    public string Version { get; init; } = plugin.GodotPlugin.ReadMetadata()?.Version ?? string.Empty;
+    public string Description { get; init; } = plugin.GodotPlugin.ReadMetadata()?.Description ?? string.Empty;
 
-    public ILogger Logger { get; init; } = plugin.Logger;
+    public string Directory { get; init; } = plugin.GodotPlugin.GetPluginDirectory();
+    
+    public ILogger? Logger { get; init; } = logger;
 
-    public EEditorPlugin? Plugin { get; set; } = plugin;
+    public IEEditorPlugin? Plugin { get; set; } = plugin;
     public EEditorPluginState State { get; set; } = EEditorPluginState.Created;
     public EEditorPluginBuilder Builder { get; init; } = EEditorPluginBuilder.Create();
 

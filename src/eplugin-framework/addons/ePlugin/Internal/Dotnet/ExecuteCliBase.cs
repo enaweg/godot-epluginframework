@@ -9,14 +9,14 @@ namespace Enaweg.Plugin.Internal.Dotnet;
 
 public abstract class ExecuteCliBase
 {
-    protected (int, string[]) ExecuteCall(ILogger logger, string cmd, string[] args)
+    protected (int, string[]) ExecuteCall(ILogger? logger, string cmd, string[] args)
     {
         var pathToSolution = ProjectSettings.GlobalizePath("res://");
 
         try
         {
             var result = new Array();
-            logger.Log($"Executing: {cmd} {string.Join(" ", args).Replace(pathToSolution, "<project>/")}");
+            logger?.Log($"Executing: {cmd} {string.Join(" ", args).Replace(pathToSolution, "<project>/")}");
             var exitVal = OS.Execute(cmd, args, result, true, false);
 
             var final = result.Select(e => e.ToString()).ToArray();
@@ -26,7 +26,7 @@ public abstract class ExecuteCliBase
         }
         catch (Exception ex)
         {
-            logger.Error(ex.Message);
+            logger?.Error(ex.Message);
         }
 
         return (-1, []);

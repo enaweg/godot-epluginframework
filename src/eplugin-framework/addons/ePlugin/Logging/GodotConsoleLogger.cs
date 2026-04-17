@@ -1,4 +1,4 @@
-﻿#if TOOLS
+﻿
 using System.Diagnostics;
 using Godot;
 
@@ -28,4 +28,3 @@ public sealed class GodotConsoleLogger(string prefix) : ILogger
         GD.PushError($"{prefix}| {message}");
     }
 }
-#endif

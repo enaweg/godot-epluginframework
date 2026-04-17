@@ -6,16 +6,23 @@ using Godot;
 namespace Enaweg.Plugin;
 
 [Tool]
-public partial class EPluginPlugin : EEditorPluginBase
+public sealed partial class EPluginPlugin : EditorPlugin
 {
-    protected override ILogger InitializeLogging()
+    public ILogger Logger
     {
-        return new GodotConsoleLogger(PluginSlug);
-    }
+        get
+        {
+            field ??= new GodotConsoleLogger(this.GetPluginSlug());
+
+            return field;
+        }
+        set => field = value;
+    } = null;
 
     public override void _EnterTree()
     {
         base._EnterTree();
+        EGlobal.Instance.Initialize(new GenericLoggerFactory(category => new GodotConsoleLogger(category)));
         EGlobal.Instance.StartProcessing(this);
     }
 
@@ -40,6 +47,12 @@ public partial class EPluginPlugin : EEditorPluginBase
     {
         EGlobal.Instance.StopProcessing();
         base._ExitTree();
+    }
+
+    public override void _Process(double delta)
+    {
+        base._Process(delta);
+        EGlobal.Instance.GlobalProcessor();
     }
 }
 #endif

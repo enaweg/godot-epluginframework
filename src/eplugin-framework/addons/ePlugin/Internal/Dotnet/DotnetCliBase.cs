@@ -9,9 +9,9 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli
 {
     protected readonly string SolutionPath;
     protected readonly string GodotProjectPath;
-    protected ILogger Logger;
+    protected ILogger? Logger;
 
-    protected DotnetCliBase(ILogger logger)
+    protected DotnetCliBase(ILogger? logger)
     {
         Logger = logger;
 
@@ -23,7 +23,7 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli
         GodotProjectPath = Path.Combine(pathToSolution, projectName);
     }
 
-    public void UseLogger(ILogger logger)
+    public void UseLogger(ILogger? logger)
     {
         Logger = logger;
     }
@@ -31,9 +31,9 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli
     public abstract void RebuildSolution();
     public abstract void RunTests();
     public abstract void RemoveProjectFromSolution(string projectPath);
-    public abstract void AddProjectToSolution(string projectPath, string virtualFolderName = null);
+    public abstract void AddProjectToSolution(string projectPath, string? virtualFolderName = null);
 
-    public abstract bool AddNugetToProject(string nugetName, string version = null, string source = null,
+    public abstract bool AddNugetToProject(string nugetName, string? version = null, string? source = null,
         bool prerelease = false);
 
     public abstract void RemoveNugetFromProject(string nugetName);
