@@ -1,37 +1,35 @@
 # ePlugin Framework
 
-Extended C# Godot Plugins.
+Extended C# Plugin Framework for [Godot](https://godotengine.org/).
 
-![Godot 4.3](https://img.shields.io/badge/Godot-v4.3-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
 ![Godot 4.4](https://img.shields.io/badge/Godot-v4.4-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
 ![Godot 4.5](https://img.shields.io/badge/Godot-v4.5-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
 ![Godot 4.6](https://img.shields.io/badge/Godot-v4.6-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
 
-![Dotnet 9](https://img.shields.io/badge/9-02020?logo=dotnet&logoSize=auto&logoColor=purple&color=darkorange&labelColor=E0E0E0)
 ![Dotnet 10](https://img.shields.io/badge/10-02020?logo=dotnet&logoSize=auto&logoColor=purple&color=darkgreen&labelColor=E0E0E0)
 
 **NOTE**: This is currently in an experimental state and very much WIP!
 
 ## Features
 
-+ Easy to use fluent API for plugins
++ Easy-to-use fluent API for plugins
 + on plugin activation/deactivation handling of
     + Project References
     + NuGet References
     + include/exclude Asset directories (for additional content)
 + Plugin Migration (version upgrades)
-+ Plugin Dependencies (when a root plugin is disabled all dependant plugins will be disabled too)
-+ Persistent plugin data
++ Plugin Dependencies (when a root plugin is disabled, all dependent plugins will be disabled too)
 
 ## Why?
 
 Godot's current plugin system has a few major drawbacks (especially for C#)
 
-+ Editor plugin code lives in same project as game code (every change to C# code will trigger a AssemblyContext reload
-  loosing all state)
-+ C# specific features like project references or nuget packages are not supported (for plugins)
-+ Code that uses external references can not be compiled (manually installing C# plugins is complex)
-+ for plugins in separate projects or nugets Godot does not find global classes, which makes it impossible to
++ Editor plugin code lives in the same project as game code (every change to C# code will trigger an AssemblyContext
+  reload losing all state)
++ C# specific features like project references or NuGet packages are not supported (for plugins)
++ Code that uses external references cannot be compiled (manually installing C# plugins is complex). Plugins cannot be
+  easily distributed in Godot's AssetLib.
++ for plugins in separate projects or NuGets Godot does not find global classes, which makes it impossible to
   externalize components (see: [issue #95036](https://github.com/godotengine/godot/issues/95036))
 
 As long as the state of Godot's plugin system and C# integration is as it is now, this extending framework tries to
@@ -39,9 +37,9 @@ provide some of the missing pieces for C# Plugins.
 
 ## Drawbacks
 
-+ Activating/Deactivating a ePlugin will freeze Godot's UI for the duration of installation/deinstallation of that
++ Activating/Deactivating an ePlugin will freeze Godot's UI for the duration of installation/deinstallation of that
   plugin
-+ if an error happens during installation or deinstallation the projects might be left in a non-compilable state and
++ if an error happens during installation or deinstallation, the projects might be left in a non-compilable state and
   needs manual intervention.
 
 ## What is not possible?
@@ -59,9 +57,12 @@ Tested on:
 + Godot 4.5 + .NET 10
 + Godot 4.4.x + .NET 10
 
-Godot 4.5 and newer have a regression with EditorPlugins  [Issue #110971](https://github.com/godotengine/godot/issues/110971). This is why an Interface approach is used here.
+Godot 4.5 and newer have a regression with
+EditorPlugins  [Issue #110971](https://github.com/godotengine/godot/issues/110971). This is why an Interface approach is
+used here.
 
-gdUnit is used as the test framework, but editor tests are not possible right now ([Issue #911](https://github.com/MikeSchulze/gdUnit4/issues/911))
+gdUnit is used as the test framework, but editor tests are not possible right
+now ([Issue #911](https://github.com/MikeSchulze/gdUnit4/issues/911))
 
 ## Examples
 
