@@ -4,10 +4,10 @@ Extended C# Godot Plugins.
 
 ![Godot 4.3](https://img.shields.io/badge/Godot-v4.3-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
 ![Godot 4.4](https://img.shields.io/badge/Godot-v4.4-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
-![Godot 4.5](https://img.shields.io/badge/Godot-v4.5-202020?logo=godot-engine&logoColor=blue&color=darkorange&labelColor=202020)
-![Godot 4.6](https://img.shields.io/badge/Godot-v4.6-202020?logo=godot-engine&logoColor=blue&color=darkorange&labelColor=202020)
+![Godot 4.5](https://img.shields.io/badge/Godot-v4.5-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
+![Godot 4.6](https://img.shields.io/badge/Godot-v4.6-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
 
-![Dotnet 9](https://img.shields.io/badge/9-02020?logo=dotnet&logoSize=auto&logoColor=purple&color=darkgreen&labelColor=E0E0E0)
+![Dotnet 9](https://img.shields.io/badge/9-02020?logo=dotnet&logoSize=auto&logoColor=purple&color=darkorange&labelColor=E0E0E0)
 ![Dotnet 10](https://img.shields.io/badge/10-02020?logo=dotnet&logoSize=auto&logoColor=purple&color=darkgreen&labelColor=E0E0E0)
 
 **NOTE**: This is currently in an experimental state and very much WIP!
@@ -30,7 +30,7 @@ Godot's current plugin system has a few major drawbacks (especially for C#)
 + Editor plugin code lives in same project as game code (every change to C# code will trigger a AssemblyContext reload
   loosing all state)
 + C# specific features like project references or nuget packages are not supported (for plugins)
-+ Code that uses external references can not be compiled (installing C# plugins is complex)
++ Code that uses external references can not be compiled (manually installing C# plugins is complex)
 + for plugins in separate projects or nugets Godot does not find global classes, which makes it impossible to
   externalize components (see: [issue #95036](https://github.com/godotengine/godot/issues/95036))
 
@@ -55,9 +55,11 @@ This needs more external plugins and testing to move forward. Feel free to parti
 
 Tested on:
 
-+ Godot 4.6.x + .NET 10 (regression [Issue #110971](https://github.com/godotengine/godot/issues/110971)
-+ Godot 4.5 + .NET 9 (regression [Issue #110971](https://github.com/godotengine/godot/issues/110971))
-+ Godot 4.4.x + .NET 9
++ Godot 4.6.x + .NET 10
++ Godot 4.5 + .NET 10
++ Godot 4.4.x + .NET 10
+
+Godot 4.5 and newer have a regression with EditorPlugins  [Issue #110971](https://github.com/godotengine/godot/issues/110971). This is why an Interface approach is used here.
 
 gdUnit is used as the test framework, but editor tests are not possible right now ([Issue #911](https://github.com/MikeSchulze/gdUnit4/issues/911))
 
@@ -73,8 +75,10 @@ using Enaweg.Plugin;
 namespace Enaweg.Sample;
 
 [Tool]
-public partial class plugin : EEditorPlugin
+public sealed partial class YourPlugin : EditorPlugin, IEEditorPlugin
 {
+    public EditorPlugin GodotPlugin => this;
+
     internal override void Bootstrap(IEEditorPluginBuilder builder)
     {
         builder
@@ -101,41 +105,27 @@ public partial class plugin : EEditorPlugin
             // plugins need to be provided in a deactivated state to users
             .AddDirectory($"{PluginDirectory}/.src");
     }
-}
-
-#endif
-```
-
-### Example Code (Persisted Plugin)
-
-```C#
-#if TOOLS
-using Enaweg.Plugin;
-using Godot;
-
-namespace Enaweg.SamplePersisted;
-
-[Tool]
-public partial class PersistedPlugin : EEditorPluginPersisted<PersistedPluginData>
-{
-    internal override void Bootstrap(IEEditorPluginBuilder builder)
+    
+    public override void _EnterTree()
     {
-       // ... setup using builder
+        base._EnterTree();
+        EGlobal.Instance.EnsureEEditorPluginEnabled();
+        EGlobal.Instance.Register(this);
+    }
+
+    public override void _EnablePlugin()
+    {
+        base._EnablePlugin();
+        EGlobal.Instance.Activate(this);
+    }
+
+    public override void _DisablePlugin()
+    {
+        EGlobal.Instance.Deactivate(this);
+        base._DisablePlugin();
     }
 }
-#endif
-```
 
-```C#
-#if TOOLS
-using Enaweg.Plugin;
-
-namespace Enaweg.SamplePersisted;
-
-public class PersistedPluginData :  PluginSettingsBase
-{
-    public string YourPluginDataProperty { get; set; }
-}
 #endif
 ```
 
@@ -148,6 +138,9 @@ Feel free to contribute with Documentation, Testing, or PRs.
 * stabilize current API
 * improve documentation
 * automated testing
+
+### Future
+
 * add simple UI API (show progress for plugins loading)
 * provide more APIs for plugins to use (as needed)
     * Automatic plugin update system using source URL
