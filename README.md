@@ -79,7 +79,7 @@ public sealed partial class YourPlugin : EditorPlugin, IEEditorPlugin
 {
     public EditorPlugin GodotPlugin => this;
 
-    internal override void Bootstrap(IEEditorPluginBuilder builder)
+    public void Bootstrap(IEEditorPluginBuilder builder)
     {
         builder
             // add multiple nugets at once (latest stable releases)

@@ -12,5 +12,5 @@ public interface IEEditorPlugin
 {
     public EditorPlugin GodotPlugin { get; }
     
-    internal void Bootstrap(IEEditorPluginBuilder builder);
+    public void Bootstrap(IEEditorPluginBuilder builder);
 }
