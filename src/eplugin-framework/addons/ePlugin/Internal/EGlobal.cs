@@ -32,7 +32,6 @@ internal sealed class EGlobal
     private readonly List<PluginContext> _contexts = [];
     private EPluginPlugin? _ePluginContext = null;
 
-    private bool _eventsRegistered = false;
     private bool _hasWork = false;
     private bool _shouldProcess = false;
 
@@ -106,27 +105,12 @@ internal sealed class EGlobal
         _shouldProcess = false;
         _ePluginContext = null;
         _contexts.Clear();
-        if (_eventsRegistered)
-        {
-            _eventsRegistered = false;
-
-            // this is auto-disconnected on assembly reload
-            // EditorInterface.Singleton.GetEditorMainScreen().GetTree().ProcessFrame -= GlobalProcessor;
-            // AssemblyLoadContext.GetLoadContext(GetType().Assembly).Unloading -= StopProcessingInternal;
-        }
 
         logger?.Log("Unloading done (Assembly reload)");
     }
 
     private void StartProcessing()
     {
-        if (!_eventsRegistered)
-        {
-            // AssemblyLoadContext.GetLoadContext(GetType().Assembly).Unloading += StopProcessingInternal;
-            // EditorInterface.Singleton.GetEditorMainScreen().GetTree().ProcessFrame += GlobalProcessor;
-            _eventsRegistered = true;
-        }
-
         _shouldProcess = true;
     }
 
@@ -507,7 +491,7 @@ internal sealed class EGlobal
         var ePluginNode = children.FirstOrDefault(c => c is EPluginPlugin);
         if (ePluginNode is null)
         {
-            logger.Error($"ePlugin base node not found!");
+            logger?.Error($"ePlugin base node not found!");
             return;
         }
 
