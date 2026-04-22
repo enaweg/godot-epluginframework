@@ -21,7 +21,7 @@ jobs:
       - name: Initialize version
         shell: bash
         run: |
-          echo "VERSION=$( (git describe --tags --exact-match HEAD || git rev-parse --short HEAD) | sed 's/\(.*\)-\(.*\)/\1.\2/g' )" >> "$GITHUB_ENV"
+          echo "VERSION=$( git describe --tags | sed 's/\(.*\)-\(.*\)/\1.\2/g' )" >> "$GITHUB_ENV"
 
       - name: Create artifact
         shell: bash
