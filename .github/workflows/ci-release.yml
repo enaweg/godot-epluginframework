@@ -4,13 +4,6 @@ on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
-    inputs:
-      version_override:
-        description: "version"
-        type: string
-        default: "vx.x"
-        required: true
 
 jobs:
   draft-release:
@@ -30,7 +23,7 @@ jobs:
         shell: bash
         run: |
           mkdir out/
-          git archive --prefix=addons/ePlugin --output="out/eplugin-${VERSION}.zip" ${{ github.ref }} src/eplugin-framework/addons/ePlugin
+          git archive --prefix=addons/ePlugin --output="out/ePlugin-${VERSION}.zip" ${{ github.ref }} src/eplugin-framework/addons/ePlugin
 
       - name: Build Changelog
         id: build_changelog
@@ -38,33 +31,33 @@ jobs:
         with:
           mode: "COMMIT"
           configurationJson: |
-           {
-              "template": "#{{CHANGELOG}}",
-              "categories": [
-                {
-                    "title": "## Feature",
-                    "labels": ["feat", "feature"]
-                },
-                {
-                    "title": "## Fix",
-                    "labels": ["fix", "bug"]
-                },
-                {
-                    "title": "## Other",
-                    "labels": []
-                }
-              ],
-              "ignore_labels": [
-                "ignore"
-              ],
-              "label_extractor": [
-                {
-                  "pattern": "^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test){1}(\\([\\w\\-\\.]+\\))?(!)?: ([\\w ])+([\\s\\S]*)",
-                  "on_property": "title",
-                  "target": "$1"
-                }
-              ]
-            }
+            {
+               "template": "#{{CHANGELOG}}",
+               "categories": [
+                 {
+                     "title": "## Feature",
+                     "labels": ["feat", "feature"]
+                 },
+                 {
+                     "title": "## Fix",
+                     "labels": ["fix", "bug"]
+                 },
+                 {
+                     "title": "## Other",
+                     "labels": []
+                 }
+               ],
+               "ignore_labels": [
+                 "ignore"
+               ],
+               "label_extractor": [
+                 {
+                   "pattern": "^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test){1}(\\([\\w\\-\\.]+\\))?(!)?: ([\\w ])+([\\s\\S]*)",
+                   "on_property": "title",
+                   "target": "$1"
+                 }
+               ]
+             }
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -72,10 +65,10 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.ref_name }}
-          name: "eplugin-${{ env.VERSION }}"
+          name: "ePlugin-${{ env.VERSION }}"
           body: ${{ steps.build_changelog.outputs.changelog }}
           token: ${{ secrets.GITHUB_TOKEN }}
           draft: true
-          artifacts: "out/eplugin-${{ env.VERSION }}.zip"
+          artifacts: "out/ePlugin-${{ env.VERSION }}.zip"
 
       
