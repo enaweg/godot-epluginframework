@@ -30,7 +30,7 @@ jobs:
         shell: bash
         run: |
           mkdir out/
-          git archive --output="out/eplugin-${VERSION}.zip" ${{ github.ref }}
+          git archive --prefix=addons/ePlugin --output="out/eplugin-${VERSION}.zip" ${{ github.ref }} src/eplugin-framework/addons/ePlugin
 
       - name: Build Changelog
         id: build_changelog
