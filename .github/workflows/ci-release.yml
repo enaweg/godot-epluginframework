@@ -27,7 +27,8 @@ jobs:
         shell: bash
         run: |
           mkdir out/
-          git archive --prefix=addons/ePlugin --output="out/ePlugin-${VERSION}.zip" ${{ github.ref }} src/eplugin-framework/addons/ePlugin
+          cd src/eplugin-framework
+          zip -r ../../out/ePlugin-${VERSION}.zip addons/ePlugin
 
       - name: Build Changelog
         id: build_changelog
