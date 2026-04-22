@@ -1,0 +1,56 @@
+image: registry.gitlab.com/enaweg/docker-base/godot-base:latest
+
+# NOTE: If your `project.godot` is at the repository root, set `PROJECT_PATH` below to ".".
+
+# Cache imported assets between runs
+cache:
+  key: import-assets
+  paths:
+    - .godot/imported/
+
+stages:
+  - import-assets
+  - version-project
+  - export
+  - deploy
+
+variables:
+  EXPORT_NAME: ePlugin
+  PROJECT_PATH: src/eplugin-framework
+
+workflow:
+  rules:
+    # Allow manual triggers via GitLab UI (web) or API  
+    - if: $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api" || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_PIPELINE_SOURCE == "schedule"
+      when: always  # Run pipeline for these sources  
+    # Block all other triggers (push, merge request, schedule, etc.)  
+    - when: never
+  auto_cancel:
+    on_new_commit: interruptible
+    on_job_failure: all
+
+# Open the editor to import assets in case the cache was empty or outdated
+import-assets:
+  stage: import-assets
+  script:
+    - godot --headless --verbose --editor --quit
+
+version-project:
+  stage: version-project
+  script:
+    - dotnet-gitversion /output buildserver
+    - printenv | grep "GitVersion.*"
+
+eplugin-export:
+  stage: export
+  script:
+    - printenv | grep "GitVersion.*"
+    - mkdir -v -p build/eplugin
+    - EXPORT_DIR="$(readlink -f build)"
+    - cd $PROJECT_PATH
+    - zip -r $EXPORT_DIR/linux/eplugin-v$GitVersion_FullSemVer.zip addons/eplugin
+  artifacts:
+    name: $EXPORT_NAME-$GitVersion_FullSemVer-$CI_JOB_NAME
+    expire_in: 60 min
+    paths:
+      - build/linux      
