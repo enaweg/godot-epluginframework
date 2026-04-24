@@ -27,7 +27,7 @@ internal sealed class DotnetCli10(ILogger? logger) : DotnetCliBase(logger), IDot
         Execute(null, null,
         [
             "sln",
-            SolutionPath,
+            $"\"{SolutionPath}\"",
             "remove",
             Path.Combine(pathToSolution, projectPath)
         ]);
@@ -41,7 +41,7 @@ internal sealed class DotnetCli10(ILogger? logger) : DotnetCliBase(logger), IDot
         {
             Execute(null, null, [
                 "sln",
-                SolutionPath,
+                $"\"{SolutionPath}\"",
                 "add",
                 Path.Combine(pathToSolution, projectPath)
             ]);
@@ -50,7 +50,7 @@ internal sealed class DotnetCli10(ILogger? logger) : DotnetCliBase(logger), IDot
         {
             Execute(null, null, [
                 "sln",
-                SolutionPath,
+                $"\"{SolutionPath}\"",
                 "add",
                 "-s", virtualFolderName,
                 Path.Combine(pathToSolution, projectPath)
@@ -108,7 +108,7 @@ internal sealed class DotnetCli10(ILogger? logger) : DotnetCliBase(logger), IDot
         Execute("package", "remove", [
             nugetName,
             "--project",
-            GodotProjectPath
+            $"\"{GodotProjectPath}\""
         ]);
     }
 
@@ -117,7 +117,7 @@ internal sealed class DotnetCli10(ILogger? logger) : DotnetCliBase(logger), IDot
         Execute("add", null,
         [
             "add",
-            GodotProjectPath,
+            $"\"{GodotProjectPath}\"",
             "reference",
             projectReference,
         ]);
@@ -128,7 +128,7 @@ internal sealed class DotnetCli10(ILogger? logger) : DotnetCliBase(logger), IDot
         Execute("remove", null,
         [
             "remove",
-            GodotProjectPath,
+            $"\"{GodotProjectPath}\"",
             "reference",
             projectReference,
         ]);

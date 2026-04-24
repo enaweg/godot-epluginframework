@@ -27,7 +27,7 @@ internal sealed class DotnetCli9(ILogger? logger) : DotnetCliBase(logger), IDotn
 
         Execute([
             "sln",
-            SolutionPath,
+            $"\"{SolutionPath}\"",
             "remove",
             Path.Combine(pathToSolution, projectPath)
         ]);
@@ -41,7 +41,7 @@ internal sealed class DotnetCli9(ILogger? logger) : DotnetCliBase(logger), IDotn
         {
             Execute([
                 "sln",
-                SolutionPath,
+                $"\"{SolutionPath}\"",
                 "add",
                 Path.Combine(pathToSolution, projectPath)
             ]);
@@ -50,7 +50,7 @@ internal sealed class DotnetCli9(ILogger? logger) : DotnetCliBase(logger), IDotn
         {
             Execute([
                 "sln",
-                SolutionPath,
+                $"\"{SolutionPath}\"",
                 "add",
                 "-s", virtualFolderName,
                 Path.Combine(pathToSolution, projectPath)
@@ -65,7 +65,7 @@ internal sealed class DotnetCli9(ILogger? logger) : DotnetCliBase(logger), IDotn
         var args = new List<string>();
 
         args.Add("add");
-        args.Add(GodotProjectPath);
+        args.Add($"\"{GodotProjectPath}\"");
         args.Add("package");
         args.Add(nugetName);
         if (version is not null)
@@ -108,7 +108,7 @@ internal sealed class DotnetCli9(ILogger? logger) : DotnetCliBase(logger), IDotn
     {
         Execute([
             "remove",
-            GodotProjectPath,
+            $"\"{GodotProjectPath}\"",
             "package",
             nugetName
         ]);
@@ -118,7 +118,7 @@ internal sealed class DotnetCli9(ILogger? logger) : DotnetCliBase(logger), IDotn
     {
         Execute([
             "add",
-            GodotProjectPath,
+            $"\"{GodotProjectPath}\"",
             "reference",
             projectReference,
         ]);
@@ -128,7 +128,7 @@ internal sealed class DotnetCli9(ILogger? logger) : DotnetCliBase(logger), IDotn
     {
         Execute([
             "remove",
-            GodotProjectPath,
+            $"\"{GodotProjectPath}\"",
             "reference",
             projectReference,
         ]);

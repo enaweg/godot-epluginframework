@@ -19,8 +19,8 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli
         var solutionName = $"{ProjectSettings.GetSetting("dotnet/project/assembly_name")}.sln";
         var projectName = $"{ProjectSettings.GetSetting("dotnet/project/assembly_name")}.csproj";
 
-        SolutionPath = Path.Combine(pathToSolution, solutionName);
-        GodotProjectPath = Path.Combine(pathToSolution, projectName);
+        SolutionPath = Path.GetFullPath(Path.Combine(pathToSolution, solutionName));
+        GodotProjectPath = Path.GetFullPath(Path.Combine(pathToSolution, ProjectSettings.GlobalizePath(projectName)));
     }
 
     public void UseLogger(ILogger? logger)
