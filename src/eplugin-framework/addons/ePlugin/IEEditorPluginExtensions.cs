@@ -1,17 +1,34 @@
 #if TOOLS
 using Enaweg.Plugin.Internal;
-using EPluginFramework.addons.ePlugin.Internal;
 using Godot;
 
 namespace Enaweg.Plugin;
 
+/// <summary>
+/// Convenience extensions on <see cref="IEEditorPlugin"/> for common dotnet CLI operations.
+/// </summary>
+/// <remarks>
+/// These members are intended for use inside <see cref="IEEditorPlugin.Bootstrap"/> or other
+/// editor-only code paths. They delegate to the shared <see cref="IDotnetCli"/> instance
+/// obtained from the framework.
+/// </remarks>
 [Tool]
 public static class IEEditorPluginExtensions
 {
     extension(IEEditorPlugin ePlugin)
     {
+        /// <summary>
+        /// Gets the <see cref="IEEditorPluginService"/> for this plugin.
+        /// </summary>
         public IEEditorPluginService EPluginService => new IntegrationWrapper(ePlugin);
-        
+
+        /// <summary>
+        /// Returns the shared <see cref="IDotnet"/> entry point to the dotnet CLI.
+        /// </summary>
+        /// <returns>
+        /// An <see cref="IDotnet"/> instance whose <see cref="IDotnet.Call"/> property
+        /// exposes the full <see cref="IDotnetCli"/> API.
+        /// </returns>
         public IDotnet Cli()
         {
             var context = EGlobal.Instance.GetContext(ePlugin);
@@ -21,12 +38,32 @@ public static class IEEditorPluginExtensions
             return cli;
         }
 
+        /// <summary>
+        /// Adds a NuGet package to the main Godot project.
+        /// </summary>
+        /// <param name="nugetName">The package ID to install.</param>
+        /// <param name="version">
+        /// Exact version to install. When <see langword="null"/>, the latest stable version
+        /// is resolved.
+        /// </param>
+        /// <param name="source">
+        /// Optional NuGet feed URL or local path. When <see langword="null"/>, the
+        /// configured feeds are used.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> if the package was installed successfully;
+        /// <see langword="false"/> otherwise.
+        /// </returns>
         public bool AddNuget(string nugetName, string? version = null,
             string? source = null)
         {
             return ePlugin.Cli().Call.AddNugetToProject(nugetName, version, source);
         }
 
+        /// <summary>
+        /// Removes one or more NuGet packages from the main Godot project.
+        /// </summary>
+        /// <param name="nugetNames">Package IDs to remove.</param>
         public void RemoveNuget(params string[] nugetNames)
         {
             foreach (var nugetName in nugetNames)
@@ -35,6 +72,19 @@ public static class IEEditorPluginExtensions
             }
         }
 
+        /// <summary>
+        /// Adds a C# project to the solution and optionally as a reference to the main
+        /// Godot project.
+        /// </summary>
+        /// <param name="projectPath">Path to the <c>.csproj</c> file.</param>
+        /// <param name="virtualFolderName">
+        /// Solution folder to place the project under. When <see langword="null"/>, the
+        /// project is added at the solution root.
+        /// </param>
+        /// <param name="addReference">
+        /// When <see langword="true"/> (default), a project reference is also added to the
+        /// main Godot <c>.csproj</c>.
+        /// </param>
         public void AddProject(string projectPath, string? virtualFolderName = null,
             bool addReference = true)
         {
@@ -45,6 +95,11 @@ public static class IEEditorPluginExtensions
             }
         }
 
+        /// <summary>
+        /// Removes one or more C# projects from the solution and removes their project
+        /// references from the main Godot project.
+        /// </summary>
+        /// <param name="projectPaths">Paths to the <c>.csproj</c> files to remove.</param>
         public void RemoveProject(params string[] projectPaths)
         {
             foreach (var projectPath in projectPaths)
@@ -54,6 +109,11 @@ public static class IEEditorPluginExtensions
             }
         }
 
+        /// <summary>
+        /// Adds one or more project-to-project references to the main Godot project without
+        /// touching the solution file.
+        /// </summary>
+        /// <param name="projectReference">Paths to the <c>.csproj</c> files to reference.</param>
         public void AddProjectReference(params string[] projectReference)
         {
             foreach (var reference in projectReference)
@@ -62,6 +122,11 @@ public static class IEEditorPluginExtensions
             }
         }
 
+        /// <summary>
+        /// Removes one or more project-to-project references from the main Godot project
+        /// without touching the solution file.
+        /// </summary>
+        /// <param name="projectReference">Paths to the <c>.csproj</c> files to dereference.</param>
         public void RemoveProjectReference(params string[] projectReference)
         {
             foreach (var reference in projectReference)
@@ -70,6 +135,9 @@ public static class IEEditorPluginExtensions
             }
         }
 
+        /// <summary>
+        /// Rebuilds the entire solution.
+        /// </summary>
         public void RebuildAll()
         {
             ePlugin.Cli().Call.RebuildSolution();
