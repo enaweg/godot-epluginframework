@@ -48,6 +48,7 @@ public static class EditorPluginExtensions
                 Name = cfg.GetValue("plugin", "name").AsString(),
                 Description = cfg.GetValue("plugin", "description").AsString(),
                 Version = cfg.GetValue("plugin", "version").AsString(),
+                Author = cfg.GetValue("plugin", "author").AsString(),
             };
         }
         catch (Exception ex)
