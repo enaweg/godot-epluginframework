@@ -1,6 +1,5 @@
 ﻿#if TOOLS
 using System.IO;
-using Enaweg.Plugin.Logging;
 using Godot;
 
 namespace Enaweg.Plugin.Internal;

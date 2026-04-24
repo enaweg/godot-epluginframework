@@ -1,7 +1,6 @@
 ﻿#if TOOLS
 using System;
 using Enaweg.Plugin.Logging;
-using GContainer.addons.ePlugin;
 using Godot;
 
 namespace Enaweg.Plugin.Internal;

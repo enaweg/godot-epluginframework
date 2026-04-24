@@ -1,7 +1,7 @@
 ﻿#if TOOLS
 using System.Collections.Generic;
 
-namespace GContainer.addons.ePlugin.Internal;
+namespace Enaweg.Plugin.Internal;
 
 internal sealed class EEditorPluginRecipe
 {

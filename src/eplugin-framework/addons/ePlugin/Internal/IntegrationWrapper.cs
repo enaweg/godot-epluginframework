@@ -1,7 +1,5 @@
-﻿using Enaweg.Plugin;
-using Enaweg.Plugin.Internal;
-
-namespace EPluginFramework.addons.ePlugin.Internal;
+﻿#if TOOLS
+namespace Enaweg.Plugin.Internal;
 
 internal sealed class IntegrationWrapper(IEEditorPlugin ePlugin) : IEEditorPluginService
 {
@@ -21,3 +19,4 @@ internal sealed class IntegrationWrapper(IEEditorPlugin ePlugin) : IEEditorPlugi
         EGlobal.Instance.Deactivate(ePlugin);
     }
 }
+#endif
