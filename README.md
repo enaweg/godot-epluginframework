@@ -7,6 +7,7 @@
 ![Godot 4.4](https://img.shields.io/badge/Godot-v4.4-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
 ![Godot 4.5](https://img.shields.io/badge/Godot-v4.5-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
 ![Godot 4.6](https://img.shields.io/badge/Godot-v4.6-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
+![Godot 4.7](https://img.shields.io/badge/Godot-v4.7-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
 
 ![Dotnet 10](https://img.shields.io/badge/10-02020?logo=dotnet&logoSize=auto&logoColor=purple&color=darkgreen&labelColor=E0E0E0)
 
@@ -57,9 +58,10 @@ This needs more external plugins and testing to move forward. Feel free to parti
 
 Tested on:
 
++ Godot 4.7.0 Beta 1 + .NET 10
 + Godot 4.6.2 + .NET 10
-+ Godot 4.5.x + .NET 10
-+ Godot 4.4.x + .NET 10
++ Godot 4.5.1 + .NET 10
++ Godot 4.4.1 + .NET 10
 
 Godot 4.5 and newer have a regression with
 EditorPlugins  [Issue #110971](https://github.com/godotengine/godot/issues/110971). This is why an Interface approach is
@@ -145,8 +147,8 @@ Feel free to contribute with Documentation, Testing, or PRs.
 
 ### Future
 
-* add simple UI API (show progress for plugins loading)
-* provide more APIs for plugins to use (as needed)
+* add simple UI API (show progress for plugins loading) for improved UX.
+* provide more APIs for plugins to use (Vision: make it easy to have advanced features for plugin authors)
     * Automatic plugin update system using source URL
     * Plugin specific UI templates (licenses, feedback, Welcome screen)
 
