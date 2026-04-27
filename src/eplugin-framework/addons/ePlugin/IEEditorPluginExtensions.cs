@@ -17,10 +17,6 @@ public static class IEEditorPluginExtensions
 {
     extension(IEEditorPlugin ePlugin)
     {
-        /// <summary>
-        /// Gets the <see cref="IEEditorPluginService"/> for this plugin.
-        /// </summary>
-        public IEEditorPluginService EPluginService => new IntegrationWrapper(ePlugin);
 
         /// <summary>
         /// Returns the shared <see cref="IDotnet"/> entry point to the dotnet CLI.

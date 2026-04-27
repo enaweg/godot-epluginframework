@@ -1,6 +1,5 @@
 using Enaweg.Plugin.Internal;
 using GdUnit4;
-using Godot;
 using Moq;
 
 namespace Enaweg.Plugin.Tests;

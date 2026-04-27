@@ -483,7 +483,7 @@ internal sealed class EGlobal
                 continue;
             }
 
-            context.Plugin.Reinitialize(context.Plugin.EPluginService);
+            context.Plugin.Reinitialize();
         }
     }
 

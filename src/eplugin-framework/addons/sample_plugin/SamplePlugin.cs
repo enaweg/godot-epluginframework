@@ -12,7 +12,7 @@ public partial class SamplePlugin : EditorPlugin, IEEditorPlugin
         builder.AddNuget("ZLogger");
     }
 
-    public void Reinitialize(IEEditorPluginService service)
+    public void Reinitialize()
     {
         GD.Print("Reinitializing");
     }

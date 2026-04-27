@@ -25,27 +25,12 @@ public sealed partial class EPluginPlugin : EditorPlugin
         InitializeInternals();
     }
 
-    public override void _Ready()
-    {
-        base._Ready();
-    }
-
-    public override void _EnablePlugin()
-    {
-        base._EnablePlugin();
-    }
-
     public override void _DisablePlugin()
     {
         EGlobal.Instance.DeactivateAllEEditorPlugins();
         base._DisablePlugin();
     }
-
-    public override void _ExitTree()
-    {
-        base._ExitTree();
-    }
-
+    
     public override void _Process(double delta)
     {
         base._Process(delta);
