@@ -7,7 +7,7 @@ using Godot;
 
 namespace Enaweg.Plugin.Internal.Dotnet;
 
-internal sealed class DotnetCli9(ILogger? logger) : DotnetCliBase(logger), IDotnetCli
+internal sealed class DotnetCli9(EPluginPlugin ePlugin, ILogger? logger) : DotnetCliBase(ePlugin, logger), IDotnetCli
 {
     private const string CmdDotNet = "dotnet";
 

@@ -70,7 +70,7 @@ internal sealed class EGlobal
     {
         if (_cli == null)
         {
-            _cli = new DotnetCli(plugin.Logger);
+            _cli = new DotnetCli(plugin, plugin.Logger);
         }
         else
         {
@@ -85,7 +85,7 @@ internal sealed class EGlobal
         var context = GetContext(plugin);
         if (_cli == null)
         {
-            _cli = new DotnetCli(context?.Logger);
+            _cli = new DotnetCli(_ePluginContext, context?.Logger);
         }
         else
         {

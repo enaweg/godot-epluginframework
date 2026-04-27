@@ -1,4 +1,4 @@
-#if TOOLS
+﻿#if TOOLS
 using System;
 using Enaweg.Plugin.Logging;
 using Godot;
@@ -74,25 +74,23 @@ internal sealed class DotnetCli : ExecuteCliBase, IDotnet
         get => _call;
     }
 
-    public DotnetCli(ILogger? logger)
+    public DotnetCli(EPluginPlugin ePlugin, ILogger? logger) : base(ePlugin)
     {
         _logger = logger;
-
-
-        if (Is10OrLater)
-        {
-            _call = new DotnetCli10(_logger);
-        }
-        else
-        {
-            _call = new DotnetCli9(_logger);
-        }
-
 
         if (!IsDotnetAvailable)
         {
             _logger?.Error(
                 "The dotnet command line tool could not be executed, make sure it is installed and accessible.");
+        }
+
+        if (Is10OrLater)
+        {
+            _call = new DotnetCli10(ePlugin, _logger);
+        }
+        else
+        {
+            _call = new DotnetCli9(ePlugin, _logger);
         }
     }
 
@@ -135,6 +133,7 @@ internal sealed class DotnetCli : ExecuteCliBase, IDotnet
             return result.Item2[0];
         }
 
+        
         throw new Exception("Dotnet could not be executed.");
     }
 

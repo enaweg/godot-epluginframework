@@ -1,4 +1,4 @@
-﻿#if TOOLS
+#if TOOLS
 using System;
 using System.IO;
 using System.Linq;
@@ -10,6 +10,13 @@ namespace Enaweg.Plugin.Internal.Dotnet;
 
 public abstract class ExecuteCliBase
 {
+    protected EPluginPlugin EPlugin { get; }
+
+    protected ExecuteCliBase(EPluginPlugin ePlugin)
+    {
+        EPlugin = ePlugin;
+    }
+
     protected (int, string[]) ExecuteCall(ILogger? logger, string cmd, string[] args)
     {
         var pathToSolution = Path.GetFullPath(ProjectSettings.GlobalizePath("res://"));

@@ -11,7 +11,7 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli
     protected readonly string GodotProjectPath;
     protected ILogger? Logger;
 
-    protected DotnetCliBase(ILogger? logger)
+    protected DotnetCliBase(EPluginPlugin ePlugin, ILogger? logger) : base(ePlugin)
     {
         Logger = logger;
 
