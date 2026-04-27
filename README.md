@@ -113,22 +113,9 @@ public sealed partial class YourPlugin : EditorPlugin, IEEditorPlugin
             .AddDirectory($"{PluginDirectory}/.src");
     }
     
-    public override void _EnterTree()
+    public void Reinitialize()
     {
-        base._EnterTree();
-        this.EPluginService.Register();
-    }
-
-    public override void _EnablePlugin()
-    {
-        base._EnablePlugin();
-        this.EPluginService.Activate();
-    }
-
-    public override void _DisablePlugin()
-    {
-        this.EPluginService.Deactivate();
-        base._DisablePlugin();
+        // initialize Plugin internas here, this is called if the project is opened or and assembly reload happens.
     }
 }
 
