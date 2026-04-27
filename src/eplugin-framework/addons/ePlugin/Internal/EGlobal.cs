@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using Enaweg.Plugin.Internal.Dotnet;
 using Enaweg.Plugin.Logging;
 using Godot;
@@ -472,18 +473,36 @@ internal sealed class EGlobal
             _hasWork = true;
         }
 
-
         _ePluginContext.Logger.Log($"Found {_contexts.Count} active ePlugin(s).");
 
         // initialize plugins
-        foreach (var context in _contexts)
+        var initializeTypes = Assembly.GetExecutingAssembly().GetExportedTypes()
+            .Where(t => t.IsAssignableTo(typeof(IInitialize))).ToArray();
+        
+        if (_ePluginContext.EnableDebugLogging && initializeTypes.Any())
         {
-            if (context.Plugin is null)
-            {
-                continue;
-            }
+            _ePluginContext.Logger.Log($"Calling Initializers:");
+        }
 
-            context.Plugin.Reinitialize();
+        foreach (var initializeType in initializeTypes)
+        {
+            try
+            {
+                var instance = Activator.CreateInstance(initializeType);
+                if (instance is IInitialize initializeInstance)
+                {
+                    if (_ePluginContext.EnableDebugLogging)
+                    {
+                        _ePluginContext.Logger.Log($" - Calling {initializeType.FullName}");
+                    }
+
+                    initializeInstance.Initialize(_ePluginContext);
+                }
+            }
+            catch (Exception ex)
+            {
+                _ePluginContext.Logger.Error($"Error initializing {initializeType.FullName}: {ex}");
+            }
         }
     }
 

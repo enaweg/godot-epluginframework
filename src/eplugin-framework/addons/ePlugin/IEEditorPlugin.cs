@@ -48,11 +48,5 @@ public interface IEEditorPlugin
     /// </para>
     /// </remarks>
     public void Bootstrap(IEEditorPluginBuilder builder);
-
-    /// <summary>
-    /// Will be called after EPluginPlugin finished its initialization, even after an assembly reload happened. As an
-    /// Assembly Reload will clear all C# state, this should be used to reinitialize the state of this plugin.
-    /// </summary>
-    public void Reinitialize();
 }
 #endif
