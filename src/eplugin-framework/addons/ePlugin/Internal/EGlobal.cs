@@ -46,7 +46,7 @@ internal sealed class EGlobal
     {
         _loggerFactory = loggerFactory;
         _ePluginContext = plugin;
-        _ePluginContext?.Logger = _loggerFactory.CreateLogger(_ePluginContext.GetType().FullName ?? "UNKNOWN");
+        plugin.Logger = _loggerFactory.CreateLogger(_ePluginContext.GetType().FullName ?? "UNKNOWN");
 
         ReloadContexts(_loggerFactory, false);
     }

@@ -8,16 +8,18 @@ namespace Enaweg.Plugin;
 [Tool]
 public sealed partial class EPluginPlugin : EditorPlugin
 {
+    private ILogger? _logger = null;
+
     public ILogger Logger
     {
         get
         {
-            field ??= new GodotConsoleLogger(this.GetPluginSlug());
+            _logger ??= new GodotConsoleLogger(this.GetPluginSlug());
 
-            return field;
+            return _logger;
         }
-        set => field = value;
-    } = null;
+        set => _logger = value;
+    }
 
     public override void _EnterTree()
     {
@@ -30,7 +32,7 @@ public sealed partial class EPluginPlugin : EditorPlugin
         EGlobal.Instance.DeactivateAllEEditorPlugins();
         base._DisablePlugin();
     }
-    
+
     public override void _Process(double delta)
     {
         base._Process(delta);
