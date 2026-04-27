@@ -1,4 +1,4 @@
-#if TOOLS
+﻿#if TOOLS
 using System;
 using System.IO;
 using System.Linq;
@@ -25,8 +25,12 @@ public abstract class ExecuteCliBase
         {
             var finalArgs = args.SelectMany(a => a.Split(' ')).ToArray();
             var result = new Array();
-            logger?.Log(
-                $"Executing: {cmd} {string.Join(" ", finalArgs).Replace(pathToSolution, $"<project>{Path.DirectorySeparatorChar}")}");
+            if (EPlugin.EnableDebugLogging)
+            {
+                logger?.Log(
+                    $"Executing: {cmd} {string.Join(" ", finalArgs).Replace(pathToSolution, $"<project>{Path.DirectorySeparatorChar}")}");
+            }
+
             var exitVal = OS.Execute(cmd, finalArgs, result, true, false);
 
             var final = result.Select(e => e.ToString()).ToArray();

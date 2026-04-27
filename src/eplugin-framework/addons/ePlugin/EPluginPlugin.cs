@@ -8,6 +8,8 @@ namespace Enaweg.Plugin;
 [Tool]
 public sealed partial class EPluginPlugin : EditorPlugin
 {
+    public bool EnableDebugLogging => false;
+
     private ILogger? _logger = null;
 
     public ILogger Logger
