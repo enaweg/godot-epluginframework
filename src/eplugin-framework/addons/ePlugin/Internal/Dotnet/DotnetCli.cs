@@ -1,4 +1,4 @@
-﻿#if TOOLS
+#if TOOLS
 using System;
 using Enaweg.Plugin.Logging;
 using Godot;
@@ -101,12 +101,18 @@ internal sealed class DotnetCli : ExecuteCliBase, IDotnet
         _logger = logger;
         _call.UseLogger(logger);
     }
-    
+
     private bool IsDotnetCliAvailable()
     {
         try
         {
-            var result = ExecuteCall(_logger, CmdDotNet, ["--version"]);
+            var cmdName = "which"; // works on linux and mac
+            if (OS.GetName() == "Windows")
+            {
+                cmdName = "where";
+            }
+
+            var result = ExecuteCall(_logger, cmdName, [CmdDotNet]);
             if (result.Item1 >= 0)
             {
                 return true;
