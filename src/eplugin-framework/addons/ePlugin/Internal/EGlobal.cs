@@ -9,7 +9,7 @@ using Godot;
 namespace Enaweg.Plugin.Internal;
 
 /// <summary>
-/// This is a internally used class by Enaweg.Plugin and should not be used by anything else. It manages plugin states
+/// This is an internally used class by Enaweg.Plugin and should not be used by anything else. It manages plugin states
 /// as well as provides some global values.
 /// </summary>
 [Tool]
@@ -33,8 +33,7 @@ internal sealed class EGlobal
     private EPluginPlugin? _ePluginContext = null;
 
     private bool _hasWork = false;
-    private bool _shouldProcess = false;
-
+    private int _lastChildNodeCount = 0;
     private DotnetCli? _cli = null;
 
     private ILoggerFactory? _loggerFactory = null;
@@ -43,22 +42,28 @@ internal sealed class EGlobal
     {
     }
 
-    public void Initialize(ILoggerFactory loggerFactory)
+    public void Initialize(EPluginPlugin plugin, ILoggerFactory loggerFactory)
     {
         _loggerFactory = loggerFactory;
-        _ePluginContext?.Logger = _loggerFactory.CreateLogger(_ePluginContext.GetType().FullName);
+        _ePluginContext = plugin;
+        _ePluginContext?.Logger = _loggerFactory.CreateLogger(_ePluginContext.GetType().FullName ?? "UNKNOWN");
 
-        ReloadContexts(_loggerFactory);
+        ReloadContexts(_loggerFactory, false);
+    }
+
+    /// <summary>
+    /// Returns true if EGlobal is initialized. After an assembly reload all state is lost, this will be false then and
+    /// a new initialize needs to happen.
+    /// </summary>
+    /// <returns></returns>
+    public bool IsValid()
+    {
+        return _ePluginContext is not null;
     }
 
     public PluginContext? GetContext(IEEditorPlugin plugin)
     {
         return _contexts.FirstOrDefault(c => c.Plugin == plugin);
-    }
-
-    public PluginContext? GetContext(string name)
-    {
-        return _contexts.FirstOrDefault(c => c.Name == name);
     }
 
     public DotnetCli GetCli(EPluginPlugin plugin)
@@ -67,71 +72,44 @@ internal sealed class EGlobal
         {
             _cli = new DotnetCli(plugin.Logger);
         }
+        else
+        {
+            _cli.UseLogger(plugin.Logger);
+        }
 
         return _cli;
     }
 
     public DotnetCli GetCli(IEEditorPlugin plugin)
     {
+        var context = GetContext(plugin);
         if (_cli == null)
         {
-            var context = GetContext(plugin);
             _cli = new DotnetCli(context?.Logger);
+        }
+        else
+        {
+            _cli.UseLogger(context?.Logger);
         }
 
         return _cli;
     }
 
-    internal void StartProcessing(EPluginPlugin ePlugin)
-    {
-        if (_ePluginContext is not null)
-        {
-            // already running
-            return;
-        }
-
-        _ePluginContext = ePlugin;
-        StartProcessing();
-    }
-
-    /// <summary>
-    /// Free all references as these will prevent proper reload of assembly after changes.
-    /// </summary>
-    private void StopProcessingInternal()
-    {
-        var logger = _ePluginContext?.Logger;
-
-        _hasWork = false;
-        _shouldProcess = false;
-        _ePluginContext = null;
-        _contexts.Clear();
-
-        logger?.Log("Unloading done (Assembly reload)");
-    }
-
-    private void StartProcessing()
-    {
-        _shouldProcess = true;
-    }
-
-    internal void StopProcessing()
-    {
-        _shouldProcess = false;
-    }
-
     public void GlobalProcessor()
     {
-        if (_ePluginContext is null)
+        if (!IsValid())
         {
             return;
         }
 
-        var workToDo = Step(_ePluginContext, _ePluginContext.Logger);
-
-        if (!_shouldProcess && !workToDo)
+        var childCount = EditorInterface.Singleton.GetBaseControl().GetParent().GetChildCount();
+        if (_lastChildNodeCount != childCount)
         {
-            StopProcessingInternal();
+            // Check if something changed, not ideal but AssemblyReload kills event bindings to editor.
+            ReloadContexts(_loggerFactory, true);
         }
+
+        var _ = Step(_ePluginContext, _ePluginContext.Logger);
     }
 
     internal void EnsureEEditorPluginEnabled()
@@ -150,54 +128,6 @@ internal sealed class EGlobal
         }
 
         _hasWork = true;
-    }
-
-    internal void Register(IEEditorPlugin plugin)
-    {
-        if (_contexts.Count <= 0)
-        {
-            ReloadContexts(_loggerFactory);
-        }
-
-        var pluginLogger = _loggerFactory?.CreateLogger(plugin.GetType().FullName);
-        _contexts.RemoveAll(c => c.Slug == plugin.GodotPlugin.GetPluginSlug());
-        _contexts.Add(new PluginContext(plugin, pluginLogger));
-        _hasWork = true;
-        StartProcessing();
-    }
-
-    internal void Activate(IEEditorPlugin plugin)
-    {
-        if (_contexts.Count <= 0)
-        {
-            ReloadContexts(_loggerFactory);
-        }
-
-        var context = _contexts.Find(c => c.Plugin == plugin);
-        if (context is not null)
-        {
-            context.IsFirstActivation = true;
-            context.State = EEditorPluginState.Created;
-        }
-
-        StartProcessing();
-    }
-
-    internal void Deactivate(IEEditorPlugin plugin)
-    {
-        if (_contexts.Count <= 0)
-        {
-            ReloadContexts(_loggerFactory);
-        }
-
-        var context = _contexts.Find(c => c.Plugin == plugin);
-        if (context != null)
-        {
-            context.State = EEditorPluginState.DeactivationRequested;
-            _hasWork = true;
-        }
-
-        StartProcessing();
     }
 
     private bool Step(EPluginPlugin ePluginPlugin, ILogger logger)
@@ -480,28 +410,42 @@ internal sealed class EGlobal
     /// <summary>
     /// If assembly reload is triggered based on code changes the contexts are lost. Need to rebuild it from active plugins.
     /// </summary>
-    private void ReloadContexts(ILoggerFactory? loggerFactory)
+    private void ReloadContexts(ILoggerFactory? loggerFactory, bool changeTriggered)
     {
-        _contexts.Clear();
-        var logger = loggerFactory?.CreateLogger(GetType().FullName);
+        var logger = loggerFactory?.CreateLogger(GetType().FullName ?? "UNKNOWN");
         var parentNode = EditorInterface.Singleton.GetBaseControl().GetParent();
         var children = parentNode.GetChildren();
 
-        // get ePlugin base
-        var ePluginNode = children.FirstOrDefault(c => c is EPluginPlugin);
-        if (ePluginNode is null)
+        if (_ePluginContext is null)
         {
-            logger?.Error($"ePlugin base node not found!");
-            return;
+            // get ePlugin base
+            var ePluginNode = children.FirstOrDefault(c => c is EPluginPlugin);
+            if (ePluginNode is null)
+            {
+                logger?.Error($"ePlugin base node not found!");
+                return;
+            }
+
+            _ePluginContext = (EPluginPlugin)ePluginNode;
         }
 
-        _ePluginContext = (EPluginPlugin)ePluginNode;
+        _lastChildNodeCount = children.Count;
 
         // init cli (so it does not happen at random)
         var _ = GetCli(_ePluginContext).IsDotnetAvailable;
 
         // handle other plugins
         _ePluginContext.Logger.Log($"Refreshing ePlugins");
+
+        var deactivatedPlugins = _contexts.Where(c => c.State == EEditorPluginState.Deactivated).ToArray();
+        if (deactivatedPlugins.Any())
+        {
+            foreach (var pluginContext in deactivatedPlugins)
+            {
+                _contexts.Remove(pluginContext);
+            }
+        }
+
         foreach (var childNode in children)
         {
             if (childNode is null)
@@ -511,16 +455,65 @@ internal sealed class EGlobal
 
             if (childNode is IEEditorPlugin editorPlugin)
             {
-                var pluginLogger = loggerFactory?.CreateLogger(editorPlugin.GetType().FullName);
-                var context = new PluginContext(editorPlugin, pluginLogger);
-                context.State = EEditorPluginState.Activated;
-                _contexts.Add(context);
+                AddOrUpdatePluginContext(editorPlugin, changeTriggered);
                 _ePluginContext.Logger.Log(
                     $"  - ePlugin {editorPlugin.GodotPlugin.GetPluginSlug()} ({editorPlugin.GodotPlugin.GetName()})");
             }
         }
 
+        var removedPlugins = _contexts.Where(c => children.All(x => x != c.Plugin)).ToArray();
+        if (removedPlugins.Any())
+        {
+            foreach (var pluginContext in removedPlugins)
+            {
+                pluginContext.State = EEditorPluginState.DeactivationRequested;
+            }
+
+            _hasWork = true;
+        }
+
+
         _ePluginContext.Logger.Log($"Found {_contexts.Count} active ePlugin(s).");
+
+        // initialize plugins
+        foreach (var context in _contexts)
+        {
+            if (context.Plugin is null)
+            {
+                continue;
+            }
+
+            context.Plugin.Reinitialize(context.Plugin.EPluginService);
+        }
+    }
+
+    private void AddOrUpdatePluginContext(IEEditorPlugin editorPlugin, bool changeTriggered)
+    {
+        var context = _contexts.FirstOrDefault(c => c.Plugin == editorPlugin);
+        if (context is null)
+        {
+            var pluginLogger = _loggerFactory?.CreateLogger(editorPlugin.GetType().FullName ?? "UNKNOWN");
+            if (changeTriggered)
+            {
+                // was a change to plugins, so this is a new plugin need to bootstrap.
+                context = new PluginContext(editorPlugin, pluginLogger)
+                {
+                    State = EEditorPluginState.Created,
+                    IsFirstActivation = true,
+                };
+                _hasWork = true;
+            }
+            else
+            {
+                // initial start or assembly reload, nothing need to be done as installation already happened
+                context = new PluginContext(editorPlugin, pluginLogger)
+                {
+                    State = EEditorPluginState.Activated
+                };
+            }
+
+            _contexts.Add(context);
+        }
     }
 
     private bool MatchesVersion(string givenVersion, string condition, ILogger logger)

@@ -22,14 +22,12 @@ public sealed partial class EPluginPlugin : EditorPlugin
     public override void _EnterTree()
     {
         base._EnterTree();
-        EGlobal.Instance.Initialize(new GenericLoggerFactory(category => new GodotConsoleLogger(category)));
-        EGlobal.Instance.StartProcessing(this);
+        InitializeInternals();
     }
 
     public override void _Ready()
     {
         base._Ready();
-        EGlobal.Instance.StartProcessing(this);
     }
 
     public override void _EnablePlugin()
@@ -45,14 +43,26 @@ public sealed partial class EPluginPlugin : EditorPlugin
 
     public override void _ExitTree()
     {
-        EGlobal.Instance.StopProcessing();
         base._ExitTree();
     }
 
     public override void _Process(double delta)
     {
         base._Process(delta);
+
+        if (!EGlobal.Instance.IsValid())
+        {
+            // after an assembly reload the EnterTree, EnablePlugin and Ready are not triggered anymore but all C#
+            // state is lost. This will reinitialize the ePlugin Framework.
+            InitializeInternals();
+        }
+
         EGlobal.Instance.GlobalProcessor();
+    }
+
+    private void InitializeInternals()
+    {
+        EGlobal.Instance.Initialize(this, new GenericLoggerFactory(category => new GodotConsoleLogger(category)));
     }
 }
 #endif

@@ -12,22 +12,9 @@ public partial class SamplePlugin : EditorPlugin, IEEditorPlugin
         builder.AddNuget("ZLogger");
     }
 
-    public override void _EnterTree()
+    public void Reinitialize(IEEditorPluginService service)
     {
-        base._EnterTree();
-        this.EPluginService.Register();
-    }
-
-    public override void _EnablePlugin()
-    {
-        base._EnablePlugin();
-        this.EPluginService.Activate();
-    }
-
-    public override void _DisablePlugin()
-    {
-        this.EPluginService.Deactivate();
-        base._DisablePlugin();
+        GD.Print("Reinitializing");
     }
 }
 #endif
