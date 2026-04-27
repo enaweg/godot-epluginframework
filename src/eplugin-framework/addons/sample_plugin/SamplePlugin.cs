@@ -2,6 +2,8 @@
 using Godot;
 using Enaweg.Plugin;
 
+namespace Enaweg.Plugin.Sample;
+
 [Tool]
 public partial class SamplePlugin : EditorPlugin, IEEditorPlugin
 {

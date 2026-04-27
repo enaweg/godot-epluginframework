@@ -117,7 +117,8 @@ public sealed partial class YourPlugin : EditorPlugin, IEEditorPlugin
     
     public void Reinitialize()
     {
-        // initialize Plugin internas here, this is called if the project is opened or and assembly reload happens.
+        // initialize Plugin internas here, this is called if the project is opened or an assembly
+        // reload happens.
     }
 }
 
