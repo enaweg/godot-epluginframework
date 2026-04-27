@@ -27,7 +27,7 @@ internal sealed class EGlobal
         }
     }
 
-    private const int MaxFailedTries = 10;
+    private const int MAX_FAILED_TRIES = 5;
 
     private readonly List<PluginContext> _contexts = [];
     private EPluginPlugin? _ePluginContext = null;
@@ -219,11 +219,11 @@ internal sealed class EGlobal
         var needsWork = false;
         foreach (var context in contexts)
         {
-            if (context.FailedTries >= MaxFailedTries)
+            if (context.FailedTries >= MAX_FAILED_TRIES)
             {
                 logger.Error($"Failed to activate plugin {context.Slug} ({context.Name})");
                 context.State = EEditorPluginState.Error;
-                context.ErrorDetail = new Exception($"Failed to load after at least {MaxFailedTries - 1} retries.");
+                context.ErrorDetail = new Exception($"Failed to load after at least {MAX_FAILED_TRIES - 1} retries.");
                 EditorInterface.Singleton.SetPluginEnabled(context.Slug, false);
                 continue;
             }
