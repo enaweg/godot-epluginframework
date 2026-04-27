@@ -13,18 +13,18 @@ public sealed class GodotConsoleLogger(string prefix) : ILogger
     [StackTraceHidden]
     public void Log(string message)
     {
-        GD.Print($"{prefix}| {message}");
+        GD.Print($"{prefix} | {message}");
     }
 
     [StackTraceHidden]
     public void Warn(string message)
     {
-        GD.PushWarning($"{prefix}| {message}");
+        GD.PushWarning($"{prefix} | {message}");
     }
 
     [StackTraceHidden]
     public void Error(string message)
     {
-        GD.PushError($"{prefix}| {message}");
+        GD.PushError($"{prefix} | {message}");
     }
 }
