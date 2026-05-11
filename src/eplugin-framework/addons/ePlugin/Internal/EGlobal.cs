@@ -37,7 +37,7 @@ internal sealed class EGlobal
 
     private ILoggerFactory? _loggerFactory = null;
 
-    private Stack<PluginContext> _toEnable = new();
+    private Stack<PluginContext> _toCheck = new();
     private Stack<PluginContext> _toDisable = new();
 
 
@@ -132,7 +132,7 @@ internal sealed class EGlobal
         if (!IsValid())
         {
             EditorInterface.Singleton.SetPluginEnabled(context.Slug, false);
-            _toEnable.Push(context);
+            _toCheck.Push(context);
         }
 
         if (context.State == EEditorPluginState.Activated)
@@ -158,10 +158,9 @@ internal sealed class EGlobal
         {
             if (!EditorInterface.Singleton.IsPluginEnabled(dependency.Slug))
             {
+                _toCheck.Push(context);
                 EditorInterface.Singleton.SetPluginEnabled(dependency.Slug, true);
-                _toEnable.Push(context);
-                EditorInterface.Singleton.SetPluginEnabled(context.Slug, false);
-                return;
+                return; // EnableEPlugin will be called by newly enabled plugin, stop here
             }
 
             if (dependency.Version is not null)
@@ -170,7 +169,8 @@ internal sealed class EGlobal
                 if (dependencyContext is null)
                 {
                     context.Logger?.Warn($"Plugin {dependency.Slug} not found!");
-                    EditorInterface.Singleton.SetPluginEnabled(context.Slug, false);
+                    _toCheck.Push(context);
+                    FailAllUncheckedPluginsAndRefresh($"Plugin dependency {dependency.Slug} not found!");
                     return;
                 }
 
@@ -181,15 +181,20 @@ internal sealed class EGlobal
                     {
                         context.Logger?.Warn(
                             $"Plugin dependency {dependency.Slug} not ready but needed by {context.Slug}!");
-                        EditorInterface.Singleton.SetPluginEnabled(context.Slug, false);
+                        _toCheck.Push(context);
+                        FailAllUncheckedPluginsAndRefresh(
+                            $"Plugin dependency {dependency.Slug} not ready but needed by {context.Slug}!");
                         return;
                     }
                 }
                 else
                 {
                     context.Logger.Warn(
-                        $"Dependency {dependency.Slug} {dependencyVersion} does not match needed {dependency.Version} of {context.Slug}!.");
-                    EditorInterface.Singleton.SetPluginEnabled(context.Slug, false);
+                        $"Dependency {dependency.Slug} {dependencyVersion} does not match needed {dependency.Version} of {context.Slug}!");
+                    
+                    _toCheck.Push(context);
+                    FailAllUncheckedPluginsAndRefresh(
+                        $"Dependency {dependency.Slug} {dependencyVersion} does not match needed {dependency.Version} of {context.Slug}!");
                     return;
                 }
             }
@@ -200,13 +205,13 @@ internal sealed class EGlobal
             }
         }
 
-        //all dependencies are ready, we can finally install the reqeusted plugin
+        //all dependencies are ready, we can finally install the requested plugin
         InstallEPlugin(context, recipe);
 
         // trigger install for waiting plugins
-        while (_toEnable.Any())
+        while (_toCheck.Any())
         {
-            var nextPlugin = _toEnable.Pop();
+            var nextPlugin = _toCheck.Pop();
 
             EnableEPlugin(nextPlugin, false);
         }
@@ -215,6 +220,20 @@ internal sealed class EGlobal
         {
             RefreshEditor();
         }
+    }
+
+    private void FailAllUncheckedPluginsAndRefresh(string reason)
+    {
+        foreach (var plugin in _toCheck)
+        {
+            plugin.State = EEditorPluginState.Error;
+            plugin.ErrorDetail = new Exception(reason);
+            EditorInterface.Singleton.SetPluginEnabled(plugin.Slug, false);
+        }
+
+        _toCheck.Clear();
+        
+        RefreshEditor();
     }
 
     internal void InstallEPlugin(PluginContext context, EEditorPluginRecipe recipe)
@@ -251,17 +270,17 @@ internal sealed class EGlobal
             return;
         }
 
-        if (_toEnable.Contains(context))
+        if (_toCheck.Contains(context))
         {
             // plugin in process of enablement, skip disable
             return;
         }
-        
+
         if (!context.IsRecipeCreated)
         {
             context.Plugin.CreateRecipe(context.Builder);
         }
-        
+
         var recipe = context.Builder.PluginRecipe;
 
         foreach (var autoload in recipe.Autoloads)
