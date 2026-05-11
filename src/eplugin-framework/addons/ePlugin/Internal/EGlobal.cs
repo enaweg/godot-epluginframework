@@ -307,7 +307,7 @@ internal sealed class EGlobal
         RefreshEditor();
     }
 
-    public void RefreshEditor()
+    private void RefreshEditor()
     {
         _ePluginContext?.Logger.Log($"Refreshed Editor state.");
 
