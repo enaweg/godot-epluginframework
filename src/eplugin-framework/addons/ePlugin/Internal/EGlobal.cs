@@ -33,11 +33,13 @@ internal sealed class EGlobal
     private readonly List<PluginContext> _contexts = [];
     private EPluginPlugin? _ePluginContext = null;
 
-    private bool _hasWork = false;
-    private int _lastChildNodeCount = 0;
     private DotnetCli? _cli = null;
 
     private ILoggerFactory? _loggerFactory = null;
+
+    private Stack<PluginContext> _toEnable = new();
+    private Stack<PluginContext> _toDisable = new();
+
 
     private EGlobal()
     {
@@ -62,9 +64,18 @@ internal sealed class EGlobal
         return _ePluginContext is not null;
     }
 
-    public PluginContext? GetContext(IEEditorPlugin plugin)
+    public PluginContext GetOrCreateContext(IEEditorPlugin plugin)
     {
-        return _contexts.FirstOrDefault(c => c.Plugin == plugin);
+        var context = _contexts.FirstOrDefault(c => c.Plugin == plugin);
+
+        if (context is null)
+        {
+            var pluginLogger = _loggerFactory?.CreateLogger(plugin.GetType().FullName ?? "UNKNOWN");
+            context = new PluginContext(plugin, pluginLogger);
+            _contexts.Add(context);
+        }
+
+        return context;
     }
 
     public DotnetCli GetCli(EPluginPlugin plugin)
@@ -83,7 +94,7 @@ internal sealed class EGlobal
 
     public DotnetCli GetCli(IEEditorPlugin plugin)
     {
-        var context = GetContext(plugin);
+        var context = GetOrCreateContext(plugin);
         if (_cli == null)
         {
             _cli = new DotnetCli(_ePluginContext, context?.Logger);
@@ -96,23 +107,6 @@ internal sealed class EGlobal
         return _cli;
     }
 
-    public void GlobalProcessor()
-    {
-        if (!IsValid())
-        {
-            return;
-        }
-
-        var childCount = EditorInterface.Singleton.GetBaseControl().GetParent().GetChildCount();
-        if (_lastChildNodeCount != childCount)
-        {
-            // Check if something changed, not ideal but AssemblyReload kills event bindings to editor.
-            ReloadContexts(_loggerFactory, true);
-        }
-
-        var _ = Step(_ePluginContext, _ePluginContext.Logger);
-    }
-
     internal void EnsureEEditorPluginEnabled()
     {
         if (!EditorInterface.Singleton.IsPluginEnabled("ePlugin"))
@@ -121,175 +115,53 @@ internal sealed class EGlobal
         }
     }
 
-    internal void DeactivateAllEEditorPlugins()
+    public void EnableEPlugin(PluginContext context, bool refreshAtEnd = true)
     {
-        foreach (var context in _contexts)
-        {
-            EditorInterface.Singleton.SetPluginEnabled(context.Slug, false);
-        }
+        EnsureEEditorPluginEnabled();
 
-        _hasWork = true;
-    }
-
-    private bool Step(EPluginPlugin ePluginPlugin, ILogger logger)
-    {
-        if (!_hasWork)
-        {
-            return false;
-        }
-
-        var activePlugins = _contexts.Where(c => c.State == EEditorPluginState.Activated);
-        var activePluginInfo = string.Join(',', activePlugins.Select(ap => $"{ap.Slug} ({ap.Name})"));
-        if (string.IsNullOrWhiteSpace(activePluginInfo))
-        {
-            _ePluginContext?.Logger.Log($"Processing plugins");
-        }
-        else
-        {
-            _ePluginContext?.Logger.Log($"Processing plugins (already finished: {activePluginInfo})");
-        }
-
-
-        // mark already active plugins properly to not bootstrap again (sadly IsPluginEnabled does not report state as expected)
-        var alreadyActivePlugins = _contexts.Where(context =>
-            context.State == EEditorPluginState.Created && !context.IsFirstActivation);
-        foreach (var context in alreadyActivePlugins)
-        {
-            context.State = EEditorPluginState.Activated;
-        }
-
-        //push plugins a step further
-        var created = _contexts.Where(context => context.State == EEditorPluginState.Created);
-        _hasWork = ToBootstrapped(created, logger);
-
-        var bootstrapped = _contexts.Where(context => context.State == EEditorPluginState.Bootstrapped);
-        _hasWork |= ToActivated(bootstrapped, logger);
-
-        var deactivationRequested = _contexts.Where(c => c.State == EEditorPluginState.DeactivationRequested);
-        ToDeactivated(deactivationRequested, ePluginPlugin, logger);
-
-        if (!_hasWork)
-        {
-            _ePluginContext?.Logger.Log($"Refreshed Editor state.");
-
-            if (!EditorInterface.Singleton.GetResourceFilesystem().IsScanning())
-            {
-                EditorInterface.Singleton.GetResourceFilesystem().Scan();
-            }
-
-            _cli?.UseLogger(logger);
-            _cli?.Call.RebuildSolution();
-
-            _ePluginContext?.Logger.Log(
-                $"Completed loading. {_contexts.Count(c => c.State == EEditorPluginState.Activated)} active plugins.");
-        }
-
-        return _hasWork;
-    }
-
-    private bool ToBootstrapped(IEnumerable<PluginContext> contexts, ILogger logger)
-    {
-        var needsWork = false;
-        foreach (var context in contexts)
-        {
-            if (context.Plugin is null)
-            {
-                continue;
-            }
-
-            try
-            {
-                context.Plugin.Bootstrap(context.Builder);
-                context.State = EEditorPluginState.Bootstrapped;
-                needsWork = true;
-            }
-            catch (Exception ex)
-            {
-                EditorInterface.Singleton.SetPluginEnabled(context.Slug, false);
-                context.State = EEditorPluginState.Error;
-                context.ErrorDetail = ex;
-                context.Logger?.Error($"{ex}");
-            }
-        }
-
-        return needsWork;
-    }
-
-    private bool ToActivated(IEnumerable<PluginContext> contexts, ILogger logger)
-    {
-        var needsWork = false;
-        foreach (var context in contexts)
-        {
-            if (context.FailedTries >= MAX_FAILED_TRIES)
-            {
-                logger.Error($"Failed to activate plugin {context.Slug} ({context.Name})");
-                context.State = EEditorPluginState.Error;
-                context.ErrorDetail = new Exception($"Failed to load after at least {MAX_FAILED_TRIES - 1} retries.");
-                EditorInterface.Singleton.SetPluginEnabled(context.Slug, false);
-                continue;
-            }
-
-            try
-            {
-                if (!Install(context))
-                {
-                    context.State = EEditorPluginState.Activated;
-                }
-                else
-                {
-                    needsWork = true;
-                }
-            }
-            catch (Exception ex)
-            {
-                EditorInterface.Singleton.SetPluginEnabled(context.Slug, false);
-                context.State = EEditorPluginState.Error;
-                logger.Error($"{ex}");
-            }
-        }
-
-        return needsWork;
-    }
-
-    private void ToDeactivated(IEnumerable<PluginContext> contexts, EPluginPlugin ePluginPlugin, ILogger logger)
-    {
-        foreach (var context in contexts)
-        {
-            try
-            {
-                Uninstall(context, ePluginPlugin);
-                context.State = EEditorPluginState.Deactivated;
-            }
-            catch (Exception ex)
-            {
-                context.State = EEditorPluginState.Error;
-                context.ErrorDetail = ex;
-                logger.Error($"{ex}");
-            }
-            finally
-            {
-                context.Plugin = default;
-            }
-        }
-    }
-
-    private bool Install(PluginContext context)
-    {
         if (context.Plugin is null)
         {
-            return false;
+            return;
         }
 
-        var needsWork = false;
-        var recipe = context.Builder.PluginRecipe;
+        if (!EditorInterface.Singleton.IsPluginEnabled(context.Slug))
+        {
+            EditorInterface.Singleton.SetPluginEnabled(context.Slug, true);
+        }
 
+        if (!IsValid())
+        {
+            EditorInterface.Singleton.SetPluginEnabled(context.Slug, false);
+            _toEnable.Push(context);
+        }
+
+        if (context.State == EEditorPluginState.Activated)
+        {
+            // already activated, nothing to do
+            return;
+        }
+
+        if (context.State is EEditorPluginState.Deactivated or EEditorPluginState.Error)
+        {
+            // already failed, nothing can be done here
+            return;
+        }
+
+        if (!context.IsRecipeCreated)
+        {
+            context.Plugin.CreateRecipe(context.Builder);
+        }
+
+        // check dependencies
+        var recipe = context.Builder.PluginRecipe;
         foreach (var dependency in recipe.PluginDependencies)
         {
             if (!EditorInterface.Singleton.IsPluginEnabled(dependency.Slug))
             {
                 EditorInterface.Singleton.SetPluginEnabled(dependency.Slug, true);
-                needsWork = true;
-                continue;
+                _toEnable.Push(context);
+                EditorInterface.Singleton.SetPluginEnabled(context.Slug, false);
+                return;
             }
 
             if (dependency.Version is not null)
@@ -298,49 +170,61 @@ internal sealed class EGlobal
                 if (dependencyContext is null)
                 {
                     context.Logger?.Warn($"Plugin {dependency.Slug} not found!");
-                    needsWork = true;
-                    continue;
+                    EditorInterface.Singleton.SetPluginEnabled(context.Slug, false);
+                    return;
                 }
 
                 var dependencyVersion = dependencyContext.Version;
                 if (MatchesVersion(dependencyVersion, dependency.Version, context.Logger))
                 {
-                    if (context.State != EEditorPluginState.Activated)
+                    if (context.State is EEditorPluginState.Deactivated or EEditorPluginState.Error)
                     {
-                        needsWork = true;
-                        continue;
+                        context.Logger?.Warn(
+                            $"Plugin dependency {dependency.Slug} not ready but needed by {context.Slug}!");
+                        EditorInterface.Singleton.SetPluginEnabled(context.Slug, false);
+                        return;
                     }
                 }
                 else
                 {
                     context.Logger.Warn(
-                        $"Dependency {dependency.Slug} {dependencyVersion} does not match needed {dependency.Version}.");
-                    needsWork = true;
-                    context.FailedTries = uint.MaxValue;
-                    continue;
+                        $"Dependency {dependency.Slug} {dependencyVersion} does not match needed {dependency.Version} of {context.Slug}!.");
+                    EditorInterface.Singleton.SetPluginEnabled(context.Slug, false);
+                    return;
                 }
             }
 
-            context.Logger?.Log($"Dependency {dependency.Slug} {dependency.Version} ready.");
-        }
-
-        if (needsWork)
-        {
-            // some dependency is not ready, retry later
-            if (context.FailedTries < int.MaxValue)
+            if (_ePluginContext.EnableDebugLogging)
             {
-                context.FailedTries++;
+                context.Logger?.Log($"Dependency {dependency.Slug} {dependency.Version} ready for {context.Slug}.");
             }
-
-            return needsWork;
         }
 
+        //all dependencies are ready, we can finally install the reqeusted plugin
+        InstallEPlugin(context, recipe);
+
+        // trigger install for waiting plugins
+        while (_toEnable.Any())
+        {
+            var nextPlugin = _toEnable.Pop();
+
+            EnableEPlugin(nextPlugin, false);
+        }
+
+        if (refreshAtEnd)
+        {
+            RefreshEditor();
+        }
+    }
+
+    internal void InstallEPlugin(PluginContext context, EEditorPluginRecipe recipe)
+    {
         foreach (var nuget in recipe.Nugets)
         {
             if (!context.Plugin.AddNuget(nuget.Name, nuget.Version, nuget.Source))
             {
                 context.FailedTries = uint.MaxValue;
-                return true;
+                return;
             }
         }
 
@@ -358,38 +242,32 @@ internal sealed class EGlobal
         {
             context.Plugin.GodotPlugin.AddAutoloadSingleton(autoload.Name, autoload.Path);
         }
-
-        return false;
     }
 
-    private void Uninstall(PluginContext context, EPluginPlugin ePluginPlugin)
+    public void DisableEPlugin(PluginContext context)
     {
         if (context.Plugin is null)
         {
             return;
         }
 
-        if (!context.IsFirstActivation)
+        if (_toEnable.Contains(context))
         {
-            // plugin was already active at start of Godot. Need to bootstrap first to fill recipe.
-            try
-            {
-                context.Plugin.Bootstrap(context.Builder);
-            }
-            catch (Exception ex)
-            {
-                context.State = EEditorPluginState.Error;
-                context.ErrorDetail = ex;
-                context.Logger?.Error($"{ex}");
-            }
+            // plugin in process of enablement, skip disable
+            return;
         }
-
+        
+        if (!context.IsRecipeCreated)
+        {
+            context.Plugin.CreateRecipe(context.Builder);
+        }
+        
         var recipe = context.Builder.PluginRecipe;
 
         foreach (var autoload in recipe.Autoloads)
         {
             // hijack base plugin as actual plugin is already destroyed here.
-            ePluginPlugin.RemoveAutoloadSingleton(autoload.Name);
+            context.Plugin.GodotPlugin.RemoveAutoloadSingleton(autoload.Name);
         }
 
         foreach (var directory in recipe.Directories)
@@ -406,6 +284,24 @@ internal sealed class EGlobal
         {
             context.Plugin.RemoveNuget(nuget.Name);
         }
+
+        RefreshEditor();
+    }
+
+    public void RefreshEditor()
+    {
+        _ePluginContext?.Logger.Log($"Refreshed Editor state.");
+
+        if (!EditorInterface.Singleton.GetResourceFilesystem().IsScanning())
+        {
+            EditorInterface.Singleton.GetResourceFilesystem().Scan();
+        }
+
+        _cli?.UseLogger(_ePluginContext?.Logger);
+        _cli?.Call.RebuildSolution();
+
+        _ePluginContext?.Logger.Log(
+            $"Completed loading. {_contexts.Count(c => c.State == EEditorPluginState.Activated)} active plugins.");
     }
 
     /// <summary>
@@ -430,7 +326,19 @@ internal sealed class EGlobal
             _ePluginContext = (EPluginPlugin)ePluginNode;
         }
 
-        _lastChildNodeCount = children.Count;
+        // ensure logger is set with current loggerFactory
+        if (loggerFactory is not null)
+        {
+            foreach (var context in _contexts)
+            {
+                if (context.Logger is not null)
+                {
+                    continue;
+                }
+
+                context.Logger = _loggerFactory?.CreateLogger(context.GetType().FullName ?? "UNKNOWN");
+            }
+        }
 
         // init cli (so it does not happen at random)
         var _ = GetCli(_ePluginContext).IsDotnetAvailable;
@@ -462,23 +370,12 @@ internal sealed class EGlobal
             }
         }
 
-        var removedPlugins = _contexts.Where(c => children.All(x => x != c.Plugin)).ToArray();
-        if (removedPlugins.Any())
-        {
-            foreach (var pluginContext in removedPlugins)
-            {
-                pluginContext.State = EEditorPluginState.DeactivationRequested;
-            }
-
-            _hasWork = true;
-        }
-
         _ePluginContext.Logger.Log($"Found {_contexts.Count} active ePlugin(s).");
 
         // initialize plugins
-        var initializeTypes = Assembly.GetExecutingAssembly().GetExportedTypes()
+        var initializeTypes = Assembly.GetExecutingAssembly().GetExportedTypes().Except([typeof(IInitialize)])
             .Where(t => t.IsAssignableTo(typeof(IInitialize))).ToArray();
-        
+
         if (_ePluginContext.EnableDebugLogging && initializeTypes.Any())
         {
             _ePluginContext.Logger.Log($"Calling Initializers:");
@@ -518,9 +415,7 @@ internal sealed class EGlobal
                 context = new PluginContext(editorPlugin, pluginLogger)
                 {
                     State = EEditorPluginState.Created,
-                    IsFirstActivation = true,
                 };
-                _hasWork = true;
             }
             else
             {

@@ -24,13 +24,25 @@ public static class IEEditorPluginExtensions
     /// </returns>
     public static IDotnet Cli(this IEEditorPlugin ePlugin)
     {
-        var context = EGlobal.Instance.GetContext(ePlugin);
+        var context = EGlobal.Instance.GetOrCreateContext(ePlugin);
 
         var cli = EGlobal.Instance.GetCli(ePlugin);
         cli.UseLogger(context?.Logger);
         return cli;
     }
 
+    public static void EnableEPlugin(this IEEditorPlugin ePlugin)
+    {
+        var context = EGlobal.Instance.GetOrCreateContext(ePlugin);
+        EGlobal.Instance.EnableEPlugin(context);
+    }
+
+    public static void DisableEPlugin(this IEEditorPlugin ePlugin)
+    {
+        var context = EGlobal.Instance.GetOrCreateContext(ePlugin);
+        EGlobal.Instance.DisableEPlugin(context);
+    }
+    
     /// <summary>
     /// Adds a NuGet package to the main Godot project.
     /// </summary>

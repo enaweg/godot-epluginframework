@@ -13,7 +13,7 @@ namespace Enaweg.Plugin;
 /// Implement this interface on your <see cref="EditorPlugin"/> class and call
 /// <c>this.EPluginService.Register()</c> / <c>Activate()</c> / <c>Deactivate()</c> from the corresponding
 /// Godot lifecycle methods. The framework will then drive the install/uninstall pipeline
-/// described in <see cref="Bootstrap"/>.
+/// described in <see cref="CreateRecipe"/>.
 /// </para>
 /// </remarks>
 public interface IEEditorPlugin
@@ -47,6 +47,6 @@ public interface IEEditorPlugin
     /// <see cref="EditorInterface"/>.
     /// </para>
     /// </remarks>
-    public void Bootstrap(IEEditorPluginBuilder builder);
+    public void CreateRecipe(IEEditorPluginBuilder builder);
 }
 #endif

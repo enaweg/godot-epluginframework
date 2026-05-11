@@ -1,6 +1,5 @@
 #if TOOLS
 using Godot;
-using Enaweg.Plugin;
 
 namespace Enaweg.Plugin.Sample;
 
@@ -9,14 +8,21 @@ public partial class SamplePlugin : EditorPlugin, IEEditorPlugin
 {
     public EditorPlugin GodotPlugin => this;
 
-    public void Bootstrap(IEEditorPluginBuilder builder)
+    public void CreateRecipe(IEEditorPluginBuilder builder)
     {
         builder.AddNuget("ZLogger");
     }
 
-    public void Reinitialize()
+    public override void _EnablePlugin()
     {
-        GD.Print("Reinitializing");
+        base._EnablePlugin();
+        this.EnableEPlugin();
+    }
+
+    public override void _DisablePlugin()
+    {
+        base._DisablePlugin();
+        this.DisableEPlugin();
     }
 }
 #endif

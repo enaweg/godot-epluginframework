@@ -9,7 +9,6 @@
 ![Godot 4.6](https://img.shields.io/badge/Godot-v4.6-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
 ![Godot 4.7](https://img.shields.io/badge/Godot-v4.7-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
 
-
 ![Dotnet 8](https://img.shields.io/badge/8-02020?logo=dotnet&logoSize=auto&logoColor=purple&color=darkgreen&labelColor=E0E0E0)
 ![Dotnet 10](https://img.shields.io/badge/10-02020?logo=dotnet&logoSize=auto&logoColor=purple&color=darkgreen&labelColor=E0E0E0)
 
@@ -66,7 +65,7 @@ Tested on:
 + Godot 4.4.1 + .NET 10
 
 Godot 4.5 and newer have a regression with
-EditorPlugins  [Issue #110971](https://github.com/godotengine/godot/issues/110971). This is why an Interface approach is
+EditorPlugins [Issue #110971](https://github.com/godotengine/godot/issues/110971). This is why an Interface approach is
 used here.
 
 gdUnit is used as the test framework, but editor tests are not possible right
@@ -75,6 +74,42 @@ now ([Issue #911](https://github.com/MikeSchulze/gdUnit4/issues/911))
 ## Examples
 
 ### Example Code (Basic Plugin)
+
+```C#
+#if TOOLS
+using Godot;
+using Enaweg.Plugin;
+
+namespace Enaweg.Plugin.Sample;
+
+[Tool]
+public partial class SamplePlugin : EditorPlugin, IEEditorPlugin
+{
+    public EditorPlugin GodotPlugin => this;
+
+    public void Bootstrap(IEEditorPluginBuilder builder)
+    {
+        // build your plugin setup here
+    }
+
+    public override void _EnablePlugin()
+    {
+        base._EnablePlugin();
+        // lifetime call to ePlugin
+        this.EnableEPlugin();
+    }
+
+    public override void _DisablePlugin()
+    {
+        base._DisablePlugin();
+        // lifetime call to ePlugin
+        this.DisableEPlugin();
+    }
+}
+#endif
+```
+
+### Example Code (Advanced Plugin)
 
 ```C#
 #if TOOLS
@@ -115,10 +150,18 @@ public sealed partial class YourPlugin : EditorPlugin, IEEditorPlugin
             .AddDirectory($"{PluginDirectory}/.src");
     }
     
-    public void Reinitialize()
+    public override void _EnablePlugin()
     {
-        // initialize Plugin internas here, this is called if the project is opened or an assembly
-        // reload happens.
+        base._EnablePlugin();
+        // lifetime call to ePlugin
+        this.EnableEPlugin();
+    }
+
+    public override void _DisablePlugin()
+    {
+        base._DisablePlugin();
+        // lifetime call to ePlugin
+        this.DisableEPlugin();
     }
 }
 

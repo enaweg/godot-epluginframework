@@ -14,14 +14,14 @@ internal sealed class PluginContext(IEEditorPlugin plugin, ILogger? logger)
     public string Description { get; init; } = plugin.GodotPlugin.ReadMetadata()?.Description ?? string.Empty;
 
     public string Directory { get; init; } = plugin.GodotPlugin.GetPluginDirectory();
-    
-    public ILogger? Logger { get; init; } = logger;
+
+    public ILogger? Logger { get; set; } = logger;
 
     public IEEditorPlugin? Plugin { get; set; } = plugin;
     public EEditorPluginState State { get; set; } = EEditorPluginState.Created;
     public EEditorPluginBuilder Builder { get; init; } = EEditorPluginBuilder.Create();
-
-    public bool IsFirstActivation { get; set; }
+    
+    public bool IsRecipeCreated { get; set; }
 
     public uint FailedTries { get; set; } = 0;
 

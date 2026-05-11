@@ -5,7 +5,7 @@ namespace Enaweg.Plugin;
 /// Builds the installation/uninstallation recipe for an editor plugin.
 /// </summary>
 /// <remarks>
-/// The builder is passed to <see cref="IEEditorPlugin.Bootstrap"/> and accumulates all
+/// The builder is passed to <see cref="IEEditorPlugin.CreateRecipe"/> and accumulates all
 /// resources the plugin requires. The framework applies the resulting recipe when the plugin
 /// is activated and reverses it when the plugin is deactivated.
 /// All methods return the builder itself to support a fluent call chain.
