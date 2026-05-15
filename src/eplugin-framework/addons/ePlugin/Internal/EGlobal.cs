@@ -43,6 +43,11 @@ internal sealed class EGlobal
     {
     }
 
+    /// <summary>
+    /// This needs to be called first to initialize the ePlugin system.
+    /// </summary>
+    /// <param name="plugin"></param>
+    /// <param name="loggerFactory"></param>
     public void Initialize(EPluginPlugin plugin, ILoggerFactory loggerFactory)
     {
         _loggerFactory = loggerFactory;

@@ -31,18 +31,38 @@ public static class IEEditorPluginExtensions
         return cli;
     }
 
+    /// <summary>
+    /// Installs the plugin into the Godot project via the ePlugin framework.
+    /// </summary>
+    /// <remarks>
+    /// Call this from <see cref="Godot.EditorPlugin._EnablePlugin"/> to trigger the
+    /// framework's install pipeline. The framework ensures the ePlugin plugin itself is
+    /// active, and then runs the plugin's <see cref="EEditorPluginRecipe"/> — resolves
+    /// declared dependencies (enabling them first when needed), registering autoloads,
+    /// copying assets, and performing any other install steps.
+    /// </remarks>
     public static void EnableEPlugin(this IEEditorPlugin ePlugin)
     {
         var context = EGlobal.Instance.GetOrCreateContext(ePlugin);
         EGlobal.Instance.EnableEPlugin(context);
     }
 
+    /// <summary>
+    /// Uninstalls the plugin from the Godot project via the ePlugin framework.
+    /// </summary>
+    /// <remarks>
+    /// Call this from <see cref="Godot.EditorPlugin._DisablePlugin"/> to trigger the
+    /// framework's uninstall pipeline. The framework runs the reverse of the install
+    /// steps defined in the plugin's <see cref="EEditorPluginRecipe"/> — removing
+    /// autoloads and cleaning up any other registered resources. It will also Disable
+    /// all plugins that depend on this plugin.
+    /// </remarks>
     public static void DisableEPlugin(this IEEditorPlugin ePlugin)
     {
         var context = EGlobal.Instance.GetOrCreateContext(ePlugin);
         EGlobal.Instance.DisableEPlugin(context);
     }
-    
+
     /// <summary>
     /// Adds a NuGet package to the main Godot project.
     /// </summary>
