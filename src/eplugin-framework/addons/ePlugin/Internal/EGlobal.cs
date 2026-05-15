@@ -28,8 +28,6 @@ internal sealed class EGlobal
         }
     }
 
-    private const int MAX_FAILED_TRIES = 5;
-
     private readonly List<PluginContext> _contexts = [];
     private EPluginPlugin? _ePluginContext = null;
 
@@ -37,8 +35,8 @@ internal sealed class EGlobal
 
     private ILoggerFactory? _loggerFactory = null;
 
-    private Stack<PluginContext> _toCheck = new();
-    private Stack<PluginContext> _toDisable = new();
+    private readonly Stack<PluginContext> _toCheckEnable = new();
+    private readonly Stack<PluginContext> _toCheckDisable = new();
 
 
     private EGlobal()
@@ -132,7 +130,7 @@ internal sealed class EGlobal
         if (!IsValid())
         {
             EditorInterface.Singleton.SetPluginEnabled(context.Slug, false);
-            _toCheck.Push(context);
+            _toCheckEnable.Push(context);
         }
 
         if (context.State == EEditorPluginState.Activated)
@@ -158,7 +156,7 @@ internal sealed class EGlobal
         {
             if (!EditorInterface.Singleton.IsPluginEnabled(dependency.Slug))
             {
-                _toCheck.Push(context);
+                _toCheckEnable.Push(context);
                 EditorInterface.Singleton.SetPluginEnabled(dependency.Slug, true);
                 return; // EnableEPlugin will be called by newly enabled plugin, stop here
             }
@@ -169,7 +167,7 @@ internal sealed class EGlobal
                 if (dependencyContext is null)
                 {
                     context.Logger?.Warn($"Plugin {dependency.Slug} not found!");
-                    _toCheck.Push(context);
+                    _toCheckEnable.Push(context);
                     FailAllUncheckedPluginsAndRefresh($"Plugin dependency {dependency.Slug} not found!");
                     return;
                 }
@@ -181,7 +179,7 @@ internal sealed class EGlobal
                     {
                         context.Logger?.Warn(
                             $"Plugin dependency {dependency.Slug} not ready but needed by {context.Slug}!");
-                        _toCheck.Push(context);
+                        _toCheckEnable.Push(context);
                         FailAllUncheckedPluginsAndRefresh(
                             $"Plugin dependency {dependency.Slug} not ready but needed by {context.Slug}!");
                         return;
@@ -192,7 +190,7 @@ internal sealed class EGlobal
                     context.Logger.Warn(
                         $"Dependency {dependency.Slug} {dependencyVersion} does not match needed {dependency.Version} of {context.Slug}!");
 
-                    _toCheck.Push(context);
+                    _toCheckEnable.Push(context);
                     FailAllUncheckedPluginsAndRefresh(
                         $"Dependency {dependency.Slug} {dependencyVersion} does not match needed {dependency.Version} of {context.Slug}!");
                     return;
@@ -211,9 +209,9 @@ internal sealed class EGlobal
         if (refreshAtEnd)
         {
             // trigger install for waiting plugins
-            while (_toCheck.Any())
+            while (_toCheckEnable.Any())
             {
-                var nextPlugin = _toCheck.Pop();
+                var nextPlugin = _toCheckEnable.Pop();
 
                 EnableEPlugin(nextPlugin, false);
             }
@@ -224,14 +222,14 @@ internal sealed class EGlobal
 
     private void FailAllUncheckedPluginsAndRefresh(string reason)
     {
-        foreach (var plugin in _toCheck)
+        foreach (var plugin in _toCheckEnable)
         {
             plugin.State = EEditorPluginState.Error;
             plugin.ErrorDetail = new Exception(reason);
             EditorInterface.Singleton.SetPluginEnabled(plugin.Slug, false);
         }
 
-        _toCheck.Clear();
+        _toCheckEnable.Clear();
 
         RefreshEditor();
     }
@@ -270,7 +268,7 @@ internal sealed class EGlobal
             return;
         }
 
-        if (_toCheck.Contains(context))
+        if (_toCheckEnable.Contains(context))
         {
             // plugin in process of enablement, skip disable
             return;
@@ -317,7 +315,7 @@ internal sealed class EGlobal
 
         if (pluginsToDisable.Any())
         {
-            _toDisable.Push(context);
+            _toCheckDisable.Push(context);
 
             foreach (var plugin in pluginsToDisable)
             {
@@ -325,10 +323,10 @@ internal sealed class EGlobal
                 {
                     continue;
                 }
-                
+
                 if (EditorInterface.Singleton.IsPluginEnabled(plugin.Slug))
                 {
-                    _toDisable.Push(plugin);
+                    _toCheckDisable.Push(plugin);
                     EditorInterface.Singleton.SetPluginEnabled(plugin.Slug, false);
                 }
             }
@@ -338,16 +336,16 @@ internal sealed class EGlobal
 
         UninstallEPlugin(context, context.Builder.PluginRecipe);
         context.State = EEditorPluginState.Deactivated;
-        
+
         // @ local dependencies: can not disable as we do not know which are needed. There is no way to track manual or
         //                       auto enabled plugins right now.
 
         if (refreshAtEnd)
         {
             // trigger uninstall for waiting plugins
-            while (_toDisable.Any())
+            while (_toCheckDisable.Any())
             {
-                var nextPlugin = _toDisable.Pop();
+                var nextPlugin = _toCheckDisable.Pop();
 
                 DisableEPlugin(nextPlugin, false);
             }
