@@ -1,6 +1,8 @@
 <div align="center">
 
+<div width="50%">
 ![ePlugin framework logo](./design/icon-16_9.png)
+</div>
 
 # ePlugin Framework
 
