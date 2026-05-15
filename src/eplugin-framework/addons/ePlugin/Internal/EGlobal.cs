@@ -58,6 +58,24 @@ internal sealed class EGlobal
     }
 
     /// <summary>
+    /// Switch logging factory. This is used by logging plugins to switch ePlugin logging to their own.
+    /// </summary>
+    /// <param name="loggerFactory"></param>
+    /// <exception cref="InvalidOperationException"></exception>
+    public void SwitchLogging(ILoggerFactory loggerFactory)
+    {
+        if (!IsValid())
+        {
+            throw new InvalidOperationException("EGlobal is not initialized, cannot switch logging");
+        }
+
+        _loggerFactory = loggerFactory;
+        _ePluginContext!.Logger = _loggerFactory.CreateLogger(_ePluginContext.GetType().FullName ?? "UNKNOWN");
+
+        ReloadContexts(_loggerFactory, false);
+    }
+
+    /// <summary>
     /// Returns true if EGlobal is initialized. After an assembly reload all state is lost, this will be false then and
     /// a new initialize needs to happen.
     /// </summary>
