@@ -321,6 +321,11 @@ internal sealed class EGlobal
 
             foreach (var plugin in pluginsToDisable)
             {
+                if (plugin.State is not EEditorPluginState.Activated)
+                {
+                    continue;
+                }
+                
                 if (EditorInterface.Singleton.IsPluginEnabled(plugin.Slug))
                 {
                     _toDisable.Push(plugin);
@@ -332,7 +337,8 @@ internal sealed class EGlobal
         }
 
         UninstallEPlugin(context, context.Builder.PluginRecipe);
-
+        context.State = EEditorPluginState.Deactivated;
+        
         // @ local dependencies: can not disable as we do not know which are needed. There is no way to track manual or
         //                       auto enabled plugins right now.
 
