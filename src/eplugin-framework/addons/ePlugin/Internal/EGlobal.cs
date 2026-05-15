@@ -191,7 +191,7 @@ internal sealed class EGlobal
                 {
                     context.Logger.Warn(
                         $"Dependency {dependency.Slug} {dependencyVersion} does not match needed {dependency.Version} of {context.Slug}!");
-                    
+
                     _toCheck.Push(context);
                     FailAllUncheckedPluginsAndRefresh(
                         $"Dependency {dependency.Slug} {dependencyVersion} does not match needed {dependency.Version} of {context.Slug}!");
@@ -208,16 +208,16 @@ internal sealed class EGlobal
         //all dependencies are ready, we can finally install the requested plugin
         InstallEPlugin(context, recipe);
 
-        // trigger install for waiting plugins
-        while (_toCheck.Any())
-        {
-            var nextPlugin = _toCheck.Pop();
-
-            EnableEPlugin(nextPlugin, false);
-        }
-
         if (refreshAtEnd)
         {
+            // trigger install for waiting plugins
+            while (_toCheck.Any())
+            {
+                var nextPlugin = _toCheck.Pop();
+
+                EnableEPlugin(nextPlugin, false);
+            }
+
             RefreshEditor();
         }
     }
@@ -232,11 +232,11 @@ internal sealed class EGlobal
         }
 
         _toCheck.Clear();
-        
+
         RefreshEditor();
     }
 
-    internal void InstallEPlugin(PluginContext context, EEditorPluginRecipe recipe)
+    private void InstallEPlugin(PluginContext context, EEditorPluginRecipe recipe)
     {
         foreach (var nuget in recipe.Nugets)
         {
@@ -263,7 +263,7 @@ internal sealed class EGlobal
         }
     }
 
-    public void DisableEPlugin(PluginContext context)
+    public void DisableEPlugin(PluginContext context, bool refreshAtEnd = true)
     {
         if (context.Plugin is null)
         {
@@ -276,13 +276,82 @@ internal sealed class EGlobal
             return;
         }
 
+        if (context.State == EEditorPluginState.Deactivated)
+        {
+            return;
+        }
+
         if (!context.IsRecipeCreated)
         {
             context.Plugin.CreateRecipe(context.Builder);
         }
 
-        var recipe = context.Builder.PluginRecipe;
+        // disable plugins dependent on this one
+        var pluginsToDisable = new List<PluginContext>();
+        foreach (var plugin in _contexts)
+        {
+            if (plugin == context)
+            {
+                continue;
+            }
 
+            if (plugin.State is not EEditorPluginState.Activated)
+            {
+                continue;
+            }
+
+            if (!plugin.IsRecipeCreated)
+            {
+                plugin.Plugin.CreateRecipe(plugin.Builder);
+                plugin.IsRecipeCreated = true;
+            }
+
+            var isDependant = plugin.Builder.PluginRecipe.PluginDependencies.Any(d => d.Slug == context.Slug);
+            if (!isDependant)
+            {
+                continue;
+            }
+
+            pluginsToDisable.Add(plugin);
+        }
+
+        if (pluginsToDisable.Any())
+        {
+            _toDisable.Push(context);
+
+            foreach (var plugin in pluginsToDisable)
+            {
+                if (EditorInterface.Singleton.IsPluginEnabled(plugin.Slug))
+                {
+                    _toDisable.Push(plugin);
+                    EditorInterface.Singleton.SetPluginEnabled(plugin.Slug, false);
+                }
+            }
+
+            return;
+        }
+
+        UninstallEPlugin(context, context.Builder.PluginRecipe);
+
+        // @ local dependencies: can not disable as we do not know which are needed. There is no way to track manual or
+        //                       auto enabled plugins right now.
+
+        if (refreshAtEnd)
+        {
+            // trigger uninstall for waiting plugins
+            while (_toDisable.Any())
+            {
+                var nextPlugin = _toDisable.Pop();
+
+                DisableEPlugin(nextPlugin, false);
+            }
+
+            RefreshEditor();
+        }
+    }
+
+    private void UninstallEPlugin(PluginContext context, EEditorPluginRecipe recipe)
+    {
         foreach (var autoload in recipe.Autoloads)
         {
             // hijack base plugin as actual plugin is already destroyed here.
@@ -303,14 +372,13 @@ internal sealed class EGlobal
         {
             context.Plugin.RemoveNuget(nuget.Name);
         }
-
-        RefreshEditor();
     }
 
     private void RefreshEditor()
     {
         _ePluginContext?.Logger.Log($"Refreshed Editor state.");
 
+        // refresh what we can in Godot Editor UI.
         if (!EditorInterface.Singleton.GetResourceFilesystem().IsScanning())
         {
             EditorInterface.Singleton.GetResourceFilesystem().Scan();
