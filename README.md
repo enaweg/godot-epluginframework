@@ -47,11 +47,14 @@ provide some of the missing pieces for C# Plugins.
   plugin
 + if an error happens during installation or deinstallation, the projects might be left in a non-compilable state and
   needs manual intervention.
++ The Godot editors plugin UI will not refresh. Activated dependant plugins will not be shown in the plugin UI till it
+  is reopened.
 
 ## What is not possible?
 
 + The current system does not allow for external Assets (Scenes, Models, Scripts, aso.) as Godot needs a unique Id for
-  each Asset and this is not supported for external elements.
+  each Asset and this is not supported for external elements. But it is possible to add them using a subdirectory of the
+  plugin that will be included on activation.
 
 ## Testing
 
