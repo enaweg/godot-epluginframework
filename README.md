@@ -1,10 +1,6 @@
 <div align="center">
 
-<div style="max-width: 50%">
-
-![ePlugin framework logo](./design/icon-16_9.png)
-
-</div>
+<img src="./design/icon-16_9.png" alt="ePlugin framework logo" width="50%"/>
 
 # ePlugin Framework
 
