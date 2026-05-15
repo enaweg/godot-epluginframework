@@ -190,6 +190,11 @@ Feel free to contribute with Documentation, Testing, or PRs.
     * Automatic plugin update system using source URL
     * Plugin specific UI templates (licenses, feedback, Welcome screen)
 
+## Commercial Support
+
+Commercial services are available from [Enaweg](https://www.enaweg.at). If you need consulting, implementation
+assistance, or tailored development services, please get in touch through their website.
+
 ## License
 
 Licensed under the MIT license, see `LICENSE` for more information.
