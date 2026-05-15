@@ -33,10 +33,10 @@ jobs:
         id: build_changelog
         uses: mikepenz/release-changelog-builder-action@v6.2.1
         with:
-          mode: "COMMIT"
+          mode: "HYBRID"
           configurationJson: |
             {
-               "template": "#{{CHANGELOG}}",
+               "template": "#{{CHANGELOG}}\n\n<summary>Contributors</summary>\n\n#{{CONTRIBUTORS}}",
                "categories": [
                  {
                      "title": "## Feature",
@@ -60,7 +60,14 @@ jobs:
                    "on_property": "title",
                    "target": "$1"
                  }
-               ]
+               ],
+              "tag_resolver": {
+                "method": "semver",
+                "filter": {
+                  "pattern": "v(.+)",
+                  "flags": "gu"
+                }
+              }
              }
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
