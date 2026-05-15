@@ -1,5 +1,7 @@
 <div align="center">
 
+![ePlugin framework logo](./design/icon-16_9.png)
+
 # ePlugin Framework
 
 **Extended C# Plugin Framework for [Godot](https://godotengine.org/).**
