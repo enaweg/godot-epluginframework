@@ -6,7 +6,7 @@ using Godot;
 namespace Enaweg.Plugin;
 
 [Tool]
-public sealed partial class EPluginPlugin : EditorPlugin
+public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin
 {
     public bool EnableDebugLogging => false;
 

@@ -8,7 +8,7 @@
 /// On startup the framework scans the executing assembly for all exported types that
 /// implement <see cref="IInitialize"/>, instantiates each with
 /// <see cref="Activator.CreateInstance"/>, and calls <see cref="Initialize"/> once with
-/// the live <see cref="EPluginPlugin"/> node.
+/// the <see cref="IEPlugin"/> instance.
 /// </remarks>
 public interface IInitialize
 {
@@ -16,6 +16,6 @@ public interface IInitialize
     /// Called once during framework startup after all active plugin contexts have been
     /// discovered.
     /// </summary>
-    /// <param name="ePlugin">The <see cref="EPluginPlugin"/> editor node.</param>
-    void Initialize(EPluginPlugin ePlugin);
+    /// <param name="ePlugin">The <see cref="IEPlugin"/> editor node.</param>
+    void Initialize(IEPlugin ePlugin);
 }
