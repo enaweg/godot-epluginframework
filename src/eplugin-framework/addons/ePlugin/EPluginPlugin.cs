@@ -23,12 +23,6 @@ public sealed partial class EPluginPlugin : EditorPlugin
         set => _logger = value;
     }
 
-    public override void _EnterTree()
-    {
-        base._EnterTree();
-        InitializeInternals();
-    }
-    
     public override void _Process(double delta)
     {
         base._Process(delta);
@@ -40,7 +34,7 @@ public sealed partial class EPluginPlugin : EditorPlugin
             InitializeInternals();
         }
     }
-
+    
     private void InitializeInternals()
     {
         EGlobal.Instance.Initialize(this, new GenericLoggerFactory(category => new GodotConsoleLogger(category)));

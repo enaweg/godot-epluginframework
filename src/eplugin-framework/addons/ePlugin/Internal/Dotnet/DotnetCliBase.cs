@@ -9,23 +9,20 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli
 {
     protected readonly string SolutionPath;
     protected readonly string GodotProjectPath;
-    protected ILogger? Logger;
 
-    protected DotnetCliBase(EPluginPlugin ePlugin, ILogger? logger) : base(ePlugin)
+    protected DotnetCliBase(ILogger? logger, bool enableDebugLogging) : base(logger, enableDebugLogging)
     {
-        Logger = logger;
-
         var pathToSolution = ProjectSettings.GlobalizePath("res://");
         var solutionName = $"{ProjectSettings.GetSetting("dotnet/project/assembly_name")}.sln";
         var projectName = $"{ProjectSettings.GetSetting("dotnet/project/assembly_name")}.csproj";
 
         SolutionPath = Path.GetFullPath(Path.Combine(pathToSolution, solutionName));
         GodotProjectPath = Path.GetFullPath(Path.Combine(pathToSolution, ProjectSettings.GlobalizePath(projectName)));
-    }
 
-    public void UseLogger(ILogger? logger)
-    {
-        Logger = logger;
+        if (enableDebugLogging)
+        {
+            logger?.Log($"Using {this.GetType().Name} for dotnet commands.");
+        }
     }
 
     public abstract void RebuildSolution();

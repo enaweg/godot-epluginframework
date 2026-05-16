@@ -22,17 +22,20 @@ public interface IEEditorPluginBuilder
     IEEditorPluginBuilder AddAutoload(string name, string path);
 
     /// <summary>
-    /// Declares a dependency on another plugin (C# or GDScript). The framework ensures the
-    /// dependency is enabled and optionally at the required version before activating this plugin.
+    /// Declares a dependency on another plugin (C# or GDScript). The framework enables the
+    /// dependency before activating this plugin and, when a version constraint is given, verifies
+    /// the installed dependency satisfies it.
     /// </summary>
     /// <param name="pluginSlug">
     /// The directory name of the required plugin under <c>addons/</c>
     /// (e.g. <c>"my-dependency"</c> for <c>addons/my-dependency/</c>).
     /// </param>
     /// <param name="version">
-    /// Optional version constraint. Use an exact version (<c>"1.2.3"</c>) or a minimum
-    /// version with a <c>&gt;</c> prefix (<c>"&gt;1.2.0"</c>).
-    /// When <see langword="null"/>, any installed version is accepted.
+    /// Optional version constraint matched against the dependency's <c>plugin.cfg</c>.
+    /// Use an exact version (<c>"1.2.3"</c>) or a "<c>&gt;</c>"-prefixed value
+    /// (<c>"&gt;1.2.0"</c>) which is interpreted as "this version or higher".
+    /// Versions must follow <c>[major].[minor].[patch]</c>; semver pre-release suffixes are
+    /// stripped before comparison. When <see langword="null"/>, any installed version is accepted.
     /// </param>
     /// <returns>The builder itself.</returns>
     IEEditorPluginBuilder AddPluginDependency(string pluginSlug, string? version = null);

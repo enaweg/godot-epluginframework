@@ -6,16 +6,14 @@ using Godot;
 namespace Enaweg.Plugin.Internal.Dotnet;
 
 [Tool]
-internal sealed class DotnetCli : ExecuteCliBase, IDotnet
+internal sealed class DotnetVersionManager : ExecuteCliBase
 {
+    private readonly bool _enableDebugLogging;
     private const string CmdDotNet = "dotnet";
-
-    private ILogger? _logger;
 
     private string? _dotnetVersion = null;
     private bool? _isDotnetAvailable = null;
     private bool? _isDotnet10OrLater = null;
-    private readonly DotnetCliBase _call;
 
     public string? DotnetVersion
     {
@@ -69,35 +67,26 @@ internal sealed class DotnetCli : ExecuteCliBase, IDotnet
         }
     }
 
-    public IDotnetCli Call
+    public DotnetVersionManager(ILogger? logger, bool enableDebugLogging) : base(logger, enableDebugLogging)
     {
-        get => _call;
-    }
-
-    public DotnetCli(EPluginPlugin ePlugin, ILogger? logger) : base(ePlugin)
-    {
-        _logger = logger;
-
+        _enableDebugLogging = enableDebugLogging;
         if (!IsDotnetAvailable)
         {
-            _logger?.Error(
+            logger?.Error(
                 "The dotnet command line tool could not be executed, make sure it is installed and accessible.");
         }
+    }
 
+    public IDotnetCli Create(ILogger? logger)
+    {
         if (Is10OrLater)
         {
-            _call = new DotnetCli10(ePlugin, _logger);
+            return new DotnetCli10(logger, _enableDebugLogging);
         }
         else
         {
-            _call = new DotnetCli9(ePlugin, _logger);
+            return new DotnetCli9(logger, _enableDebugLogging);
         }
-    }
-
-    public void UseLogger(ILogger? logger)
-    {
-        _logger = logger;
-        _call.UseLogger(logger);
     }
 
     private bool IsDotnetCliAvailable()
@@ -110,15 +99,15 @@ internal sealed class DotnetCli : ExecuteCliBase, IDotnet
                 cmdName = "where";
             }
 
-            var result = ExecuteCall(_logger, cmdName, [CmdDotNet]);
+            var result = ExecuteCall(cmdName, [CmdDotNet]);
             if (result.Item1 >= 0)
             {
                 return true;
             }
         }
-        catch (Exception ex)
+        catch (Exception _)
         {
-            _logger?.Error(ex.Message);
+            // ignored
         }
 
         return false;
@@ -126,14 +115,13 @@ internal sealed class DotnetCli : ExecuteCliBase, IDotnet
 
     private string ReadDotnetVersion()
     {
-        var result = ExecuteCall(_logger, CmdDotNet, ["--version"]);
+        var result = ExecuteCall(CmdDotNet, ["--version"]);
 
         if (result.Item1 >= 0 && result.Item2.Length >= 1)
         {
             return result.Item2[0];
         }
 
-        
         throw new Exception("Dotnet could not be executed.");
     }
 

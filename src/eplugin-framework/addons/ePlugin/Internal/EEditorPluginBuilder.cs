@@ -16,6 +16,7 @@ internal sealed class EEditorPluginBuilder : IEEditorPluginBuilder
     private EEditorPluginBuilder()
     {
         PluginRecipe = new EEditorPluginRecipe();
+        PluginRecipe.PluginDependencies.Add(new EEditorPluginRecipe.Plugin("ePlugin", null));
     }
 
     public IEEditorPluginBuilder AddAutoload(string name, string path)

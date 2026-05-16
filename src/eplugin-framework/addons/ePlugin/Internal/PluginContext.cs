@@ -6,18 +6,23 @@ using Godot;
 namespace Enaweg.Plugin.Internal;
 
 [Tool]
-internal sealed class PluginContext(IEEditorPlugin plugin, ILogger? logger)
+internal sealed class PluginContext(IEEditorPlugin? plugin, EditorPlugin pluginBase, ILogger? logger)
 {
-    public string Slug { get; init; } = plugin.GodotPlugin.GetPluginSlug();
-    public string Name { get; init; } = plugin.GodotPlugin.ReadMetadata()?.Name ?? plugin.GodotPlugin.GetPluginSlug();
-    public string Version { get; init; } = plugin.GodotPlugin.ReadMetadata()?.Version ?? string.Empty;
-    public string Description { get; init; } = plugin.GodotPlugin.ReadMetadata()?.Description ?? string.Empty;
+    public string Slug { get; init; } = pluginBase.GetPluginSlug();
+    public string Name { get; init; } = pluginBase.ReadMetadata()?.Name ?? pluginBase.GetPluginSlug();
+    public string Version { get; init; } = pluginBase.ReadMetadata()?.Version ?? string.Empty;
+    public string Description { get; init; } = pluginBase.ReadMetadata()?.Description ?? string.Empty;
 
-    public string Directory { get; init; } = plugin.GodotPlugin.GetPluginDirectory();
+    public string Directory { get; init; } = pluginBase.GetPluginDirectory();
 
-    public ILogger? Logger { get; set; } = logger;
+    public ILogger? Logger { get; init; } = logger;
 
-    public IEEditorPlugin? Plugin { get; set; } = plugin;
+    public IEEditorPlugin? Plugin { get; init; } = plugin;
+    
+    public EditorPlugin PluginBase { get; init; } = pluginBase;
+
+    public IDotnetCli? Cli { get; init; } = EGlobal.Instance.GetCli(logger);
+    
     public EEditorPluginState State { get; set; } = EEditorPluginState.Created;
     public EEditorPluginBuilder Builder { get; init; } = EEditorPluginBuilder.Create();
     

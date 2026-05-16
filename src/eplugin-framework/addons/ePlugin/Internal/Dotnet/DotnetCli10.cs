@@ -6,7 +6,8 @@ using Godot;
 
 namespace Enaweg.Plugin.Internal.Dotnet;
 
-internal sealed class DotnetCli10(EPluginPlugin ePlugin, ILogger? logger) : DotnetCliBase(ePlugin, logger), IDotnetCli
+internal sealed class DotnetCli10(ILogger? logger, bool enableDebugLogging)
+    : DotnetCliBase(logger, enableDebugLogging), IDotnetCli
 {
     private const string CmdDotNet = "dotnet";
 
@@ -92,11 +93,11 @@ internal sealed class DotnetCli10(EPluginPlugin ePlugin, ILogger? logger) : Dotn
         {
             if (version is not null)
             {
-                Logger?.Error($"Installing {nugetName} v{version} failed!");
+                logger?.Error($"Installing {nugetName} v{version} failed!");
             }
             else
             {
-                Logger?.Error($"Installing {nugetName} failed!");
+                logger?.Error($"Installing {nugetName} failed!");
             }
         }
 
@@ -136,7 +137,7 @@ internal sealed class DotnetCli10(EPluginPlugin ePlugin, ILogger? logger) : Dotn
 
     public override (int, string[]) Execute(string command, string[] args)
     {
-        return ExecuteCall(Logger, command, args);
+        return ExecuteCall(command, args);
     }
 
     private (int, string[]) Execute(string? noun, string? verb, string[] args)
@@ -154,7 +155,7 @@ internal sealed class DotnetCli10(EPluginPlugin ePlugin, ILogger? logger) : Dotn
 
         allArgs.AddRange(args);
 
-        return ExecuteCall(Logger, CmdDotNet, allArgs.ToArray());
+        return ExecuteCall(CmdDotNet, allArgs.ToArray());
     }
 }
 #endif

@@ -7,7 +7,8 @@ using Godot;
 
 namespace Enaweg.Plugin.Internal.Dotnet;
 
-internal sealed class DotnetCli9(EPluginPlugin ePlugin, ILogger? logger) : DotnetCliBase(ePlugin, logger), IDotnetCli
+internal sealed class DotnetCli9(ILogger? logger, bool enableDebugLogging)
+    : DotnetCliBase(logger, enableDebugLogging), IDotnetCli
 {
     private const string CmdDotNet = "dotnet";
 
@@ -93,11 +94,11 @@ internal sealed class DotnetCli9(EPluginPlugin ePlugin, ILogger? logger) : Dotne
         {
             if (version is not null)
             {
-                Logger.Error($"Installing {nugetName} v{version} failed! {result.Item2.First()}");
+                logger?.Error($"Installing {nugetName} v{version} failed! {result.Item2.First()}");
             }
             else
             {
-                Logger.Error($"Installing {nugetName} failed! {result.Item2.First()}");
+                logger?.Error($"Installing {nugetName} failed! {result.Item2.First()}");
             }
         }
 
@@ -136,12 +137,12 @@ internal sealed class DotnetCli9(EPluginPlugin ePlugin, ILogger? logger) : Dotne
 
     public override (int, string[]) Execute(string command, string[] args)
     {
-        return ExecuteCall(Logger, CmdDotNet, args);
+        return ExecuteCall(CmdDotNet, args);
     }
 
     private (int, string[]) Execute(string[] args)
     {
-        return ExecuteCall(Logger, CmdDotNet, args);
+        return ExecuteCall(CmdDotNet, args);
     }
 }
 #endif

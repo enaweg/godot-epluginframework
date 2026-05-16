@@ -8,16 +8,9 @@ using Array = Godot.Collections.Array;
 
 namespace Enaweg.Plugin.Internal.Dotnet;
 
-public abstract class ExecuteCliBase
+public abstract class ExecuteCliBase(ILogger? logger, bool enableDebugLogging)
 {
-    protected EPluginPlugin EPlugin { get; }
-
-    protected ExecuteCliBase(EPluginPlugin ePlugin)
-    {
-        EPlugin = ePlugin;
-    }
-
-    protected (int, string[]) ExecuteCall(ILogger? logger, string cmd, string[] args)
+    protected (int, string[]) ExecuteCall(string cmd, string[] args)
     {
         var pathToSolution = Path.GetFullPath(ProjectSettings.GlobalizePath("res://"));
 
@@ -25,7 +18,7 @@ public abstract class ExecuteCliBase
         {
             var finalArgs = args.SelectMany(a => a.Split(' ')).ToArray();
             var result = new Array();
-            if (EPlugin.EnableDebugLogging)
+            if (enableDebugLogging)
             {
                 logger?.Log(
                     $"Executing: {cmd} {string.Join(" ", finalArgs).Replace(pathToSolution, $"<project>{Path.DirectorySeparatorChar}")}");

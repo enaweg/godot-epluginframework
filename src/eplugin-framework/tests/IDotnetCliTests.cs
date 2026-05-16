@@ -1,4 +1,5 @@
 using Enaweg.Plugin.Internal;
+using Enaweg.Plugin.Logging;
 using GdUnit4;
 using Moq;
 
@@ -11,11 +12,12 @@ public class IDotnetCliTests
     [RequireGodotRuntime]
     public void VersionTest()
     {
-        var mockPlugin = new Mock<IEEditorPlugin>();
+        var mockPlugin = new Mock<EPluginPlugin>();
 
-        var cli = EGlobal.Instance.GetCli(mockPlugin.Object);
+        EGlobal.Instance.Initialize(mockPlugin.Object,
+            new GenericLoggerFactory(category => new GodotConsoleLogger(category)));
 
-        var dotnetVersion = cli.DotnetVersion;
+        var dotnetVersion = EGlobal.Instance.CliService.DotnetVersion;
 
         Assertions.AssertThat(dotnetVersion).IsNotEmpty();
     }

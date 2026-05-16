@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using Enaweg.Plugin.Internal.Dotnet;
 using Enaweg.Plugin.Logging;
 using Godot;
@@ -31,13 +30,12 @@ internal sealed class EGlobal
     private readonly List<PluginContext> _contexts = [];
     private EPluginPlugin? _ePluginContext = null;
 
-    private DotnetCli? _cli = null;
+    public DotnetVersionManager? CliService { get; private set; } = null;
 
     private ILoggerFactory? _loggerFactory = null;
 
     private readonly Stack<PluginContext> _toCheckEnable = new();
     private readonly Stack<PluginContext> _toCheckDisable = new();
-
 
     private EGlobal()
     {
@@ -53,6 +51,8 @@ internal sealed class EGlobal
         _loggerFactory = loggerFactory;
         _ePluginContext = plugin;
         plugin.Logger = _loggerFactory.CreateLogger(_ePluginContext.GetType().FullName ?? "UNKNOWN");
+
+        CliService = new DotnetVersionManager(plugin.Logger, plugin.EnableDebugLogging);
 
         ReloadContexts(_loggerFactory, false);
     }
@@ -72,6 +72,8 @@ internal sealed class EGlobal
         _loggerFactory = loggerFactory;
         _ePluginContext!.Logger = _loggerFactory.CreateLogger(_ePluginContext.GetType().FullName ?? "UNKNOWN");
 
+        CliService = new DotnetVersionManager(_ePluginContext.Logger, _ePluginContext.EnableDebugLogging);
+
         ReloadContexts(_loggerFactory, false);
     }
 
@@ -85,60 +87,37 @@ internal sealed class EGlobal
         return _ePluginContext is not null;
     }
 
-    public PluginContext GetOrCreateContext(IEEditorPlugin plugin)
+    public PluginContext GetOrCreateContext(EditorPlugin pluginBase)
     {
-        var context = _contexts.FirstOrDefault(c => c.Plugin == plugin);
-
+        var context = _contexts.FirstOrDefault(c => c.PluginBase == pluginBase);
         if (context is null)
         {
-            var pluginLogger = _loggerFactory?.CreateLogger(plugin.GetType().FullName ?? "UNKNOWN");
-            context = new PluginContext(plugin, pluginLogger);
+            var ePlugin = pluginBase as IEEditorPlugin;
+            var pluginLogger = _loggerFactory?.CreateLogger(pluginBase.GetType().FullName ?? "UNKNOWN");
+            context = new PluginContext(ePlugin, pluginBase, pluginLogger);
             _contexts.Add(context);
         }
 
         return context;
     }
 
-    public DotnetCli GetCli(EPluginPlugin plugin)
+    public IDotnetCli? GetCli(ILogger? logger)
     {
-        if (_cli == null)
-        {
-            _cli = new DotnetCli(plugin, plugin.Logger);
-        }
-        else
-        {
-            _cli.UseLogger(plugin.Logger);
-        }
-
-        return _cli;
+        return CliService?.Create(logger);
     }
 
-    public DotnetCli GetCli(IEEditorPlugin plugin)
-    {
-        var context = GetOrCreateContext(plugin);
-        if (_cli == null)
-        {
-            _cli = new DotnetCli(_ePluginContext, context?.Logger);
-        }
-        else
-        {
-            _cli.UseLogger(context?.Logger);
-        }
-
-        return _cli;
-    }
-
-    internal void EnsureEEditorPluginEnabled()
+    private void EnsureEEditorPluginEnabled(PluginContext context)
     {
         if (!EditorInterface.Singleton.IsPluginEnabled("ePlugin"))
         {
+            _toCheckEnable.Push(context);
             EditorInterface.Singleton.SetPluginEnabled("ePlugin", true);
         }
     }
 
     public void EnableEPlugin(PluginContext context, bool refreshAtEnd = true)
     {
-        EnsureEEditorPluginEnabled();
+        EnsureEEditorPluginEnabled(context);
 
         if (context.Plugin is null)
         {
@@ -261,7 +240,7 @@ internal sealed class EGlobal
     {
         foreach (var nuget in recipe.Nugets)
         {
-            if (!context.Plugin.AddNuget(nuget.Name, nuget.Version, nuget.Source))
+            if (!context.Cli.AddNugetToProject(nuget.Name, nuget.Version, nuget.Source))
             {
                 context.FailedTries = uint.MaxValue;
                 return;
@@ -270,7 +249,12 @@ internal sealed class EGlobal
 
         foreach (var project in recipe.Projects)
         {
-            context.Plugin.AddProject(project.Path, project.FolderName, project.Reference);
+            context.Cli.AddProjectToSolution(project.Path, project.FolderName);
+
+            if (project.Reference)
+            {
+                context.Cli.AddProjectReference(project.Path);
+            }
         }
 
         foreach (var directory in recipe.Directories)
@@ -280,7 +264,7 @@ internal sealed class EGlobal
 
         foreach (var autoload in recipe.Autoloads)
         {
-            context.Plugin.GodotPlugin.AddAutoloadSingleton(autoload.Name, autoload.Path);
+            context.PluginBase.AddAutoloadSingleton(autoload.Name, autoload.Path);
         }
     }
 
@@ -318,6 +302,12 @@ internal sealed class EGlobal
 
             if (plugin.State is not EEditorPluginState.Activated)
             {
+                continue;
+            }
+
+            if (plugin.Plugin is null)
+            {
+                // not an ePlugin plugin.
                 continue;
             }
 
@@ -382,7 +372,7 @@ internal sealed class EGlobal
         foreach (var autoload in recipe.Autoloads)
         {
             // hijack base plugin as actual plugin is already destroyed here.
-            context.Plugin.GodotPlugin.RemoveAutoloadSingleton(autoload.Name);
+            context.PluginBase.RemoveAutoloadSingleton(autoload.Name);
         }
 
         foreach (var directory in recipe.Directories)
@@ -392,12 +382,13 @@ internal sealed class EGlobal
 
         foreach (var project in recipe.Projects)
         {
-            context.Plugin.RemoveProject(project.Path);
+            context.Cli.RemoveProjectReference(project.Path);
+            context.Cli.RemoveProjectFromSolution(project.Path);
         }
 
         foreach (var nuget in recipe.Nugets)
         {
-            context.Plugin.RemoveNuget(nuget.Name);
+            context.Cli.RemoveNugetFromProject(nuget.Name);
         }
     }
 
@@ -411,11 +402,14 @@ internal sealed class EGlobal
             EditorInterface.Singleton.GetResourceFilesystem().Scan();
         }
 
-        _cli?.UseLogger(_ePluginContext?.Logger);
-        _cli?.Call.RebuildSolution();
+        if (_ePluginContext is not null)
+        {
+            var baseContext = GetOrCreateContext(_ePluginContext);
+            baseContext.Cli?.RebuildSolution();
 
-        _ePluginContext?.Logger.Log(
-            $"Completed loading. {_contexts.Count(c => c.State == EEditorPluginState.Activated)} active plugins.");
+            _ePluginContext.Logger.Log(
+                $"Completed loading. {_contexts.Count(c => c.State == EEditorPluginState.Activated)} active plugins.");
+        }
     }
 
     /// <summary>
@@ -440,25 +434,8 @@ internal sealed class EGlobal
             _ePluginContext = (EPluginPlugin)ePluginNode;
         }
 
-        // ensure logger is set with current loggerFactory
-        if (loggerFactory is not null)
-        {
-            foreach (var context in _contexts)
-            {
-                if (context.Logger is not null)
-                {
-                    continue;
-                }
-
-                context.Logger = _loggerFactory?.CreateLogger(context.GetType().FullName ?? "UNKNOWN");
-            }
-        }
-
-        // init cli (so it does not happen at random)
-        var _ = GetCli(_ePluginContext).IsDotnetAvailable;
-
         // handle other plugins
-        _ePluginContext.Logger.Log($"Refreshing ePlugins");
+        _ePluginContext.Logger.Log($"Refreshing plugins");
 
         var deactivatedPlugins = _contexts.Where(c => c.State == EEditorPluginState.Deactivated).ToArray();
         if (deactivatedPlugins.Any())
@@ -471,62 +448,63 @@ internal sealed class EGlobal
 
         foreach (var childNode in children)
         {
-            if (childNode is null)
+            if (childNode.GetScript().VariantType is Variant.Type.Nil ||
+                string.IsNullOrEmpty(((Script)childNode.GetScript()).GetPath()))
             {
                 continue;
             }
 
-            if (childNode is IEEditorPlugin editorPlugin)
+            if (childNode is EditorPlugin pluginBase)
             {
-                AddOrUpdatePluginContext(editorPlugin, changeTriggered);
-                _ePluginContext.Logger.Log(
-                    $"  - ePlugin {editorPlugin.GodotPlugin.GetPluginSlug()} ({editorPlugin.GodotPlugin.GetName()})");
+                if (pluginBase.GetPluginDirectory() is null)
+                {
+                    // native Godot plugin, skip
+                    continue;
+                }
+
+                AddOrUpdatePluginContext(pluginBase as IEEditorPlugin, pluginBase, changeTriggered);
+                _ePluginContext.Logger.Log($"  - plugin {pluginBase.GetPluginSlug()} ({pluginBase.GetName()})");
             }
         }
 
-        _ePluginContext.Logger.Log($"Found {_contexts.Count} active ePlugin(s).");
+        _ePluginContext.Logger.Log(
+            $"Found {_contexts.Count(p => p.State is EEditorPluginState.Activated)} active plugins.");
 
         // initialize plugins
-        var initializeTypes = Assembly.GetExecutingAssembly().GetExportedTypes().Except([typeof(IInitialize)])
-            .Where(t => t.IsAssignableTo(typeof(IInitialize))).ToArray();
-
-        if (_ePluginContext.EnableDebugLogging && initializeTypes.Any())
+        var initializers = _contexts.Select(c => c.PluginBase).OfType<IInitialize>().ToArray();
+        if (_ePluginContext.EnableDebugLogging && initializers.Any())
         {
             _ePluginContext.Logger.Log($"Calling Initializers:");
         }
 
-        foreach (var initializeType in initializeTypes)
+        foreach (var initializer in initializers)
         {
             try
             {
-                var instance = Activator.CreateInstance(initializeType);
-                if (instance is IInitialize initializeInstance)
+                if (_ePluginContext.EnableDebugLogging)
                 {
-                    if (_ePluginContext.EnableDebugLogging)
-                    {
-                        _ePluginContext.Logger.Log($" - Calling {initializeType.FullName}");
-                    }
-
-                    initializeInstance.Initialize(_ePluginContext);
+                    _ePluginContext.Logger.Log($" - Initializing {initializer.GetType().FullName}");
                 }
+
+                initializer.Initialize(_ePluginContext);
             }
             catch (Exception ex)
             {
-                _ePluginContext.Logger.Error($"Error initializing {initializeType.FullName}: {ex}");
+                _ePluginContext.Logger.Error($"Error initializing {initializer.GetType().FullName}: {ex}");
             }
         }
     }
 
-    private void AddOrUpdatePluginContext(IEEditorPlugin editorPlugin, bool changeTriggered)
+    private void AddOrUpdatePluginContext(IEEditorPlugin? editorPlugin, EditorPlugin pluginBase, bool changeTriggered)
     {
-        var context = _contexts.FirstOrDefault(c => c.Plugin == editorPlugin);
+        var context = _contexts.FirstOrDefault(c => c.PluginBase == pluginBase);
         if (context is null)
         {
-            var pluginLogger = _loggerFactory?.CreateLogger(editorPlugin.GetType().FullName ?? "UNKNOWN");
+            var pluginLogger = _loggerFactory?.CreateLogger(pluginBase.GetType().FullName ?? "UNKNOWN");
             if (changeTriggered)
             {
                 // was a change to plugins, so this is a new plugin need to bootstrap.
-                context = new PluginContext(editorPlugin, pluginLogger)
+                context = new PluginContext(editorPlugin, pluginBase, pluginLogger)
                 {
                     State = EEditorPluginState.Created,
                 };
@@ -534,7 +512,7 @@ internal sealed class EGlobal
             else
             {
                 // initial start or assembly reload, nothing need to be done as installation already happened
-                context = new PluginContext(editorPlugin, pluginLogger)
+                context = new PluginContext(editorPlugin, pluginBase, pluginLogger)
                 {
                     State = EEditorPluginState.Activated
                 };
