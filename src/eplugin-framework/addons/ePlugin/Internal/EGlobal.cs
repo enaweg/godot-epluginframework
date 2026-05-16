@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using Enaweg.Plugin.Internal.Dotnet;
 using Enaweg.Plugin.Logging;
 using Godot;
@@ -96,6 +97,11 @@ internal sealed class EGlobal
             var pluginLogger = _loggerFactory?.CreateLogger(pluginBase.GetType().FullName ?? "UNKNOWN");
             context = new PluginContext(ePlugin, pluginBase, pluginLogger);
             _contexts.Add(context);
+
+            if (context.PluginBase is IInitialize initialize)
+            {
+                initialize.Initialize(_ePluginContext);
+            }
         }
 
         return context;
@@ -462,7 +468,18 @@ internal sealed class EGlobal
                     continue;
                 }
 
-                AddOrUpdatePluginContext(pluginBase as IEEditorPlugin, pluginBase, changeTriggered);
+                var context = GetOrCreateContext(pluginBase);
+                if (changeTriggered)
+                {
+                    // was a change to plugins, so this is a new plugin need to bootstrap.
+                    context.State = EEditorPluginState.Created;
+                }
+                else
+                {
+                    // initial start or assembly reload, nothing need to be done as installation already happened
+                    context.State = EEditorPluginState.Activated;
+                }
+
                 _ePluginContext.Logger.Log($"  - plugin {pluginBase.GetPluginSlug()} ({pluginBase.GetName()})");
             }
         }
@@ -470,55 +487,30 @@ internal sealed class EGlobal
         _ePluginContext.Logger.Log(
             $"Found {_contexts.Count(p => p.State is EEditorPluginState.Activated)} active plugins.");
 
-        // initialize plugins
-        var initializers = _contexts.Select(c => c.PluginBase).OfType<IInitialize>().ToArray();
-        if (_ePluginContext.EnableDebugLogging && initializers.Any())
+        // initialize plugins using reflection as these types are only available after install added them (future: source generators)
+        var initializersTypes = Assembly.GetExecutingAssembly().GetExportedTypes().Except([typeof(IInitialize)])
+            .Where(t => t.IsAssignableTo(typeof(IInitialize))).ToArray();
+        if (_ePluginContext.EnableDebugLogging && initializersTypes.Any())
         {
             _ePluginContext.Logger.Log($"Calling Initializers:");
         }
 
-        foreach (var initializer in initializers)
+        foreach (var initializerType in initializersTypes)
         {
             try
             {
+                var initializer = (IInitialize)Activator.CreateInstance(initializerType);
                 if (_ePluginContext.EnableDebugLogging)
                 {
-                    _ePluginContext.Logger.Log($" - Initializing {initializer.GetType().FullName}");
+                    _ePluginContext.Logger.Log($" - Initializing {initializerType.FullName}");
                 }
 
                 initializer.Initialize(_ePluginContext);
             }
             catch (Exception ex)
             {
-                _ePluginContext.Logger.Error($"Error initializing {initializer.GetType().FullName}: {ex}");
+                _ePluginContext.Logger.Error($"Error initializing {initializerType.FullName}: {ex}");
             }
-        }
-    }
-
-    private void AddOrUpdatePluginContext(IEEditorPlugin? editorPlugin, EditorPlugin pluginBase, bool changeTriggered)
-    {
-        var context = _contexts.FirstOrDefault(c => c.PluginBase == pluginBase);
-        if (context is null)
-        {
-            var pluginLogger = _loggerFactory?.CreateLogger(pluginBase.GetType().FullName ?? "UNKNOWN");
-            if (changeTriggered)
-            {
-                // was a change to plugins, so this is a new plugin need to bootstrap.
-                context = new PluginContext(editorPlugin, pluginBase, pluginLogger)
-                {
-                    State = EEditorPluginState.Created,
-                };
-            }
-            else
-            {
-                // initial start or assembly reload, nothing need to be done as installation already happened
-                context = new PluginContext(editorPlugin, pluginBase, pluginLogger)
-                {
-                    State = EEditorPluginState.Activated
-                };
-            }
-
-            _contexts.Add(context);
         }
     }
 
