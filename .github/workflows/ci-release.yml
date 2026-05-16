@@ -36,7 +36,7 @@ jobs:
           mode: "HYBRID"
           configurationJson: |
             {
-               "template": "#{{CHANGELOG}}\n\n<summary>Contributors</summary>\n\n#{{CONTRIBUTORS}}",
+               "template": "#{{CHANGELOG}}\n\n<detail>\n<summary>Contributors</summary>\n\n#{{CONTRIBUTORS}}\n\n</detail>\n\n",
                "categories": [
                  {
                      "title": "## Feature",
