@@ -56,6 +56,16 @@ internal sealed class EGlobal
         CliService = new DotnetVersionManager(plugin.Logger, plugin.EnableDebugLogging);
 
         ReloadContexts(_loggerFactory, false);
+
+        if (_toCheckEnable.Any())
+        {
+            foreach (var pluginContext in _toCheckEnable)
+            {
+                EnableEPlugin(pluginContext, false);
+            }
+
+            RefreshEditor();
+        }
     }
 
     /// <summary>
@@ -137,8 +147,8 @@ internal sealed class EGlobal
 
         if (!IsValid())
         {
-            EditorInterface.Singleton.SetPluginEnabled(context.Slug, false);
             _toCheckEnable.Push(context);
+            return;
         }
 
         if (context.State == EEditorPluginState.Activated)
@@ -180,7 +190,8 @@ internal sealed class EGlobal
                     return;
                 }
 
-                var dependencyVersion = dependencyContext.Version;
+                var dependencyVersion = dependencyContext.Metadata?.Version ?? "0.0";
+
                 if (MatchesVersion(dependencyVersion, dependency.Version, context.Logger))
                 {
                     if (context.State is EEditorPluginState.Deactivated or EEditorPluginState.Error)
@@ -246,7 +257,7 @@ internal sealed class EGlobal
     {
         foreach (var nuget in recipe.Nugets)
         {
-            if (!context.Cli.AddNugetToProject(nuget.Name, nuget.Version, nuget.Source))
+            if (!context.Cli!.AddNugetToProject(nuget.Name, nuget.Version, nuget.Source))
             {
                 context.FailedTries = uint.MaxValue;
                 return;
@@ -255,11 +266,11 @@ internal sealed class EGlobal
 
         foreach (var project in recipe.Projects)
         {
-            context.Cli.AddProjectToSolution(project.Path, project.FolderName);
+            context.Cli!.AddProjectToSolution(project.Path, project.FolderName);
 
             if (project.Reference)
             {
-                context.Cli.AddProjectReference(project.Path);
+                context.Cli!.AddProjectReference(project.Path);
             }
         }
 
@@ -388,13 +399,13 @@ internal sealed class EGlobal
 
         foreach (var project in recipe.Projects)
         {
-            context.Cli.RemoveProjectReference(project.Path);
-            context.Cli.RemoveProjectFromSolution(project.Path);
+            context.Cli!.RemoveProjectReference(project.Path);
+            context.Cli!.RemoveProjectFromSolution(project.Path);
         }
 
         foreach (var nuget in recipe.Nugets)
         {
-            context.Cli.RemoveNugetFromProject(nuget.Name);
+            context.Cli!.RemoveNugetFromProject(nuget.Name);
         }
     }
 
@@ -469,16 +480,14 @@ internal sealed class EGlobal
                 }
 
                 var context = GetOrCreateContext(pluginBase);
-                if (changeTriggered)
-                {
+
+                context.State = changeTriggered
+                    ?
                     // was a change to plugins, so this is a new plugin need to bootstrap.
-                    context.State = EEditorPluginState.Created;
-                }
-                else
-                {
+                    EEditorPluginState.Created
+                    :
                     // initial start or assembly reload, nothing need to be done as installation already happened
-                    context.State = EEditorPluginState.Activated;
-                }
+                    EEditorPluginState.Activated;
 
                 _ePluginContext.Logger.Log($"  - plugin {pluginBase.GetPluginSlug()} ({pluginBase.GetName()})");
             }
@@ -499,7 +508,11 @@ internal sealed class EGlobal
         {
             try
             {
-                var initializer = (IInitialize)Activator.CreateInstance(initializerType);
+                if (Activator.CreateInstance(initializerType) is not IInitialize initializer)
+                {
+                    continue;
+                }
+
                 if (_ePluginContext.EnableDebugLogging)
                 {
                     _ePluginContext.Logger.Log($" - Initializing {initializerType.FullName}");
@@ -514,7 +527,7 @@ internal sealed class EGlobal
         }
     }
 
-    private bool MatchesVersion(string givenVersion, string condition, ILogger logger)
+    private bool MatchesVersion(string givenVersion, string condition, ILogger? logger)
     {
         if (string.IsNullOrWhiteSpace(givenVersion) || string.IsNullOrWhiteSpace(condition))
             return false;
@@ -528,7 +541,7 @@ internal sealed class EGlobal
 
         if (!Version.TryParse(givenVersion, out var version))
         {
-            logger.Warn(
+            logger?.Warn(
                 $"Dependency version is in wrong format! (was: {givenVersion} needed: [major].[minor].[patch])");
             return false;
         }
@@ -538,7 +551,7 @@ internal sealed class EGlobal
             var conditionVersionStr = condition.AsSpan()[1..];
             if (!Version.TryParse(conditionVersionStr, out var checkVersion))
             {
-                logger.Warn(
+                logger?.Warn(
                     $"Dependency version is in wrong format! (was: {givenVersion} needed: >[major].[minor].[patch])");
                 return false;
             }
@@ -549,7 +562,7 @@ internal sealed class EGlobal
         {
             if (!Version.TryParse(condition, out var checkVersion))
             {
-                logger.Warn(
+                logger?.Warn(
                     $"Dependency version is in wrong format! (was: {givenVersion} needed: [major].[minor].[patch])");
                 return false;
             }
