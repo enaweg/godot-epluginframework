@@ -6,8 +6,6 @@ namespace Enaweg.Plugin.Sample;
 [Tool]
 public partial class SamplePlugin : EditorPlugin, IEEditorPlugin
 {
-    public EditorPlugin GodotPlugin => this;
-
     public void CreateRecipe(IEEditorPluginBuilder builder)
     {
         builder.AddNuget("ZLogger");
