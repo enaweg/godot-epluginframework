@@ -90,8 +90,6 @@ namespace Enaweg.Plugin.Sample;
 [Tool]
 public partial class SamplePlugin : EditorPlugin, IEEditorPlugin
 {
-    public EditorPlugin GodotPlugin => this;
-
     public void Bootstrap(IEEditorPluginBuilder builder)
     {
         // build your plugin setup here
@@ -126,8 +124,6 @@ namespace Enaweg.Sample;
 [Tool]
 public sealed partial class YourPlugin : EditorPlugin, IEEditorPlugin
 {
-    public EditorPlugin GodotPlugin => this;
-
     public void Bootstrap(IEEditorPluginBuilder builder)
     {
         builder
