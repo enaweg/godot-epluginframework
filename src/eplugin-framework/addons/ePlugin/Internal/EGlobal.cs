@@ -496,6 +496,11 @@ internal sealed class EGlobal
         _ePluginContext.Logger.Log(
             $"Found {_contexts.Count(p => p.State is EEditorPluginState.Activated)} active plugins.");
 
+        ExecuteInitializers();
+    }
+
+    private void ExecuteInitializers()
+    {
         // initialize plugins using reflection as these types are only available after install added them (future: source generators)
         var initializersTypes = Assembly.GetExecutingAssembly().GetExportedTypes().Except([typeof(IInitialize)])
             .Where(t => t.IsAssignableTo(typeof(IInitialize))).ToArray();
