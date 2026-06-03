@@ -22,6 +22,11 @@ jobs:
         run: |
           echo "VERSION=$( git describe --tags | sed 's/\(.*\)-\(.*\)/\1.\2/g' )" >> "$GITHUB_ENV"
 
+      - name: Set Version to plugin.ini
+        shell: bash
+        run: |
+          sed -i "s/version=\".*\"/version=\"${{ env.VERSION }}\"/g" src/eplugin-framework/addons/ePlugin/plugin.xml
+
       - name: Create artifact
         shell: bash
         run: |
