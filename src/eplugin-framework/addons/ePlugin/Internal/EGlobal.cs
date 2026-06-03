@@ -37,6 +37,8 @@ internal sealed class EGlobal
 
     private readonly Stack<PluginContext> _toCheckEnable = new();
     private readonly Stack<PluginContext> _toCheckDisable = new();
+    private readonly Queue<IInitialize> _toInitialize = new();
+
 
     private EGlobal()
     {
@@ -501,34 +503,15 @@ internal sealed class EGlobal
 
     private void ExecuteInitializers()
     {
-        // initialize plugins using reflection as these types are only available after install added them (future: source generators)
-        var initializersTypes = Assembly.GetExecutingAssembly().GetExportedTypes().Except([typeof(IInitialize)])
-            .Where(t => t.IsAssignableTo(typeof(IInitialize))).ToArray();
-        if (_ePluginContext.EnableDebugLogging && initializersTypes.Any())
+        if (!IsValid())
         {
-            _ePluginContext.Logger.Log($"Calling Initializers:");
+            return;
         }
 
-        foreach (var initializerType in initializersTypes)
+        while (_toInitialize.Count > 0)
         {
-            try
-            {
-                if (Activator.CreateInstance(initializerType) is not IInitialize initializer)
-                {
-                    continue;
-                }
-
-                if (_ePluginContext.EnableDebugLogging)
-                {
-                    _ePluginContext.Logger.Log($" - Initializing {initializerType.FullName}");
-                }
-
-                initializer.Initialize(_ePluginContext);
-            }
-            catch (Exception ex)
-            {
-                _ePluginContext.Logger.Error($"Error initializing {initializerType.FullName}: {ex}");
-            }
+            var initializer = _toInitialize.Dequeue();
+            initializer.Initialize(_ePluginContext);
         }
     }
 
@@ -573,6 +556,16 @@ internal sealed class EGlobal
             }
 
             return version == checkVersion;
+        }
+    }
+
+    public void AddInitializer(IInitialize initializer)
+    {
+        _toInitialize.Enqueue(initializer);
+
+        if (_ePluginContext?.EnableDebugLogging ?? false)
+        {
+            _ePluginContext.Logger?.Log($"Initializer {initializer.GetType().FullName} enqueued.");
         }
     }
 }

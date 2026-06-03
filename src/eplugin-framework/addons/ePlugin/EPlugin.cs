@@ -1,5 +1,6 @@
 ﻿#if TOOLS
 using System.Linq;
+using Enaweg.Plugin.Internal;
 using Godot;
 
 namespace Enaweg.Plugin;
@@ -36,6 +37,11 @@ public static class EPlugin
 
             return _instanceCache;
         }
+    }
+
+    public static void RegisterInitializer(IInitialize initializer)
+    {
+        EGlobal.Instance.AddInitializer(initializer);
     }
 }
 #endif
