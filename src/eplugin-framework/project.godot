@@ -26,7 +26,7 @@ project/assembly_name="EPlugin Framework"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/ePlugin/plugin.cfg", "res://addons/gdUnit4/plugin.cfg")
+enabled=PackedStringArray("res://addons/ePlugin/plugin.cfg", "res://addons/gdUnit4/plugin.cfg", "res://addons/sample_addedcode_plugin/plugin.cfg")
 
 [gdunit4]
 
