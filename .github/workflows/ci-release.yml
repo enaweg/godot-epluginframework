@@ -25,7 +25,7 @@ jobs:
       - name: Set Version to plugin.ini
         shell: bash
         run: |
-          sed -i "s/version=\".*\"/version=\"${{ env.VERSION }}\"/g" src/eplugin-framework/addons/ePlugin/plugin.xml
+          sed -i "s/version=\".*\"/version=\"${{ env.VERSION }}\"/g" src/eplugin-framework/addons/ePlugin/plugin.cfg
 
       - name: Create artifact
         shell: bash
