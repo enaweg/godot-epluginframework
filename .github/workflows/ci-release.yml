@@ -20,7 +20,7 @@ jobs:
       - name: Initialize version
         shell: bash
         run: |
-          echo "VERSION=$( git describe --tags | sed 's/\(.*\)-\(.*\)/\1.\2/g' )" >> "$GITHUB_ENV"
+          echo "VERSION=$( git describe --tags | sed 's/v\(.*\)-\(.*\)/\1.\2/g' )" >> "$GITHUB_ENV"
 
       - name: Set Version to plugin.ini
         shell: bash
@@ -32,7 +32,7 @@ jobs:
         run: |
           mkdir out/
           cd src/eplugin-framework
-          zip -r ../../out/ePlugin-${VERSION}.zip addons/ePlugin
+          zip -r ../../out/ePlugin-v${VERSION}.zip addons/ePlugin
 
       - name: Build Changelog
         id: build_changelog
@@ -81,10 +81,10 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.ref_name }}
-          name: "ePlugin-${{ env.VERSION }}"
+          name: "ePlugin-v${{ env.VERSION }}"
           body: ${{ steps.build_changelog.outputs.changelog }}
           token: ${{ secrets.GITHUB_TOKEN }}
           draft: true
-          artifacts: "out/ePlugin-${{ env.VERSION }}.zip"
+          artifacts: "out/ePlugin-v${{ env.VERSION }}.zip"
 
       
