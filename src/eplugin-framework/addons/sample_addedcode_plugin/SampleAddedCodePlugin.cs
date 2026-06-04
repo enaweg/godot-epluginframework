@@ -7,7 +7,7 @@ public partial class SampleAddedCodePlugin : EditorPlugin, IEEditorPlugin
 {
     public void CreateRecipe(IEEditorPluginBuilder builder)
     {
-        builder.AddDirectory("res://addons/sample_addedcode_plugin/.src");
+        builder.AddDirectory($"{this.GetPluginDirectory()}/.src");
     }
 
     public override void _EnablePlugin()
