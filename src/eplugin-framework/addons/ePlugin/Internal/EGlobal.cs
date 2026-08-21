@@ -525,7 +525,7 @@ internal sealed class EGlobal
         }
     }
 
-    private bool MatchesVersion(string givenVersion, string condition, ILogger? logger)
+    internal bool MatchesVersion(string givenVersion, string condition, ILogger? logger)
     {
         if (string.IsNullOrWhiteSpace(givenVersion) || string.IsNullOrWhiteSpace(condition))
             return false;
