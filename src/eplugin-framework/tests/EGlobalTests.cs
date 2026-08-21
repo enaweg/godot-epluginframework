@@ -13,7 +13,7 @@ public class EGlobalTests
 {
     private readonly List<EditorPlugin> _createdPlugins = [];
 
-    [After]
+    [AfterTest]
     public void Cleanup()
     {
         foreach (var plugin in _createdPlugins)
@@ -117,7 +117,7 @@ public class EGlobalTests
 
         EGlobal.Instance.DisableEPlugin(context, false);
 
-        Assertions.AssertThat(context.State).IsEqual(EEditorPluginState.Created);
+        Assertions.AssertObject(context.State).IsEqual(EEditorPluginState.Created);
     }
 
     [TestCase]
@@ -134,7 +134,7 @@ public class EGlobalTests
         EGlobal.Instance.DisableEPlugin(context, false);
 
         mockPlugin.Verify(p => p.CreateRecipe(It.IsAny<IEEditorPluginBuilder>()), Times.Never);
-        Assertions.AssertThat(context.State).IsEqual(EEditorPluginState.Deactivated);
+        Assertions.AssertObject(context.State).IsEqual(EEditorPluginState.Deactivated);
     }
 
     [TestCase]
@@ -148,6 +148,6 @@ public class EGlobalTests
         EGlobal.Instance.DisableEPlugin(context, false);
 
         mockPlugin.Verify(p => p.CreateRecipe(It.IsAny<IEEditorPluginBuilder>()), Times.Once);
-        Assertions.AssertThat(context.State).IsEqual(EEditorPluginState.Deactivated);
+        Assertions.AssertObject(context.State).IsEqual(EEditorPluginState.Deactivated);
     }
 }

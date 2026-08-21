@@ -44,7 +44,7 @@ internal sealed class EEditorPluginBuilder : IEEditorPluginBuilder
         return this;
     }
 
-    public IEEditorPluginBuilder AddNuget(params string[] nugetNames)
+    public IEEditorPluginBuilder AddNugets(params string[] nugetNames)
     {
         foreach (var nugetName in nugetNames)
         {

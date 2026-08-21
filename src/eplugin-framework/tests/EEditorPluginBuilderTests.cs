@@ -83,7 +83,7 @@ public class EEditorPluginBuilderTests
     {
         var builder = EEditorPluginBuilder.Create();
 
-        builder.AddNuget("Newtonsoft.Json", "ZLogger");
+        builder.AddNugets("Newtonsoft.Json", "ZLogger");
 
         Assertions.AssertThat(builder.PluginRecipe.Nugets)
             .ContainsExactly(

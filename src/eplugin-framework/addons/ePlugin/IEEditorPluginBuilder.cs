@@ -73,7 +73,7 @@ public interface IEEditorPluginBuilder
     /// </summary>
     /// <param name="nugetNames">Package IDs to install (e.g. <c>"Newtonsoft.Json"</c>).</param>
     /// <returns>The builder itself.</returns>
-    IEEditorPluginBuilder AddNuget(params string[] nugetNames);
+    IEEditorPluginBuilder AddNugets(params string[] nugetNames);
 
     /// <summary>
     /// Adds a NuGet package to the main Godot project with an optional version pin and feed source.
