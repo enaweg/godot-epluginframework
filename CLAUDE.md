@@ -16,12 +16,16 @@ The whole project lives under `src/eplugin-framework/` (Godot project root — `
 
 ### Repository layout
 
-- `src/eplugin-framework/addons/ePlugin/` — **the framework itself**. This is what you'll be editing.
-- `src/eplugin-framework/addons/gdUnit4/`, `sample_plugin/`, `sample_dependant_plugin/`,
-  `sample_addedcode_plugin/` — vendored/reference plugins bundled with full source, the same way a NuGet
-  package ships source. Treat these as **read-only**: don't modify them unless explicitly asked. The
-  `sample_*` plugins are still useful reading — they're minimal, working examples of how to consume the
+- `src/eplugin-framework/addons/ePlugin/` — **the main part of this project, the framework itself**. This is
+  what you'll be editing.
+- `src/eplugin-framework/addons/sample_plugin/`, `sample_dependant_plugin/`, `sample_addedcode_plugin/` —
+  any addon under `addons/` whose name starts with `sample` is a reference plugin demonstrating usage of
+  the ePlugin framework, bundled with full source. Treat these as **read-only**: don't modify them unless
+  explicitly asked. They're useful reading — minimal, working examples of how to consume the
   `IEEditorPlugin` API (see Architecture below).
+- `src/eplugin-framework/addons/gdUnit4/` — a vendored unit testing framework plugin (used to run this
+  repo's own test suite), not an example of the ePlugin API. Treat it as a **read-only** code dependency:
+  don't modify it unless explicitly asked.
 - `src/eplugin-framework/tests/` — gdUnit4 test suite for the framework.
 - `design/` — logo/icon assets referenced by the README.
 
