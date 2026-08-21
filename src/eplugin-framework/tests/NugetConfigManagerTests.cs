@@ -12,7 +12,7 @@ public class NugetConfigManagerTests
 {
     private static string ConfigPath => Path.Combine(ProjectSettings.GlobalizePath("res://"), "nuget.config");
 
-    [After]
+    [AfterTest]
     public void Cleanup()
     {
         if (File.Exists(ConfigPath))

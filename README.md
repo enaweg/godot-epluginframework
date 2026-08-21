@@ -129,7 +129,7 @@ public sealed partial class YourPlugin : EditorPlugin, IEEditorPlugin
     {
         builder
             // add multiple nugets at once (latest stable releases)
-            .AddNuget("Sample.Nuget.Package1a", "Sample.Nuget.Package1b")
+            .AddNugets("Sample.Nuget.Package1a", "Sample.Nuget.Package1b")
             
             // add specific nuget versions from a source URL
             .AddNuget("Sample.Nuget.Package2", ">2.0", "https://www.nuget.org/")
