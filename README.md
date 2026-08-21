@@ -23,7 +23,8 @@
 + Easy-to-use fluent API for plugins
 + on plugin activation/deactivation handling of
     + Project References
-    + NuGet References
+    + NuGet References (external/local sources are tracked in a root `nuget.config` so a fresh
+      checkout can restore them too)
     + include/exclude Asset directories (for additional content)
 + Plugin Migration (version upgrades)
 + Plugin Dependencies (when a root plugin is disabled, all dependent plugins will be disabled too)

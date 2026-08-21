@@ -95,6 +95,14 @@ application always goes through `PluginContext.Cli` (an `IDotnetCli`), never raw
 instance, its `IEEditorPlugin`/metadata/slug, its logger, its `IDotnetCli`, its recipe builder, and its
 `EEditorPluginState`.
 
+When a recipe's NuGet entry has an external/local `source`, `NugetConfigManager`
+(`addons/ePlugin/Internal/Dotnet/NugetConfigManager.cs`) additionally mirrors that source into a root
+`nuget.config`, so a fresh checkout (without the installing machine's ad-hoc `--source` flag) can still
+restore the package. Entries it creates are tagged with a deterministic `ePlugin-<hash>` key and a
+preceding XML comment tracking which plugin slugs currently depend on that source (multiple plugins can
+share one entry); it never touches sources it didn't create, and only deletes `nuget.config` entirely once
+removing the last managed entry leaves nothing else in the file.
+
 ### Dotnet CLI abstraction
 
 `DotnetVersionManager` detects the installed `dotnet --version` and hands out either `DotnetCli10` or
