@@ -9,7 +9,6 @@ jobs:
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: true
       DOTNET_NOLOGO: true
-      GODOT_BIN: godot
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -24,6 +23,10 @@ jobs:
         with:
           version: 4.7.2
           use-dotnet: true
+
+      - name: Configure Godot test executable
+        shell: bash
+        run: echo "GODOT_BIN=$GODOT" >> "$GITHUB_ENV"
 
       - name: Build
         working-directory: src/eplugin-framework
