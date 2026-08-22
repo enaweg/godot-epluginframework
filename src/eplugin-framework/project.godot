@@ -22,7 +22,7 @@ config/icon="res://icon.svg"
 
 [dotnet]
 
-project/assembly_name="EPlugin Framework"
+project/assembly_name="EPluginFramework"
 
 [editor_plugins]
 
@@ -30,7 +30,7 @@ enabled=PackedStringArray("res://addons/ePlugin/plugin.cfg", "res://addons/gdUni
 
 [gdunit4]
 
-settings/test/test_lookup_folder="Tests"
+settings/test/test_lookup_folder="tests"
 settings/test/test_discovery=true
 
 [rendering]

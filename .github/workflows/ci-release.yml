@@ -11,13 +11,51 @@ jobs:
     permissions:
       contents: write
       pull-requests: read
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      DOTNET_NOLOGO: true
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
           fetch-depth: 200
           fetch-tags: true
-          
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Setup Godot .NET
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: true
+
+      - name: Configure Godot test executable
+        shell: bash
+        run: echo "GODOT_BIN=$GODOT" >> "$GITHUB_ENV"
+
+      - name: Install Xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes xvfb
+
+      - name: Build
+        working-directory: src/eplugin-framework
+        run: dotnet build "EPlugin Framework.sln" --configuration Debug
+
+      - name: Rebuild Godot project cache
+        working-directory: src/eplugin-framework
+        run: |
+          "$GODOT_BIN" --path . --editor --headless --quit-after 2000
+
+      - name: Run tests
+        working-directory: src/eplugin-framework
+        run: |
+          xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" \
+            dotnet test "EPlugin Framework.sln" --configuration Debug --no-build --settings .runsettings --verbosity normal -m:1
+
       - name: Initialize version
         shell: bash
         run: |
@@ -87,5 +125,3 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           draft: true
           artifacts: "out/ePlugin-v${{ env.VERSION }}.zip"
-
-      
