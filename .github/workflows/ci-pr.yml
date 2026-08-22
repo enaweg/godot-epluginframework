@@ -34,4 +34,4 @@ jobs:
 
       - name: Run tests
         working-directory: src/eplugin-framework
-        run: dotnet test "EPlugin Framework.sln" --configuration Debug --no-build
+        run: dotnet test "EPlugin Framework.sln" --configuration Debug --no-build --settings .runsettings
