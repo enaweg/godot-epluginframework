@@ -32,6 +32,11 @@ jobs:
         working-directory: src/eplugin-framework
         run: dotnet build "EPlugin Framework.sln" --configuration Debug
 
+      - name: Rebuild Godot project cache
+        working-directory: src/eplugin-framework
+        run: |
+          "$GODOT_BIN" --path . --editor --headless --quit-after 2000
+
       - name: Run tests
         working-directory: src/eplugin-framework
         run: dotnet test "EPlugin Framework.sln" --configuration Debug --no-build --settings .runsettings
