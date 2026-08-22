@@ -28,6 +28,11 @@ jobs:
         shell: bash
         run: echo "GODOT_BIN=$GODOT" >> "$GITHUB_ENV"
 
+      - name: Install Xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes xvfb
+
       - name: Build
         working-directory: src/eplugin-framework
         run: dotnet build "EPlugin Framework.sln" --configuration Debug
@@ -39,4 +44,6 @@ jobs:
 
       - name: Run tests
         working-directory: src/eplugin-framework
-        run: dotnet test "EPlugin Framework.sln" --configuration Debug --no-build --settings .runsettings
+        run: |
+          xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" \
+            dotnet test "EPlugin Framework.sln" --configuration Debug --no-build --settings .runsettings --verbosity normal -m:1
