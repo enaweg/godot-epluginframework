@@ -4,6 +4,7 @@
     <RollForward>LatestMajor</RollForward>
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <RootNamespace>EPluginFramework</RootNamespace>
+    <AssemblyName>EPluginFramework</AssemblyName>
     <LangVersion>12</LangVersion>
     <Nullable>enable</Nullable>
   </PropertyGroup>
