@@ -31,8 +31,8 @@ The project targets `net8.0`. Earlier tested Godot and .NET combinations are lis
 
 ## Installation
 
-1. Download the latest [ePlugin release](https://github.com/enaweg/godot-epluginframework/releases).
-2. Extract the archive's `addons/ePlugin` directory into your Godot project's `addons` directory.
+1. Install [ePlugin Framework from the Godot Asset Store](https://store.godotengine.org/asset/enaweg/eplugin-framework/).
+2. Alternatively, download the latest [ePlugin release](https://github.com/enaweg/godot-epluginframework/releases) and extract the archive's `addons/ePlugin` directory into your Godot project's `addons` directory.
 3. Open the project in the Godot .NET editor and enable **ePlugin** under **Project > Project Settings > Plugins**.
 4. Enable the plugins that implement `IEEditorPlugin`.
 
