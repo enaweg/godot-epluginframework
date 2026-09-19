@@ -204,6 +204,7 @@ public sealed partial class YourPlugin : EditorPlugin, IEEditorPlugin
 ## Plugins using ePlugin Framework
 
 + [godot-elogger](https://github.com/enaweg/godot-elogger)
++ [godot-econtainer](https://github.com/enaweg/godot-econtainer)
 
 ## Contribute
 
