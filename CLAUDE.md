@@ -18,11 +18,11 @@ The whole project lives under `src/eplugin-framework/` (Godot project root — `
 
 - `src/eplugin-framework/addons/ePlugin/` — **the main part of this project, the framework itself**. This is
   what you'll be editing.
-- `src/eplugin-framework/addons/sample_plugin/`, `sample_dependant_plugin/`, `sample_addedcode_plugin/` —
-  any addon under `addons/` whose name starts with `sample` is a reference plugin demonstrating usage of
-  the ePlugin framework, bundled with full source. Treat these as **read-only**: don't modify them unless
-  explicitly asked. They're useful reading — minimal, working examples of how to consume the
-  `IEEditorPlugin` API (see Architecture below).
+- `src/eplugin-framework/addons/sample_plugin/`, `sample_dependant_plugin/`,
+  `sample_addedcode_plugin/`, `sample_optional_plugin/` — any addon under `addons/` whose name starts with
+  `sample` is a reference plugin demonstrating usage of the ePlugin framework, bundled with full source.
+  Treat these as **read-only**: don't modify them unless explicitly asked. They're useful reading — minimal,
+  working examples of how to consume the `IEEditorPlugin` API (see Architecture below).
 - `src/eplugin-framework/addons/gdUnit4/` — a vendored unit testing framework plugin (used to run this
   repo's own test suite), not an example of the ePlugin API. Treat it as a **read-only** code dependency:
   don't modify it unless explicitly asked.
@@ -79,9 +79,11 @@ A consumer plugin implements `IEEditorPlugin.CreateRecipe(IEEditorPluginBuilder 
 extension methods `this.EnableEPlugin()` / `this.DisableEPlugin()` (`IEEditorPluginExtensions`) from its own
 `_EnablePlugin()` / `_DisablePlugin()` overrides. `CreateRecipe` must be deterministic and side-effect free —
 it only declares requirements via the fluent `IEEditorPluginBuilder` (NuGets, project references/solution
-entries, autoloads, managed directories, plugin dependencies via `AddPluginDependency`). See
-`addons/sample_plugin`, `addons/sample_dependant_plugin` (dependency example), and
-`addons/sample_addedcode_plugin` (`AddDirectory` example) for minimal reference implementations, and the
+entries, autoloads, managed directories, plugin dependencies via `AddPluginDependency`, and optional plugin
+dependencies carrying a nested recipe via `AddOptionalPluginDependency`). See
+`addons/sample_plugin`, `addons/sample_dependant_plugin` (dependency example),
+`addons/sample_addedcode_plugin` (`AddDirectory` example), and `addons/sample_optional_plugin`
+(`AddOptionalPluginDependency` example) for minimal reference implementations, and the
 README's "Advanced Plugin" example for the full builder surface.
 
 `IEEditorPlugin` is an interface rather than an abstract base class specifically to work around C# bugs in
@@ -89,15 +91,49 @@ Godot 4.5.x/4.6.x EditorPlugin handling — don't "simplify" this back to a base
 
 ### Builder → Recipe → install/uninstall
 
+The public builder surface is split in two: `IEEditorPluginRecipeBuilder` declares resources (`AddAutoload`,
+`AddProject`, `AddNuget(s)`, `AddDirectory`), and `IEEditorPluginBuilder` extends it with dependency
+declarations. Only the root recipe may declare dependencies — nested recipes get the resource-only interface.
+The root interface re-declares the inherited members with `new` and an `IEEditorPluginBuilder` return type so
+fluent chains can still reach the dependency methods; `EEditorPluginBuilder` therefore carries explicit
+interface forwarders for the base-typed variants.
+
 `EEditorPluginBuilder` (internal impl of `IEEditorPluginBuilder`) accumulates an `EEditorPluginRecipe`
-(records for `Nuget`, `Project`, `Autoload`, plugin `Plugin` dependencies, plus a directory list). `EGlobal`
-applies a recipe in `InstallEPlugin` (add NuGets → add/reference solution projects → show managed
-directories → add autoloads) and reverses it in `UninstallEPlugin` in roughly opposite order. Recipe
-application always goes through `PluginContext.Cli` (an `IDotnetCli`), never raw `dotnet` calls elsewhere.
+(records for `Nuget`, `Project`, `Autoload`, plugin `Plugin` dependencies, `OptionalPlugin` dependencies,
+plus a directory list); `EEditorPluginSubRecipeBuilder` is the `IEEditorPluginRecipeBuilder` impl used for the
+nested recipe of an optional dependency (a bare `EEditorPluginRecipe` — no implicit ePlugin self-dependency).
+`EGlobal` applies a recipe in `InstallEPlugin`/`ApplyRecipe` (add NuGets → add/reference solution projects →
+show managed directories → add autoloads) and reverses it in `UninstallEPlugin`/`ReverseRecipe` in roughly
+opposite order. Recipe application always goes through `PluginContext.Cli` (an `IDotnetCli`), never raw
+`dotnet` calls elsewhere.
+
+Optional dependencies are resolved by `EGlobal.ResolveOptionalRecipes` at install time: a nested recipe is
+applied only when its plugin is already enabled and satisfies any version constraint. It never enables a
+plugin and never fails the activation. What was applied is snapshotted in
+`PluginContext.AppliedOptionalDependencies` so uninstall reverses exactly that (falling back to re-resolving
+when the snapshot was lost to an assembly reload).
+
+Activation order does not matter, because both directions are re-evaluated against the other installed
+plugins:
+
+- enabling: `ReevaluateOptionalDependencies` applies the nested recipes that just became satisfied. The
+  baseline of "already installed" is that plugin's snapshot or, when an assembly reload lost it,
+  `ResolveOptionalRecipes(..., ignoreSlug: <the plugin just enabled>)`, so only genuinely new recipes are
+  applied.
+- disabling: `UninstallOptionalDependenciesOn` reverses the nested recipes that were installed *because of*
+  the plugin being disabled, so nothing is left referencing a plugin that is gone. The baseline falls back to
+  `ResolveOptionalRecipes(..., assumeEnabledSlug: <the plugin being disabled>)`.
+
+Entries stay in the snapshot once applied even if they stop being satisfied, so uninstall still reverses them.
+Optional dependencies still take no part in the reverse-dependency scan in `DisableEPlugin`: disabling an
+optional plugin removes the nested recipe but does not disable the plugin that declared it.
+
+Both hooks sit in `EnableEPlugin`/`DisableEPlugin`, which return early for plugins that do not implement
+`IEEditorPlugin`, so enabling or disabling a plain Godot plugin does not re-evaluate anything.
 
 `PluginContext` (`addons/ePlugin/Internal/PluginContext.cs`) is the per-plugin state bag: the `EditorPlugin`
-instance, its `IEEditorPlugin`/metadata/slug, its logger, its `IDotnetCli`, its recipe builder, and its
-`EEditorPluginState`.
+instance, its `IEEditorPlugin`/metadata/slug, its logger, its `IDotnetCli`, its recipe builder, its
+`EEditorPluginState`, and the `AppliedOptionalDependencies` snapshot.
 
 When a recipe's NuGet entry has an external/local `source`, `NugetConfigManager`
 (`addons/ePlugin/Internal/Dotnet/NugetConfigManager.cs`) additionally mirrors that source into a root

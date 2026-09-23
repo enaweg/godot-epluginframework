@@ -1,4 +1,4 @@
-using Enaweg.Plugin.Internal;
+﻿using Enaweg.Plugin.Internal;
 using GdUnit4;
 
 namespace Enaweg.Plugin.Tests;
@@ -132,5 +132,82 @@ public class EEditorPluginBuilderTests
         Assertions.AssertInt(builder.PluginRecipe.Directories.Count).IsEqual(1);
         // one implicit "ePlugin" dependency (added by Create()) plus the one just declared
         Assertions.AssertInt(builder.PluginRecipe.PluginDependencies.Count).IsEqual(2);
+    }
+
+    [TestCase]
+    [RequireGodotRuntime]
+    public void AddOptionalPluginDependencyRecordsSlugVersionAndReturnsRootBuilder()
+    {
+        var builder = EEditorPluginBuilder.Create();
+
+        var result = builder.AddOptionalPluginDependency("some-plugin", ">1.2.0", _ => { });
+
+        Assertions.AssertObject(result).IsSame(builder);
+        Assertions.AssertInt(builder.PluginRecipe.OptionalPluginDependencies.Count).IsEqual(1);
+
+        var optional = builder.PluginRecipe.OptionalPluginDependencies[0];
+        Assertions.AssertString(optional.Slug).IsEqual("some-plugin");
+        Assertions.AssertString(optional.Version).IsEqual(">1.2.0");
+    }
+
+    [TestCase]
+    [RequireGodotRuntime]
+    public void AddOptionalPluginDependencyKeepsSubRecipeSeparateFromRootRecipe()
+    {
+        var builder = EEditorPluginBuilder.Create();
+
+        builder.AddOptionalPluginDependency("some-plugin", null, optional => optional
+            .AddAutoload("OptionalGlobal", "res://addons/my-plugin/OptionalGlobal.cs")
+            .AddNuget("ZLogger", "2.0.0")
+            .AddProject("addons/my-plugin/Optional.csproj", "MyFolder", true)
+            .AddDirectory("res://addons/my-plugin/optional_src"));
+
+        var subRecipe = builder.PluginRecipe.OptionalPluginDependencies[0].Recipe;
+
+        Assertions.AssertThat(subRecipe.Autoloads)
+            .ContainsExactly(new EEditorPluginRecipe.Autoload("OptionalGlobal",
+                "res://addons/my-plugin/OptionalGlobal.cs"));
+        Assertions.AssertThat(subRecipe.Nugets)
+            .ContainsExactly(new EEditorPluginRecipe.Nuget("ZLogger", "2.0.0", null));
+        Assertions.AssertThat(subRecipe.Projects)
+            .ContainsExactly(new EEditorPluginRecipe.Project("addons/my-plugin/Optional.csproj", "MyFolder", true));
+        Assertions.AssertThat(subRecipe.Directories).ContainsExactly("res://addons/my-plugin/optional_src");
+
+        // nothing of the sub-recipe leaked into the root recipe
+        Assertions.AssertInt(builder.PluginRecipe.Autoloads.Count).IsEqual(0);
+        Assertions.AssertInt(builder.PluginRecipe.Nugets.Count).IsEqual(0);
+        Assertions.AssertInt(builder.PluginRecipe.Projects.Count).IsEqual(0);
+        Assertions.AssertInt(builder.PluginRecipe.Directories.Count).IsEqual(0);
+    }
+
+    [TestCase]
+    [RequireGodotRuntime]
+    public void AddOptionalPluginDependencySubRecipeHasNoImplicitEPluginDependency()
+    {
+        var builder = EEditorPluginBuilder.Create();
+
+        builder.AddOptionalPluginDependency("some-plugin", null, optional => optional.AddNuget("ZLogger"));
+
+        var subRecipe = builder.PluginRecipe.OptionalPluginDependencies[0].Recipe;
+
+        Assertions.AssertInt(subRecipe.PluginDependencies.Count).IsEqual(0);
+        Assertions.AssertInt(subRecipe.OptionalPluginDependencies.Count).IsEqual(0);
+    }
+
+    [TestCase]
+    [RequireGodotRuntime]
+    public void AddOptionalPluginDependencyChainsBackIntoRootBuilder()
+    {
+        var builder = EEditorPluginBuilder.Create();
+
+        builder
+            .AddNuget("Newtonsoft.Json")
+            .AddOptionalPluginDependency("some-plugin", null, optional => optional.AddNuget("ZLogger"))
+            .AddPluginDependency("required-plugin");
+
+        Assertions.AssertInt(builder.PluginRecipe.Nugets.Count).IsEqual(1);
+        Assertions.AssertInt(builder.PluginRecipe.OptionalPluginDependencies.Count).IsEqual(1);
+        Assertions.AssertThat(builder.PluginRecipe.PluginDependencies)
+            .Contains(new EEditorPluginRecipe.Plugin("required-plugin", null));
     }
 }

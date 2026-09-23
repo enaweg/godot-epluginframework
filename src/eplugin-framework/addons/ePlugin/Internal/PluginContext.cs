@@ -1,5 +1,6 @@
 ﻿#if TOOLS
 using System;
+using System.Collections.Generic;
 using Enaweg.Plugin.Logging;
 using Godot;
 
@@ -28,6 +29,14 @@ internal sealed class PluginContext(IEEditorPlugin? plugin, EditorPlugin pluginB
     public EEditorPluginBuilder Builder { get; init; } = EEditorPluginBuilder.Create();
 
     public bool IsRecipeCreated { get; set; } = false;
+
+    /// <summary>
+    /// The optional dependencies whose nested recipe is currently installed for this plugin. Uninstall
+    /// reverses exactly these. <see langword="null"/> means no snapshot is available (the plugin was never
+    /// activated in this session, e.g. after an assembly reload) and the optional dependencies have to be
+    /// resolved against the current editor state instead.
+    /// </summary>
+    public List<EEditorPluginRecipe.OptionalPlugin>? AppliedOptionalDependencies { get; set; } = null;
 
     public uint FailedTries { get; set; } = 0;
 

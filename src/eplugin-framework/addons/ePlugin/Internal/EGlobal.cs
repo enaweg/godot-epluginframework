@@ -168,6 +168,7 @@ internal sealed class EGlobal
         if (!context.IsRecipeCreated)
         {
             context.Plugin.CreateRecipe(context.Builder);
+            context.IsRecipeCreated = true;
         }
 
         // check dependencies
@@ -227,6 +228,12 @@ internal sealed class EGlobal
         //all dependencies are ready, we can finally install the requested plugin
         InstallEPlugin(context, recipe);
 
+        if (context.FailedTries != uint.MaxValue)
+        {
+            // this plugin may satisfy optional dependencies of plugins that were activated before it
+            ReevaluateOptionalDependencies(context);
+        }
+
         if (refreshAtEnd)
         {
             // trigger install for waiting plugins
@@ -255,7 +262,206 @@ internal sealed class EGlobal
         RefreshEditor();
     }
 
+    /// <summary>
+    /// Determines which optional plugin dependencies of <paramref name="recipe"/> are currently satisfied and
+    /// returns their nested recipes. An optional dependency is satisfied when its plugin is enabled and, if a
+    /// version constraint was given, the installed version matches. Unsatisfied ones are skipped — they never
+    /// enable a plugin and never fail the activation.
+    /// </summary>
+    /// <param name="ignoreSlug">
+    /// When given, that plugin is treated as if it were not enabled. Used to reconstruct which optional
+    /// recipes were already installed before a plugin became available.
+    /// </param>
+    /// <param name="assumeEnabledSlug">
+    /// When given, that plugin is treated as if it were still enabled. Used to reconstruct which optional
+    /// recipes were installed while a plugin that is being disabled right now was still available.
+    /// </param>
+    internal List<EEditorPluginRecipe.OptionalPlugin> ResolveOptionalRecipes(PluginContext context,
+        EEditorPluginRecipe recipe, string? ignoreSlug = null, string? assumeEnabledSlug = null)
+    {
+        var resolved = new List<EEditorPluginRecipe.OptionalPlugin>();
+
+        foreach (var optional in recipe.OptionalPluginDependencies)
+        {
+            if (optional.Slug == ignoreSlug)
+            {
+                continue;
+            }
+
+            if (optional.Slug != assumeEnabledSlug && !EditorInterface.Singleton.IsPluginEnabled(optional.Slug))
+            {
+                context.Logger?.Log(
+                    $"Optional dependency {optional.Slug} not enabled, skipping its recipe for {context.Slug}.");
+                continue;
+            }
+
+            if (optional.Version is not null)
+            {
+                var optionalContext = _contexts.FirstOrDefault(c => c.Slug == optional.Slug);
+                var optionalVersion = optionalContext?.Metadata?.Version ?? "0.0";
+
+                if (!MatchesVersion(optionalVersion, optional.Version, context.Logger))
+                {
+                    context.Logger?.Log(
+                        $"Optional dependency {optional.Slug} {optionalVersion} does not match needed {optional.Version}, skipping its recipe for {context.Slug}.");
+                    continue;
+                }
+            }
+
+            context.Logger?.Log($"Optional dependency {optional.Slug} satisfied for {context.Slug}.");
+            resolved.Add(optional);
+        }
+
+        return resolved;
+    }
+
+    /// <summary>
+    /// Re-checks the optional dependencies of every other installed plugin now that
+    /// <paramref name="enabledContext"/> is available, and installs the nested recipes that became
+    /// satisfied. This makes activation order irrelevant: a plugin that was activated before its optional
+    /// dependency still picks it up once that dependency is enabled.
+    /// </summary>
+    private void ReevaluateOptionalDependencies(PluginContext enabledContext)
+    {
+        foreach (var other in _contexts.ToArray())
+        {
+            if (other == enabledContext || other.Plugin is null)
+            {
+                continue;
+            }
+
+            if (other.State is EEditorPluginState.Deactivated or EEditorPluginState.Error ||
+                other.FailedTries == uint.MaxValue)
+            {
+                continue;
+            }
+
+            var otherRecipe = GetInstalledOptionalRecipeOrNull(other, enabledContext.Slug);
+            if (otherRecipe is null)
+            {
+                continue;
+            }
+
+            // without a snapshot (the context was rebuilt after an assembly reload) assume everything that
+            // was already satisfied before this plugin appeared is installed. Applied entries stay in the
+            // snapshot even when they are no longer satisfied, so uninstall still reverses them.
+            var applied = new List<EEditorPluginRecipe.OptionalPlugin>(other.AppliedOptionalDependencies ??
+                ResolveOptionalRecipes(other, otherRecipe, ignoreSlug: enabledContext.Slug));
+            other.AppliedOptionalDependencies = applied;
+
+            foreach (var optional in ResolveOptionalRecipes(other, otherRecipe))
+            {
+                if (applied.Contains(optional))
+                {
+                    continue;
+                }
+
+                other.Logger?.Log(
+                    $"Installing optional recipe of {other.Slug} that became satisfied by {enabledContext.Slug}.");
+
+                applied.Add(optional);
+                ApplyRecipe(other, optional.Recipe);
+
+                if (other.FailedTries == uint.MaxValue)
+                {
+                    break;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reverses the nested recipes that other installed plugins got because
+    /// <paramref name="disabledContext"/> was available. Without this their code would keep referencing a
+    /// plugin that is no longer installed and the project would stop compiling.
+    /// </summary>
+    private void UninstallOptionalDependenciesOn(PluginContext disabledContext)
+    {
+        foreach (var other in _contexts.ToArray())
+        {
+            if (other == disabledContext || other.Plugin is null)
+            {
+                continue;
+            }
+
+            if (other.State is EEditorPluginState.Deactivated or EEditorPluginState.Error ||
+                other.FailedTries == uint.MaxValue)
+            {
+                continue;
+            }
+
+            var otherRecipe = GetInstalledOptionalRecipeOrNull(other, disabledContext.Slug);
+            if (otherRecipe is null)
+            {
+                continue;
+            }
+
+            // without a snapshot (the context was rebuilt after an assembly reload) reconstruct what was
+            // installed while the plugin being disabled was still available.
+            var applied = other.AppliedOptionalDependencies ??
+                          ResolveOptionalRecipes(other, otherRecipe, assumeEnabledSlug: disabledContext.Slug);
+            other.AppliedOptionalDependencies = applied;
+
+            foreach (var optional in applied.Where(o => o.Slug == disabledContext.Slug).ToArray())
+            {
+                other.Logger?.Log(
+                    $"Removing optional recipe of {other.Slug} that depended on {disabledContext.Slug}.");
+
+                ReverseRecipe(other, optional.Recipe);
+                applied.Remove(optional);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns the recipe of <paramref name="context"/> when it is installed and declares an optional
+    /// dependency on <paramref name="slug"/>, otherwise <see langword="null"/>.
+    /// </summary>
+    private EEditorPluginRecipe? GetInstalledOptionalRecipeOrNull(PluginContext context, string slug)
+    {
+        // installed either in an earlier session (Activated after a reload) or in this one (it has a
+        // snapshot). Anything else was never installed and resolves its optionals on activation.
+        if (context.State is not EEditorPluginState.Activated && context.AppliedOptionalDependencies is null)
+        {
+            return null;
+        }
+
+        if (!context.IsRecipeCreated)
+        {
+            context.Plugin!.CreateRecipe(context.Builder);
+            context.IsRecipeCreated = true;
+        }
+
+        var recipe = context.Builder.PluginRecipe;
+        return recipe.OptionalPluginDependencies.Any(o => o.Slug == slug) ? recipe : null;
+    }
+
     private void InstallEPlugin(PluginContext context, EEditorPluginRecipe recipe)
+    {
+        // track applied optional dependencies as we go so a failure mid-install can still be reversed.
+        var applied = new List<EEditorPluginRecipe.OptionalPlugin>();
+        context.AppliedOptionalDependencies = applied;
+
+        ApplyRecipe(context, recipe);
+
+        if (context.FailedTries == uint.MaxValue)
+        {
+            return;
+        }
+
+        foreach (var optional in ResolveOptionalRecipes(context, recipe))
+        {
+            applied.Add(optional);
+            ApplyRecipe(context, optional.Recipe);
+
+            if (context.FailedTries == uint.MaxValue)
+            {
+                return;
+            }
+        }
+    }
+
+    private void ApplyRecipe(PluginContext context, EEditorPluginRecipe recipe)
     {
         foreach (var nuget in recipe.Nugets)
         {
@@ -313,6 +519,7 @@ internal sealed class EGlobal
         if (!context.IsRecipeCreated)
         {
             context.Plugin.CreateRecipe(context.Builder);
+            context.IsRecipeCreated = true;
         }
 
         // disable plugins dependent on this one
@@ -372,6 +579,10 @@ internal sealed class EGlobal
         }
 
         UninstallEPlugin(context, context.Builder.PluginRecipe);
+
+        // other plugins may have installed code that depends on this one via an optional dependency
+        UninstallOptionalDependenciesOn(context);
+
         context.State = EEditorPluginState.Deactivated;
 
         // @ local dependencies: can not disable as we do not know which are needed. There is no way to track manual or
@@ -392,6 +603,22 @@ internal sealed class EGlobal
     }
 
     private void UninstallEPlugin(PluginContext context, EEditorPluginRecipe recipe)
+    {
+        // without a snapshot (e.g. the context was rebuilt after an assembly reload) fall back to resolving
+        // the optional dependencies against the current editor state.
+        var applied = context.AppliedOptionalDependencies ?? ResolveOptionalRecipes(context, recipe);
+
+        for (var i = applied.Count - 1; i >= 0; i--)
+        {
+            ReverseRecipe(context, applied[i].Recipe);
+        }
+
+        context.AppliedOptionalDependencies = null;
+
+        ReverseRecipe(context, recipe);
+    }
+
+    private void ReverseRecipe(PluginContext context, EEditorPluginRecipe recipe)
     {
         foreach (var autoload in recipe.Autoloads)
         {

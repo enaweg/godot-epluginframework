@@ -8,9 +8,9 @@ The Godot project and solution are under `src/eplugin-framework/`.
 ## Repository guidance
 
 - Edit framework code under `src/eplugin-framework/addons/ePlugin/`.
-- Treat `addons/sample_plugin/`, `addons/sample_dependant_plugin/`, and
-  `addons/sample_addedcode_plugin/` as read-only usage examples unless explicitly asked to
-  change them.
+- Treat `addons/sample_plugin/`, `addons/sample_dependant_plugin/`,
+  `addons/sample_addedcode_plugin/`, and `addons/sample_optional_plugin/` as read-only usage
+  examples unless explicitly asked to change them.
 - Treat `addons/gdUnit4/` as a read-only vendored dependency unless explicitly asked to change it.
 - Tests are under `src/eplugin-framework/tests/`.
 - Most framework code is wrapped in `#if TOOLS` because it runs only in the Godot editor.
@@ -34,6 +34,13 @@ dotnet test "src/eplugin-framework/EPlugin Framework.sln" --filter "FullyQualifi
 - `EGlobal` owns plugin contexts, lifecycle state, dependency resolution, and recipe installation.
 - Consumer plugins implement `IEEditorPlugin.CreateRecipe` and call `EnableEPlugin()` /
   `DisableEPlugin()` from their Godot lifecycle methods.
+- The builder surface is split: `IEEditorPluginRecipeBuilder` declares resources, `IEEditorPluginBuilder`
+  extends it with dependency declarations. Only the root recipe declares dependencies; the nested
+  recipe of an optional dependency gets the resource-only interface.
+- `AddOptionalPluginDependency` recipes are installed only while the named plugin is enabled and its
+  version matches. `EGlobal` re-evaluates them in both directions (enabling a plugin applies newly
+  satisfied recipes, disabling one reverses the recipes that depended on it), so activation order does
+  not matter. They never enable a plugin, never fail an activation, and never cascade a disable.
 - Recipe changes should go through the `IDotnetCli` abstraction; new CLI operations must be
   implemented for both .NET 9 and .NET 10 CLI implementations.
 - Keep `IEEditorPlugin` as an interface; this works around Godot 4.5+ `EditorPlugin` regressions.
