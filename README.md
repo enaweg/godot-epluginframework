@@ -47,7 +47,8 @@ The repository also contains a sample project in `src/eplugin-framework`.
 + Include/exclude asset directories (for additional content)
 + Plugin Migration (version upgrades)
 + Plugin Dependencies (when a root plugin is disabled, all dependent plugins will be disabled too)
-+ Optional Plugin Dependencies with their own nested recipe, installed only when the other plugin is present
++ Optional Plugin Dependencies with their own nested recipe, installed and removed as the other plugin is
+  enabled and disabled
 
 ## Motivation
 
@@ -72,8 +73,10 @@ provide some of the missing pieces for C# Plugins.
   require manual intervention.
 + Godot's editor plugin UI does not refresh automatically. Activated dependent plugins may not be shown until the UI
   is reopened.
-+ Optional plugin dependencies are re-evaluated whenever a plugin is enabled or disabled, so activation
-  order does not matter and disabling an optional plugin also removes the nested recipe that depended on it.
++ Optional plugin dependencies are only re-evaluated when an ePlugin-managed plugin is enabled or disabled.
+  Enabling or disabling a plain Godot plugin (one that does not implement `IEEditorPlugin`) does not trigger
+  it, so a nested recipe depending on such a plugin is only applied or removed once the declaring plugin is
+  toggled itself.
 
 ## What is not possible?
 
@@ -212,6 +215,68 @@ public sealed partial class YourPlugin : EditorPlugin, IEEditorPlugin
 
 #endif
 ```
+
+### Example Code (Optional Plugin Dependency)
+
+A plugin can declare that it does *extra* work while another plugin happens to be around — for example
+registering an integration project, an autoload or a directory of glue code. `AddOptionalPluginDependency`
+takes the slug of that plugin, an optional version constraint, and a nested recipe:
+
+```C#
+#if TOOLS
+using Godot;
+using Enaweg.Plugin;
+
+[Tool]
+public partial class YourPlugin : EditorPlugin, IEEditorPlugin
+{
+    public void CreateRecipe(IEEditorPluginBuilder builder)
+    {
+        builder
+            // installed whenever this plugin is active
+            .AddDirectory($"{this.GetPluginDirectory()}/.src")
+
+            // installed only while "other-plugin" is enabled and at least version 1.0
+            .AddOptionalPluginDependency("other-plugin", ">1.0", optional => optional
+                .AddNuget("Sample.Nuget.Package")
+                .AddProject("addons/your-plugin/Integration.csproj")
+                .AddAutoload("IntegrationName", "res://path-to-integration-resource")
+                .AddDirectory($"{this.GetPluginDirectory()}/.optional-src"));
+    }
+
+    public override void _EnablePlugin()
+    {
+        base._EnablePlugin();
+        this.EnableEPlugin();
+    }
+
+    public override void _DisablePlugin()
+    {
+        base._DisablePlugin();
+        this.DisableEPlugin();
+    }
+}
+#endif
+```
+
+How it behaves:
+
++ **Optional means optional.** The named plugin is never enabled on your behalf. When it is missing, disabled,
+  or its version does not match, the nested recipe is skipped, a line is logged, and your plugin activates
+  normally. This is the difference to `AddPluginDependency`, which enables the dependency and fails your
+  plugin when it cannot be satisfied.
++ **Activation order does not matter.** Enabling the other plugin later installs the nested recipe at that
+  point, even though your plugin was activated first.
++ **Disabling the other plugin removes the nested recipe again**, so nothing is left referencing a plugin that
+  is gone and the project keeps compiling. Your plugin itself stays enabled — optional dependencies never
+  cascade a disable, unlike `AddPluginDependency`.
++ **Version constraints** use the same syntax as `AddPluginDependency` (`"1.2.3"` for an exact version,
+  `">1.2.0"` for "this version or higher"). Pass `null` to accept any version.
++ **Nested recipes declare resources only** — `AddNuget`, `AddNugets`, `AddProject`, `AddAutoload` and
+  `AddDirectory`. They cannot declare dependencies of their own; only the root recipe can.
+
+`addons/sample_optional_plugin` in this repository is a working example: it optionally depends on
+`addons/sample_plugin` and manages a directory of integration code alongside its own.
 
 ## Plugins using ePlugin Framework
 

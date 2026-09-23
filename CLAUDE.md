@@ -19,11 +19,10 @@ The whole project lives under `src/eplugin-framework/` (Godot project root — `
 - `src/eplugin-framework/addons/ePlugin/` — **the main part of this project, the framework itself**. This is
   what you'll be editing.
 - `src/eplugin-framework/addons/sample_plugin/`, `sample_dependant_plugin/`,
-  `sample_addedcode_plugin/`, `sample_optional_plugin/` — any addon under `addons/` whose name starts
-  with `sample` is a reference plugin demonstrating usage of
-  the ePlugin framework, bundled with full source. Treat these as **read-only**: don't modify them unless
-  explicitly asked. They're useful reading — minimal, working examples of how to consume the
-  `IEEditorPlugin` API (see Architecture below).
+  `sample_addedcode_plugin/`, `sample_optional_plugin/` — any addon under `addons/` whose name starts with
+  `sample` is a reference plugin demonstrating usage of the ePlugin framework, bundled with full source.
+  Treat these as **read-only**: don't modify them unless explicitly asked. They're useful reading — minimal,
+  working examples of how to consume the `IEEditorPlugin` API (see Architecture below).
 - `src/eplugin-framework/addons/gdUnit4/` — a vendored unit testing framework plugin (used to run this
   repo's own test suite), not an example of the ePlugin API. Treat it as a **read-only** code dependency:
   don't modify it unless explicitly asked.
@@ -111,8 +110,8 @@ opposite order. Recipe application always goes through `PluginContext.Cli` (an `
 Optional dependencies are resolved by `EGlobal.ResolveOptionalRecipes` at install time: a nested recipe is
 applied only when its plugin is already enabled and satisfies any version constraint. It never enables a
 plugin and never fails the activation. What was applied is snapshotted in
-`PluginContext.AppliedOptionalRecipes` so uninstall reverses exactly that (falling back to re-resolving when
-the snapshot was lost to an assembly reload).
+`PluginContext.AppliedOptionalDependencies` so uninstall reverses exactly that (falling back to re-resolving
+when the snapshot was lost to an assembly reload).
 
 Activation order does not matter, because both directions are re-evaluated against the other installed
 plugins:
@@ -129,9 +128,12 @@ Entries stay in the snapshot once applied even if they stop being satisfied, so 
 Optional dependencies still take no part in the reverse-dependency scan in `DisableEPlugin`: disabling an
 optional plugin removes the nested recipe but does not disable the plugin that declared it.
 
+Both hooks sit in `EnableEPlugin`/`DisableEPlugin`, which return early for plugins that do not implement
+`IEEditorPlugin`, so enabling or disabling a plain Godot plugin does not re-evaluate anything.
+
 `PluginContext` (`addons/ePlugin/Internal/PluginContext.cs`) is the per-plugin state bag: the `EditorPlugin`
-instance, its `IEEditorPlugin`/metadata/slug, its logger, its `IDotnetCli`, its recipe builder, and its
-`EEditorPluginState`.
+instance, its `IEEditorPlugin`/metadata/slug, its logger, its `IDotnetCli`, its recipe builder, its
+`EEditorPluginState`, and the `AppliedOptionalDependencies` snapshot.
 
 When a recipe's NuGet entry has an external/local `source`, `NugetConfigManager`
 (`addons/ePlugin/Internal/Dotnet/NugetConfigManager.cs`) additionally mirrors that source into a root
