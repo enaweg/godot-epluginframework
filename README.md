@@ -47,6 +47,7 @@ The repository also contains a sample project in `src/eplugin-framework`.
 + Include/exclude asset directories (for additional content)
 + Plugin Migration (version upgrades)
 + Plugin Dependencies (when a root plugin is disabled, all dependent plugins will be disabled too)
++ Optional Plugin Dependencies with their own nested recipe, installed only when the other plugin is present
 
 ## Motivation
 
@@ -71,6 +72,8 @@ provide some of the missing pieces for C# Plugins.
   require manual intervention.
 + Godot's editor plugin UI does not refresh automatically. Activated dependent plugins may not be shown until the UI
   is reopened.
++ Optional plugin dependencies are resolved once, when the plugin is activated. Enabling or disabling the optional
+  plugin afterwards does not install or uninstall its nested recipe — the dependent plugin has to be re-enabled.
 
 ## What is not possible?
 
@@ -170,6 +173,15 @@ public sealed partial class YourPlugin : EditorPlugin, IEEditorPlugin
             
             // add a dependency to any plugin (C# or normal GDScript Plugin)
             .AddPluginDependency("other-plugin", ">2.0.0")
+            
+            // add an OPTIONAL dependency with its own recipe: the nested recipe is only installed
+            // when that plugin is already enabled (and matches the version). It is never enabled
+            // automatically and a missing/mismatched plugin never fails this plugin.
+            .AddOptionalPluginDependency("optional-plugin", ">1.0.0", optional => optional
+                .AddNuget("Sample.Nuget.Package3")
+                .AddProject("optional project path")
+                .AddAutoload("OptionalResourceName", "res://path-to-optional-resource")
+                .AddDirectory($"{this.GetPluginDirectory()}/.optional-src"))
             
             // add autoload
             .AddAutoload("ResourceName", "res://path-to-resource")
