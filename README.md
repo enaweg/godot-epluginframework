@@ -72,8 +72,9 @@ provide some of the missing pieces for C# Plugins.
   require manual intervention.
 + Godot's editor plugin UI does not refresh automatically. Activated dependent plugins may not be shown until the UI
   is reopened.
-+ Optional plugin dependencies are resolved once, when the plugin is activated. Enabling or disabling the optional
-  plugin afterwards does not install or uninstall its nested recipe — the dependent plugin has to be re-enabled.
++ Optional plugin dependencies are re-evaluated whenever a plugin is enabled, so activation order does not
+  matter. Disabling the optional plugin however does not uninstall its nested recipe — the dependent plugin
+  has to be re-enabled for that.
 
 ## What is not possible?
 

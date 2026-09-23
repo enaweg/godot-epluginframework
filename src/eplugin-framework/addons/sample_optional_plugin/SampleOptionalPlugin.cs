@@ -11,9 +11,10 @@ public partial class SampleOptionalPlugin : EditorPlugin, IEEditorPlugin
             // always installed while this plugin is active
             .AddDirectory($"{this.GetPluginDirectory()}/.src")
 
-            // only installed when sample_plugin is already enabled and at least version 1.0.
-            // sample_plugin is never enabled on our behalf: when it is missing or its version does
-            // not match, the nested recipe is skipped and this plugin still activates normally.
+            // only installed when sample_plugin is enabled and at least version 1.0. sample_plugin is
+            // never enabled on our behalf: when it is missing or its version does not match, the nested
+            // recipe is skipped and this plugin still activates normally. Order does not matter either --
+            // enabling sample_plugin afterwards installs the nested recipe at that point.
             .AddOptionalPluginDependency("sample_plugin", ">1.0", optional => optional
                 .AddDirectory($"{this.GetPluginDirectory()}/.optional-src"));
     }

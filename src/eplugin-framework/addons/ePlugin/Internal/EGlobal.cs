@@ -228,6 +228,12 @@ internal sealed class EGlobal
         //all dependencies are ready, we can finally install the requested plugin
         InstallEPlugin(context, recipe);
 
+        if (context.FailedTries != uint.MaxValue)
+        {
+            // this plugin may satisfy optional dependencies of plugins that were activated before it
+            ReevaluateOptionalDependencies(context);
+        }
+
         if (refreshAtEnd)
         {
             // trigger install for waiting plugins
@@ -262,12 +268,22 @@ internal sealed class EGlobal
     /// version constraint was given, the installed version matches. Unsatisfied ones are skipped — they never
     /// enable a plugin and never fail the activation.
     /// </summary>
-    internal List<EEditorPluginRecipe> ResolveOptionalRecipes(PluginContext context, EEditorPluginRecipe recipe)
+    /// <param name="ignoreSlug">
+    /// When given, that plugin is treated as if it were not enabled. Used to reconstruct which optional
+    /// recipes were already installed before a plugin became available.
+    /// </param>
+    internal List<EEditorPluginRecipe> ResolveOptionalRecipes(PluginContext context, EEditorPluginRecipe recipe,
+        string? ignoreSlug = null)
     {
         var resolved = new List<EEditorPluginRecipe>();
 
         foreach (var optional in recipe.OptionalPluginDependencies)
         {
+            if (optional.Slug == ignoreSlug)
+            {
+                continue;
+            }
+
             if (!EditorInterface.Singleton.IsPluginEnabled(optional.Slug))
             {
                 context.Logger?.Log(
@@ -293,6 +309,77 @@ internal sealed class EGlobal
         }
 
         return resolved;
+    }
+
+    /// <summary>
+    /// Re-checks the optional dependencies of every other installed plugin now that
+    /// <paramref name="enabledContext"/> is available, and installs the nested recipes that became
+    /// satisfied. This makes activation order irrelevant: a plugin that was activated before its optional
+    /// dependency still picks it up once that dependency is enabled.
+    /// </summary>
+    private void ReevaluateOptionalDependencies(PluginContext enabledContext)
+    {
+        foreach (var other in _contexts.ToArray())
+        {
+            if (other == enabledContext || other.Plugin is null)
+            {
+                continue;
+            }
+
+            if (other.State is EEditorPluginState.Deactivated or EEditorPluginState.Error ||
+                other.FailedTries == uint.MaxValue)
+            {
+                continue;
+            }
+
+            // installed either in an earlier session (Activated after a reload) or in this one (it has a
+            // snapshot). Anything else was never installed and will resolve its optionals on activation.
+            if (other.State is not EEditorPluginState.Activated && other.AppliedOptionalRecipes is null)
+            {
+                continue;
+            }
+
+            if (!other.IsRecipeCreated)
+            {
+                other.Plugin.CreateRecipe(other.Builder);
+                other.IsRecipeCreated = true;
+            }
+
+            var otherRecipe = other.Builder.PluginRecipe;
+            if (!otherRecipe.OptionalPluginDependencies.Any())
+            {
+                continue;
+            }
+
+            // without a snapshot (the context was rebuilt after an assembly reload) assume everything that
+            // was already satisfied before this plugin appeared is installed.
+            var applied = other.AppliedOptionalRecipes ??
+                          ResolveOptionalRecipes(other, otherRecipe, enabledContext.Slug);
+
+            // keep already applied recipes in the snapshot even if they are no longer satisfied, so
+            // uninstall still reverses them.
+            var updated = new List<EEditorPluginRecipe>(applied);
+            other.AppliedOptionalRecipes = updated;
+
+            foreach (var optionalRecipe in ResolveOptionalRecipes(other, otherRecipe))
+            {
+                if (updated.Contains(optionalRecipe))
+                {
+                    continue;
+                }
+
+                other.Logger?.Log(
+                    $"Installing optional recipe of {other.Slug} that became satisfied by {enabledContext.Slug}.");
+
+                updated.Add(optionalRecipe);
+                ApplyRecipe(other, optionalRecipe);
+
+                if (other.FailedTries == uint.MaxValue)
+                {
+                    break;
+                }
+            }
+        }
     }
 
     private void InstallEPlugin(PluginContext context, EEditorPluginRecipe recipe)

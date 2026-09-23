@@ -168,6 +168,22 @@ public class EGlobalTests
 
     [TestCase]
     [RequireGodotRuntime]
+    public void ResolveOptionalRecipesSkipsIgnoredSlugWithoutQueryingTheEditor()
+    {
+        var pluginBase = CreatePluginBase();
+        var context = new PluginContext(null, pluginBase, new NullLogger());
+        var builder = EEditorPluginBuilder.Create();
+        builder.AddOptionalPluginDependency("some-plugin", null, optional => optional.AddNuget("ZLogger"));
+
+        // the ignored slug is treated as not enabled, short-circuiting before EditorInterface is asked --
+        // this is how the pre-enable baseline is reconstructed when no snapshot is available.
+        var resolved = EGlobal.Instance.ResolveOptionalRecipes(context, builder.PluginRecipe, "some-plugin");
+
+        Assertions.AssertInt(resolved.Count).IsEqual(0);
+    }
+
+    [TestCase]
+    [RequireGodotRuntime]
     public void DisableEPluginClearsAppliedOptionalRecipeSnapshot()
     {
         var pluginBase = CreatePluginBase();

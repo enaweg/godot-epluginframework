@@ -78,8 +78,9 @@ public interface IEEditorPluginBuilder : IEEditorPluginRecipeBuilder
     /// plugin's activation: when the plugin is not enabled, or its version does not match, the nested
     /// recipe is simply skipped.
     /// <para>
-    /// Resolution is a snapshot taken when this plugin is activated. Enabling or disabling the optional
-    /// plugin afterwards does not install or uninstall the nested recipe — re-enable this plugin for that.
+    /// Activation order does not matter: enabling the optional plugin later re-evaluates the optional
+    /// dependencies of the plugins already installed and applies the nested recipe then. Disabling it again
+    /// however does not uninstall the nested recipe — re-enable this plugin for that.
     /// </para>
     /// </remarks>
     /// <returns>The builder itself.</returns>

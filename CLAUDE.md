@@ -112,8 +112,16 @@ Optional dependencies are resolved by `EGlobal.ResolveOptionalRecipes` at instal
 applied only when its plugin is already enabled and satisfies any version constraint. It never enables a
 plugin and never fails the activation. What was applied is snapshotted in
 `PluginContext.AppliedOptionalRecipes` so uninstall reverses exactly that (falling back to re-resolving when
-the snapshot was lost to an assembly reload). Optional dependencies deliberately do not participate in the
-reverse-dependency scan in `DisableEPlugin`, so disabling an optional plugin does not cascade.
+the snapshot was lost to an assembly reload).
+
+Activation order does not matter: after installing a plugin, `ReevaluateOptionalDependencies` re-checks every
+other already-installed plugin and applies the nested recipes that just became satisfied. The baseline of
+"already installed" comes from that plugin's snapshot, or — when it was lost to an assembly reload — from
+`ResolveOptionalRecipes(..., ignoreSlug: <the plugin just enabled>)`, so only the genuinely new recipes are
+applied. Recipes stay in the snapshot once applied even if they stop being satisfied, so uninstall still
+reverses them. The reverse direction is deliberately not wired up: optional dependencies take no part in the
+reverse-dependency scan in `DisableEPlugin`, so disabling an optional plugin neither cascades nor uninstalls
+the nested recipe it enabled.
 
 `PluginContext` (`addons/ePlugin/Internal/PluginContext.cs`) is the per-plugin state bag: the `EditorPlugin`
 instance, its `IEEditorPlugin`/metadata/slug, its logger, its `IDotnetCli`, its recipe builder, and its
