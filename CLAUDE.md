@@ -18,8 +18,9 @@ The whole project lives under `src/eplugin-framework/` (Godot project root — `
 
 - `src/eplugin-framework/addons/ePlugin/` — **the main part of this project, the framework itself**. This is
   what you'll be editing.
-- `src/eplugin-framework/addons/sample_plugin/`, `sample_dependant_plugin/`, `sample_addedcode_plugin/` —
-  any addon under `addons/` whose name starts with `sample` is a reference plugin demonstrating usage of
+- `src/eplugin-framework/addons/sample_plugin/`, `sample_dependant_plugin/`,
+  `sample_addedcode_plugin/`, `sample_optional_plugin/` — any addon under `addons/` whose name starts
+  with `sample` is a reference plugin demonstrating usage of
   the ePlugin framework, bundled with full source. Treat these as **read-only**: don't modify them unless
   explicitly asked. They're useful reading — minimal, working examples of how to consume the
   `IEEditorPlugin` API (see Architecture below).
@@ -81,8 +82,9 @@ extension methods `this.EnableEPlugin()` / `this.DisableEPlugin()` (`IEEditorPlu
 it only declares requirements via the fluent `IEEditorPluginBuilder` (NuGets, project references/solution
 entries, autoloads, managed directories, plugin dependencies via `AddPluginDependency`, and optional plugin
 dependencies carrying a nested recipe via `AddOptionalPluginDependency`). See
-`addons/sample_plugin`, `addons/sample_dependant_plugin` (dependency example), and
-`addons/sample_addedcode_plugin` (`AddDirectory` example) for minimal reference implementations, and the
+`addons/sample_plugin`, `addons/sample_dependant_plugin` (dependency example),
+`addons/sample_addedcode_plugin` (`AddDirectory` example), and `addons/sample_optional_plugin`
+(`AddOptionalPluginDependency` example) for minimal reference implementations, and the
 README's "Advanced Plugin" example for the full builder surface.
 
 `IEEditorPlugin` is an interface rather than an abstract base class specifically to work around C# bugs in

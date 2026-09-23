@@ -8,9 +8,9 @@ The Godot project and solution are under `src/eplugin-framework/`.
 ## Repository guidance
 
 - Edit framework code under `src/eplugin-framework/addons/ePlugin/`.
-- Treat `addons/sample_plugin/`, `addons/sample_dependant_plugin/`, and
-  `addons/sample_addedcode_plugin/` as read-only usage examples unless explicitly asked to
-  change them.
+- Treat `addons/sample_plugin/`, `addons/sample_dependant_plugin/`,
+  `addons/sample_addedcode_plugin/`, and `addons/sample_optional_plugin/` as read-only usage
+  examples unless explicitly asked to change them.
 - Treat `addons/gdUnit4/` as a read-only vendored dependency unless explicitly asked to change it.
 - Tests are under `src/eplugin-framework/tests/`.
 - Most framework code is wrapped in `#if TOOLS` because it runs only in the Godot editor.
