@@ -1,4 +1,5 @@
-﻿#if TOOLS
+#if TOOLS
+using System;
 using Godot;
 
 namespace Enaweg.Plugin.Internal;
@@ -28,6 +29,19 @@ internal sealed class EEditorPluginBuilder : IEEditorPluginBuilder
     public IEEditorPluginBuilder AddPluginDependency(string pluginSlug, string? version = null)
     {
         PluginRecipe.PluginDependencies.Add(new EEditorPluginRecipe.Plugin(pluginSlug, version));
+        return this;
+    }
+
+    public IEEditorPluginBuilder AddOptionalPluginDependency(string pluginSlug, string? version,
+        Action<IEEditorPluginRecipeBuilder> optionalRecipe)
+    {
+        ArgumentNullException.ThrowIfNull(optionalRecipe);
+
+        var subBuilder = EEditorPluginSubRecipeBuilder.Create();
+        optionalRecipe(subBuilder);
+
+        PluginRecipe.OptionalPluginDependencies.Add(
+            new EEditorPluginRecipe.OptionalPlugin(pluginSlug, version, subBuilder.PluginRecipe));
         return this;
     }
 
@@ -65,5 +79,25 @@ internal sealed class EEditorPluginBuilder : IEEditorPluginBuilder
         PluginRecipe.Directories.Add(path);
         return this;
     }
+
+    IEEditorPluginRecipeBuilder IEEditorPluginRecipeBuilder.AddAutoload(string name, string path)
+        => AddAutoload(name, path);
+
+    IEEditorPluginRecipeBuilder IEEditorPluginRecipeBuilder.AddProject(string path, bool addReference)
+        => AddProject(path, addReference);
+
+    IEEditorPluginRecipeBuilder IEEditorPluginRecipeBuilder.AddProject(string path, string? virtualFolderName,
+        bool addReference)
+        => AddProject(path, virtualFolderName, addReference);
+
+    IEEditorPluginRecipeBuilder IEEditorPluginRecipeBuilder.AddNugets(params string[] nugetNames)
+        => AddNugets(nugetNames);
+
+    IEEditorPluginRecipeBuilder IEEditorPluginRecipeBuilder.AddNuget(string nugetName, string? version,
+        string? source)
+        => AddNuget(nugetName, version, source);
+
+    IEEditorPluginRecipeBuilder IEEditorPluginRecipeBuilder.AddDirectory(string path)
+        => AddDirectory(path);
 }
 #endif

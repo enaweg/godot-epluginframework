@@ -7,6 +7,8 @@ internal sealed class EEditorPluginRecipe
 {
     internal record Plugin(string Slug, string? Version);
 
+    internal record OptionalPlugin(string Slug, string? Version, EEditorPluginRecipe Recipe);
+
     internal record Project(string Path, string? FolderName, bool Reference);
 
     internal record Nuget(string Name, string? Version, string? Source);
@@ -14,6 +16,7 @@ internal sealed class EEditorPluginRecipe
     internal record Autoload(string Name, string Path);
 
     public List<Plugin> PluginDependencies { get; init; } = [];
+    public List<OptionalPlugin> OptionalPluginDependencies { get; init; } = [];
     public List<Project> Projects { get; init; } = [];
     public List<Nuget> Nugets { get; init; } = [];
 
