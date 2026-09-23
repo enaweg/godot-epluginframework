@@ -168,6 +168,7 @@ internal sealed class EGlobal
         if (!context.IsRecipeCreated)
         {
             context.Plugin.CreateRecipe(context.Builder);
+            context.IsRecipeCreated = true;
         }
 
         // check dependencies
@@ -255,7 +256,71 @@ internal sealed class EGlobal
         RefreshEditor();
     }
 
+    /// <summary>
+    /// Determines which optional plugin dependencies of <paramref name="recipe"/> are currently satisfied and
+    /// returns their nested recipes. An optional dependency is satisfied when its plugin is enabled and, if a
+    /// version constraint was given, the installed version matches. Unsatisfied ones are skipped — they never
+    /// enable a plugin and never fail the activation.
+    /// </summary>
+    internal List<EEditorPluginRecipe> ResolveOptionalRecipes(PluginContext context, EEditorPluginRecipe recipe)
+    {
+        var resolved = new List<EEditorPluginRecipe>();
+
+        foreach (var optional in recipe.OptionalPluginDependencies)
+        {
+            if (!EditorInterface.Singleton.IsPluginEnabled(optional.Slug))
+            {
+                context.Logger?.Log(
+                    $"Optional dependency {optional.Slug} not enabled, skipping its recipe for {context.Slug}.");
+                continue;
+            }
+
+            if (optional.Version is not null)
+            {
+                var optionalContext = _contexts.FirstOrDefault(c => c.Slug == optional.Slug);
+                var optionalVersion = optionalContext?.Metadata?.Version ?? "0.0";
+
+                if (!MatchesVersion(optionalVersion, optional.Version, context.Logger))
+                {
+                    context.Logger?.Log(
+                        $"Optional dependency {optional.Slug} {optionalVersion} does not match needed {optional.Version}, skipping its recipe for {context.Slug}.");
+                    continue;
+                }
+            }
+
+            context.Logger?.Log($"Optional dependency {optional.Slug} satisfied, applying its recipe for {context.Slug}.");
+            resolved.Add(optional.Recipe);
+        }
+
+        return resolved;
+    }
+
     private void InstallEPlugin(PluginContext context, EEditorPluginRecipe recipe)
+    {
+        // track applied optional recipes as we go so a failure mid-install can still be reversed.
+        var appliedOptionalRecipes = new List<EEditorPluginRecipe>();
+        context.AppliedOptionalRecipes = appliedOptionalRecipes;
+
+        ApplyRecipe(context, recipe);
+
+        if (context.FailedTries == uint.MaxValue)
+        {
+            return;
+        }
+
+        foreach (var optionalRecipe in ResolveOptionalRecipes(context, recipe))
+        {
+            appliedOptionalRecipes.Add(optionalRecipe);
+            ApplyRecipe(context, optionalRecipe);
+
+            if (context.FailedTries == uint.MaxValue)
+            {
+                return;
+            }
+        }
+    }
+
+    private void ApplyRecipe(PluginContext context, EEditorPluginRecipe recipe)
     {
         foreach (var nuget in recipe.Nugets)
         {
@@ -313,6 +378,7 @@ internal sealed class EGlobal
         if (!context.IsRecipeCreated)
         {
             context.Plugin.CreateRecipe(context.Builder);
+            context.IsRecipeCreated = true;
         }
 
         // disable plugins dependent on this one
@@ -392,6 +458,22 @@ internal sealed class EGlobal
     }
 
     private void UninstallEPlugin(PluginContext context, EEditorPluginRecipe recipe)
+    {
+        // without a snapshot (e.g. the context was rebuilt after an assembly reload) fall back to resolving
+        // the optional dependencies against the current editor state.
+        var optionalRecipes = context.AppliedOptionalRecipes ?? ResolveOptionalRecipes(context, recipe);
+
+        for (var i = optionalRecipes.Count - 1; i >= 0; i--)
+        {
+            ReverseRecipe(context, optionalRecipes[i]);
+        }
+
+        context.AppliedOptionalRecipes = null;
+
+        ReverseRecipe(context, recipe);
+    }
+
+    private void ReverseRecipe(PluginContext context, EEditorPluginRecipe recipe)
     {
         foreach (var autoload in recipe.Autoloads)
         {
