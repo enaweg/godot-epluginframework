@@ -40,15 +40,27 @@ The repository also contains a sample project in `src/eplugin-framework`.
 
 ## Features
 
-+ Easy-to-use fluent API for plugins
-+ Plugin activation/deactivation handling for:
-    + Project References
-+ NuGet package references; external and local sources can be persisted in the project-root `nuget.config`
-+ Include/exclude asset directories (for additional content)
-+ Plugin Migration (version upgrades)
-+ Plugin Dependencies (when a root plugin is disabled, all dependent plugins will be disabled too)
-+ Optional Plugin Dependencies with their own nested recipe, installed and removed as the other plugin is
-  enabled and disabled
++ Fluent, declarative API: a plugin declares what it needs in `CreateRecipe`, and the framework installs it
+  when the plugin is enabled and reverses it when the plugin is disabled.
++ Resources a recipe can declare:
+    + **NuGet packages** — with an optional exact version and feed source. External and local sources are
+      mirrored into the project-root `nuget.config`, so a fresh checkout can restore them.
+    + **C# projects** — added to the solution (optionally inside a solution folder) and referenced from the
+      main Godot project.
+    + **Autoload singletons** — registered on activation, removed on deactivation.
+    + **Directories** — shown while the plugin is active and hidden while it is not, so a plugin can ship
+      source or assets that stay inert until it is enabled.
++ **Plugin dependencies**: a required plugin (C# or GDScript) is enabled before the dependent plugin and
+  checked against an optional version constraint. Disabling it also disables every plugin that depends on it.
++ **Optional plugin dependencies** with their own nested recipe, installed and removed as the other plugin
+  is enabled and disabled — never enabling it and never failing activation.
++ **Survives C# assembly reloads**: the editor drops all static state on a reload, so the framework rebuilds
+  its plugin state from the plugins that are currently active.
++ **Startup initializers**: code shipped inside a managed directory can register an `IInitialize` via
+  `EPlugin.RegisterInitializer` and get called once the framework is up (see `addons/sample_addedcode_plugin`).
++ **Plugin helpers** for authors: `GetPluginSlug()`, `GetPluginDirectory()`, `ReadMetadata()` and `Cli()`
+  extensions on `EditorPlugin`.
++ The editor's filesystem is rescanned and the solution rebuilt after every install and uninstall.
 
 ## Motivation
 
@@ -295,6 +307,7 @@ Feel free to contribute with documentation, testing, or pull requests.
 
 ### Future
 
+* plugin migration support (running upgrade steps when a plugin's version changes)
 * add simple UI API (show progress for plugins loading) for improved UX.
 * provide more APIs for plugins to use (Vision: make it easy to have advanced features for plugin authors)
     * Automatic plugin update system using source URL
