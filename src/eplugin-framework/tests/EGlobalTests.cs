@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Enaweg.Plugin.Internal;
 using Enaweg.Plugin.Logging;
 using GdUnit4;
@@ -149,5 +149,36 @@ public class EGlobalTests
 
         mockPlugin.Verify(p => p.CreateRecipe(It.IsAny<IEEditorPluginBuilder>()), Times.Once);
         Assertions.AssertObject(context.State).IsEqual(EEditorPluginState.Deactivated);
+    }
+
+    [TestCase]
+    [RequireGodotRuntime]
+    // NOTE: optional dependencies that ARE enabled cannot be covered here — resolution calls
+    // EditorInterface.Singleton.IsPluginEnabled, which is unavailable in the headless test runtime.
+    public void ResolveOptionalRecipesWithoutOptionalDependenciesReturnsEmpty()
+    {
+        var pluginBase = CreatePluginBase();
+        var context = new PluginContext(null, pluginBase, new NullLogger());
+        var recipe = new EEditorPluginRecipe();
+
+        var resolved = EGlobal.Instance.ResolveOptionalRecipes(context, recipe);
+
+        Assertions.AssertInt(resolved.Count).IsEqual(0);
+    }
+
+    [TestCase]
+    [RequireGodotRuntime]
+    public void DisableEPluginClearsAppliedOptionalRecipeSnapshot()
+    {
+        var pluginBase = CreatePluginBase();
+        var mockPlugin = new Mock<IEEditorPlugin>();
+        var context = new PluginContext(mockPlugin.Object, pluginBase, new NullLogger())
+        {
+            AppliedOptionalRecipes = [new EEditorPluginRecipe()]
+        };
+
+        EGlobal.Instance.DisableEPlugin(context, false);
+
+        Assertions.AssertObject(context.AppliedOptionalRecipes).IsNull();
     }
 }
