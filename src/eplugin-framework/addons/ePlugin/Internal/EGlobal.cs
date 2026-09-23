@@ -228,7 +228,7 @@ internal sealed class EGlobal
         //all dependencies are ready, we can finally install the requested plugin
         InstallEPlugin(context, recipe);
 
-        if (context.FailedTries != uint.MaxValue)
+        if (context.State is not EEditorPluginState.Error)
         {
             // this plugin may satisfy optional dependencies of plugins that were activated before it
             ReevaluateOptionalDependencies(context);
@@ -330,8 +330,7 @@ internal sealed class EGlobal
                 continue;
             }
 
-            if (other.State is EEditorPluginState.Deactivated or EEditorPluginState.Error ||
-                other.FailedTries == uint.MaxValue)
+            if (other.State is EEditorPluginState.Deactivated or EEditorPluginState.Error)
             {
                 continue;
             }
@@ -362,7 +361,7 @@ internal sealed class EGlobal
                 applied.Add(optional);
                 ApplyRecipe(other, optional.Recipe);
 
-                if (other.FailedTries == uint.MaxValue)
+                if (other.State is EEditorPluginState.Error)
                 {
                     break;
                 }
@@ -384,8 +383,7 @@ internal sealed class EGlobal
                 continue;
             }
 
-            if (other.State is EEditorPluginState.Deactivated or EEditorPluginState.Error ||
-                other.FailedTries == uint.MaxValue)
+            if (other.State is EEditorPluginState.Deactivated or EEditorPluginState.Error)
             {
                 continue;
             }
@@ -444,7 +442,7 @@ internal sealed class EGlobal
 
         ApplyRecipe(context, recipe);
 
-        if (context.FailedTries == uint.MaxValue)
+        if (context.State is EEditorPluginState.Error)
         {
             return;
         }
@@ -454,7 +452,7 @@ internal sealed class EGlobal
             applied.Add(optional);
             ApplyRecipe(context, optional.Recipe);
 
-            if (context.FailedTries == uint.MaxValue)
+            if (context.State is EEditorPluginState.Error)
             {
                 return;
             }
@@ -467,7 +465,9 @@ internal sealed class EGlobal
         {
             if (!context.Cli!.AddNugetToProject(nuget.Name, nuget.Version, nuget.Source))
             {
-                context.FailedTries = uint.MaxValue;
+                context.State = EEditorPluginState.Error;
+                context.ErrorDetail =
+                    new Exception($"Adding nuget {nuget.Name} {nuget.Version} to the project failed!");
                 return;
             }
 

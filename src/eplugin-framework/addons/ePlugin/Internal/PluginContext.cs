@@ -38,8 +38,6 @@ internal sealed class PluginContext(IEEditorPlugin? plugin, EditorPlugin pluginB
     /// </summary>
     public List<EEditorPluginRecipe.OptionalPlugin>? AppliedOptionalDependencies { get; set; } = null;
 
-    public uint FailedTries { get; set; } = 0;
-
     public Exception? ErrorDetail { get; set; } = null;
 }
 
