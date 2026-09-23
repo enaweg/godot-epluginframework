@@ -184,17 +184,36 @@ public class EGlobalTests
 
     [TestCase]
     [RequireGodotRuntime]
-    public void DisableEPluginClearsAppliedOptionalRecipeSnapshot()
+    public void ResolveOptionalRecipesTreatsAssumedEnabledSlugAsSatisfied()
+    {
+        var pluginBase = CreatePluginBase();
+        var context = new PluginContext(null, pluginBase, new NullLogger());
+        var builder = EEditorPluginBuilder.Create();
+        builder.AddOptionalPluginDependency("some-plugin", null, optional => optional.AddNuget("ZLogger"));
+
+        // the assumed slug counts as enabled without asking EditorInterface -- this is how the recipes
+        // installed for a plugin that is being disabled right now are reconstructed.
+        var resolved = EGlobal.Instance.ResolveOptionalRecipes(context, builder.PluginRecipe,
+            assumeEnabledSlug: "some-plugin");
+
+        Assertions.AssertInt(resolved.Count).IsEqual(1);
+        Assertions.AssertString(resolved[0].Slug).IsEqual("some-plugin");
+    }
+
+    [TestCase]
+    [RequireGodotRuntime]
+    public void DisableEPluginClearsAppliedOptionalDependencySnapshot()
     {
         var pluginBase = CreatePluginBase();
         var mockPlugin = new Mock<IEEditorPlugin>();
         var context = new PluginContext(mockPlugin.Object, pluginBase, new NullLogger())
         {
-            AppliedOptionalRecipes = [new EEditorPluginRecipe()]
+            AppliedOptionalDependencies =
+                [new EEditorPluginRecipe.OptionalPlugin("some-plugin", null, new EEditorPluginRecipe())]
         };
 
         EGlobal.Instance.DisableEPlugin(context, false);
 
-        Assertions.AssertObject(context.AppliedOptionalRecipes).IsNull();
+        Assertions.AssertObject(context.AppliedOptionalDependencies).IsNull();
     }
 }

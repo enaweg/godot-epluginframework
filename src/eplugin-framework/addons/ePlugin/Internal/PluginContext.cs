@@ -31,12 +31,12 @@ internal sealed class PluginContext(IEEditorPlugin? plugin, EditorPlugin pluginB
     public bool IsRecipeCreated { get; set; } = false;
 
     /// <summary>
-    /// The optional dependency recipes that were actually installed when this plugin was activated.
-    /// Uninstall reverses exactly these. <see langword="null"/> means no snapshot is available (the plugin
-    /// was never activated in this session, e.g. after an assembly reload) and the optional dependencies
-    /// have to be resolved against the current editor state instead.
+    /// The optional dependencies whose nested recipe is currently installed for this plugin. Uninstall
+    /// reverses exactly these. <see langword="null"/> means no snapshot is available (the plugin was never
+    /// activated in this session, e.g. after an assembly reload) and the optional dependencies have to be
+    /// resolved against the current editor state instead.
     /// </summary>
-    public List<EEditorPluginRecipe>? AppliedOptionalRecipes { get; set; } = null;
+    public List<EEditorPluginRecipe.OptionalPlugin>? AppliedOptionalDependencies { get; set; } = null;
 
     public uint FailedTries { get; set; } = 0;
 
