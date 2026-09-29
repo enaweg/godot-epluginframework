@@ -11,7 +11,8 @@ def start_helper(executable):
     process = subprocess.Popen(
         [executable], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
-    ready, _, _ = select.select([process.stdout], [], [], 5)
+    # CI can take longer on the first launch while the single-file bundle extracts.
+    ready, _, _ = select.select([process.stdout], [], [], 20)
     if not ready or process.stdout.readline() != b"READY\n":
         process.kill()
         stderr = process.communicate()[1].decode(errors="replace")

@@ -14,7 +14,8 @@ namespace Enaweg.Plugin.Internal;
 /// </summary>
 internal static class ActivationProgress
 {
-    private const int StartupTimeoutMilliseconds = 3000;
+    // A cold single-file launch may need to extract native libraries before the window opens.
+    private const int StartupTimeoutMilliseconds = 10000;
     private const int ExitTimeoutMilliseconds = 500;
     private static int _depth;
     private static Process? _process;
