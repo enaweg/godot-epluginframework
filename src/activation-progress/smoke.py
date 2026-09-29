@@ -8,15 +8,15 @@ import sys
 import threading
 
 
-def start_helper(executable):
+def start_helper(command):
     process = subprocess.Popen(
-        [executable], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
     # select() only supports sockets on Windows, so read the first line on a thread instead.
     lines = queue.Queue()
     threading.Thread(target=lambda: lines.put(process.stdout.readline()), daemon=True).start()
     try:
-        # CI can take longer on the first launch while the single-file bundle extracts.
+        # A cold .NET start can be slow on CI runners.
         line = lines.get(timeout=20)
     except queue.Empty:
         line = None
@@ -28,10 +28,11 @@ def start_helper(executable):
     return process
 
 
-executable = sys.argv[1]
-assert os.path.isfile(executable)
+# The command to start the helper, e.g. `dotnet path/to/ActivationProgress.dll`.
+command = sys.argv[1:]
+assert os.path.isfile(command[-1])
 
-process = start_helper(executable)
+process = start_helper(command)
 try:
     label = base64.b64encode("Activating sample plugin".encode())
     process.stdin.write(b"TEXT " + label + b"\nCLOSE\n")
@@ -41,7 +42,7 @@ finally:
     if process.poll() is None:
         process.kill()
 
-process = start_helper(executable)
+process = start_helper(command)
 try:
     process.stdin.close()
     assert process.wait(timeout=5) == 0

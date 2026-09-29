@@ -4,8 +4,12 @@ on:
   pull_request:
 
 jobs:
-  progress-helper-windows:
-    runs-on: windows-latest
+  progress-helper:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: true
       DOTNET_NOLOGO: true
@@ -18,16 +22,19 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Smoke test single-file progress helper
+      - name: Smoke test progress helper
         shell: bash
         run: |
-          output="$(cygpath -u "$RUNNER_TEMP")/activation-progress"
+          temp="$RUNNER_TEMP"
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            temp="$(cygpath -u "$temp")"
+          fi
+          output="$temp/activation-progress"
           dotnet publish src/activation-progress/ActivationProgress.csproj \
-            --configuration Release --runtime win-x64 --self-contained true \
-            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
-            -p:PublishTrimmed=false -p:DebugType=None --output "$output"
-          test "$(find "$output" -maxdepth 1 -type f | wc -l)" -eq 1
-          python src/activation-progress/smoke.py "$output/ActivationProgress.exe"
+            --configuration Release -p:DebugType=None --output "$output"
+          test "$(find "$output" -maxdepth 1 -type f | wc -l)" -eq 2
+          python="$(command -v python || command -v python3)"
+          "$python" src/activation-progress/smoke.py dotnet "$output/ActivationProgress.dll"
 
   build-and-test:
     runs-on: ubuntu-latest
@@ -53,10 +60,10 @@ jobs:
         shell: bash
         run: echo "GODOT_BIN=$GODOT" >> "$GITHUB_ENV"
 
-      - name: Install Xvfb
+      - name: Install Xvfb and GTK 3
         run: |
           sudo apt-get update
-          sudo apt-get install --yes xvfb
+          sudo apt-get install --yes xvfb libgtk-3-0
 
       - name: Build
         working-directory: src/eplugin-framework
@@ -65,15 +72,13 @@ jobs:
       - name: Build progress helper
         run: dotnet build src/activation-progress/ActivationProgress.csproj --configuration Release
 
-      - name: Smoke test single-file progress helper
+      - name: Smoke test progress helper
         run: |
           dotnet publish src/activation-progress/ActivationProgress.csproj \
-            --configuration Release --runtime linux-x64 --self-contained true \
-            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
-            -p:PublishTrimmed=false -p:DebugType=None --output "$RUNNER_TEMP/activation-progress"
-          test "$(find "$RUNNER_TEMP/activation-progress" -maxdepth 1 -type f | wc -l)" -eq 1
+            --configuration Release -p:DebugType=None --output "$RUNNER_TEMP/activation-progress"
+          test "$(find "$RUNNER_TEMP/activation-progress" -maxdepth 1 -type f | wc -l)" -eq 2
           xvfb-run --auto-servernum python3 src/activation-progress/smoke.py \
-            "$RUNNER_TEMP/activation-progress/ActivationProgress"
+            dotnet "$RUNNER_TEMP/activation-progress/ActivationProgress.dll"
 
       - name: Rebuild Godot project cache
         working-directory: src/eplugin-framework

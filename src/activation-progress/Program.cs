@@ -1,49 +1,54 @@
 using System.Text;
-using Avalonia;
-using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Layout;
-using Avalonia.Themes.Fluent;
-using Avalonia.Threading;
 
 namespace ActivationProgress;
 
 internal static class Program
 {
+    private const string Title = "ePlugin Framework";
+    private const string InitialText = "Working...";
+
     [STAThread]
-    private static void Main(string[] args)
+    private static int Main()
     {
-        AppBuilder.Configure<ProgressApp>()
-            .UsePlatformDetect()
-            .StartWithClassicDesktopLifetime(args);
-    }
-}
-
-internal sealed class ProgressApp : Application
-{
-    public override void OnFrameworkInitializationCompleted()
-    {
-        Styles.Add(new FluentTheme());
-
-        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        IProgressWindow window;
+        if (OperatingSystem.IsWindows())
         {
-            var output = new StreamWriter(Console.OpenStandardOutput(), Encoding.ASCII) { AutoFlush = true };
-            var window = new ProgressWindow();
-            window.Opened += (_, _) => Dispatcher.UIThread.Post(() =>
-            {
-                output.WriteLine("READY");
-            }, DispatcherPriority.Background);
-
-            // Reading a redirected console stream can block before its first await.
-            _ = Task.Run(() => ReadCommands(window, desktop));
-            desktop.MainWindow = window;
+            window = new Win32ProgressWindow();
+        }
+        else if (OperatingSystem.IsMacOS())
+        {
+            window = new CocoaProgressWindow();
+        }
+        else if (OperatingSystem.IsLinux())
+        {
+            window = new GtkProgressWindow();
+        }
+        else
+        {
+            return 1;
         }
 
-        base.OnFrameworkInitializationCompleted();
+        try
+        {
+            window.Run(Title, InitialText, () =>
+            {
+                var output = new StreamWriter(Console.OpenStandardOutput(), Encoding.ASCII) { AutoFlush = true };
+                output.WriteLine("READY");
+
+                // Reading a redirected console stream can block before its first await.
+                new Thread(() => ReadCommands(window)) { IsBackground = true }.Start();
+            });
+        }
+        catch (Exception)
+        {
+            // Missing native UI libraries (e.g. no GTK 3); the host continues without a window.
+            return 1;
+        }
+
+        return 0;
     }
 
-    private static void ReadCommands(ProgressWindow window,
-        IClassicDesktopStyleApplicationLifetime desktop)
+    private static void ReadCommands(IProgressWindow window)
     {
         try
         {
@@ -60,8 +65,7 @@ internal sealed class ProgressApp : Application
                 {
                     try
                     {
-                        var text = Encoding.UTF8.GetString(Convert.FromBase64String(line[5..]));
-                        Dispatcher.UIThread.Post(() => window.SetText(text));
+                        window.SetText(Encoding.UTF8.GetString(Convert.FromBase64String(line[5..])));
                     }
                     catch (FormatException)
                     {
@@ -75,41 +79,19 @@ internal sealed class ProgressApp : Application
             // The parent process closed the pipe.
         }
 
-        Dispatcher.UIThread.Post(() => desktop.Shutdown());
+        // The native UI loops own the main thread; exiting from here avoids per-platform shutdown plumbing.
+        Environment.Exit(0);
     }
 }
 
-internal sealed class ProgressWindow : Window
+internal interface IProgressWindow
 {
-    private readonly TextBlock _text = new() { Text = "Working..." };
+    /// <summary>
+    /// Shows the window and runs the native UI loop on the calling thread until the window is closed.
+    /// <paramref name="shown"/> runs on the UI thread once the window is visible.
+    /// </summary>
+    void Run(string title, string text, Action shown);
 
-    public ProgressWindow()
-    {
-        Title = "ePlugin Framework";
-        Width = 340;
-        Height = 100;
-        CanResize = false;
-        ShowInTaskbar = false;
-        Topmost = true;
-        WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        Content = new StackPanel
-        {
-            Spacing = 14,
-            Margin = new Thickness(20),
-            Children =
-            {
-                _text,
-                new ProgressBar
-                {
-                    IsIndeterminate = true,
-                    HorizontalAlignment = HorizontalAlignment.Stretch
-                }
-            }
-        };
-    }
-
-    public void SetText(string text)
-    {
-        _text.Text = text;
-    }
+    /// <summary>Replaces the label text. Callable from any thread once the window is shown.</summary>
+    void SetText(string text);
 }

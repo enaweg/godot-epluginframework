@@ -66,24 +66,13 @@ jobs:
         run: |
           sed -i "s/version=\".*\"/version=\"${{ env.VERSION }}\"/g" src/eplugin-framework/addons/ePlugin/plugin.cfg
 
-      - name: Publish single-file progress helpers
+      - name: Publish progress helper
         shell: bash
         run: |
-          for runtime in win-x64 win-arm64 linux-x64 linux-arm64 osx-x64 osx-arm64; do
-            output="$RUNNER_TEMP/activation-progress/$runtime"
-            dotnet publish src/activation-progress/ActivationProgress.csproj \
-              --configuration Release --runtime "$runtime" --self-contained true \
-              -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
-              -p:PublishTrimmed=false -p:DebugType=None --output "$output"
-            target="src/eplugin-framework/addons/ePlugin/progress/$runtime"
-            mkdir -p "$target"
-            if [[ "$runtime" == win-* ]]; then
-              cp "$output/ActivationProgress.exe" "$target/"
-            else
-              cp "$output/ActivationProgress" "$target/"
-              chmod +x "$target/ActivationProgress"
-            fi
-          done
+          # Framework-dependent and RID-neutral: one assembly serves every platform.
+          dotnet publish src/activation-progress/ActivationProgress.csproj \
+            --configuration Release -p:DebugType=None \
+            --output src/eplugin-framework/addons/ePlugin/progress
 
       - name: Create artifact
         shell: bash

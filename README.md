@@ -34,9 +34,10 @@ The project targets `net8.0`. Earlier tested Godot and .NET combinations are lis
 3. Open the project in the Godot .NET editor and enable **ePlugin** under **Project > Project Settings > Plugins**.
 4. Enable the plugins that implement `IEEditorPlugin`.
 
-Release archives include a platform-specific, single-file progress helper. A source checkout does not include
-the generated executable; without it, activation and deactivation run normally without a progress window.
-Asset Library distributions should use the release archive so they include those executables.
+Release archives include a small progress helper (about 20 KB, shared by all platforms) that runs on the installed
+.NET runtime and draws its window with the native UI of Windows, macOS, or Linux (GTK 3). A source checkout does not
+include the generated helper; without it, or without GTK 3 on Linux, activation and deactivation run normally without
+a progress window. Asset Library distributions should use the release archive so they include the helper.
 
 The repository also contains a sample project in `src/eplugin-framework`.
 
