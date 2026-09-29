@@ -24,7 +24,9 @@ public static class IEEditorPluginExtensions
     /// </remarks>
     public static void EnableEPlugin<TEPlugin>(this TEPlugin ePlugin) where TEPlugin : EditorPlugin, IEEditorPlugin
     {
+        using var progress = ActivationProgress.Begin("Activating plugin...");
         var context = EGlobal.Instance.GetOrCreateContext(ePlugin);
+        ActivationProgress.SetText($"Activating {context.Name}...");
         EGlobal.Instance.EnableEPlugin(context);
     }
 
@@ -42,7 +44,9 @@ public static class IEEditorPluginExtensions
     /// </remarks>
     public static void DisableEPlugin<TEPlugin>(this TEPlugin ePlugin) where TEPlugin : EditorPlugin, IEEditorPlugin
     {
+        using var progress = ActivationProgress.Begin("Deactivating plugin...");
         var context = EGlobal.Instance.GetOrCreateContext(ePlugin);
+        ActivationProgress.SetText($"Deactivating {context.Name}...");
         EGlobal.Instance.DisableEPlugin(context);
     }
 }

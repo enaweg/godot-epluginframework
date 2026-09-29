@@ -51,6 +51,7 @@ internal sealed class EGlobal
     /// <param name="loggerFactory"></param>
     public void Initialize(EPluginPlugin plugin, ILoggerFactory loggerFactory)
     {
+        using var progress = _toCheckEnable.Any() ? ActivationProgress.Begin("Activating plugins...") : null;
         _loggerFactory = loggerFactory;
         _ePluginContext = plugin;
         plugin.Logger = _loggerFactory.CreateLogger(_ePluginContext.GetType().FullName ?? "UNKNOWN");
@@ -226,6 +227,7 @@ internal sealed class EGlobal
         }
 
         //all dependencies are ready, we can finally install the requested plugin
+        ActivationProgress.SetText($"Activating {context.Name}...");
         InstallEPlugin(context, recipe);
 
         if (context.State is not EEditorPluginState.Error)
@@ -578,6 +580,7 @@ internal sealed class EGlobal
             return;
         }
 
+        ActivationProgress.SetText($"Deactivating {context.Name}...");
         UninstallEPlugin(context, context.Builder.PluginRecipe);
 
         // other plugins may have installed code that depends on this one via an optional dependency
@@ -650,6 +653,7 @@ internal sealed class EGlobal
 
     private void RefreshEditor()
     {
+        ActivationProgress.SetText("Refreshing editor and rebuilding solution...");
         _ePluginContext?.Logger.Log($"Refreshed Editor state.");
 
         // refresh what we can in Godot Editor UI.

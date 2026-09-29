@@ -37,6 +37,19 @@ jobs:
         working-directory: src/eplugin-framework
         run: dotnet build "EPlugin Framework.sln" --configuration Debug
 
+      - name: Build progress helper
+        run: dotnet build src/activation-progress/ActivationProgress.csproj --configuration Release
+
+      - name: Smoke test single-file progress helper
+        run: |
+          dotnet publish src/activation-progress/ActivationProgress.csproj \
+            --configuration Release --runtime linux-x64 --self-contained true \
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:PublishTrimmed=false -p:DebugType=None --output "$RUNNER_TEMP/activation-progress"
+          test "$(find "$RUNNER_TEMP/activation-progress" -maxdepth 1 -type f | wc -l)" -eq 1
+          xvfb-run --auto-servernum python3 src/activation-progress/smoke.py \
+            "$RUNNER_TEMP/activation-progress/ActivationProgress"
+
       - name: Rebuild Godot project cache
         working-directory: src/eplugin-framework
         run: |
