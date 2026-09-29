@@ -292,6 +292,7 @@ How it behaves:
 
 + [godot-elogger](https://github.com/enaweg/godot-elogger)
 + [godot-econtainer](https://github.com/enaweg/godot-econtainer)
++ [godot-emessagepipe](https://github.com/enaweg/godot-emessagepipe) — MessagePipe support for Godot .NET, with optional eContainer integration
 
 ## Contribute
 
