@@ -2,7 +2,6 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Text;
 using Godot;
 
@@ -14,7 +13,7 @@ namespace Enaweg.Plugin.Internal;
 /// </summary>
 internal static class ActivationProgress
 {
-    // A cold single-file launch may need to extract native libraries before the window opens.
+    // A cold .NET start of the helper can take a few seconds on slow machines.
     private const int StartupTimeoutMilliseconds = 10000;
     private const int ExitTimeoutMilliseconds = 500;
     private static int _depth;
@@ -51,29 +50,32 @@ internal static class ActivationProgress
 
     private static void Start()
     {
-        var runtime = GetRuntime();
-        if (runtime is null)
+        if (!HasDesktop())
         {
             return;
         }
 
         try
         {
-            var fileName = OperatingSystem.IsWindows() ? "ActivationProgress.exe" : "ActivationProgress";
-            var path = ProjectSettings.GlobalizePath($"res://addons/ePlugin/progress/{runtime}/{fileName}");
+            var path = ProjectSettings.GlobalizePath("res://addons/ePlugin/progress/ActivationProgress.dll");
             if (!File.Exists(path))
             {
                 return;
             }
 
-            var process = Process.Start(new ProcessStartInfo(path)
+            // The helper is framework-dependent, so it runs on the same dotnet host the recipes use.
+            var startInfo = new ProcessStartInfo("dotnet")
             {
                 UseShellExecute = false,
+                // dotnet is a console application; don't flash a console window next to the progress window.
+                CreateNoWindow = true,
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 StandardInputEncoding = Encoding.ASCII,
                 StandardOutputEncoding = Encoding.ASCII
-            });
+            };
+            startInfo.ArgumentList.Add(path);
+            var process = Process.Start(startInfo);
 
             if (process is null)
             {
@@ -94,42 +96,16 @@ internal static class ActivationProgress
         }
     }
 
-    private static string? GetRuntime()
+    private static bool HasDesktop()
     {
-        if (OperatingSystem.IsLinux() &&
-            string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("DISPLAY")))
+        if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
         {
-            return null;
+            return true;
         }
 
-        var architecture = RuntimeInformation.ProcessArchitecture switch
-        {
-            Architecture.X64 => "x64",
-            Architecture.Arm64 => "arm64",
-            _ => null
-        };
-
-        if (architecture is null)
-        {
-            return null;
-        }
-
-        if (OperatingSystem.IsWindows())
-        {
-            return $"win-{architecture}";
-        }
-
-        if (OperatingSystem.IsLinux())
-        {
-            return $"linux-{architecture}";
-        }
-
-        if (OperatingSystem.IsMacOS())
-        {
-            return $"osx-{architecture}";
-        }
-
-        return null;
+        return OperatingSystem.IsLinux() &&
+               (!string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("DISPLAY")) ||
+                !string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")));
     }
 
     private static void Stop()
