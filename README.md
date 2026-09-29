@@ -34,6 +34,10 @@ The project targets `net8.0`. Earlier tested Godot and .NET combinations are lis
 3. Open the project in the Godot .NET editor and enable **ePlugin** under **Project > Project Settings > Plugins**.
 4. Enable the plugins that implement `IEEditorPlugin`.
 
+Release archives include a platform-specific, single-file progress helper. A source checkout does not include
+the generated executable; without it, activation and deactivation run normally without a progress window.
+Asset Library distributions should use the release archive so they include those executables.
+
 The repository also contains a sample project in `src/eplugin-framework`.
 
 ## Features
@@ -78,7 +82,8 @@ provide some of the missing pieces for C# Plugins.
 ## Drawbacks
 
 + Activating or deactivating an ePlugin freezes Godot's UI while it installs or uninstalls the
-  plugin
+  plugin. On supported desktop platforms, a separate progress window stays responsive during this work;
+  on other platforms the operation runs without the window.
 + If an error occurs during installation or uninstallation, the project may be left in a non-compilable state and
   require manual intervention.
 + Godot's editor plugin UI does not refresh automatically. Activated dependent plugins may not be shown until the UI

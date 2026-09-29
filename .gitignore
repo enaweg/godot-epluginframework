@@ -22,3 +22,6 @@ mono_crash.*.json
 reports/
 
 build/
+src/activation-progress/bin/
+src/activation-progress/obj/
+src/eplugin-framework/addons/ePlugin/progress/*/
