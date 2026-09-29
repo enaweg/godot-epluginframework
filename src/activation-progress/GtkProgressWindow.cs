@@ -1,0 +1,161 @@
+using System.Runtime.InteropServices;
+
+namespace ActivationProgress;
+
+/// <summary>GTK 3 window; works on X11 and Wayland. Fails (and the host skips the window) without libgtk-3.</summary>
+internal sealed class GtkProgressWindow : IProgressWindow
+{
+    private const string Gtk = "libgtk-3.so.0";
+    private const string GLib = "libglib-2.0.so.0";
+    private const string GObject = "libgobject-2.0.so.0";
+
+    // Kept in fields so the delegates outlive the native callbacks that reference them.
+    private readonly SourceFunc _pulse = Pulse;
+    private readonly SourceFunc _updateText;
+    private readonly SourceFunc _shown;
+    private readonly SignalCallback _destroy = (_, _) => gtk_main_quit();
+    private Action? _onShown;
+    private IntPtr _label;
+    private volatile string _text = string.Empty;
+
+    public GtkProgressWindow()
+    {
+        _updateText = _ =>
+        {
+            gtk_label_set_text(_label, _text);
+            return false;
+        };
+        _shown = _ =>
+        {
+            _onShown?.Invoke();
+            return false;
+        };
+    }
+
+    public void Run(string title, string text, Action shown)
+    {
+        if (!gtk_init_check(IntPtr.Zero, IntPtr.Zero))
+        {
+            throw new InvalidOperationException("GTK could not open a display.");
+        }
+
+        var window = gtk_window_new(0); // GTK_WINDOW_TOPLEVEL
+        gtk_window_set_title(window, title);
+        gtk_window_set_default_size(window, 340, 100);
+        gtk_window_set_resizable(window, false);
+        gtk_window_set_keep_above(window, true);
+        gtk_window_set_skip_taskbar_hint(window, true);
+        gtk_window_set_position(window, 1); // GTK_WIN_POS_CENTER
+        gtk_container_set_border_width(window, 20);
+
+        var box = gtk_box_new(1, 14); // GTK_ORIENTATION_VERTICAL
+        _label = gtk_label_new(text);
+        gtk_label_set_xalign(_label, 0f);
+        gtk_label_set_ellipsize(_label, 3); // PANGO_ELLIPSIZE_END
+        var progress = gtk_progress_bar_new();
+        gtk_box_pack_start(box, _label, false, false, 0);
+        gtk_box_pack_start(box, progress, false, false, 0);
+        gtk_container_add(window, box);
+
+        g_signal_connect_data(window, "destroy", Marshal.GetFunctionPointerForDelegate(_destroy),
+            IntPtr.Zero, IntPtr.Zero, 0);
+        g_timeout_add(100, Marshal.GetFunctionPointerForDelegate(_pulse), progress);
+        gtk_widget_show_all(window);
+
+        _onShown = shown;
+        g_idle_add(Marshal.GetFunctionPointerForDelegate(_shown), IntPtr.Zero);
+        gtk_main();
+    }
+
+    public void SetText(string text)
+    {
+        _text = text;
+        // g_idle_add is thread-safe and runs the callback on the GTK main loop.
+        g_idle_add(Marshal.GetFunctionPointerForDelegate(_updateText), IntPtr.Zero);
+    }
+
+    private static bool Pulse(IntPtr progress)
+    {
+        gtk_progress_bar_pulse(progress);
+        return true;
+    }
+
+    private delegate bool SourceFunc(IntPtr data);
+
+    private delegate void SignalCallback(IntPtr instance, IntPtr data);
+
+    [DllImport(Gtk)]
+    private static extern bool gtk_init_check(IntPtr argc, IntPtr argv);
+
+    [DllImport(Gtk)]
+    private static extern void gtk_main();
+
+    [DllImport(Gtk)]
+    private static extern void gtk_main_quit();
+
+    [DllImport(Gtk)]
+    private static extern IntPtr gtk_window_new(int type);
+
+    [DllImport(Gtk)]
+    private static extern void gtk_window_set_title(IntPtr window,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string title);
+
+    [DllImport(Gtk)]
+    private static extern void gtk_window_set_default_size(IntPtr window, int width, int height);
+
+    [DllImport(Gtk)]
+    private static extern void gtk_window_set_resizable(IntPtr window, bool resizable);
+
+    [DllImport(Gtk)]
+    private static extern void gtk_window_set_keep_above(IntPtr window, bool setting);
+
+    [DllImport(Gtk)]
+    private static extern void gtk_window_set_skip_taskbar_hint(IntPtr window, bool setting);
+
+    [DllImport(Gtk)]
+    private static extern void gtk_window_set_position(IntPtr window, int position);
+
+    [DllImport(Gtk)]
+    private static extern void gtk_container_set_border_width(IntPtr container, uint width);
+
+    [DllImport(Gtk)]
+    private static extern void gtk_container_add(IntPtr container, IntPtr widget);
+
+    [DllImport(Gtk)]
+    private static extern IntPtr gtk_box_new(int orientation, int spacing);
+
+    [DllImport(Gtk)]
+    private static extern void gtk_box_pack_start(IntPtr box, IntPtr child, bool expand, bool fill, uint padding);
+
+    [DllImport(Gtk)]
+    private static extern IntPtr gtk_label_new([MarshalAs(UnmanagedType.LPUTF8Str)] string text);
+
+    [DllImport(Gtk)]
+    private static extern void gtk_label_set_text(IntPtr label, [MarshalAs(UnmanagedType.LPUTF8Str)] string text);
+
+    [DllImport(Gtk)]
+    private static extern void gtk_label_set_xalign(IntPtr label, float xalign);
+
+    [DllImport(Gtk)]
+    private static extern void gtk_label_set_ellipsize(IntPtr label, int mode);
+
+    [DllImport(Gtk)]
+    private static extern IntPtr gtk_progress_bar_new();
+
+    [DllImport(Gtk)]
+    private static extern void gtk_progress_bar_pulse(IntPtr progress);
+
+    [DllImport(Gtk)]
+    private static extern void gtk_widget_show_all(IntPtr widget);
+
+    [DllImport(GLib)]
+    private static extern uint g_idle_add(IntPtr function, IntPtr data);
+
+    [DllImport(GLib)]
+    private static extern uint g_timeout_add(uint interval, IntPtr function, IntPtr data);
+
+    [DllImport(GObject)]
+    private static extern ulong g_signal_connect_data(IntPtr instance,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string signal, IntPtr handler, IntPtr data, IntPtr destroyData,
+        int flags);
+}
