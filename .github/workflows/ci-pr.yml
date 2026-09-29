@@ -4,6 +4,31 @@ on:
   pull_request:
 
 jobs:
+  progress-helper-windows:
+    runs-on: windows-latest
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      DOTNET_NOLOGO: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Smoke test single-file progress helper
+        shell: bash
+        run: |
+          output="$(cygpath -u "$RUNNER_TEMP")/activation-progress"
+          dotnet publish src/activation-progress/ActivationProgress.csproj \
+            --configuration Release --runtime win-x64 --self-contained true \
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:PublishTrimmed=false -p:DebugType=None --output "$output"
+          test "$(find "$output" -maxdepth 1 -type f | wc -l)" -eq 1
+          python src/activation-progress/smoke.py "$output/ActivationProgress.exe"
+
   build-and-test:
     runs-on: ubuntu-latest
     env:

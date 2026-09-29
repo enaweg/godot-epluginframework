@@ -2,18 +2,26 @@
 
 import base64
 import os
-import select
+import queue
 import subprocess
 import sys
+import threading
 
 
 def start_helper(executable):
     process = subprocess.Popen(
         [executable], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
-    # CI can take longer on the first launch while the single-file bundle extracts.
-    ready, _, _ = select.select([process.stdout], [], [], 20)
-    if not ready or process.stdout.readline() != b"READY\n":
+    # select() only supports sockets on Windows, so read the first line on a thread instead.
+    lines = queue.Queue()
+    threading.Thread(target=lambda: lines.put(process.stdout.readline()), daemon=True).start()
+    try:
+        # CI can take longer on the first launch while the single-file bundle extracts.
+        line = lines.get(timeout=20)
+    except queue.Empty:
+        line = None
+    # Windows terminates the line with \r\n.
+    if line is None or line.rstrip(b"\r\n") != b"READY":
         process.kill()
         stderr = process.communicate()[1].decode(errors="replace")
         raise AssertionError(f"helper did not become ready: {stderr}")
