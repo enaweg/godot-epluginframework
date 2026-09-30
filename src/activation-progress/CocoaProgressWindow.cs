@@ -8,22 +8,32 @@ internal sealed class CocoaProgressWindow : IProgressWindow
     private const string ObjC = "/usr/lib/libobjc.A.dylib";
     private const string LibSystem = "/usr/lib/libSystem.B.dylib";
     private const string AppKit = "/System/Library/Frameworks/AppKit.framework/AppKit";
+    private const ulong DispatchTimeNow = 0;
 
     // Kept in fields so the delegates outlive the native callbacks that reference them.
     private readonly DispatchFunction _updateText;
-    private readonly DispatchFunction _shown;
+    private readonly DispatchFunction _ready;
+    private readonly DispatchFunction _show;
+    private readonly EditorCenter? _editorCenter;
     private IntPtr _mainQueue;
-    private Action? _onShown;
+    private Action? _onReady;
+    private IntPtr _window;
     private IntPtr _label;
     private volatile string _text = string.Empty;
 
-    public CocoaProgressWindow()
+    /// <param name="editorCenter">
+    /// The editor's center in AppKit screen points (bottom-left origin), or null for the screen center.
+    /// </param>
+    public CocoaProgressWindow(EditorCenter? editorCenter)
     {
+        _editorCenter = editorCenter;
         _updateText = _ => Send(_label, Sel("setStringValue:"), NSString(_text));
-        _shown = _ => _onShown?.Invoke();
+        _ready = _ => _onReady?.Invoke();
+        // Ordered front without activating the helper, so the editor keeps focus.
+        _show = _ => Send(_window, Sel("orderFrontRegardless"));
     }
 
-    public void Run(string title, string text, Action shown)
+    public void Run(string title, string text, int showDelayMilliseconds, Action ready)
     {
         NativeLibrary.Load(AppKit);
         // dispatch_get_main_queue() is a macro for the address of this symbol.
@@ -33,11 +43,21 @@ internal sealed class CocoaProgressWindow : IProgressWindow
         var app = Send(Class("NSApplication"), Sel("sharedApplication"));
         Send(app, Sel("setActivationPolicy:"), 1L); // NSApplicationActivationPolicyAccessory: no Dock icon
 
-        var window = Send(Send(Class("NSWindow"), Sel("alloc")), Sel("initWithContentRect:styleMask:backing:defer:"),
-            new CGRect(0, 0, 340, 100), 1UL /* titled */, 2UL /* buffered */, false);
+        // Titled only: no close button; the window closes with the host or its lifetime.
+        const double width = 340;
+        const double height = 100;
+        var contentRect = _editorCenter is { } center
+            ? new CGRect(center.X - width / 2, center.Y - height / 2, width, height)
+            : new CGRect(0, 0, width, height);
+        var window = _window = Send(Send(Class("NSWindow"), Sel("alloc")),
+            Sel("initWithContentRect:styleMask:backing:defer:"),
+            contentRect, 1UL /* titled */, 2UL /* buffered */, false);
         Send(window, Sel("setTitle:"), NSString(title));
         Send(window, Sel("setLevel:"), 3L); // NSFloatingWindowLevel
-        Send(window, Sel("center"));
+        if (_editorCenter is null)
+        {
+            Send(window, Sel("center"));
+        }
         var content = Send(window, Sel("contentView"));
 
         // AppKit's origin is bottom-left.
@@ -53,11 +73,11 @@ internal sealed class CocoaProgressWindow : IProgressWindow
         Send(progress, Sel("startAnimation:"), IntPtr.Zero);
         Send(content, Sel("addSubview:"), progress);
 
-        Send(window, Sel("makeKeyAndOrderFront:"), IntPtr.Zero);
-        Send(app, Sel("activateIgnoringOtherApps:"), true);
+        dispatch_after_f(dispatch_time(DispatchTimeNow, showDelayMilliseconds * 1_000_000L), _mainQueue, IntPtr.Zero,
+            Marshal.GetFunctionPointerForDelegate(_show));
 
-        _onShown = shown;
-        dispatch_async_f(_mainQueue, IntPtr.Zero, Marshal.GetFunctionPointerForDelegate(_shown));
+        _onReady = ready;
+        dispatch_async_f(_mainQueue, IntPtr.Zero, Marshal.GetFunctionPointerForDelegate(_ready));
         Send(app, Sel("run"));
     }
 
@@ -109,4 +129,10 @@ internal sealed class CocoaProgressWindow : IProgressWindow
 
     [DllImport(LibSystem)]
     private static extern void dispatch_async_f(IntPtr queue, IntPtr context, IntPtr work);
+
+    [DllImport(LibSystem)]
+    private static extern ulong dispatch_time(ulong when, long deltaNanoseconds);
+
+    [DllImport(LibSystem)]
+    private static extern void dispatch_after_f(ulong when, IntPtr queue, IntPtr context, IntPtr work);
 }

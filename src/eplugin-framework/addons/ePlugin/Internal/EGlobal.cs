@@ -62,7 +62,12 @@ internal sealed class EGlobal
 
         if (_toCheckEnable.Any())
         {
-            foreach (var pluginContext in _toCheckEnable)
+            // Take the waiting plugins off the stack first: EnableEPlugin pushes a plugin back while one of its
+            // dependencies is still being enabled, which would break enumerating the stack, and draining it until
+            // empty would never end for a dependency that cannot be enabled.
+            var waitingPlugins = _toCheckEnable.ToArray();
+            _toCheckEnable.Clear();
+            foreach (var pluginContext in waitingPlugins)
             {
                 EnableEPlugin(pluginContext, false);
             }
@@ -438,6 +443,9 @@ internal sealed class EGlobal
 
     private void InstallEPlugin(PluginContext context, EEditorPluginRecipe recipe)
     {
+        // each plugin of a dependency chain gets a fresh helper lifetime, so a long chain keeps its window
+        ActivationProgress.Heartbeat();
+
         // track applied optional dependencies as we go so a failure mid-install can still be reversed.
         var applied = new List<EEditorPluginRecipe.OptionalPlugin>();
         context.AppliedOptionalDependencies = applied;
@@ -607,6 +615,8 @@ internal sealed class EGlobal
 
     private void UninstallEPlugin(PluginContext context, EEditorPluginRecipe recipe)
     {
+        ActivationProgress.Heartbeat();
+
         // without a snapshot (e.g. the context was rebuilt after an assembly reload) fall back to resolving
         // the optional dependencies against the current editor state.
         var applied = context.AppliedOptionalDependencies ?? ResolveOptionalRecipes(context, recipe);

@@ -36,10 +36,10 @@ jobs:
         shell: bash
         run: echo "GODOT_BIN=$GODOT" >> "$GITHUB_ENV"
 
-      - name: Install Xvfb
+      - name: Install Xvfb and GTK 3
         run: |
           sudo apt-get update
-          sudo apt-get install --yes xvfb
+          sudo apt-get install --yes xvfb libgtk-3-0
 
       - name: Build
         working-directory: src/eplugin-framework
@@ -73,6 +73,13 @@ jobs:
           dotnet publish src/activation-progress/ActivationProgress.csproj \
             --configuration Release -p:DebugType=None \
             --output src/eplugin-framework/addons/ePlugin/progress
+
+      - name: Smoke test progress helper
+        run: |
+          # Verify the exact files that ship in the release archive.
+          test "$(find src/eplugin-framework/addons/ePlugin/progress -maxdepth 1 -type f -name 'ActivationProgress.*' | wc -l)" -eq 2
+          xvfb-run --auto-servernum python3 src/activation-progress/smoke.py \
+            dotnet src/eplugin-framework/addons/ePlugin/progress/ActivationProgress.dll
 
       - name: Create artifact
         shell: bash
