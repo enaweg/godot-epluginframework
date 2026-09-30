@@ -8,6 +8,7 @@ internal sealed class GtkProgressWindow : IProgressWindow
     private const string Gtk = "libgtk-3.so.0";
     private const string GLib = "libglib-2.0.so.0";
     private const string GObject = "libgobject-2.0.so.0";
+    private const string GdkPixbuf = "libgdk_pixbuf-2.0.so.0";
 
     // Kept in fields so the delegates outlive the native callbacks that reference them.
     private readonly SourceFunc _pulse = Pulse;
@@ -53,7 +54,7 @@ internal sealed class GtkProgressWindow : IProgressWindow
 
         var window = _window = gtk_window_new(0); // GTK_WINDOW_TOPLEVEL
         gtk_window_set_title(window, title);
-        gtk_window_set_default_size(window, 340, 100);
+        gtk_window_set_default_size(window, 340, 280);
         gtk_window_set_resizable(window, false);
         gtk_window_set_keep_above(window, true);
         gtk_window_set_skip_taskbar_hint(window, true);
@@ -64,6 +65,39 @@ internal sealed class GtkProgressWindow : IProgressWindow
         gtk_container_set_border_width(window, 20);
 
         var box = gtk_box_new(1, 14); // GTK_ORIENTATION_VERTICAL
+        var loader = gdk_pixbuf_loader_new();
+        var logoBytes = Logo.Load();
+        try
+        {
+            if (!gdk_pixbuf_loader_write(loader, logoBytes, (nuint)logoBytes.Length, IntPtr.Zero) ||
+                !gdk_pixbuf_loader_close(loader, IntPtr.Zero))
+            {
+                throw new InvalidOperationException("GTK could not decode the ePlugin logo.");
+            }
+
+            var scaled = gdk_pixbuf_scale_simple(gdk_pixbuf_loader_get_pixbuf(loader), Logo.Size, Logo.Size,
+                2); // GDK_INTERP_BILINEAR
+            if (scaled == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("GTK could not scale the ePlugin logo.");
+            }
+
+            try
+            {
+                var image = gtk_image_new_from_pixbuf(scaled);
+                gtk_widget_set_halign(image, 3); // GTK_ALIGN_CENTER
+                gtk_box_pack_start(box, image, false, false, 0);
+            }
+            finally
+            {
+                g_object_unref(scaled);
+            }
+        }
+        finally
+        {
+            g_object_unref(loader);
+        }
+
         _label = gtk_label_new(text);
         gtk_label_set_xalign(_label, 0f);
         gtk_label_set_ellipsize(_label, 3); // PANGO_ELLIPSIZE_END
@@ -187,6 +221,12 @@ internal sealed class GtkProgressWindow : IProgressWindow
     private static extern IntPtr gtk_label_new([MarshalAs(UnmanagedType.LPUTF8Str)] string text);
 
     [DllImport(Gtk)]
+    private static extern IntPtr gtk_image_new_from_pixbuf(IntPtr pixbuf);
+
+    [DllImport(Gtk)]
+    private static extern void gtk_widget_set_halign(IntPtr widget, int align);
+
+    [DllImport(Gtk)]
     private static extern void gtk_label_set_text(IntPtr label, [MarshalAs(UnmanagedType.LPUTF8Str)] string text);
 
     [DllImport(Gtk)]
@@ -214,4 +254,22 @@ internal sealed class GtkProgressWindow : IProgressWindow
     private static extern ulong g_signal_connect_data(IntPtr instance,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string signal, IntPtr handler, IntPtr data, IntPtr destroyData,
         int flags);
+
+    [DllImport(GObject)]
+    private static extern void g_object_unref(IntPtr instance);
+
+    [DllImport(GdkPixbuf)]
+    private static extern IntPtr gdk_pixbuf_loader_new();
+
+    [DllImport(GdkPixbuf)]
+    private static extern bool gdk_pixbuf_loader_write(IntPtr loader, byte[] buffer, nuint count, IntPtr error);
+
+    [DllImport(GdkPixbuf)]
+    private static extern bool gdk_pixbuf_loader_close(IntPtr loader, IntPtr error);
+
+    [DllImport(GdkPixbuf)]
+    private static extern IntPtr gdk_pixbuf_loader_get_pixbuf(IntPtr loader);
+
+    [DllImport(GdkPixbuf)]
+    private static extern IntPtr gdk_pixbuf_scale_simple(IntPtr source, int width, int height, int interpolation);
 }
