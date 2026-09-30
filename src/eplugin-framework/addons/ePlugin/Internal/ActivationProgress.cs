@@ -25,9 +25,12 @@ internal static class ActivationProgress
     // the nested scopes of that operation, only by the next top-level one.
     private static int _depth;
     private static IProgressHelper? _helper;
+    private static IDisposable? _settingsDialog;
 
     /// <summary>Starts a helper, or returns null when none can run. Tests replace it with a fake.</summary>
     internal static Func<IProgressHelper?> Launch { get; set; } = LaunchDefault;
+
+    internal static Func<IDisposable?> HideSettingsDialog { get; set; } = ProjectSettingsDialog.TryHide;
 
     internal static IProgressHelper? LaunchDefault() => ProcessProgressHelper.TryStart(HelperPath);
 
@@ -35,6 +38,16 @@ internal static class ActivationProgress
     {
         if (_depth++ == 0)
         {
+            try
+            {
+                _settingsDialog = HideSettingsDialog();
+            }
+            catch (Exception)
+            {
+                // Editor UI feedback must not prevent plugin operations.
+                _settingsDialog = null;
+            }
+
             Start();
         }
 
@@ -114,6 +127,16 @@ internal static class ActivationProgress
             if (--_depth == 0)
             {
                 Stop();
+                var settingsDialog = _settingsDialog;
+                _settingsDialog = null;
+                try
+                {
+                    settingsDialog?.Dispose();
+                }
+                catch (Exception)
+                {
+                    // Restoring editor UI must not change the plugin operation's result.
+                }
             }
         }
     }
