@@ -64,6 +64,8 @@ The repository also contains a sample project in `src/eplugin-framework`.
 + **Plugin helpers** for authors: `GetPluginSlug()`, `GetPluginDirectory()`, `ReadMetadata()` and `Cli()`
   extensions on `EditorPlugin`.
 + The editor's filesystem is rescanned and the solution rebuilt after every install and uninstall.
++ When Project Settings is open, it is temporarily hidden during plugin activation or deactivation and reopened
+  afterwards on the same tab, refreshing the Plugins list including automatically toggled dependencies.
 
 ## Motivation
 
@@ -87,8 +89,8 @@ provide some of the missing pieces for C# Plugins.
   on other platforms the operation runs without the window.
 + If an error occurs during installation or uninstallation, the project may be left in a non-compilable state and
   require manual intervention.
-+ Godot's editor plugin UI does not refresh automatically. Activated dependent plugins may not be shown until the UI
-  is reopened.
++ Refreshing the Plugins list uses Godot's internal dialog and menu nodes. If a Godot version changes these,
+  automatic reopening is skipped and the list can be refreshed by closing and reopening Project Settings manually.
 + Optional plugin dependencies are only re-evaluated when an ePlugin-managed plugin is enabled or disabled.
   Enabling or disabling a plain Godot plugin (one that does not implement `IEEditorPlugin`) does not trigger
   it, so a nested recipe depending on such a plugin is only applied or removed once the declaring plugin is

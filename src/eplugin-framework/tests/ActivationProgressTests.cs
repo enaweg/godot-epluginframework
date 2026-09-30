@@ -16,6 +16,7 @@ public class ActivationProgressTests
     public void Setup()
     {
         _launched.Clear();
+        ActivationProgress.HideSettingsDialog = () => null;
         ActivationProgress.Launch = () =>
         {
             var helper = new FakeHelper();
@@ -28,6 +29,7 @@ public class ActivationProgressTests
     public void Cleanup()
     {
         ActivationProgress.Launch = ActivationProgress.LaunchDefault;
+        ActivationProgress.HideSettingsDialog = ProjectSettingsDialog.TryHide;
     }
 
     [TestCase]
@@ -130,6 +132,62 @@ public class ActivationProgressTests
             ActivationProgress.SetText("Refreshing...");
             ActivationProgress.Heartbeat();
         }
+    }
+
+    [TestCase]
+    public void SettingsDialogIsHiddenOnceAndRestoredAfterNestedOperation()
+    {
+        var dialog = new FakeHelper();
+        var hideCount = 0;
+        ActivationProgress.HideSettingsDialog = () =>
+        {
+            hideCount++;
+            return dialog;
+        };
+
+        using (ActivationProgress.Begin("Activating A..."))
+        {
+            using (ActivationProgress.Begin("Activating dependency..."))
+            {
+            }
+
+            Assertions.AssertInt(hideCount).IsEqual(1);
+            Assertions.AssertBool(dialog.Disposed).IsFalse();
+            // A failed progress helper must not restore settings while installation is still running.
+            _launched[0].Dead = true;
+            ActivationProgress.SetText("Rebuilding...");
+            Assertions.AssertBool(dialog.Disposed).IsFalse();
+        }
+
+        Assertions.AssertBool(dialog.Disposed).IsTrue();
+    }
+
+    [TestCase]
+    public void SettingsDialogIsRestoredWhenOperationThrows()
+    {
+        var dialog = new FakeHelper();
+        ActivationProgress.HideSettingsDialog = () => dialog;
+        try
+        {
+            using var progress = ActivationProgress.Begin("Activating A...");
+            throw new InvalidOperationException("Installation failed.");
+        }
+        catch (InvalidOperationException)
+        {
+        }
+
+        Assertions.AssertBool(dialog.Disposed).IsTrue();
+    }
+
+    [TestCase]
+    public void FailingSettingsDialogDoesNotAffectOperation()
+    {
+        ActivationProgress.HideSettingsDialog = () => throw new InvalidOperationException("Editor UI unavailable.");
+        using (ActivationProgress.Begin("Activating A..."))
+        {
+        }
+
+        Assertions.AssertBool(_launched[0].Disposed).IsTrue();
     }
 
     [TestCase]
