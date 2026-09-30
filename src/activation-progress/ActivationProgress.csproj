@@ -17,4 +17,7 @@
     <!-- Embedded as resource 1; Win32ProgressWindow activates it to get the themed marquee progress bar. -->
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../design/icon-nobg_small.png" LogicalName="ActivationProgress.Logo.png" />
+  </ItemGroup>
 </Project>

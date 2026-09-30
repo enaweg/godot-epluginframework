@@ -45,7 +45,7 @@ internal sealed class CocoaProgressWindow : IProgressWindow
 
         // Titled only: no close button; the window closes with the host or its lifetime.
         const double width = 340;
-        const double height = 100;
+        const double height = 280;
         var contentRect = _editorCenter is { } center
             ? new CGRect(center.X - width / 2, center.Y - height / 2, width, height)
             : new CGRect(0, 0, width, height);
@@ -60,14 +60,39 @@ internal sealed class CocoaProgressWindow : IProgressWindow
         }
         var content = Send(window, Sel("contentView"));
 
+        var logoBytes = Logo.Load();
+        var buffer = Marshal.AllocHGlobal(logoBytes.Length);
+        IntPtr data;
+        try
+        {
+            Marshal.Copy(logoBytes, 0, buffer, logoBytes.Length);
+            data = Send(Class("NSData"), Sel("dataWithBytes:length:"), buffer, (ulong)logoBytes.Length);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
+
+        var logo = Send(Send(Class("NSImage"), Sel("alloc")), Sel("initWithData:"), data);
+        if (logo == IntPtr.Zero)
+        {
+            throw new InvalidOperationException("AppKit could not decode the ePlugin logo.");
+        }
+
+        var image = Send(Send(Class("NSImageView"), Sel("alloc")), Sel("initWithFrame:"),
+            new CGRect((width - Logo.Size) / 2, 110, Logo.Size, Logo.Size));
+        Send(image, Sel("setImage:"), logo);
+        Send(image, Sel("setImageScaling:"), 3L); // NSImageScaleProportionallyUpOrDown
+        Send(content, Sel("addSubview:"), image);
+
         // AppKit's origin is bottom-left.
         _label = Send(Class("NSTextField"), Sel("labelWithString:"), NSString(text));
-        Send(_label, Sel("setFrame:"), new CGRect(20, 56, 300, 20));
+        Send(_label, Sel("setFrame:"), new CGRect(20, 64, 300, 20));
         Send(_label, Sel("setLineBreakMode:"), 4L); // NSLineBreakByTruncatingTail
         Send(content, Sel("addSubview:"), _label);
 
         var progress = Send(Send(Class("NSProgressIndicator"), Sel("alloc")), Sel("initWithFrame:"),
-            new CGRect(20, 22, 300, 20));
+            new CGRect(20, 30, 300, 20));
         Send(progress, Sel("setStyle:"), 0L); // NSProgressIndicatorStyleBar
         Send(progress, Sel("setIndeterminate:"), true);
         Send(progress, Sel("startAnimation:"), IntPtr.Zero);
@@ -109,6 +134,9 @@ internal sealed class CocoaProgressWindow : IProgressWindow
 
     [DllImport(ObjC, EntryPoint = "objc_msgSend")]
     private static extern IntPtr Send(IntPtr receiver, IntPtr selector, IntPtr argument);
+
+    [DllImport(ObjC, EntryPoint = "objc_msgSend")]
+    private static extern IntPtr Send(IntPtr receiver, IntPtr selector, IntPtr argument, ulong length);
 
     [DllImport(ObjC, EntryPoint = "objc_msgSend")]
     private static extern IntPtr Send(IntPtr receiver, IntPtr selector, long argument);

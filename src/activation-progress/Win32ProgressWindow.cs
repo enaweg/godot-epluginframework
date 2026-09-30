@@ -7,6 +7,7 @@ internal sealed class Win32ProgressWindow : IProgressWindow
 {
     private const string ClassName = "ePluginActivationProgress";
     private const uint WmDestroy = 0x0002;
+    private const uint WmPaint = 0x000F;
     private const uint WmClose = 0x0010;
     private const uint WmSetFont = 0x0030;
     private const uint WmTimer = 0x0113;
@@ -30,6 +31,12 @@ internal sealed class Win32ProgressWindow : IProgressWindow
     private readonly IntPtr _editorWindow;
     private IntPtr _window;
     private IntPtr _label;
+    private IntPtr _logo;
+    private IntPtr _logoStream;
+    private nuint _gdiplusToken;
+    private int _logoX;
+    private int _logoY;
+    private int _logoSize;
     private volatile string _text = string.Empty;
 
     /// <param name="editorWindow">The editor's window to center on, or zero for the primary screen.</param>
@@ -71,7 +78,7 @@ internal sealed class Win32ProgressWindow : IProgressWindow
         const uint style = WsCaption;
         // No activation: the editor keeps focus while the helper is up and after it exits.
         const uint exStyle = WsExTopmost | WsExToolWindow | WsExNoActivate;
-        var bounds = new Rect { Right = Scale(340), Bottom = Scale(100) };
+        var bounds = new Rect { Right = Scale(340), Bottom = Scale(280) };
         AdjustWindowRectEx(ref bounds, style, false, exStyle);
         var width = bounds.Right - bounds.Left;
         var height = bounds.Bottom - bounds.Top;
@@ -81,6 +88,10 @@ internal sealed class Win32ProgressWindow : IProgressWindow
             : new Rect { Right = GetSystemMetrics(0), Bottom = GetSystemMetrics(1) }; // SM_CXSCREEN, SM_CYSCREEN
         var x = (target.Left + target.Right - width) / 2;
         var y = (target.Top + target.Bottom - height) / 2;
+        _logoX = Scale((340 - Logo.Size) / 2);
+        _logoY = Scale(20);
+        _logoSize = Scale(Logo.Size);
+        LoadLogo();
 
         _window = CreateWindowExW(exStyle, ClassName, title, style, x, y, width, height,
             IntPtr.Zero, IntPtr.Zero, instance, IntPtr.Zero);
@@ -90,12 +101,12 @@ internal sealed class Win32ProgressWindow : IProgressWindow
         }
 
         _label = CreateWindowExW(0, "STATIC", text, WsChild | WsVisible | SsNoPrefix | SsEndEllipsis,
-            Scale(20), Scale(20), Scale(300), Scale(20), _window, IntPtr.Zero, instance, IntPtr.Zero);
+            Scale(20), Scale(195), Scale(300), Scale(20), _window, IntPtr.Zero, instance, IntPtr.Zero);
         var font = CreateFontW(-Scale(12), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, "Segoe UI"); // 9pt, CLEARTYPE_QUALITY
         SendMessageW(_label, WmSetFont, font, IntPtr.Zero);
 
         var progress = CreateWindowExW(0, "msctls_progress32", null, WsChild | WsVisible | PbsMarquee,
-            Scale(20), Scale(54), Scale(300), Scale(18), _window, IntPtr.Zero, instance, IntPtr.Zero);
+            Scale(20), Scale(229), Scale(300), Scale(18), _window, IntPtr.Zero, instance, IntPtr.Zero);
         SendMessageW(progress, PbmSetMarquee, new IntPtr(1), new IntPtr(30));
 
         SetTimer(_window, ShowTimerId, (uint)showDelayMilliseconds, IntPtr.Zero);
@@ -106,6 +117,10 @@ internal sealed class Win32ProgressWindow : IProgressWindow
             TranslateMessage(ref message);
             DispatchMessageW(ref message);
         }
+
+        GdipDisposeImage(_logo);
+        Marshal.Release(_logoStream);
+        GdiplusShutdown(_gdiplusToken);
     }
 
     public void SetText(string text)
@@ -118,6 +133,17 @@ internal sealed class Win32ProgressWindow : IProgressWindow
     {
         switch (message)
         {
+            case WmPaint:
+                var paintDc = BeginPaint(window, out var paint);
+                if (GdipCreateFromHDC(paintDc, out var graphics) == 0)
+                {
+                    GdipSetInterpolationMode(graphics, 7); // InterpolationModeHighQualityBicubic
+                    GdipDrawImageRectI(graphics, _logo, _logoX, _logoY, _logoSize, _logoSize);
+                    GdipDeleteGraphics(graphics);
+                }
+
+                EndPaint(window, ref paint);
+                return IntPtr.Zero;
             case WmUpdateText:
                 SetWindowTextW(_label, _text);
                 return IntPtr.Zero;
@@ -134,6 +160,22 @@ internal sealed class Win32ProgressWindow : IProgressWindow
                 return IntPtr.Zero;
             default:
                 return DefWindowProcW(window, message, wParam, lParam);
+        }
+    }
+
+    private void LoadLogo()
+    {
+        var startup = new GdiplusStartupInput { Version = 1 };
+        if (GdiplusStartup(out _gdiplusToken, ref startup, IntPtr.Zero) != 0)
+        {
+            throw new Win32Exception("GDI+ could not start.");
+        }
+
+        var bytes = Logo.Load();
+        _logoStream = SHCreateMemStream(bytes, (uint)bytes.Length);
+        if (_logoStream == IntPtr.Zero || GdipCreateBitmapFromStream(_logoStream, out _logo) != 0)
+        {
+            throw new Win32Exception("GDI+ could not decode the ePlugin logo.");
         }
     }
 
@@ -223,6 +265,33 @@ internal sealed class Win32ProgressWindow : IProgressWindow
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    private struct PaintStruct
+    {
+        public IntPtr Dc;
+        public int Erase;
+        public Rect Paint;
+        public int Restore;
+        public int IncUpdate;
+        public uint Reserved0;
+        public uint Reserved1;
+        public uint Reserved2;
+        public uint Reserved3;
+        public uint Reserved4;
+        public uint Reserved5;
+        public uint Reserved6;
+        public uint Reserved7;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct GdiplusStartupInput
+    {
+        public uint Version;
+        public IntPtr DebugEventCallback;
+        public int SuppressBackgroundThread;
+        public int SuppressExternalCodecs;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     private struct Msg
     {
         public IntPtr Window;
@@ -243,6 +312,33 @@ internal sealed class Win32ProgressWindow : IProgressWindow
 
     [DllImport("kernel32.dll")]
     private static extern bool ActivateActCtx(IntPtr context, out IntPtr cookie);
+
+    [DllImport("shlwapi.dll")]
+    private static extern IntPtr SHCreateMemStream(byte[] bytes, uint length);
+
+    [DllImport("gdiplus.dll")]
+    private static extern int GdiplusStartup(out nuint token, ref GdiplusStartupInput input, IntPtr output);
+
+    [DllImport("gdiplus.dll")]
+    private static extern void GdiplusShutdown(nuint token);
+
+    [DllImport("gdiplus.dll")]
+    private static extern int GdipCreateBitmapFromStream(IntPtr stream, out IntPtr bitmap);
+
+    [DllImport("gdiplus.dll")]
+    private static extern int GdipDisposeImage(IntPtr image);
+
+    [DllImport("gdiplus.dll")]
+    private static extern int GdipCreateFromHDC(IntPtr dc, out IntPtr graphics);
+
+    [DllImport("gdiplus.dll")]
+    private static extern int GdipSetInterpolationMode(IntPtr graphics, int mode);
+
+    [DllImport("gdiplus.dll")]
+    private static extern int GdipDrawImageRectI(IntPtr graphics, IntPtr image, int x, int y, int width, int height);
+
+    [DllImport("gdiplus.dll")]
+    private static extern int GdipDeleteGraphics(IntPtr graphics);
 
     [DllImport("comctl32.dll")]
     private static extern bool InitCommonControlsEx(ref InitCommonControlsExInfo info);
@@ -291,6 +387,12 @@ internal sealed class Win32ProgressWindow : IProgressWindow
 
     [DllImport("user32.dll")]
     private static extern bool UpdateWindow(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr BeginPaint(IntPtr window, out PaintStruct paint);
+
+    [DllImport("user32.dll")]
+    private static extern bool EndPaint(IntPtr window, ref PaintStruct paint);
 
     [DllImport("user32.dll")]
     private static extern UIntPtr SetTimer(IntPtr window, UIntPtr id, uint elapse, IntPtr timerFunction);
