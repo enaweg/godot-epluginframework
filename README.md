@@ -105,6 +105,12 @@ This project needs more external plugins and testing to move forward. Feel free 
 
 The current CI configuration builds and tests pull requests with Godot 4.7.2 and .NET 8.
 
+To test a pull request in your own project, open its **CI-PR** run from the PR's checks and download
+`ePlugin-pr-<number>.zip` from **Artifacts** after the `build-and-test` job succeeds. Extract the archive's
+`addons/ePlugin` directory into your Godot project's `addons` directory, then build the project and enable
+**ePlugin** under **Project > Project Settings > Plugins**. The archive includes the progress helper,
+just like a release.
+
 Tested combinations:
 
 + Godot 4.7.2 + .NET 8 (CI-tested)
