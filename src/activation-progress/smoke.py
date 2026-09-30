@@ -72,6 +72,21 @@ finally:
     if process.poll() is None:
         process.kill()
 
+# Each HEARTBEAT restarts the lifetime, so a long chain of plugin installs keeps the window; without more
+# heartbeats it still ends on its own.
+process = start_helper(command + ["--max-lifetime-seconds", "3"])
+try:
+    # Outlives the 3 s lifetime only if the heartbeats restart it.
+    for _ in range(5):
+        time.sleep(1)
+        process.stdin.write(b"HEARTBEAT\n")
+        process.stdin.flush()
+    assert process.poll() is None, "helper exited despite heartbeats"
+    assert process.wait(timeout=10) == 0
+finally:
+    if process.poll() is None:
+        process.kill()
+
 # The host never waits for READY: commands are queued before the helper has started, and a helper closed
 # before its show delay must exit without ever showing its window.
 process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)

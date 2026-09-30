@@ -7,6 +7,8 @@ namespace ActivationProgress;
 /// Usage: <c>dotnet ActivationProgress.dll [--editor-window HWND | --editor-center X Y] [--max-lifetime-seconds N]</c>.
 /// <c>--editor-window</c> (Windows) and <c>--editor-center</c> (native desktop coordinates, macOS and Linux) place the
 /// window over the editor instead of on the primary screen.
+/// Commands on stdin, one per line: <c>TEXT base64-utf8</c> replaces the label, <c>HEARTBEAT</c> restarts the
+/// lifetime, and <c>CLOSE</c> (or end of input) exits.
 /// </summary>
 internal static class Program
 {
@@ -17,6 +19,7 @@ internal static class Program
     private const int ShowDelayMilliseconds = 300;
 
     // The window has no close button, so a host that hangs or never sends CLOSE cannot leave it up forever.
+    // Each HEARTBEAT restarts it.
     private const int DefaultMaxLifetimeSeconds = 15 * 60;
 
     [STAThread]
@@ -49,8 +52,9 @@ internal static class Program
                                      out var parsedSeconds) && parsedSeconds > 0
             ? parsedSeconds
             : DefaultMaxLifetimeSeconds;
-        using var lifetime = new Timer(_ => Environment.Exit(0), null, TimeSpan.FromSeconds(maxLifetimeSeconds),
-            Timeout.InfiniteTimeSpan);
+        var maxLifetime = TimeSpan.FromSeconds(maxLifetimeSeconds);
+        // Not disposed: the reader thread may still restart it while the process exits.
+        var lifetime = new Timer(_ => Environment.Exit(0), null, maxLifetime, Timeout.InfiniteTimeSpan);
 
         try
         {
@@ -60,7 +64,10 @@ internal static class Program
                 output.WriteLine("READY");
 
                 // Reading a redirected console stream can block before its first await.
-                new Thread(() => ReadCommands(window)) { IsBackground = true }.Start();
+                new Thread(() => ReadCommands(window, () => lifetime.Change(maxLifetime, Timeout.InfiniteTimeSpan)))
+                {
+                    IsBackground = true
+                }.Start();
             });
         }
         catch (Exception)
@@ -69,6 +76,8 @@ internal static class Program
             return 1;
         }
 
+        // A timer nothing references can be collected before it fires.
+        GC.KeepAlive(lifetime);
         return 0;
     }
 
@@ -88,7 +97,7 @@ internal static class Program
             : null;
     }
 
-    private static void ReadCommands(IProgressWindow window)
+    private static void ReadCommands(IProgressWindow window, Action heartbeat)
     {
         try
         {
@@ -99,6 +108,12 @@ internal static class Program
                 if (line == "CLOSE")
                 {
                     break;
+                }
+
+                if (line == "HEARTBEAT")
+                {
+                    heartbeat();
+                    continue;
                 }
 
                 if (line.StartsWith("TEXT ", StringComparison.Ordinal))

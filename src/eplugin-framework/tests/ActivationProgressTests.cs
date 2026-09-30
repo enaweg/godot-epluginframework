@@ -39,8 +39,22 @@ public class ActivationProgressTests
         }
 
         Assertions.AssertInt(_launched.Count).IsEqual(1);
-        Assertions.AssertThat(_launched[0].Texts).ContainsExactly("Activating A...", "Refreshing...");
+        Assertions.AssertThat(_launched[0].Received).ContainsExactly("Activating A...", "Refreshing...");
         Assertions.AssertBool(_launched[0].Disposed).IsTrue();
+    }
+
+    [TestCase]
+    public void HeartbeatIsSentToRunningHelper()
+    {
+        using (ActivationProgress.Begin("Activating A..."))
+        {
+            ActivationProgress.Heartbeat();
+            ActivationProgress.SetText("Activating B...");
+            ActivationProgress.Heartbeat();
+        }
+
+        Assertions.AssertThat(_launched[0].Received)
+            .ContainsExactly("Activating A...", "HEARTBEAT", "Activating B...", "HEARTBEAT");
     }
 
     [TestCase]
@@ -57,7 +71,7 @@ public class ActivationProgressTests
         outer.Dispose();
 
         Assertions.AssertBool(_launched[0].Disposed).IsTrue();
-        Assertions.AssertThat(_launched[0].Texts).ContainsExactly("Activating A...", "Activating B...");
+        Assertions.AssertThat(_launched[0].Received).ContainsExactly("Activating A...", "Activating B...");
     }
 
     [TestCase]
@@ -97,7 +111,7 @@ public class ActivationProgressTests
         }
 
         Assertions.AssertInt(_launched.Count).IsEqual(2);
-        Assertions.AssertThat(_launched[1].Texts).ContainsExactly("Deactivating A...");
+        Assertions.AssertThat(_launched[1].Received).ContainsExactly("Deactivating A...");
     }
 
     [TestCase]
@@ -107,12 +121,14 @@ public class ActivationProgressTests
         using (ActivationProgress.Begin("Activating A..."))
         {
             ActivationProgress.SetText("Refreshing...");
+            ActivationProgress.Heartbeat();
         }
 
         ActivationProgress.Launch = () => throw new IOException("dotnet not found");
         using (ActivationProgress.Begin("Activating A..."))
         {
             ActivationProgress.SetText("Refreshing...");
+            ActivationProgress.Heartbeat();
         }
     }
 
@@ -125,7 +141,8 @@ public class ActivationProgressTests
 
     private sealed class FakeHelper : IProgressHelper
     {
-        public List<string> Texts { get; } = [];
+        /// <summary>Decoded TEXT payloads; any other command verbatim.</summary>
+        public List<string> Received { get; } = [];
 
         public bool Dead { get; set; }
 
@@ -138,8 +155,7 @@ public class ActivationProgressTests
                 throw new IOException("The helper exited.");
             }
 
-            // Anything but a TEXT command shows up as a mismatch in the Texts assertions.
-            Texts.Add(command.StartsWith("TEXT ", StringComparison.Ordinal)
+            Received.Add(command.StartsWith("TEXT ", StringComparison.Ordinal)
                 ? Encoding.UTF8.GetString(Convert.FromBase64String(command[5..]))
                 : command);
         }

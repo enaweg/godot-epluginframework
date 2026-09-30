@@ -44,6 +44,20 @@ internal static class ActivationProgress
 
     public static void SetText(string text)
     {
+        Send($"TEXT {Convert.ToBase64String(Encoding.UTF8.GetBytes(text))}");
+    }
+
+    /// <summary>
+    /// Restarts the helper's lifetime (15 minutes), which otherwise closes the window on its own. Sent whenever a
+    /// plugin starts installing or uninstalling, so a long chain of dependencies keeps its window until done.
+    /// </summary>
+    public static void Heartbeat()
+    {
+        Send("HEARTBEAT");
+    }
+
+    private static void Send(string command)
+    {
         if (_helper is null)
         {
             return;
@@ -51,7 +65,7 @@ internal static class ActivationProgress
 
         try
         {
-            _helper.Send($"TEXT {Convert.ToBase64String(Encoding.UTF8.GetBytes(text))}");
+            _helper.Send(command);
         }
         catch (Exception)
         {
