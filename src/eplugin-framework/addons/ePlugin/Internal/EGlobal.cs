@@ -467,6 +467,8 @@ internal sealed class EGlobal
                 return;
             }
         }
+
+        context.State = EEditorPluginState.Activated;
     }
 
     private void ApplyRecipe(PluginContext context, EEditorPluginRecipe recipe)
