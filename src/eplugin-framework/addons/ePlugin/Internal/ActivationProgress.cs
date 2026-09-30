@@ -11,10 +11,13 @@ namespace Enaweg.Plugin.Internal;
 /// Best-effort feedback in a separate process while Godot's synchronous plugin work blocks its UI.
 /// Nested editor callbacks share the same process.
 /// </summary>
+/// <remarks>
+/// The helper is never waited for: commands sit in the stdin pipe until it has started, a dead helper surfaces as a
+/// failed write, and an operation that ends before the helper shows its window never shows one. Once the helper
+/// has failed, nested scopes of the same operation do not restart it.
+/// </remarks>
 internal static class ActivationProgress
 {
-    // A cold .NET start of the helper can take a few seconds on slow machines.
-    private const int StartupTimeoutMilliseconds = 10000;
     private const int ExitTimeoutMilliseconds = 500;
     private static int _depth;
     private static Process? _process;
@@ -70,6 +73,7 @@ internal static class ActivationProgress
                 // dotnet is a console application; don't flash a console window next to the progress window.
                 CreateNoWindow = true,
                 RedirectStandardInput = true,
+                // Swallows the helper's READY line (only the smoke test reads it) instead of the editor console.
                 RedirectStandardOutput = true,
                 StandardInputEncoding = Encoding.ASCII,
                 StandardOutputEncoding = Encoding.ASCII
@@ -84,11 +88,6 @@ internal static class ActivationProgress
 
             _process = process;
             process.StandardInput.AutoFlush = true;
-            var ready = process.StandardOutput.ReadLineAsync();
-            if (!ready.Wait(StartupTimeoutMilliseconds) || ready.Result != "READY")
-            {
-                Stop();
-            }
         }
         catch (Exception)
         {
@@ -98,6 +97,12 @@ internal static class ActivationProgress
 
     private static bool HasDesktop()
     {
+        // e.g. `godot --headless --editor` for imports or exports on a desktop machine.
+        if (DisplayServer.GetName() == "headless")
+        {
+            return false;
+        }
+
         if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
         {
             return true;
