@@ -69,9 +69,6 @@ jobs:
         working-directory: src/eplugin-framework
         run: dotnet build "EPlugin Framework.sln" --configuration Debug
 
-      - name: Build progress helper
-        run: dotnet build src/activation-progress/ActivationProgress.csproj --configuration Release
-
       - name: Smoke test progress helper
         run: |
           dotnet publish src/activation-progress/ActivationProgress.csproj \
