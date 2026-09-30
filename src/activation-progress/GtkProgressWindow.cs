@@ -15,13 +15,18 @@ internal sealed class GtkProgressWindow : IProgressWindow
     private readonly SourceFunc _ready;
     private readonly SourceFunc _show;
     private readonly SignalCallback _destroy = (_, _) => gtk_main_quit();
+    // Only the host or the lifetime timer end the helper.
+    private readonly EventCallback _refuseDelete = (_, _, _) => true;
+    private readonly EditorCenter? _editorCenter;
     private Action? _onReady;
     private IntPtr _window;
     private IntPtr _label;
     private volatile string _text = string.Empty;
 
-    public GtkProgressWindow()
+    /// <param name="editorCenter">The editor's center in X11 root pixels, or null for the screen center.</param>
+    public GtkProgressWindow(EditorCenter? editorCenter)
     {
+        _editorCenter = editorCenter;
         _updateText = _ =>
         {
             gtk_label_set_text(_label, _text);
@@ -55,7 +60,7 @@ internal sealed class GtkProgressWindow : IProgressWindow
         // The editor keeps focus while the helper is up and after it exits.
         gtk_window_set_focus_on_map(window, false);
         gtk_window_set_accept_focus(window, false);
-        gtk_window_set_position(window, 1); // GTK_WIN_POS_CENTER
+        gtk_window_set_deletable(window, false);
         gtk_container_set_border_width(window, 20);
 
         var box = gtk_box_new(1, 14); // GTK_ORIENTATION_VERTICAL
@@ -67,7 +72,11 @@ internal sealed class GtkProgressWindow : IProgressWindow
         gtk_box_pack_start(box, progress, false, false, 0);
         gtk_container_add(window, box);
 
+        Place(window);
+
         g_signal_connect_data(window, "destroy", Marshal.GetFunctionPointerForDelegate(_destroy),
+            IntPtr.Zero, IntPtr.Zero, 0);
+        g_signal_connect_data(window, "delete-event", Marshal.GetFunctionPointerForDelegate(_refuseDelete),
             IntPtr.Zero, IntPtr.Zero, 0);
         g_timeout_add(100, Marshal.GetFunctionPointerForDelegate(_pulse), progress);
         g_timeout_add((uint)showDelayMilliseconds, Marshal.GetFunctionPointerForDelegate(_show), IntPtr.Zero);
@@ -84,6 +93,23 @@ internal sealed class GtkProgressWindow : IProgressWindow
         g_idle_add(Marshal.GetFunctionPointerForDelegate(_updateText), IntPtr.Zero);
     }
 
+    /// <summary>
+    /// Centers on the editor. Wayland compositors ignore client positions and place the window themselves.
+    /// </summary>
+    private void Place(IntPtr window)
+    {
+        if (_editorCenter is not { } center)
+        {
+            gtk_window_set_position(window, 1); // GTK_WIN_POS_CENTER
+            return;
+        }
+
+        // Godot reports device pixels; GTK positions windows in pixels divided by the GDK scale.
+        var scale = Math.Max(1, gtk_widget_get_scale_factor(window));
+        gtk_window_get_size(window, out var width, out var height);
+        gtk_window_move(window, (int)(center.X / scale) - width / 2, (int)(center.Y / scale) - height / 2);
+    }
+
     private static bool Pulse(IntPtr progress)
     {
         gtk_progress_bar_pulse(progress);
@@ -93,6 +119,8 @@ internal sealed class GtkProgressWindow : IProgressWindow
     private delegate bool SourceFunc(IntPtr data);
 
     private delegate void SignalCallback(IntPtr instance, IntPtr data);
+
+    private delegate bool EventCallback(IntPtr instance, IntPtr gdkEvent, IntPtr data);
 
     [DllImport(Gtk)]
     private static extern bool gtk_init_check(IntPtr argc, IntPtr argv);
@@ -130,6 +158,18 @@ internal sealed class GtkProgressWindow : IProgressWindow
 
     [DllImport(Gtk)]
     private static extern void gtk_window_set_position(IntPtr window, int position);
+
+    [DllImport(Gtk)]
+    private static extern void gtk_window_set_deletable(IntPtr window, bool setting);
+
+    [DllImport(Gtk)]
+    private static extern void gtk_window_get_size(IntPtr window, out int width, out int height);
+
+    [DllImport(Gtk)]
+    private static extern void gtk_window_move(IntPtr window, int x, int y);
+
+    [DllImport(Gtk)]
+    private static extern int gtk_widget_get_scale_factor(IntPtr widget);
 
     [DllImport(Gtk)]
     private static extern void gtk_container_set_border_width(IntPtr container, uint width);

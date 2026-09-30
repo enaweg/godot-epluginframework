@@ -53,6 +53,25 @@ finally:
     if process.poll() is None:
         process.kill()
 
+# Placement arguments; each platform ignores the one it does not use.
+process = start_helper(command + ["--editor-window", "0", "--editor-center", "400", "300"])
+try:
+    time.sleep(1)
+    process.stdin.write(b"CLOSE\n")
+    process.stdin.flush()
+    assert process.wait(timeout=5) == 0
+finally:
+    if process.poll() is None:
+        process.kill()
+
+# The window has no close button, so the helper must end itself when the host never closes it.
+process = start_helper(command + ["--max-lifetime-seconds", "2"])
+try:
+    assert process.wait(timeout=10) == 0
+finally:
+    if process.poll() is None:
+        process.kill()
+
 # The host never waits for READY: commands are queued before the helper has started, and a helper closed
 # before its show delay must exit without ever showing its window.
 process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)

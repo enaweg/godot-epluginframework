@@ -7,6 +7,7 @@ internal sealed class Win32ProgressWindow : IProgressWindow
 {
     private const string ClassName = "ePluginActivationProgress";
     private const uint WmDestroy = 0x0002;
+    private const uint WmClose = 0x0010;
     private const uint WmSetFont = 0x0030;
     private const uint WmTimer = 0x0113;
     private const uint WmUpdateText = 0x8000; // WM_APP
@@ -14,7 +15,6 @@ internal sealed class Win32ProgressWindow : IProgressWindow
     private const uint WsChild = 0x40000000;
     private const uint WsVisible = 0x10000000;
     private const uint WsCaption = 0x00C00000;
-    private const uint WsSysMenu = 0x00080000;
     private const uint WsExTopmost = 0x00000008;
     private const uint WsExToolWindow = 0x00000080;
     private const uint WsExNoActivate = 0x08000000;
@@ -27,13 +27,16 @@ internal sealed class Win32ProgressWindow : IProgressWindow
     private static readonly UIntPtr ShowTimerId = new(1);
 
     private readonly WndProc _wndProc;
+    private readonly IntPtr _editorWindow;
     private IntPtr _window;
     private IntPtr _label;
     private volatile string _text = string.Empty;
 
-    public Win32ProgressWindow()
+    /// <param name="editorWindow">The editor's window to center on, or zero for the primary screen.</param>
+    public Win32ProgressWindow(IntPtr editorWindow)
     {
         _wndProc = WindowProc;
+        _editorWindow = editorWindow;
     }
 
     public void Run(string title, string text, int showDelayMilliseconds, Action ready)
@@ -64,15 +67,20 @@ internal sealed class Win32ProgressWindow : IProgressWindow
             throw new Win32Exception();
         }
 
-        const uint style = WsCaption | WsSysMenu;
+        // A caption without a system menu has no close button; the window closes with the host or its lifetime.
+        const uint style = WsCaption;
         // No activation: the editor keeps focus while the helper is up and after it exits.
         const uint exStyle = WsExTopmost | WsExToolWindow | WsExNoActivate;
         var bounds = new Rect { Right = Scale(340), Bottom = Scale(100) };
         AdjustWindowRectEx(ref bounds, style, false, exStyle);
         var width = bounds.Right - bounds.Left;
         var height = bounds.Bottom - bounds.Top;
-        var x = (GetSystemMetrics(0) - width) / 2; // SM_CXSCREEN
-        var y = (GetSystemMetrics(1) - height) / 2; // SM_CYSCREEN
+        // Read in this process's DPI awareness, so the rectangle matches the scale the window is created at.
+        var target = _editorWindow != IntPtr.Zero && GetWindowRect(_editorWindow, out var editor)
+            ? editor
+            : new Rect { Right = GetSystemMetrics(0), Bottom = GetSystemMetrics(1) }; // SM_CXSCREEN, SM_CYSCREEN
+        var x = (target.Left + target.Right - width) / 2;
+        var y = (target.Top + target.Bottom - height) / 2;
 
         _window = CreateWindowExW(exStyle, ClassName, title, style, x, y, width, height,
             IntPtr.Zero, IntPtr.Zero, instance, IntPtr.Zero);
@@ -118,6 +126,9 @@ internal sealed class Win32ProgressWindow : IProgressWindow
                 ShowWindow(window, SwShowNoActivate);
                 UpdateWindow(window);
                 return IntPtr.Zero;
+            case WmClose:
+                // Alt+F4 and similar; only the host or the lifetime timer end the helper.
+                return IntPtr.Zero;
             case WmDestroy:
                 PostQuitMessage(0);
                 return IntPtr.Zero;
@@ -150,7 +161,9 @@ internal sealed class Win32ProgressWindow : IProgressWindow
     {
         try
         {
-            SetProcessDpiAwarenessContext(new IntPtr(-4)); // PER_MONITOR_AWARE_V2
+            // System-aware matches the fixed layout: it is scaled once by the system DPI, and Windows scales the
+            // window on monitors with another DPI instead of the helper handling WM_DPICHANGED.
+            SetProcessDpiAwarenessContext(new IntPtr(-2)); // SYSTEM_AWARE
             return (int)GetDpiForSystem();
         }
         catch (EntryPointNotFoundException)
@@ -253,6 +266,9 @@ internal sealed class Win32ProgressWindow : IProgressWindow
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern ushort RegisterClassExW(ref WndClassEx windowClass);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr window, out Rect rect);
 
     [DllImport("user32.dll")]
     private static extern bool AdjustWindowRectEx(ref Rect rect, uint style, bool menu, uint exStyle);

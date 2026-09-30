@@ -1,7 +1,13 @@
+using System.Globalization;
 using System.Text;
 
 namespace ActivationProgress;
 
+/// <summary>
+/// Usage: <c>dotnet ActivationProgress.dll [--editor-window HWND | --editor-center X Y] [--max-lifetime-seconds N]</c>.
+/// <c>--editor-window</c> (Windows) and <c>--editor-center</c> (native desktop coordinates, macOS and Linux) place the
+/// window over the editor instead of on the primary screen.
+/// </summary>
 internal static class Program
 {
     private const string Title = "ePlugin Framework";
@@ -10,26 +16,41 @@ internal static class Program
     // Operations that finish sooner close the helper before its window ever appears.
     private const int ShowDelayMilliseconds = 300;
 
+    // The window has no close button, so a host that hangs or never sends CLOSE cannot leave it up forever.
+    private const int DefaultMaxLifetimeSeconds = 15 * 60;
+
     [STAThread]
-    private static int Main()
+    private static int Main(string[] args)
     {
         IProgressWindow window;
         if (OperatingSystem.IsWindows())
         {
-            window = new Win32ProgressWindow();
+            var handle = Option(args, "--editor-window", 1) is [var value] &&
+                         long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+                ? new IntPtr(parsed)
+                : IntPtr.Zero;
+            window = new Win32ProgressWindow(handle);
         }
         else if (OperatingSystem.IsMacOS())
         {
-            window = new CocoaProgressWindow();
+            window = new CocoaProgressWindow(ParseEditorCenter(args));
         }
         else if (OperatingSystem.IsLinux())
         {
-            window = new GtkProgressWindow();
+            window = new GtkProgressWindow(ParseEditorCenter(args));
         }
         else
         {
             return 1;
         }
+
+        var maxLifetimeSeconds = Option(args, "--max-lifetime-seconds", 1) is [var seconds] &&
+                                 int.TryParse(seconds, NumberStyles.Integer, CultureInfo.InvariantCulture,
+                                     out var parsedSeconds) && parsedSeconds > 0
+            ? parsedSeconds
+            : DefaultMaxLifetimeSeconds;
+        using var lifetime = new Timer(_ => Environment.Exit(0), null, TimeSpan.FromSeconds(maxLifetimeSeconds),
+            Timeout.InfiniteTimeSpan);
 
         try
         {
@@ -49,6 +70,22 @@ internal static class Program
         }
 
         return 0;
+    }
+
+    /// <summary>Returns the <paramref name="count"/> values after <paramref name="name"/>, or null if absent.</summary>
+    private static string[]? Option(string[] args, string name, int count)
+    {
+        var index = Array.IndexOf(args, name);
+        return index >= 0 && index + count < args.Length ? args[(index + 1)..(index + 1 + count)] : null;
+    }
+
+    private static EditorCenter? ParseEditorCenter(string[] args)
+    {
+        return Option(args, "--editor-center", 2) is [var x, var y] &&
+               double.TryParse(x, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedX) &&
+               double.TryParse(y, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedY)
+            ? new EditorCenter(parsedX, parsedY)
+            : null;
     }
 
     private static void ReadCommands(IProgressWindow window)
@@ -86,6 +123,9 @@ internal static class Program
         Environment.Exit(0);
     }
 }
+
+/// <summary>The editor window's center in the platform's native desktop coordinates.</summary>
+internal readonly record struct EditorCenter(double X, double Y);
 
 internal interface IProgressWindow
 {
