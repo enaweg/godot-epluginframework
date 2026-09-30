@@ -62,7 +62,12 @@ internal sealed class EGlobal
 
         if (_toCheckEnable.Any())
         {
-            foreach (var pluginContext in _toCheckEnable)
+            // Take the waiting plugins off the stack first: EnableEPlugin pushes a plugin back while one of its
+            // dependencies is still being enabled, which would break enumerating the stack, and draining it until
+            // empty would never end for a dependency that cannot be enabled.
+            var waitingPlugins = _toCheckEnable.ToArray();
+            _toCheckEnable.Clear();
+            foreach (var pluginContext in waitingPlugins)
             {
                 EnableEPlugin(pluginContext, false);
             }
