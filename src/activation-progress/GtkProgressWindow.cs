@@ -12,9 +12,11 @@ internal sealed class GtkProgressWindow : IProgressWindow
     // Kept in fields so the delegates outlive the native callbacks that reference them.
     private readonly SourceFunc _pulse = Pulse;
     private readonly SourceFunc _updateText;
-    private readonly SourceFunc _shown;
+    private readonly SourceFunc _ready;
+    private readonly SourceFunc _show;
     private readonly SignalCallback _destroy = (_, _) => gtk_main_quit();
-    private Action? _onShown;
+    private Action? _onReady;
+    private IntPtr _window;
     private IntPtr _label;
     private volatile string _text = string.Empty;
 
@@ -25,26 +27,34 @@ internal sealed class GtkProgressWindow : IProgressWindow
             gtk_label_set_text(_label, _text);
             return false;
         };
-        _shown = _ =>
+        _ready = _ =>
         {
-            _onShown?.Invoke();
+            _onReady?.Invoke();
+            return false;
+        };
+        _show = _ =>
+        {
+            gtk_widget_show_all(_window);
             return false;
         };
     }
 
-    public void Run(string title, string text, Action shown)
+    public void Run(string title, string text, int showDelayMilliseconds, Action ready)
     {
         if (!gtk_init_check(IntPtr.Zero, IntPtr.Zero))
         {
             throw new InvalidOperationException("GTK could not open a display.");
         }
 
-        var window = gtk_window_new(0); // GTK_WINDOW_TOPLEVEL
+        var window = _window = gtk_window_new(0); // GTK_WINDOW_TOPLEVEL
         gtk_window_set_title(window, title);
         gtk_window_set_default_size(window, 340, 100);
         gtk_window_set_resizable(window, false);
         gtk_window_set_keep_above(window, true);
         gtk_window_set_skip_taskbar_hint(window, true);
+        // The editor keeps focus while the helper is up and after it exits.
+        gtk_window_set_focus_on_map(window, false);
+        gtk_window_set_accept_focus(window, false);
         gtk_window_set_position(window, 1); // GTK_WIN_POS_CENTER
         gtk_container_set_border_width(window, 20);
 
@@ -60,10 +70,10 @@ internal sealed class GtkProgressWindow : IProgressWindow
         g_signal_connect_data(window, "destroy", Marshal.GetFunctionPointerForDelegate(_destroy),
             IntPtr.Zero, IntPtr.Zero, 0);
         g_timeout_add(100, Marshal.GetFunctionPointerForDelegate(_pulse), progress);
-        gtk_widget_show_all(window);
+        g_timeout_add((uint)showDelayMilliseconds, Marshal.GetFunctionPointerForDelegate(_show), IntPtr.Zero);
 
-        _onShown = shown;
-        g_idle_add(Marshal.GetFunctionPointerForDelegate(_shown), IntPtr.Zero);
+        _onReady = ready;
+        g_idle_add(Marshal.GetFunctionPointerForDelegate(_ready), IntPtr.Zero);
         gtk_main();
     }
 
@@ -111,6 +121,12 @@ internal sealed class GtkProgressWindow : IProgressWindow
 
     [DllImport(Gtk)]
     private static extern void gtk_window_set_skip_taskbar_hint(IntPtr window, bool setting);
+
+    [DllImport(Gtk)]
+    private static extern void gtk_window_set_focus_on_map(IntPtr window, bool setting);
+
+    [DllImport(Gtk)]
+    private static extern void gtk_window_set_accept_focus(IntPtr window, bool setting);
 
     [DllImport(Gtk)]
     private static extern void gtk_window_set_position(IntPtr window, int position);

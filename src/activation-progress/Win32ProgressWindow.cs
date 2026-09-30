@@ -8,6 +8,7 @@ internal sealed class Win32ProgressWindow : IProgressWindow
     private const string ClassName = "ePluginActivationProgress";
     private const uint WmDestroy = 0x0002;
     private const uint WmSetFont = 0x0030;
+    private const uint WmTimer = 0x0113;
     private const uint WmUpdateText = 0x8000; // WM_APP
     private const uint PbmSetMarquee = 0x0400 + 10;
     private const uint WsChild = 0x40000000;
@@ -16,11 +17,14 @@ internal sealed class Win32ProgressWindow : IProgressWindow
     private const uint WsSysMenu = 0x00080000;
     private const uint WsExTopmost = 0x00000008;
     private const uint WsExToolWindow = 0x00000080;
+    private const uint WsExNoActivate = 0x08000000;
     private const uint SsNoPrefix = 0x0080;
     private const uint SsEndEllipsis = 0x4000;
     private const uint PbsMarquee = 0x08;
     private const uint IccProgressClass = 0x20;
     private const uint ActCtxFlagResourceNameValid = 0x08;
+    private const int SwShowNoActivate = 4;
+    private static readonly UIntPtr ShowTimerId = new(1);
 
     private readonly WndProc _wndProc;
     private IntPtr _window;
@@ -32,7 +36,7 @@ internal sealed class Win32ProgressWindow : IProgressWindow
         _wndProc = WindowProc;
     }
 
-    public void Run(string title, string text, Action shown)
+    public void Run(string title, string text, int showDelayMilliseconds, Action ready)
     {
         EnableVisualStyles();
         var dpi = EnableDpiAwareness();
@@ -61,7 +65,8 @@ internal sealed class Win32ProgressWindow : IProgressWindow
         }
 
         const uint style = WsCaption | WsSysMenu;
-        const uint exStyle = WsExTopmost | WsExToolWindow;
+        // No activation: the editor keeps focus while the helper is up and after it exits.
+        const uint exStyle = WsExTopmost | WsExToolWindow | WsExNoActivate;
         var bounds = new Rect { Right = Scale(340), Bottom = Scale(100) };
         AdjustWindowRectEx(ref bounds, style, false, exStyle);
         var width = bounds.Right - bounds.Left;
@@ -85,9 +90,8 @@ internal sealed class Win32ProgressWindow : IProgressWindow
             Scale(20), Scale(54), Scale(300), Scale(18), _window, IntPtr.Zero, instance, IntPtr.Zero);
         SendMessageW(progress, PbmSetMarquee, new IntPtr(1), new IntPtr(30));
 
-        ShowWindow(_window, 5); // SW_SHOW
-        UpdateWindow(_window);
-        shown();
+        SetTimer(_window, ShowTimerId, (uint)showDelayMilliseconds, IntPtr.Zero);
+        ready();
 
         while (GetMessageW(out var message, IntPtr.Zero, 0, 0) > 0)
         {
@@ -108,6 +112,11 @@ internal sealed class Win32ProgressWindow : IProgressWindow
         {
             case WmUpdateText:
                 SetWindowTextW(_label, _text);
+                return IntPtr.Zero;
+            case WmTimer when wParam == (IntPtr)ShowTimerId:
+                KillTimer(window, ShowTimerId);
+                ShowWindow(window, SwShowNoActivate);
+                UpdateWindow(window);
                 return IntPtr.Zero;
             case WmDestroy:
                 PostQuitMessage(0);
@@ -266,6 +275,12 @@ internal sealed class Win32ProgressWindow : IProgressWindow
 
     [DllImport("user32.dll")]
     private static extern bool UpdateWindow(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern UIntPtr SetTimer(IntPtr window, UIntPtr id, uint elapse, IntPtr timerFunction);
+
+    [DllImport("user32.dll")]
+    private static extern bool KillTimer(IntPtr window, UIntPtr id);
 
     [DllImport("user32.dll")]
     private static extern int GetMessageW(out Msg message, IntPtr window, uint filterMin, uint filterMax);

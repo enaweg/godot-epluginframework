@@ -7,6 +7,9 @@ internal static class Program
     private const string Title = "ePlugin Framework";
     private const string InitialText = "Working...";
 
+    // Operations that finish sooner close the helper before its window ever appears.
+    private const int ShowDelayMilliseconds = 300;
+
     [STAThread]
     private static int Main()
     {
@@ -30,7 +33,7 @@ internal static class Program
 
         try
         {
-            window.Run(Title, InitialText, () =>
+            window.Run(Title, InitialText, ShowDelayMilliseconds, () =>
             {
                 var output = new StreamWriter(Console.OpenStandardOutput(), Encoding.ASCII) { AutoFlush = true };
                 output.WriteLine("READY");
@@ -87,11 +90,12 @@ internal static class Program
 internal interface IProgressWindow
 {
     /// <summary>
-    /// Shows the window and runs the native UI loop on the calling thread until the window is closed.
-    /// <paramref name="shown"/> runs on the UI thread once the window is visible.
+    /// Creates the window hidden and runs the native UI loop on the calling thread until the window is closed.
+    /// <paramref name="ready"/> runs on the UI thread once the window exists. The window is shown without taking
+    /// focus from the editor after <paramref name="showDelayMilliseconds"/>.
     /// </summary>
-    void Run(string title, string text, Action shown);
+    void Run(string title, string text, int showDelayMilliseconds, Action ready);
 
-    /// <summary>Replaces the label text. Callable from any thread once the window is shown.</summary>
+    /// <summary>Replaces the label text. Callable from any thread once <c>ready</c> has run.</summary>
     void SetText(string text);
 }
