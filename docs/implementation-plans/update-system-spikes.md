@@ -18,3 +18,9 @@ repository examples and gdUnit4 were not modified.
 The repository's headless runner setting was corrected separately (commit 5025c9d); all 65 existing tests passed.
 M0b (plain tracking) was already committed as 2251439. Plan documents still describe desired behavior; platform
 checks above are intentionally distinguished from verified automated behavior.
+
+M5 follow-up: the full managed-directory fixture (`.src` → `.code`, with game code consuming `Contract.Api`)
+exposed Godot 4.7.2 collectible-assembly unload failures after an in-process update. Removing the managed watchdog
+Timer did not make the reload reliable. Consequently `restart_policy=auto` conservatively uses a durable restart
+for C# handoff, and another restart after a managed final build (or rollback build) to load that assembly. Pure
+GDScript updates stay in-process. This avoids assuming that the simple S1 probe applies to the complete framework.

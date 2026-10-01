@@ -142,22 +142,24 @@ internal sealed partial class EGlobal
         public void Preflight(IReadOnlyList<ValidatedPackage> packages)
         {
             if (EditorInterface.Singleton.IsPlayingScene()) throw new InvalidOperationException("Stop the running scene before updating plugins.");
-            if (packages.Any(p => IsManaged(p.Candidate.Slug))) throw new InvalidOperationException("Managed recipe updates are not available in this milestone.");
+            foreach (var package in packages.Where(p => IsManaged(p.Candidate.Slug)))
+                if (global._contexts.FirstOrDefault(c => c.Slug == package.Candidate.Slug)?.State != EEditorPluginState.Activated)
+                    throw new InvalidOperationException($"Finish enabling {package.Candidate.Slug} before updating it.");
+            var findings = global.UpdatePreflightFindings(packages.Select(p => p.Candidate).ToArray());
+            if (findings.Any(f => f.Severity == FindingSeverity.Error)) throw new InvalidOperationException(string.Join("; ", findings.Where(f => f.Severity == FindingSeverity.Error).Select(f => f.Message)));
+            foreach (var warning in findings.Where(f => f.Severity == FindingSeverity.Warning)) Log(warning.Message);
             if (global._toCheckEnable.Any() || global._toCheckDisable.Any()) throw new InvalidOperationException("Finish plugin transitions before updating.");
             if (packages.Any(p => p.ContainsCSharp) && global.GetOrCreateContext(global._ePluginContext!).Cli is not ICheckedDotnetCli)
                 throw new InvalidOperationException("A working dotnet CLI is required for C# updates.");
         }
-        public void PrepareJournal(UpdateJournal journal) { }
-        public void Bridge(UpdateJournal journal, UpdatePluginJournal plugin) { }
-        public void Reconcile(UpdateJournal journal, bool rollback)
+        public void PrepareJournal(UpdateJournal journal) => global.PrepareUpdateRecipes(journal);
+        public void Bridge(UpdateJournal journal, UpdatePluginJournal plugin)
         {
-            foreach (var plugin in journal.Plugins)
-            {
-                var context = global._contexts.FirstOrDefault(c => c.Slug == plugin.Slug);
-                context?.RefreshMetadata();
-                if (context is not null) context.State = EEditorPluginState.Activated;
-            }
+            if (!plugin.IsEPlugin || !journal.Recipes.TryGetValue(plugin.Slug, out var recipe)) return;
+            plugin.Preserved = InterimBridge.Restore(plugin.Slug, recipe.Old, journal.Backup(plugin.Slug), Path.Combine(global.UpdateProjectRoot, "addons", plugin.Slug));
+            journal.Save();
         }
+        public void Reconcile(UpdateJournal journal, bool rollback) => global.ReconcileUpdateRecipes(journal, rollback);
         public void SetPlainEnabled(string slug, bool enabled) => EditorInterface.Singleton.SetPluginEnabled(slug, enabled);
         public void SaveScenes() => EditorInterface.Singleton.SaveAllScenes();
         public void Scan() => EditorInterface.Singleton.GetResourceFilesystem().Scan();
@@ -168,22 +170,11 @@ internal sealed partial class EGlobal
         }
         public void RequestReload(UpdateJournal journal)
         {
-            if (RestartAlways || journal.Plugins.Any(p => p.Slug == "ePlugin"))
-            {
-                journal.RestartRequired = true; journal.Save();
-                Log("Restarting editor to finish the update. If automatic launch fails, reopen the project to resume.");
-                Callable.From(() => EditorInterface.Singleton.RestartEditor(true)).CallDeferred();
-            }
-            else
-            {
-                var attempt = journal.AttemptId;
-                var timer = global._ePluginContext!.GetTree().CreateTimer(30);
-                timer.Timeout += () =>
-                {
-                    if (global._updateJournals?.Read().Any(j => j.AttemptId == attempt && j.State == UpdatePhase.InterimBuilt) == true)
-                    { Log("Assembly reload did not resume the update; restarting. Reopen the project if automatic launch fails."); EditorInterface.Singleton.RestartEditor(true); }
-                };
-            }
+            // The full in-place fixture exposed unreliable collectible-assembly reload on Godot 4.7.2.
+            // Auto therefore uses the journal-backed restart path rather than a callback that pins old code.
+            if (journal.IsActive) { journal.RestartRequired = true; journal.Save(); }
+            Log("Restarting editor to load the updated assembly. If automatic launch fails, reopen the project to resume.");
+            EditorInterface.Singleton.CallDeferred(EditorInterface.MethodName.RestartEditor, true);
         }
         public bool Verify(UpdatePluginJournal plugin)
         {

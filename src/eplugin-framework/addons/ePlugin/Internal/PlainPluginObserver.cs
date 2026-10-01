@@ -54,6 +54,7 @@ internal sealed class PlainPluginObserver(
                 continue;
             }
 
+            if (saved?.State == (active ? PersistedPluginState.Activated : PersistedPluginState.Deactivated)) continue;
             Record(slug, active, manualRetry: OwnsFailedWrite(slug));
         }
 

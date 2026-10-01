@@ -135,7 +135,9 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
 
     public UpdateOutcome Commit(UpdateJournal journal)
     {
-        if (!store.TryAcknowledgeVersions(journal.AttemptId, journal.Plugins.ToDictionary(p => p.Slug, p => p.NewVersion, StringComparer.Ordinal)))
+        var versions = new Dictionary<string, string>(journal.AdditionalVersions, StringComparer.Ordinal);
+        foreach (var plugin in journal.Plugins) versions[plugin.Slug] = plugin.NewVersion;
+        if (!store.TryAcknowledgeVersions(journal.AttemptId, versions))
         {
             store.TryFail(journal.AttemptId, PersistedPluginState.Failed, "update_commit_failed");
             journal.Failure = "Healthy update could not be acknowledged; merge the shared state file and use Retry failed ePlugin addons.";
@@ -152,6 +154,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         cache.Save();
         journal.Save(UpdatePhase.Committed);
         System.IO.Directory.Delete(journal.Directory, true);
+        if (journal.Plugins.Any(p => p.IsEPlugin && p.ContainsCSharp)) host.RequestReload(journal);
         return UpdateOutcome.Completed;
     }
 
@@ -196,6 +199,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             }
             cache.Save();
             host.Log($"Update rolled back: {reason}. Logs: {journal.Directory}");
+            if (journal.Plugins.Any(p => p.ContainsCSharp)) host.RequestReload(journal);
             return UpdateOutcome.RolledBack;
         }
         catch (Exception ex)

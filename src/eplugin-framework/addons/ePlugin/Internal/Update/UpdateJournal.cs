@@ -21,6 +21,7 @@ internal sealed class UpdatePluginJournal
     public string? Revision { get; set; }
     public bool ContainsCSharp { get; set; }
     public bool SwapStarted { get; set; }
+    public List<string> Preserved { get; set; } = [];
     public Dictionary<string, string> Uids { get; set; } = [];
 }
 internal sealed record JournalBuild(string Name, int ExitCode, string LogFile);
@@ -36,6 +37,8 @@ internal sealed class UpdateJournal
     public List<UpdatePluginJournal> Plugins { get; set; } = [];
     public List<JournalBuild> Builds { get; set; } = [];
     public List<string> ProjectFiles { get; set; } = [];
+    public Dictionary<string, RecipeJournal> Recipes { get; set; } = [];
+    public Dictionary<string, string> AdditionalVersions { get; set; } = [];
     public string? Failure { get; set; }
     [JsonIgnore] public string Directory { get; set; } = "";
     public string Backup(string slug) => PackageFiles.Inside(Path.Combine(Directory, "backup"), slug);
@@ -53,6 +56,14 @@ internal sealed class UpdateJournal
                 !SemVer.TryParse(plugin.OldVersion, out _) || !SemVer.TryParse(plugin.NewVersion, out _))
                 throw new InvalidDataException("Invalid plugin in update journal.");
         foreach (var path in journal.ProjectFiles) PackageFiles.Normalize(path);
+        foreach (var recipe in journal.Recipes)
+        {
+            if (PackageFiles.Normalize(recipe.Key) != recipe.Key || recipe.Key.Contains('/')) throw new InvalidDataException("Invalid recipe owner.");
+            RecipeReconciler.Validate(recipe.Value.Old);
+            RecipeReconciler.Validate(recipe.Value.Applied);
+            if (recipe.Value.Target is not null) RecipeReconciler.Validate(recipe.Value.Target);
+        }
+        foreach (var plugin in journal.Plugins) foreach (var path in plugin.Preserved) PackageFiles.Normalize(path);
         journal.Directory = directory;
         return journal;
     }
@@ -72,7 +83,7 @@ internal sealed class UpdateJournals(string root, Action<string>? log = null)
         return result;
     }
     public bool OwnsAttempt(Guid? id) => id is not null && Read().Any(j => j.IsActive && j.AttemptId == id);
-    public IReadOnlySet<string> OwnedSlugs => Read().Where(j => j.IsActive).SelectMany(j => j.Plugins).Select(p => p.Slug).ToHashSet(StringComparer.Ordinal);
+    public IReadOnlySet<string> OwnedSlugs => Read().Where(j => j.IsActive).SelectMany(j => j.Plugins.Select(p => p.Slug).Concat(j.AdditionalVersions.Keys)).ToHashSet(StringComparer.Ordinal);
     public string NewDirectory() => Path.Combine(root, DateTimeOffset.UtcNow.ToString("yyyyMMddTHHmmss") + "-" + Guid.NewGuid().ToString("N")[..8]);
 }
 #endif
