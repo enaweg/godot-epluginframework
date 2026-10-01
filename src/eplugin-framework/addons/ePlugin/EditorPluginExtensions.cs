@@ -120,6 +120,7 @@ public static class EditorPluginExtensions
                 Name = cfg.GetValue("plugin", "name", "").AsString(),
                 Description = cfg.GetValue("plugin", "description", "").AsString(),
                 Version = cfg.GetValue("plugin", "version", "").AsString(),
+                UpdateUrl = NullIfWhiteSpace(cfg.GetValue("plugin", "update_url", "").AsString()),
                 Author = cfg.GetValue("plugin", "author", "").AsString(),
             };
         }
@@ -135,5 +136,6 @@ public static class EditorPluginExtensions
 
         return result;
     }
+    private static string? NullIfWhiteSpace(string value) => string.IsNullOrWhiteSpace(value) ? null : value;
 }
 #endif

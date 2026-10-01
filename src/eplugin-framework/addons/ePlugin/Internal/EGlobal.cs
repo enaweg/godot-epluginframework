@@ -15,7 +15,7 @@ namespace Enaweg.Plugin.Internal;
 /// as well as provides some global values.
 /// </summary>
 [Tool]
-internal sealed class EGlobal
+internal sealed partial class EGlobal
 {
     private static EGlobal? _instance = null;
 
@@ -103,6 +103,8 @@ internal sealed class EGlobal
                 RefreshEditor(rebuild: false);
             }
         }
+
+        InitializeUpdates(plugin);
     }
 
     /// <summary>

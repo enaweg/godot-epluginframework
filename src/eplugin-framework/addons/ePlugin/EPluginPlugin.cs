@@ -1,5 +1,7 @@
 #if TOOLS
 using System;
+using System.Threading;
+using Enaweg.Plugin.Internal.Update;
 using Enaweg.Plugin.Internal;
 using Enaweg.Plugin.Logging;
 using Godot;
@@ -11,6 +13,8 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin
 {
     private const string RetryMenuName = "Retry failed ePlugin addons";
     private bool _retryMenuAdded;
+    private CancellationTokenSource _updateLifetime = new();
+    internal CancellationToken UpdateLifetime => _updateLifetime.Token;
     public bool EnableDebugLogging => false;
 
     private ILogger? _logger = null;
@@ -60,6 +64,8 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin
 
     public override void _ExitTree()
     {
+        _updateLifetime.Cancel();
+        _updateLifetime.Dispose();
         if (_retryMenuAdded)
         {
             RemoveToolMenuItem(RetryMenuName);
@@ -71,6 +77,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin
     
     private void InitializeInternals()
     {
+        UpdateSettings.Register();
         EGlobal.Instance.Initialize(this, new GenericLoggerFactory(category => new GodotConsoleLogger(category)));
     }
 }

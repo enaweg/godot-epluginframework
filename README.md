@@ -355,3 +355,11 @@ assistance, or tailored development services, please get in touch through their 
 ## License
 
 Licensed under the [MIT license](LICENSE).
+
+## Update URL
+
+A plugin may declare `update_url` in the `[plugin]` section of `plugin.cfg`. The framework compares remote versions
+against the installed version, including plain GDScript and C# plugins. Startup checks run at most every 20 hours;
+settings under `eplugin/updates` control checks and prereleases. Checks only report updates; applying one always
+requires confirmation. Use a release page such as `https://github.com/owner/repository/releases`, or a git URL
+`https://host/owner/repository.git?path=addons/my_plugin#main`. Pinning a git tag or commit opts out of updates.
