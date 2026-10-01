@@ -14,7 +14,6 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
     {
         var pathToSolution = ProjectSettings.GlobalizePath("res://");
         var solutionName = $"{ProjectSettings.GetSetting("dotnet/project/assembly_name")}.sln";
-        var projectName = $"{ProjectSettings.GetSetting("dotnet/project/assembly_name")}.csproj";
 
         var expectedSolutionPath = Path.GetFullPath(Path.Combine(pathToSolution, solutionName));
         // Godot's assembly name need not match the solution name (the sample project uses
@@ -27,7 +26,7 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
         SolutionPath = File.Exists(expectedSolutionPath) || solutions.Length != 1
             ? expectedSolutionPath
             : solutions[0];
-        GodotProjectPath = Path.GetFullPath(Path.Combine(pathToSolution, ProjectSettings.GlobalizePath(projectName)));
+        GodotProjectPath = Path.ChangeExtension(SolutionPath, ".csproj");
 
         if (enableDebugLogging)
         {
