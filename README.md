@@ -413,6 +413,11 @@ an interim build; the new recipe is reconciled before the final build. Plain plu
 around the swap. Optional recipes that stop matching are warned about and retained until their owning plugin
 is toggled; newly satisfied optional recipes are applied during reconciliation.
 
+Before any addon file is swapped, the updater saves and closes all open scenes, so no scene keeps nodes whose
+scripts or resources are missing between the old and new version. Reopen them once the update has finished.
+Untitled scenes cannot be saved, so an update refuses to start while one is open. Closing scenes needs Godot 4.5
+or newer; on Godot 4.4 scenes are only saved and stay open.
+
 ### Builds, restart, and recovery
 
 Each batch has a durable journal, old addon trees, project backups, and build logs under
