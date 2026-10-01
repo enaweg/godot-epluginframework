@@ -18,4 +18,23 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
     <PackageReference Include="Moq" Version="4.20.72" />
   </ItemGroup>
+
+  <!--
+    The progress window helper is gitignored and only published by CI for release archives. Publish it here too,
+    so a development checkout shows the window after a normal build. Same command as CI; runs again only when the
+    helper's sources change. Best-effort: ActivationProgress runs without a window when the helper is missing.
+  -->
+  <PropertyGroup>
+    <ActivationProgressProjectDir>$(MSBuildProjectDirectory)/../activation-progress</ActivationProgressProjectDir>
+    <ActivationProgressPublishDir>$(MSBuildProjectDirectory)/addons/ePlugin/progress</ActivationProgressPublishDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <ActivationProgressSources Include="$(ActivationProgressProjectDir)/*.cs;$(ActivationProgressProjectDir)/*.csproj;$(ActivationProgressProjectDir)/app.manifest;$(MSBuildProjectDirectory)/../../design/icon-nobg_small.png" />
+  </ItemGroup>
+  <Target Name="PublishActivationProgress" BeforeTargets="Build"
+          Condition="Exists('$(ActivationProgressProjectDir)/ActivationProgress.csproj')"
+          Inputs="@(ActivationProgressSources)" Outputs="$(ActivationProgressPublishDir)/ActivationProgress.dll">
+    <Exec Command="dotnet publish &quot;$(ActivationProgressProjectDir)/ActivationProgress.csproj&quot; --configuration Release -p:DebugType=None --output &quot;$(ActivationProgressPublishDir)&quot;"
+          ContinueOnError="WarnAndContinue" />
+  </Target>
 </Project>
