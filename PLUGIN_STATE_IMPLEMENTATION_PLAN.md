@@ -1,6 +1,6 @@
 # Plugin state serialization: implementation plan
 
-This is a reference plan for future work. It does not authorize implementation by itself.
+This plan describes the persistence and recovery foundation. Automatic update, migration, and rollback execution remain future work.
 
 ## Goal and scope
 

@@ -130,4 +130,82 @@ public class PluginStateStoreTests
         Assertions.AssertBool(edited.SequenceEqual(File.ReadAllBytes(path))).IsTrue();
         Assertions.AssertBool(File.Exists(path + ".user")).IsTrue();
     }
+
+    [TestCase]
+    public void CompletedAttemptLeftInLocalFileIsClearedAfterReload()
+    {
+        var (store, path) = NewStore();
+        Assertions.AssertBool(store.TryCreateBaseline([])).IsTrue();
+        Assertions.AssertBool(store.TryBeginAttempt("sample_plugin", "1.0", PersistedPluginState.Activated,
+            out var id)).IsTrue();
+
+        // Simulate a crash after the shared atomic write and before local cleanup.
+        var shared = File.ReadAllText(path).Replace(
+            "\"lastCompletedAttemptId\": null",
+            $"\"lastCompletedAttemptId\": \"{id}\"");
+        File.WriteAllText(path, shared);
+
+        var reloaded = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(reloaded.Load()).IsTrue();
+        Assertions.AssertBool(reloaded.IsBlocked("sample_plugin")).IsFalse();
+        Assertions.AssertBool(File.Exists(path + ".user")).IsFalse();
+    }
+
+    [TestCase]
+    public void UnfinishedAtomicWriteIsRemovedWithoutChangingLastSharedState()
+    {
+        var (store, path) = NewStore();
+        Assertions.AssertBool(store.TryCreateBaseline([
+            new SharedPluginState("sample_plugin", "1.0", PersistedPluginState.Activated)
+        ])).IsTrue();
+        var original = File.ReadAllBytes(path);
+        var abandoned = path + ".tmp-abandoned";
+        File.WriteAllText(abandoned, "truncated");
+
+        var reloaded = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(reloaded.Load()).IsTrue();
+        Assertions.AssertBool(File.Exists(abandoned)).IsFalse();
+        Assertions.AssertBool(original.SequenceEqual(File.ReadAllBytes(path))).IsTrue();
+    }
+
+    [TestCase]
+    public void CorruptLocalJournalIsPreservedAndDoesNotReplaceSharedHistory()
+    {
+        var (store, path) = NewStore();
+        Assertions.AssertBool(store.TryCreateBaseline([
+            new SharedPluginState("sample_plugin", "1.0", PersistedPluginState.Activated)
+        ])).IsTrue();
+        var shared = File.ReadAllBytes(path);
+        File.WriteAllText(path + ".user", "{invalid json");
+
+        var reloaded = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(reloaded.Load()).IsFalse();
+        Assertions.AssertBool(reloaded.IsReadOnly).IsTrue();
+        Assertions.AssertBool(reloaded.TryBeginAttempt("sample_plugin", "1.0",
+            PersistedPluginState.Deactivated, out _)).IsFalse();
+        Assertions.AssertBool(shared.SequenceEqual(File.ReadAllBytes(path))).IsTrue();
+        Assertions.AssertString(File.ReadAllText(path + ".user")).IsEqual("{invalid json");
+    }
+
+    [TestCase]
+    public void FailedAttemptRequiresExplicitRetryBeforeItCanComplete()
+    {
+        var (store, path) = NewStore();
+        Assertions.AssertBool(store.TryCreateBaseline([])).IsTrue();
+        Assertions.AssertBool(store.TryBeginAttempt("sample_plugin", "1.0",
+            PersistedPluginState.Activated, out var failedId)).IsTrue();
+        Assertions.AssertBool(store.TryFail(failedId, PersistedPluginState.Failed, "solution_build_failed")).IsTrue();
+
+        var reloaded = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(reloaded.Load()).IsTrue();
+        Assertions.AssertBool(reloaded.TryBeginAttempt("sample_plugin", "1.0",
+            PersistedPluginState.Activated, out _)).IsFalse();
+        Assertions.AssertBool(reloaded.TryBeginAttempt("sample_plugin", "1.0",
+            PersistedPluginState.Activated, out var retryId, manualRetry: true)).IsTrue();
+        Assertions.AssertBool(retryId != failedId).IsTrue();
+        Assertions.AssertBool(reloaded.TryComplete(retryId, [
+            new SharedPluginState("sample_plugin", "1.0", PersistedPluginState.Activated)
+        ])).IsTrue();
+        Assertions.AssertBool(File.Exists(path + ".user")).IsFalse();
+    }
 }
