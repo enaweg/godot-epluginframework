@@ -6,8 +6,8 @@ namespace Enaweg.Plugin;
 /// NuGet packages, and project references from editor tooling.
 /// </summary>
 /// <remarks>
-/// All operations target the solution and main <c>.csproj</c> derived from the Godot project's
-/// <c>dotnet/project/assembly_name</c> setting. This interface is only available in editor builds.
+/// All operations target the resolved solution and the main <c>.csproj</c> with the same filename.
+/// This interface is only available in editor builds.
 /// </remarks>
 public interface IDotnetCli
 {
