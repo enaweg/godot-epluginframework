@@ -19,10 +19,12 @@ mono_crash.*.json
 *.DotSettings.user
 *.user
 
+bin/
+obj/
+
+
 # gdUnit Test ignores
 reports/
 
 build/
-src/activation-progress/bin/
-src/activation-progress/obj/
-src/eplugin-framework/addons/ePlugin/progress/ActivationProgress.*
+
