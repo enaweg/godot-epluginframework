@@ -67,6 +67,8 @@ The repository also contains a sample project in `src/eplugin-framework`.
 + When Project Settings is open, it is temporarily hidden during plugin activation or deactivation and reopened
   afterwards on the same tab, refreshing the Plugins list including automatically toggled dependencies.
 
+Enabled addons can be checked and updated from release or git sources; see [Updating plugins](#updating-plugins).
+
 ## Plugin state files
 
 The framework creates `res://addons/eplugin-state.json` from the currently active plugins (both ePlugin-managed and plain Godot plugins) when the file is
@@ -333,6 +335,124 @@ How it behaves:
 
 Feel free to contribute with documentation, testing, or pull requests.
 
+## Updating plugins
+
+Add an `update_url` to the `[plugin]` section of `plugin.cfg`:
+
+```ini
+[plugin]
+name="My plugin"
+version="1.2.0"
+script="MyPlugin.cs"
+update_url="https://github.com/owner/repository/releases"
+```
+
+This works for enabled ePlugin plugins, plain Godot GDScript/C# plugins, and ePlugin itself. Checks compare the
+remote version with the **installed** `plugin.cfg`, independently of the last working version in the shared
+state index. A manual version change does not block updates; an unfinished local attempt does.
+
+The framework checks once per editor session when the last successful check is at least 20 hours old. Results
+and the timestamp are cached under `.godot/eplugin/update-state.json`. A check reports available updates without
+installing them. Use **Project → Tools → Check for ePlugin addon updates** to bypass the interval, or open
+**Update ePlugin addons...** and select **Check now**.
+
+The update dialog lists installed/new versions, sources, warnings, and earlier failures. Select a batch and
+confirm to download and validate it. Package warnings require another confirmation before installation; a
+changed source host requires the explicit trust checkbox. Canceling the download leaves installed addons
+untouched. Previously failed versions are shown but are not selected automatically.
+
+### Supported sources
+
+| Source | Example |
+|---|---|
+| GitHub releases | `https://github.com/owner/repository/releases` |
+| GitLab releases, including self-hosted instances | `https://gitlab.example/group/subgroup/repository/-/releases` |
+| Git subtree tracking a branch | `https://host/owner/repository.git?path=addons/my_plugin#main` |
+| Git over SSH | `git@host:owner/repository.git?path=addons/my_plugin#main` |
+
+Release sources select the highest semantic version and a ZIP asset (prefer a slug/addon/plugin-named ZIP if
+there are several); if no suitable asset exists, the release source archive is used. An ambiguous asset list
+is refused. Git sources with no `#ref` select the newest semantic tag, falling back to the default branch.
+A branch tracks its tip; a tag or full commit SHA **pins** the version and opts out of update checks. Checks
+remain version based: changing a commit without increasing `plugin.cfg`'s version does not offer an update.
+
+Git sources require **git 2.25 or newer** on PATH. Fetches use shallow, partial, sparse checkout of the requested
+subtree. Servers that do not advertise partial-clone filtering are refused. Git release checks can read remote
+metadata directly; otherwise they fetch just the metadata blob. Release ZIP sources do not require git.
+
+For private release APIs, set `EPLUGIN_GITHUB_TOKEN` (fallback `GITHUB_TOKEN`) or `EPLUGIN_GITLAB_TOKEN`
+(fallback `GITLAB_TOKEN`) in the editor's environment. Tokens are never written to project files or caches;
+HTTP credentials are scoped to the source host and stripped on redirects to another host. Git authentication
+uses your normal git/SSH credentials and runs without interactive prompts.
+
+### Publishing an updatable release
+
+Keep the addon slug stable and include `plugin.cfg` plus its entry script. A ZIP may contain
+`addons/<slug>/`, an addon at its root, or one wrapper folder containing the addon. Source archives may contain
+other addons; only the selected addon is staged. Do not include symlinks, submodules, a `project.godot`, or
+`nuget.config`. New `.csproj`, `.sln`, and `.slnx` paths are refused; existing addon project paths may be updated.
+Downloads are limited to 256 MiB; extracted packages to 512 MiB and 20,000 files, with 256 MiB per file.
+Plugins containing `.gdextension` files, including an installed native payload, are currently refused.
+
+Bump `version` for every release. Versions accept `1.2`/`1.2.3`, an optional leading `v`, and semantic
+prerelease/build suffixes. Prereleases are excluded by default. The version in the staged `plugin.cfg` must be
+newer than the installed version; a difference from the release tag is reported for review.
+
+For ePlugin recipes:
+
+1. Keep root code compilable using only Godot and ePlugin. Code needing new NuGets or project references belongs
+   in managed directories/projects declared by the recipe.
+2. Ship managed directories in their **hidden** form, such as `.src`.
+3. Keep `CreateRecipe` deterministic and free of side effects. The updater loads the new assembly and reconciles
+   the old and new declarations.
+4. Treat public API changes as changes your users' game code may need to accommodate. Major updates show a warning;
+   hard dependency constraints that reject the new version block the update.
+
+An enabled managed plugin stays enabled throughout its update. Its old visible resources remain available for
+an interim build; the new recipe is reconciled before the final build. Plain plugins are temporarily toggled
+around the swap. Optional recipes that stop matching are warned about and retained until their owning plugin
+is toggled; newly satisfied optional recipes are applied during reconciliation.
+
+### Builds, restart, and recovery
+
+Each batch has a durable journal, old addon trees, project backups, and build logs under
+`.godot/eplugin/updates/<id>/`. The local state marker is written before file changes. The shared
+`addons/eplugin-state.json` advances once, after the whole batch builds and verifies successfully. Commit that
+index **together with the updated addon files**. Backups are removed after success; failed updates retain logs.
+
+Interim build failures, installation failures, and every self-update failure roll back automatically. A final
+build failure normally offers **Roll back**, **Keep new version**, and **Open build log**. Esc/closing the dialog
+rolls back; closing the editor while a decision is pending preserves it for the next startup. Headless execution
+always rolls back. Keeping a failed version retains its backup and `update_kept_build_failed` local marker,
+without advancing the shared index. Fix the build and use **Retry failed ePlugin addons** to verify and acknowledge it.
+An externally changed index leaves `update_commit_failed`; merge it, then retry acknowledgement.
+
+C# updates conservatively restart for the assembly handoff. Managed C# recipes also restart after their final
+build; ePlugin self-update always restarts. If automatic launch fails, reopen the project to resume its journal.
+Before a self-update swap the progress helper closes to release Windows file locks. Independent early recovery
+runs before `EGlobal`: two startups without a health marker restore the previous framework, rebuild it, clear
+its local marker, and request a restart.
+
+If automatic recovery cannot run, close the editor, restore `updates/<id>/backup/<slug>` to `addons/<slug>` for
+all affected addons, and restore the files in `backup-project/` to the project root. Delete `.godot/mono/temp`
+and rebuild the solution. Reopen the editor and use **Retry failed ePlugin addons** to finish recovery; keep the
+journal and local marker until restoration succeeds. Each transaction includes a `README.txt` with this hint.
+
+Settings under **Project Settings → eplugin/updates**:
+
+| Setting | Default | Effect |
+|---|---|---|
+| `check_enabled` | `true` | Enable scheduled checks; manual checks remain available. |
+| `check_interval_hours` | `20` | Minimum interval between successful scheduled checks. |
+| `allow_prerelease` | `false` | Include semantic prereleases. |
+| `on_build_failure` | `ask` | Final-build policy: `ask`, `rollback`, or `keep`; self-update/headless always roll back. |
+| `restart_policy` | `auto` | Conservative C# restart, or `always` for every batch. |
+
+Update journals and recipe snapshots use versioned, backward-compatible readers. Future ePlugin releases must
+preserve that contract and keep the shared/local plugin-state schema readable by a rolled-back framework.
+Unsupported future journals require manual repair. Updates do not install missing addons, resolve remote
+plugin dependencies, run migration scripts, or offer downgrades.
+
 ## Roadmap
 
 * stabilize current API
@@ -344,7 +464,6 @@ Feel free to contribute with documentation, testing, or pull requests.
 * plugin migration support (running upgrade steps when a plugin's version changes)
 * add simple UI API (show progress for plugins loading) for improved UX.
 * provide more APIs for plugins to use (Vision: make it easy to have advanced features for plugin authors)
-    * Automatic plugin update system using source URL
     * Plugin specific UI templates (licenses, feedback, Welcome screen)
 
 ## Commercial Support
@@ -355,11 +474,3 @@ assistance, or tailored development services, please get in touch through their 
 ## License
 
 Licensed under the [MIT license](LICENSE).
-
-## Update URL
-
-A plugin may declare `update_url` in the `[plugin]` section of `plugin.cfg`. The framework compares remote versions
-against the installed version, including plain GDScript and C# plugins. Startup checks run at most every 20 hours;
-settings under `eplugin/updates` control checks and prereleases. Checks only report updates; applying one always
-requires confirmation. Use a release page such as `https://github.com/owner/repository/releases`, or a git URL
-`https://host/owner/repository.git?path=addons/my_plugin#main`. Pinning a git tag or commit opts out of updates.
