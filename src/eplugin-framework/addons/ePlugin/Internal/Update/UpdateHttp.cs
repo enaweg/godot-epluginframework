@@ -68,9 +68,17 @@ internal sealed class UpdateHttp
         return System.Text.Encoding.UTF8.GetString(output.ToArray());
     }
 
-    public async Task DownloadAsync(string url, string destination, IProgress<double>? progress, CancellationToken ct)
+    public async Task DownloadAsync(string url, string destination, IProgress<double>? progress, CancellationToken ct, string? sourceUrl = null)
     {
-        using var response = await SendAsync(new Uri(url), HttpMethod.Get, ct).ConfigureAwait(false);
+        string? token = null;
+        var gitlab = false;
+        if (Uri.TryCreate(sourceUrl, UriKind.Absolute, out var source) && new Uri(url).Host == source.Host)
+        {
+            gitlab = source.AbsolutePath.Contains("/-/", StringComparison.Ordinal);
+            if (source.Host == "github.com") token = Environment.GetEnvironmentVariable("EPLUGIN_GITHUB_TOKEN") ?? Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+            else if (gitlab) token = Environment.GetEnvironmentVariable("EPLUGIN_GITLAB_TOKEN") ?? Environment.GetEnvironmentVariable("GITLAB_TOKEN");
+        }
+        using var response = await SendAsync(new Uri(url), HttpMethod.Get, ct, token, gitlab).ConfigureAwait(false);
         await using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true);
         await CopyBounded(response, output, MaximumDownload, progress, ct).ConfigureAwait(false);
     }

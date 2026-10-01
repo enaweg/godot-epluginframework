@@ -53,7 +53,7 @@ internal static class PackageFiles
             throw new InvalidDataException("Unsafe package path: " + path);
         return string.Join('/', parts);
     }
-    public static bool Skip(string path) => path.Split('/').Any(p => p.StartsWith(".git", StringComparison.OrdinalIgnoreCase) || p is "__MACOSX" or ".DS_Store" or "Thumbs.db");
+    public static bool Skip(string path) => path.Split('/').Any(p => (p.StartsWith(".git", StringComparison.OrdinalIgnoreCase) && !p.Equals(".gitmodules", StringComparison.OrdinalIgnoreCase)) || p is "__MACOSX" or ".DS_Store" or "Thumbs.db");
     public static string Inside(string root, string relative)
     {
         var prefix = System.IO.Path.GetFullPath(root).TrimEnd(System.IO.Path.DirectorySeparatorChar) + System.IO.Path.DirectorySeparatorChar;
@@ -79,6 +79,8 @@ internal static class PackageFiles
         foreach (var file in Files(source))
         {
             ct.ThrowIfCancellationRequested();
+            if (System.IO.Path.GetFileName(file).Equals(".gitmodules", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Packages cannot contain .gitmodules.");
             var size = new FileInfo(file).Length;
             if (++count > MaximumFiles || size > MaximumFile || (bytes += size) > MaximumTotal) throw new IOException("Package exceeds file or size limits.");
             var target = Inside(destination, System.IO.Path.GetRelativePath(source, file));
