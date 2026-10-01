@@ -24,6 +24,8 @@ internal sealed partial class EGlobal
         _updateCache ??= new UpdateStateStore(Path.Combine(ProjectSettings.GlobalizePath("res://.godot/eplugin"), "update-state.json"));
         _updateCache.Load();
         _updateService = new UpdateService(new UpdateSourceFactory(), new SystemClock(), _updateCache);
+        PendingUpdates = UpdateScheduler.CurrentCached(_updateCache.State, CollectUpdateTargets(),
+            ProjectSettings.GetSetting("eplugin/updates/allow_prerelease", false).AsBool());
         if (_updateJournals?.Read().Any(j => j.IsActive) == true) return;
         var engine = Engine.GetSingleton("Engine");
         if (engine.HasMeta("eplugin_update_check_ran")) return;
