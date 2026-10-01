@@ -13,8 +13,10 @@ internal sealed class DotnetCli10(ILogger? logger, bool enableDebugLogging)
 
     public override void RebuildSolution()
     {
-        Execute("build", null, []);
+        TryRebuildSolution();
     }
+
+    public override bool TryRebuildSolution() => Execute("build", null, []).Item1 == 0;
 
     public override void RunTests()
     {
@@ -23,39 +25,49 @@ internal sealed class DotnetCli10(ILogger? logger, bool enableDebugLogging)
 
     public override void RemoveProjectFromSolution(string projectPath)
     {
+        TryRemoveProjectFromSolution(projectPath);
+    }
+
+    public override bool TryRemoveProjectFromSolution(string projectPath)
+    {
         var pathToSolution = ProjectSettings.GlobalizePath("res://");
 
-        Execute(null, null,
+        return Execute(null, null,
         [
             "sln",
             $"\"{SolutionPath}\"",
             "remove",
             Path.Combine(pathToSolution, projectPath)
-        ]);
+        ]).Item1 == 0;
     }
 
     public override void AddProjectToSolution(string projectPath, string? virtualFolderName = null)
+    {
+        TryAddProjectToSolution(projectPath, virtualFolderName);
+    }
+
+    public override bool TryAddProjectToSolution(string projectPath, string? virtualFolderName)
     {
         var pathToSolution = ProjectSettings.GlobalizePath("res://");
 
         if (virtualFolderName is null)
         {
-            Execute(null, null, [
+            return Execute(null, null, [
                 "sln",
                 $"\"{SolutionPath}\"",
                 "add",
                 Path.Combine(pathToSolution, projectPath)
-            ]);
+            ]).Item1 == 0;
         }
         else
         {
-            Execute(null, null, [
+            return Execute(null, null, [
                 "sln",
                 $"\"{SolutionPath}\"",
                 "add",
                 "-s", virtualFolderName,
                 Path.Combine(pathToSolution, projectPath)
-            ]);
+            ]).Item1 == 0;
         }
     }
 
@@ -106,33 +118,46 @@ internal sealed class DotnetCli10(ILogger? logger, bool enableDebugLogging)
 
     public override void RemoveNugetFromProject(string nugetName)
     {
-        Execute("package", "remove", [
+        TryRemoveNugetFromProject(nugetName);
+    }
+
+    public override bool TryRemoveNugetFromProject(string nugetName)
+    {
+        return Execute("package", "remove", [
             nugetName,
             "--project",
             $"\"{GodotProjectPath}\""
-        ]);
+        ]).Item1 == 0;
     }
 
     public override void AddProjectReference(string projectReference)
     {
-        Execute("add", null,
+        TryAddProjectReference(projectReference);
+    }
+
+    public override bool TryAddProjectReference(string projectReference)
+    {
+        return Execute("reference", "add",
         [
-            "add",
-            $"\"{GodotProjectPath}\"",
-            "reference",
             projectReference,
-        ]);
+            "--project",
+            GodotProjectPath,
+        ]).Item1 == 0;
     }
 
     public override void RemoveProjectReference(string projectReference)
     {
-        Execute("remove", null,
+        TryRemoveProjectReference(projectReference);
+    }
+
+    public override bool TryRemoveProjectReference(string projectReference)
+    {
+        return Execute("reference", "remove",
         [
-            "remove",
-            $"\"{GodotProjectPath}\"",
-            "reference",
             projectReference,
-        ]);
+            "--project",
+            GodotProjectPath,
+        ]).Item1 == 0;
     }
 
     public override (int, string[]) Execute(string command, string[] args)

@@ -30,7 +30,7 @@ internal static class NugetConfigManager
     private const string ManagedKeyPrefix = "ePlugin-";
     private const string UsedByCommentPrefix = "ePlugin-managed used-by=\"";
 
-    public static void RegisterSource(string pluginSlug, string rawSource, ILogger? logger)
+    public static bool RegisterSource(string pluginSlug, string rawSource, ILogger? logger)
     {
         try
         {
@@ -39,7 +39,7 @@ internal static class NugetConfigManager
             {
                 logger?.Log(
                     $"NuGet source '{rawSource}' is outside the project and cannot be tracked in nuget.config.");
-                return;
+                return true;
             }
 
             var key = ComputeKey(normalized);
@@ -49,7 +49,7 @@ internal static class NugetConfigManager
             if (root is null)
             {
                 logger?.Error("nuget.config is malformed (missing root <configuration> element), skipping.");
-                return;
+                return false;
             }
 
             var packageSources = root.Element("packageSources");
@@ -60,7 +60,7 @@ internal static class NugetConfigManager
                 if (conflicting is not null)
                 {
                     // an unrelated, user-managed source already provides this exact value; leave it alone.
-                    return;
+                    return true;
                 }
             }
             else
@@ -84,27 +84,29 @@ internal static class NugetConfigManager
             }
 
             Save(doc, configPath);
+            return true;
         }
         catch (Exception ex)
         {
             logger?.Error($"Failed to update nuget.config for source '{rawSource}': {ex.Message}");
+            return false;
         }
     }
 
-    public static void UnregisterSource(string pluginSlug, string rawSource, ILogger? logger)
+    public static bool UnregisterSource(string pluginSlug, string rawSource, ILogger? logger)
     {
         try
         {
             var normalized = Normalize(rawSource);
             if (normalized is null)
             {
-                return;
+                return true;
             }
 
             var configPath = GetConfigPath();
             if (!File.Exists(configPath))
             {
-                return;
+                return true;
             }
 
             var doc = XDocument.Load(configPath);
@@ -114,7 +116,7 @@ internal static class NugetConfigManager
             var add = packageSources?.Elements("add").FirstOrDefault(e => (string?)e.Attribute("key") == key);
             if (root is null || add is null)
             {
-                return;
+                return true;
             }
 
             var usedBy = ParseUsedBy(add.PreviousNode as XComment).Where(s => s != pluginSlug).ToArray();
@@ -137,14 +139,16 @@ internal static class NugetConfigManager
             {
                 File.Delete(configPath);
                 logger?.Log("Removed nuget.config (no managed NuGet sources remain).");
-                return;
+                return true;
             }
 
             Save(doc, configPath);
+            return true;
         }
         catch (Exception ex)
         {
             logger?.Error($"Failed to update nuget.config while removing source '{rawSource}': {ex.Message}");
+            return false;
         }
     }
 

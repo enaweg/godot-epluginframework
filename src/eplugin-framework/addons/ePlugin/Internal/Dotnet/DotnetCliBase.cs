@@ -5,7 +5,7 @@ using Godot;
 
 namespace Enaweg.Plugin.Internal.Dotnet;
 
-internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli
+internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotnetCli
 {
     protected readonly string SolutionPath;
     protected readonly string GodotProjectPath;
@@ -37,5 +37,11 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli
     public abstract void AddProjectReference(string projectReference);
     public abstract void RemoveProjectReference(string projectReference);
     public abstract (int, string[]) Execute(string command, string[] args);
+    public abstract bool TryRebuildSolution();
+    public abstract bool TryAddProjectToSolution(string projectPath, string? virtualFolderName);
+    public abstract bool TryRemoveProjectFromSolution(string projectPath);
+    public abstract bool TryAddProjectReference(string projectReference);
+    public abstract bool TryRemoveProjectReference(string projectReference);
+    public abstract bool TryRemoveNugetFromProject(string nugetName);
 }
 #endif
