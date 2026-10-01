@@ -159,7 +159,8 @@ applier, recipe snapshots/diffs, journal/cache persistence, early self-update re
 provide the Godot integration. HTTP/git work runs off the editor thread; lifecycle and recipe changes stay on it.
 
 Checks use installed metadata and a 20-hour local cache, never the shared working-version index. Every apply
-requires dialog confirmation. Stage and validate the whole batch before touching addons. Managed plugins are
+requires dialog confirmation. Stage and validate the whole batch before touching addons, then save and close all
+open scenes (`IUpdateHost.CloseScenes`; `close_scene` exists only from Godot 4.5) before the swap. Managed plugins are
 updated in place without disabling/uninstalling them; plain plugins may be toggled under observer suppression.
 The interim bridge keeps old visible resources until the new assembly is loaded. Reconcile executes per-item
 operations without intermediate builds/refreshes, tracks pending operations durably, handles hard/optional
