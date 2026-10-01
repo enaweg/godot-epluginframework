@@ -17,7 +17,7 @@ internal sealed class DotnetCli9(ILogger? logger, bool enableDebugLogging)
         TryRebuildSolution();
     }
 
-    public override bool TryRebuildSolution() => Execute(["build"]).Item1 == 0;
+    public override bool TryRebuildSolution() => Execute(["build", SolutionPath]).Item1 == 0;
 
     public override void RunTests()
     {

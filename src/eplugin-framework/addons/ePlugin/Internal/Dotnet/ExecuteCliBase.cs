@@ -32,6 +32,11 @@ public abstract class ExecuteCliBase(ILogger? logger, bool enableDebugLogging)
             var final = result.Select(e => e.ToString()).ToArray();
             result.Dispose();
 
+            if (exitVal != 0)
+            {
+                logger?.Error($"Command {cmd} failed with exit code {exitVal}: {string.Join("\n", final)}");
+            }
+
             return (exitVal, final);
         }
         catch (Exception ex)

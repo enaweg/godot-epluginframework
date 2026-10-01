@@ -16,7 +16,17 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
         var solutionName = $"{ProjectSettings.GetSetting("dotnet/project/assembly_name")}.sln";
         var projectName = $"{ProjectSettings.GetSetting("dotnet/project/assembly_name")}.csproj";
 
-        SolutionPath = Path.GetFullPath(Path.Combine(pathToSolution, solutionName));
+        var expectedSolutionPath = Path.GetFullPath(Path.Combine(pathToSolution, solutionName));
+        // Godot's assembly name need not match the solution name (the sample project uses
+        // EPluginFramework and "EPlugin Framework.sln", for example).
+        var solutions = Directory.GetFiles(pathToSolution, "*.sln");
+        if (solutions.Length == 0)
+        {
+            solutions = Directory.GetFiles(pathToSolution, "*.slnx");
+        }
+        SolutionPath = File.Exists(expectedSolutionPath) || solutions.Length != 1
+            ? expectedSolutionPath
+            : solutions[0];
         GodotProjectPath = Path.GetFullPath(Path.Combine(pathToSolution, ProjectSettings.GlobalizePath(projectName)));
 
         if (enableDebugLogging)
