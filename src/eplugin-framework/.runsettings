@@ -6,7 +6,7 @@
     <TreatNoTestsAsError>true</TreatNoTestsAsError>
   </RunConfiguration>
   <GdUnit4>
-    <Parameters>--verbose</Parameters>
+    <Parameters>--verbose --headless</Parameters>
     <GodotConnectTimeout>60000</GodotConnectTimeout>
   </GdUnit4>
 </RunSettings>

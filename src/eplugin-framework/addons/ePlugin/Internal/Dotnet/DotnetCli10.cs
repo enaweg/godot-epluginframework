@@ -1,4 +1,4 @@
-﻿#if TOOLS
+#if TOOLS
 using System.Collections.Generic;
 using System.IO;
 using Enaweg.Plugin.Logging;
@@ -16,7 +16,13 @@ internal sealed class DotnetCli10(ILogger? logger, bool enableDebugLogging)
         TryRebuildSolution();
     }
 
-    public override bool TryRebuildSolution() => Execute("build", null, [SolutionPath]).Item1 == 0;
+    public override bool TryRebuildSolution() => TryBuild().ExitCode == 0;
+
+    public override BuildOutcome TryBuild()
+    {
+        var result = Execute("build", null, [SolutionPath, "--no-incremental"]);
+        return new BuildOutcome(result.Item1, result.Item2);
+    }
 
     public override void RunTests()
     {

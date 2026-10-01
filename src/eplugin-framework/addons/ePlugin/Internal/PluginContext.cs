@@ -1,4 +1,4 @@
-﻿#if TOOLS
+#if TOOLS
 using System;
 using System.Collections.Generic;
 using Enaweg.Plugin.Logging;
@@ -11,9 +11,15 @@ internal sealed class PluginContext(IEEditorPlugin? plugin, EditorPlugin pluginB
 {
     public string Slug { get; init; } = pluginBase.GetPluginSlug();
     
-    public string Name { get; init; } = pluginBase.ReadMetadata()?.Name ?? pluginBase.GetPluginSlug();
+    public string Name { get; private set; } = pluginBase.ReadMetadata()?.Name ?? pluginBase.GetPluginSlug();
 
-    public EEditorPluginMetadata? Metadata { get; init; } = pluginBase.ReadMetadata();
+    public EEditorPluginMetadata? Metadata { get; set; } = pluginBase.ReadMetadata();
+
+    public void RefreshMetadata()
+    {
+        Metadata = EditorPluginExtensions.ReadMetadata($"res://addons/{Slug}/plugin.cfg");
+        Name = Metadata?.Name ?? Slug;
+    }
 
     public string? Directory { get; init; } = pluginBase.GetPluginDirectory();
 

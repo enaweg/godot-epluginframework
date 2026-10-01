@@ -1,4 +1,4 @@
-﻿#if TOOLS
+#if TOOLS
 using System;
 using System.IO;
 using Enaweg.Plugin.Internal;
@@ -93,7 +93,12 @@ public static class EditorPluginExtensions
     /// </returns>
     public static EEditorPluginMetadata? ReadMetadata(this EditorPlugin plugin)
     {
-        var cfgFile = $"{plugin.GetPluginDirectory()}/plugin.cfg";
+        return ReadMetadata($"{plugin.GetPluginDirectory()}/plugin.cfg");
+    }
+
+    /// <summary>Reads metadata directly from a plugin configuration path.</summary>
+    public static EEditorPluginMetadata? ReadMetadata(string cfgFile)
+    {
 
         if (!FileAccess.FileExists(cfgFile))
         {
@@ -112,15 +117,16 @@ public static class EditorPluginExtensions
 
             result = new EEditorPluginMetadata
             {
-                Name = cfg.GetValue("plugin", "name").AsString(),
-                Description = cfg.GetValue("plugin", "description").AsString(),
-                Version = cfg.GetValue("plugin", "version").AsString(),
-                Author = cfg.GetValue("plugin", "author").AsString(),
+                Name = cfg.GetValue("plugin", "name", "").AsString(),
+                Description = cfg.GetValue("plugin", "description", "").AsString(),
+                Version = cfg.GetValue("plugin", "version", "").AsString(),
+                UpdateUrl = NullIfWhiteSpace(cfg.GetValue("plugin", "update_url", "").AsString()),
+                Author = cfg.GetValue("plugin", "author", "").AsString(),
             };
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"Failed to read metadata of plugin {plugin.Name} [{plugin.GetInstanceId()}]. {ex.Message}");
+            GD.PrintErr($"Failed to read metadata of plugin at {cfgFile}. {ex.Message}");
             return null;
         }
         finally
@@ -130,5 +136,6 @@ public static class EditorPluginExtensions
 
         return result;
     }
+    private static string? NullIfWhiteSpace(string value) => string.IsNullOrWhiteSpace(value) ? null : value;
 }
 #endif

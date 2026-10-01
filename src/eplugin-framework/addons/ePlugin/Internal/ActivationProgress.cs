@@ -98,6 +98,8 @@ internal static class ActivationProgress
         }
     }
 
+    internal static void ForceCloseForUpdate() => Stop();
+
     private static void Stop()
     {
         var helper = _helper;

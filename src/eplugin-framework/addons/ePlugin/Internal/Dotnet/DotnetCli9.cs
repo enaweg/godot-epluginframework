@@ -1,4 +1,4 @@
-﻿#if TOOLS
+#if TOOLS
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -17,7 +17,13 @@ internal sealed class DotnetCli9(ILogger? logger, bool enableDebugLogging)
         TryRebuildSolution();
     }
 
-    public override bool TryRebuildSolution() => Execute(["build", SolutionPath]).Item1 == 0;
+    public override bool TryRebuildSolution() => TryBuild().ExitCode == 0;
+
+    public override BuildOutcome TryBuild()
+    {
+        var result = Execute(["build", SolutionPath, "--no-incremental"]);
+        return new BuildOutcome(result.Item1, result.Item2);
+    }
 
     public override void RunTests()
     {

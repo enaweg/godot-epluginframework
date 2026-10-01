@@ -42,7 +42,7 @@ dotnet build "src/eplugin-framework/EPlugin Framework.sln"
 Run tests (gdUnit4 via its VSTest adapter — requires the `GODOT_BIN` environment variable to point at a
 Godot .NET/Mono editor binary, since tests spin up a headless Godot runtime):
 ```
-dotnet test "src/eplugin-framework/EPlugin Framework.sln"
+dotnet test "src/eplugin-framework/EPlugin Framework.sln" --settings "src/eplugin-framework/.runsettings"
 ```
 Run a single test:
 ```
@@ -150,6 +150,38 @@ removing the last managed entry leaves nothing else in the file.
 enough in `sln`/`nuget`/reference command behavior to need separate implementations. `ExecuteCliBase` does
 the actual process execution. Any new dotnet CLI operation needs a corresponding abstract member on
 `DotnetCliBase`/`IDotnetCli` implemented in both `DotnetCli9` and `DotnetCli10`.
+
+### Update system
+
+`Internal/Update/` contains pure checks/sources, bounded ZIP and sparse-git staging, validation, the transaction
+applier, recipe snapshots/diffs, journal/cache persistence, early self-update recovery, and dialog view models.
+`EGlobal.Updates.cs`, `EGlobal.UpdateApply.cs`, `EGlobal.UpdateRecipes.cs`, and `EGlobal.RecipeOperations.cs`
+provide the Godot integration. HTTP/git work runs off the editor thread; lifecycle and recipe changes stay on it.
+
+Checks use installed metadata and a 20-hour local cache, never the shared working-version index. Every apply
+requires dialog confirmation. Stage and validate the whole batch before touching addons. Managed plugins are
+updated in place without disabling/uninstalling them; plain plugins may be toggled under observer suppression.
+The interim bridge keeps old visible resources until the new assembly is loaded. Reconcile executes per-item
+operations without intermediate builds/refreshes, tracks pending operations durably, handles hard/optional
+dependencies, and protects shared NuGets. `ICheckedDotnetCli.TryBuild` in both CLI implementations returns exit
+status/output and forces non-incremental compilation, including rollback (old timestamps cannot reuse new code).
+
+A batch owns one PluginStateStore attempt. Write its local marker before side effects; acknowledge all versions
+once after final build/verification. Rollback restores backups and abandons the marker without changing the
+shared index. Keep-after-final-build-failure retains an `update_kept_build_failed` marker; an acknowledgement
+conflict retains `update_commit_failed`. Retry dispatches these to the update applier. An acknowledged attempt
+must never be rolled back merely because diagnostic cleanup failed. State-file schema remains unchanged.
+
+C# handoff uses a durable editor restart, with another restart after a managed final/rollback build. Engine
+metadata prevents scheduled checks and early recovery counters from repeating after assembly reloads.
+`EPluginPlugin` invokes `UpdateRecovery` before touching EGlobal; this reader is deliberately independent of
+EGlobal and recipe execution. Self-update closes ActivationProgress before the folder swap and always rolls
+back failures. Two unhealthy starts restore backups, project settings and directory visibility, force a build,
+then clear the marker. A health marker is written only after verification. Keep journal readers additive and
+backward compatible across framework versions; unknown/newer schemas need manual repair.
+
+See README's update/publishing/recovery contract and
+`docs/implementation-plans/update-system-spikes.md` for measured engine behavior and pending platform checks.
 
 ### Logging
 

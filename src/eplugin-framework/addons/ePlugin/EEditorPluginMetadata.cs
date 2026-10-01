@@ -1,4 +1,4 @@
-﻿#if TOOLS
+#if TOOLS
 namespace Enaweg.Plugin;
 
 /// <summary>
@@ -11,6 +11,9 @@ namespace Enaweg.Plugin;
 /// </remarks>
 public class EEditorPluginMetadata
 {
+    /// <summary>Release page or git URL used to check for plugin updates.</summary>
+    public string? UpdateUrl { get; set; }
+
     /// <summary>Display name of the plugin (the <c>name</c> key in <c>plugin.cfg</c>).</summary>
     public string Name { get; set; }
 
