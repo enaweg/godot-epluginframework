@@ -22,7 +22,8 @@ internal interface IUpdateHost
     void Bridge(UpdateJournal journal, UpdatePluginJournal plugin);
     void Reconcile(UpdateJournal journal, bool rollback);
     void SetPlainEnabled(string slug, bool enabled);
-    void SaveScenes();
+    // Saves and closes every open scene so none keeps nodes whose scripts or resources disappear mid-update.
+    void CloseScenes();
     void Scan();
     BuildOutcome Build();
     void RequestReload(UpdateJournal journal);
@@ -71,7 +72,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         File.WriteAllText(Path.Combine(transactionDirectory, "README.txt"), "Manual restore: close the editor, move backup/<slug> to addons/<slug>, restore backup-project files if necessary, delete .godot/mono/temp and rebuild. Do not remove the local plugin-state marker until recovery succeeds.\n");
         try
         {
-            host.SaveScenes();
+            host.CloseScenes();
             host.BeforeSwap(journal);
             journal.Save(UpdatePhase.Swapped);
             foreach (var plugin in journal.Plugins)
@@ -232,6 +233,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
 
     public UpdateOutcome Retry(UpdateJournal journal)
     {
+        host.CloseScenes();
         var reason = store.LocalAttempts.FirstOrDefault(a => a.AttemptId == journal.AttemptId)?.Reason;
         if (reason == "update_commit_failed") return journal.Plugins.All(host.Verify) ? Commit(journal) : Rollback(journal, "Retry verification failed.");
         if (reason == "update_kept_build_failed")

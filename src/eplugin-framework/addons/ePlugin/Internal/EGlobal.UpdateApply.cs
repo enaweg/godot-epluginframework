@@ -134,6 +134,10 @@ internal sealed partial class EGlobal
 
     private sealed class GodotUpdateHost(EGlobal global) : IUpdateHost
     {
+        // Called by name: both methods exist only since Godot 4.5, and plugins compile against the project's Godot SDK.
+        private static readonly StringName CloseScene = "close_scene";
+        private static readonly StringName GetOpenSceneRoots = "get_open_scene_roots";
+        private const int MaxClosedScenes = 1000;
         public bool UiAvailable => DisplayServer.GetName() != "headless" && global._ePluginContext?.IsInsideTree() == true;
         public string BuildFailurePolicy => ProjectSettings.GetSetting("eplugin/updates/on_build_failure", "ask").AsString();
         public bool RestartAlways => ProjectSettings.GetSetting("eplugin/updates/restart_policy", "auto").AsString() == "always";
@@ -142,6 +146,9 @@ internal sealed partial class EGlobal
         public void Preflight(IReadOnlyList<ValidatedPackage> packages)
         {
             if (EditorInterface.Singleton.IsPlayingScene()) throw new InvalidOperationException("Stop the running scene before updating plugins.");
+            // Closing discards what SaveAllScenes cannot save, so refuse before the marker rather than lose an untitled scene.
+            if (HasUntitledScene())
+                throw new InvalidOperationException("Save or close untitled scenes before updating plugins.");
             foreach (var package in packages.Where(p => IsManaged(p.Candidate.Slug)))
                 if (global._contexts.FirstOrDefault(c => c.Slug == package.Candidate.Slug)?.State != EEditorPluginState.Activated)
                     throw new InvalidOperationException($"Finish enabling {package.Candidate.Slug} before updating it.");
@@ -165,7 +172,27 @@ internal sealed partial class EGlobal
         }
         public void Reconcile(UpdateJournal journal, bool rollback) => global.ReconcileUpdateRecipes(journal, rollback);
         public void SetPlainEnabled(string slug, bool enabled) => EditorInterface.Singleton.SetPluginEnabled(slug, enabled);
-        public void SaveScenes() => EditorInterface.Singleton.SaveAllScenes();
+        public void CloseScenes()
+        {
+            var editor = EditorInterface.Singleton;
+            editor.SaveAllScenes();
+            if (!editor.HasMethod(CloseScene))
+            {
+                Log("Open scenes stay open during the update; closing them needs Godot 4.5 or newer.");
+                return;
+            }
+            if (HasUntitledScene())
+            {
+                Log("Open scenes stay open during the update; save or close untitled scenes first.");
+                return;
+            }
+            // close_scene closes the active tab and returns DoesNotExist once only the empty untitled tab is left.
+            for (var closed = 0; closed < MaxClosedScenes; closed++)
+                if ((Error)editor.Call(CloseScene).AsInt32() != Error.Ok) return;
+            Log("Some scenes could not be closed before the update.");
+        }
+        private static bool HasUntitledScene() => EditorInterface.Singleton.HasMethod(GetOpenSceneRoots) &&
+            EditorInterface.Singleton.Call(GetOpenSceneRoots).AsGodotArray<Node>().Any(root => root is not null && string.IsNullOrEmpty(root.SceneFilePath));
         public void Scan() => EditorInterface.Singleton.GetResourceFilesystem().Scan();
         public BuildOutcome Build()
         {

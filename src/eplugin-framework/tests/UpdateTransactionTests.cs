@@ -53,6 +53,21 @@ public class UpdateTransactionTests
         Assertions.AssertBool(Directory.Exists(package.Directory)).IsFalse();
     }
     [TestCase]
+    public void ScenesAreClosedAfterMarkerAndBeforeAnyAddonIsSwapped()
+    {
+        var closed = 0;
+        _host.OnCloseScenes = () =>
+        {
+            closed++;
+            Assertions.AssertBool(_store.IsBlocked("plugin")).IsTrue();
+            Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/plugin/plugin.cfg")).Contains("1.0.0")).IsTrue();
+            Assertions.AssertInt(_host.Toggles).IsEqual(0);
+        };
+        var package = Package();
+        Assertions.AssertObject(_applier.Apply([package.Package], package.Directory)).IsEqual(UpdateOutcome.Completed);
+        Assertions.AssertInt(closed).IsEqual(1);
+    }
+    [TestCase]
     public void InterimFailureRestoresFilesAndProjectWithoutChangingSharedIndex()
     {
         _host.Managed = true;
@@ -148,7 +163,7 @@ public class UpdateTransactionTests
     private sealed class FakeHost(PluginStateStore store) : IUpdateHost
     {
         public bool Managed; public bool HasUi; public string Policy = "rollback"; public int Toggles; public bool MarkerBeforeToggle;
-        public Action? OnScan; public Action? OnBeforeSwap; public int Reloads;
+        public Action? OnScan; public Action? OnBeforeSwap; public Action? OnCloseScenes; public int Reloads;
         public Queue<BuildOutcome> Builds { get; } = new();
         public bool UiAvailable => HasUi;
         public string BuildFailurePolicy => Policy;
@@ -161,7 +176,7 @@ public class UpdateTransactionTests
         public void Bridge(UpdateJournal journal, UpdatePluginJournal plugin) { }
         public void Reconcile(UpdateJournal journal, bool rollback) { }
         public void SetPlainEnabled(string slug, bool enabled) { Toggles++; MarkerBeforeToggle |= store.IsBlocked(slug); }
-        public void SaveScenes() { }
+        public void CloseScenes() => OnCloseScenes?.Invoke();
         public void Scan() => OnScan?.Invoke();
         public BuildOutcome Build() => Builds.Count > 0 ? Builds.Dequeue() : new(0, []);
         public void RequestReload(UpdateJournal journal) { Reloads++; }
