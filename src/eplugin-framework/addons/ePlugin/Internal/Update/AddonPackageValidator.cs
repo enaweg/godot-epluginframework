@@ -82,7 +82,7 @@ internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules 
             Add("R14", FindingSeverity.Warning, "Major version change: your project code may need changes.");
         if (installed.IsBlocked || installed.StoreReadOnly) Add("R17", FindingSeverity.Error, "Resolve local state using Project > Tools > Retry failed ePlugin addons first.");
         foreach (var rule in extraRules ?? []) findings.AddRange(rule.Check(context));
-        return new(candidate, stage, version, newUrl, files.Any(f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)), findings);
+        return new(candidate, stage, version, newUrl, files.Concat(installedFiles).Any(f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)), findings);
     }
 }
 #endif

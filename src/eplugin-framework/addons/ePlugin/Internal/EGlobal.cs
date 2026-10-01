@@ -76,13 +76,14 @@ internal sealed partial class EGlobal
         _stateStore = new PluginStateStore(
             Path.GetFullPath(ProjectSettings.GlobalizePath("res://addons/eplugin-state.json")), plugin.Logger);
         _stateStore.Load();
+        InitializeUpdateJournals();
         ReloadContexts(_loggerFactory, false);
         CreateStateBaseline();
         RecordFrameworkEnabled(plugin);
         _plainPluginObserver = new PlainPluginObserver(_stateStore, GetEnabledPluginSlugs,
             slug => EditorPluginExtensions.ReadMetadata($"res://addons/{slug}/plugin.cfg")?.Version,
             IsManagedPlugin,
-            slug => false, // The independent observer has no update pipeline; future journals supply ownership here.
+            slug => _updateJournals?.OwnedSlugs.Contains(slug) == true,
             plugin.Logger);
         RefreshPlainPlugins();
 
@@ -104,6 +105,7 @@ internal sealed partial class EGlobal
             }
         }
 
+        ResumeUpdates();
         InitializeUpdates(plugin);
     }
 
@@ -255,8 +257,15 @@ internal sealed partial class EGlobal
             return;
         }
 
+        var retriedUpdates = new HashSet<Guid>();
         foreach (var attempt in _stateStore.LocalAttempts.ToArray())
         {
+            var updateJournal = _updateJournals?.Read().FirstOrDefault(j => j.AttemptId == attempt.AttemptId);
+            if (updateJournal is not null || attempt.Reason.StartsWith("update_", StringComparison.Ordinal))
+            {
+                if (retriedUpdates.Add(attempt.AttemptId)) RetryUpdate(updateJournal);
+                continue;
+            }
             var context = _contexts.FirstOrDefault(c => c.Slug == attempt.Slug && c.Plugin is not null);
             if (context is null && attempt.Reason == "invalid_plugin_version" &&
                 !IsManagedPlugin(attempt.Slug))
@@ -1231,13 +1240,14 @@ internal sealed partial class EGlobal
                     // initial start or assembly reload, nothing need to be done as installation already happened
                     EEditorPluginState.Activated;
 
-                if (_stateStore?.IsReadOnly == true || _stateStore?.IsBlocked(context.Slug) == true)
+                var updateOwned = _updateJournals?.OwnsAttempt(_stateStore?.GetAttemptId(context.Slug)) == true;
+                if (_stateStore?.IsReadOnly == true || (_stateStore?.IsBlocked(context.Slug) == true && !updateOwned))
                 {
                     context.State = EEditorPluginState.Error;
                     context.Logger?.Error(
                         $"Plugin {context.Slug} has unresolved local state; use the manual retry action after recovery.");
                 }
-                else if (_stateStore?.GetShared(context.Slug) is { } saved)
+                else if (!updateOwned && _stateStore?.GetShared(context.Slug) is { } saved)
                 {
                     if (saved.State != PersistedPluginState.Activated ||
                         !string.Equals(saved.Version, context.Metadata?.Version, StringComparison.Ordinal))

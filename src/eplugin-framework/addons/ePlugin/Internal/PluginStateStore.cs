@@ -51,6 +51,8 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
     private byte[]? _sharedBytes;
     private Guid? _lastCompletedAttemptId;
 
+    public Guid? LastCompletedAttemptId => _lastCompletedAttemptId;
+    public Guid? GetAttemptId(string slug) => GetLocal(slug)?.AttemptId;
     public bool IsReadOnly { get; private set; }
     public bool HasSharedFile => _sharedBytes is not null;
     public IReadOnlyCollection<SharedPluginState> SharedStates => _shared.Values;
@@ -237,7 +239,27 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
     }
 
     /// <summary>Commits every participant together; a failed write leaves .user in place.</summary>
-    public bool TryComplete(Guid attemptId, IEnumerable<SharedPluginState> completedStates)
+    public bool TryComplete(Guid attemptId, IEnumerable<SharedPluginState> completedStates) =>
+        Complete(attemptId, completedStates, acknowledgeVersions: false);
+
+    public bool TryAcknowledgeVersions(Guid attemptId, IReadOnlyDictionary<string, string> versions)
+    {
+        var participants = _local.Values.Where(x => x.AttemptId == attemptId).ToArray();
+        if (participants.Length == 0 || versions.Count != participants.Length ||
+            participants.Any(p => !versions.TryGetValue(p.Slug, out var version) || string.IsNullOrWhiteSpace(version))) return false;
+        return Complete(attemptId, participants.Select(p => new SharedPluginState(p.Slug, versions[p.Slug], p.TargetState)), true);
+    }
+
+    public bool TryAbandonAttempt(Guid attemptId)
+    {
+        if (IsReadOnly || !_local.Values.Any(p => p.AttemptId == attemptId)) return false;
+        var remaining = _local.Where(p => p.Value.AttemptId != attemptId).ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);
+        if (!SaveLocal(remaining)) return false;
+        _local = remaining;
+        return true;
+    }
+
+    private bool Complete(Guid attemptId, IEnumerable<SharedPluginState> completedStates, bool acknowledgeVersions)
     {
         if (IsReadOnly)
         {
@@ -257,7 +279,7 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
         var next = new Dictionary<string, SharedPluginState>(_shared, StringComparer.Ordinal);
         foreach (var entry in completed)
         {
-            next[entry.Slug] = entry with { Version = _shared.TryGetValue(entry.Slug, out var old)
+            next[entry.Slug] = entry with { Version = !acknowledgeVersions && _shared.TryGetValue(entry.Slug, out var old)
                 ? old.Version
                 : entry.Version };
         }

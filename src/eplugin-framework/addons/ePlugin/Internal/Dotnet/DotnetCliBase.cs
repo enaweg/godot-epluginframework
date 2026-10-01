@@ -1,4 +1,4 @@
-﻿#if TOOLS
+#if TOOLS
 using System.IO;
 using Enaweg.Plugin.Logging;
 using Godot;
@@ -47,6 +47,7 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
     public abstract void AddProjectReference(string projectReference);
     public abstract void RemoveProjectReference(string projectReference);
     public abstract (int, string[]) Execute(string command, string[] args);
+    public abstract BuildOutcome TryBuild();
     public abstract bool TryRebuildSolution();
     public abstract bool TryAddProjectToSolution(string projectPath, string? virtualFolderName);
     public abstract bool TryRemoveProjectFromSolution(string projectPath);
