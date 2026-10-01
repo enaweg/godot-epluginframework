@@ -42,6 +42,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin
 
     public override void _Process(double delta)
     {
+        AssemblyUnloadCleanup.Register();
         if (!EnsureEarlyUpdateRecovery()) return;
         base._Process(delta);
 
