@@ -16,7 +16,10 @@ public abstract class ExecuteCliBase(ILogger? logger, bool enableDebugLogging)
 
         try
         {
-            var finalArgs = args.SelectMany(a => a.Split(' ')).ToArray();
+            // OS.Execute accepts one argument per array element. Splitting on spaces corrupts
+            // solution and project paths such as "EPlugin Framework.sln".
+            var finalArgs = System.Array.ConvertAll(args, a =>
+                a.Length >= 2 && a[0] == '"' && a[^1] == '"' ? a[1..^1] : a);
             var result = new Array();
             if (enableDebugLogging)
             {
@@ -28,6 +31,11 @@ public abstract class ExecuteCliBase(ILogger? logger, bool enableDebugLogging)
 
             var final = result.Select(e => e.ToString()).ToArray();
             result.Dispose();
+
+            if (exitVal != 0)
+            {
+                logger?.Error($"Command {cmd} failed with exit code {exitVal}: {string.Join("\n", final)}");
+            }
 
             return (exitVal, final);
         }

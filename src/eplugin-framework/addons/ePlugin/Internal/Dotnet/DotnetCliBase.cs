@@ -5,7 +5,7 @@ using Godot;
 
 namespace Enaweg.Plugin.Internal.Dotnet;
 
-internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli
+internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotnetCli
 {
     protected readonly string SolutionPath;
     protected readonly string GodotProjectPath;
@@ -16,7 +16,17 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli
         var solutionName = $"{ProjectSettings.GetSetting("dotnet/project/assembly_name")}.sln";
         var projectName = $"{ProjectSettings.GetSetting("dotnet/project/assembly_name")}.csproj";
 
-        SolutionPath = Path.GetFullPath(Path.Combine(pathToSolution, solutionName));
+        var expectedSolutionPath = Path.GetFullPath(Path.Combine(pathToSolution, solutionName));
+        // Godot's assembly name need not match the solution name (the sample project uses
+        // EPluginFramework and "EPlugin Framework.sln", for example).
+        var solutions = Directory.GetFiles(pathToSolution, "*.sln");
+        if (solutions.Length == 0)
+        {
+            solutions = Directory.GetFiles(pathToSolution, "*.slnx");
+        }
+        SolutionPath = File.Exists(expectedSolutionPath) || solutions.Length != 1
+            ? expectedSolutionPath
+            : solutions[0];
         GodotProjectPath = Path.GetFullPath(Path.Combine(pathToSolution, ProjectSettings.GlobalizePath(projectName)));
 
         if (enableDebugLogging)
@@ -37,5 +47,11 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli
     public abstract void AddProjectReference(string projectReference);
     public abstract void RemoveProjectReference(string projectReference);
     public abstract (int, string[]) Execute(string command, string[] args);
+    public abstract bool TryRebuildSolution();
+    public abstract bool TryAddProjectToSolution(string projectPath, string? virtualFolderName);
+    public abstract bool TryRemoveProjectFromSolution(string projectPath);
+    public abstract bool TryAddProjectReference(string projectReference);
+    public abstract bool TryRemoveProjectReference(string projectReference);
+    public abstract bool TryRemoveNugetFromProject(string nugetName);
 }
 #endif

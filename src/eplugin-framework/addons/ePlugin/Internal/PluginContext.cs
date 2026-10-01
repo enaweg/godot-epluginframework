@@ -23,7 +23,7 @@ internal sealed class PluginContext(IEEditorPlugin? plugin, EditorPlugin pluginB
 
     public EditorPlugin PluginBase { get; init; } = pluginBase;
 
-    public IDotnetCli? Cli { get; init; } = EGlobal.Instance.GetCli(logger);
+    public IDotnetCli? Cli { get; set; } = EGlobal.Instance.GetCli(logger);
 
     public EEditorPluginState State { get; set; } = EEditorPluginState.Created;
     public EEditorPluginBuilder Builder { get; init; } = EEditorPluginBuilder.Create();

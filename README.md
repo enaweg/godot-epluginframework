@@ -67,6 +67,21 @@ The repository also contains a sample project in `src/eplugin-framework`.
 + When Project Settings is open, it is temporarily hidden during plugin activation or deactivation and reopened
   afterwards on the same tab, refreshing the Plugins list including automatically toggled dependencies.
 
+## Plugin state files
+
+The framework creates `res://addons/eplugin-state.json` from the currently active managed plugins when the file is
+missing. Commit this JSON file with your project. It records the last acknowledged plugin versions and completed
+activation or deactivation states, including ePlugin itself. The first snapshot is a baseline of the current editor
+state; it cannot recover versions installed before the file existed. Later changes to `plugin.cfg` do not advance the
+acknowledged version until a migration or update completes.
+
+The adjacent `res://addons/eplugin-state.json.user` records unfinished or failed work on one machine. Keep it out of
+Git by adding `addons/eplugin-state.json.user` to your project's `.gitignore`. An unresolved entry blocks automatic
+recipe retry after an editor restart or assembly reload. After fixing the cause and any partial side effects, use
+**Project > Tools > Retry failed ePlugin addons** to retry explicitly. A failed operation leaves the checked-in JSON
+at its last completed state. The state files provide the basis for future migration and rollback tooling; they do not
+restore addon files or undo partial recipe changes themselves.
+
 ## Motivation
 
 Godot's plugin system has a few major drawbacks, especially for C# plugins:

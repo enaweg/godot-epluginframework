@@ -27,4 +27,7 @@ obj/
 reports/
 
 build/
-
+src/activation-progress/bin/
+src/activation-progress/obj/
+src/eplugin-framework/addons/ePlugin/progress/ActivationProgress.*
+**/addons/eplugin-state.json*.tmp-*

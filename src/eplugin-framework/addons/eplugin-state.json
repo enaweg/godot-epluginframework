@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "lastCompletedAttemptId": null,
+  "plugins": [
+    {
+      "slug": "ePlugin",
+      "version": "1.0",
+      "state": "activated"
+    },
+    {
+      "slug": "sample_dependant_plugin",
+      "version": "1.0",
+      "state": "activated"
+    },
+    {
+      "slug": "sample_optional_plugin",
+      "version": "1.0",
+      "state": "activated"
+    },
+    {
+      "slug": "sample_plugin",
+      "version": "1.0",
+      "state": "activated"
+    }
+  ]
+}
