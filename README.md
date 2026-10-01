@@ -69,11 +69,17 @@ The repository also contains a sample project in `src/eplugin-framework`.
 
 ## Plugin state files
 
-The framework creates `res://addons/eplugin-state.json` from the currently active managed plugins when the file is
-missing. Commit this JSON file with your project. It records the last acknowledged plugin versions and completed
+The framework creates `res://addons/eplugin-state.json` from the currently active plugins (both ePlugin-managed and plain Godot plugins) when the file is
+missing. Commit this JSON file with your addon files. It records the last acknowledged plugin versions and completed
 activation or deactivation states, including ePlugin itself. The first snapshot is a baseline of the current editor
 state; it cannot recover versions installed before the file existed. Later changes to `plugin.cfg` do not advance the
 acknowledged version until a migration or update completes.
+
+Plain GDScript and C# plugins are observed on demand at startup and before manual retry, without polling.
+Later consumers of the index explicitly refresh it before use. Live toggles are recorded at the next refresh; startup
+discrepancies are reported without overwriting existing entries. Enabled plugins missing from the index are added.
+Entries remain after disabling or removing a plugin. A missing version creates only a local invalid record; repair
+`plugin.cfg` and use the retry action to re-read it.
 
 The adjacent `res://addons/eplugin-state.json.user` records unfinished or failed work on one machine. Keep it out of
 Git by adding `addons/eplugin-state.json.user` to your project's `.gitignore`. An unresolved entry blocks automatic

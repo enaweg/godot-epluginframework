@@ -32,6 +32,7 @@ internal sealed class EGlobal
     private readonly List<PluginContext> _contexts = [];
     private EPluginPlugin? _ePluginContext = null;
     private PluginStateStore? _stateStore;
+    private PlainPluginObserver? _plainPluginObserver;
 
     public DotnetVersionManager? CliService { get; private set; } = null;
 
@@ -78,6 +79,12 @@ internal sealed class EGlobal
         ReloadContexts(_loggerFactory, false);
         CreateStateBaseline();
         RecordFrameworkEnabled(plugin);
+        _plainPluginObserver = new PlainPluginObserver(_stateStore, GetEnabledPluginSlugs,
+            slug => EditorPluginExtensions.ReadMetadata($"res://addons/{slug}/plugin.cfg")?.Version,
+            IsManagedPlugin,
+            slug => false, // The independent observer has no update pipeline; future journals supply ownership here.
+            plugin.Logger);
+        RefreshPlainPlugins();
 
         if (_toCheckEnable.Any())
         {
@@ -135,8 +142,7 @@ internal sealed class EGlobal
             return;
         }
 
-        var active = _contexts.Where(c => c.State == EEditorPluginState.Activated &&
-                                          (c.Plugin is not null || c.PluginBase == _ePluginContext))
+        var active = _contexts.Where(c => c.State == EEditorPluginState.Activated)
             .ToArray();
         var states = new List<SharedPluginState>();
         foreach (var context in active)
@@ -212,8 +218,36 @@ internal sealed class EGlobal
         }
     }
 
+    /// <summary>Call before consuming persisted plugin state and after an update batch.</summary>
+    internal void RefreshPlainPlugins() => _plainPluginObserver?.Refresh();
+
+    private bool IsManagedPlugin(string slug)
+    {
+        if (slug == _ePluginContext?.GetPluginSlug() ||
+            _contexts.Any(c => c.Slug == slug && c.Plugin is not null))
+        {
+            return true;
+        }
+
+        // Disabled C# plugins have no editor instance after a reload. Their script types are still compiled.
+        var prefix = $"res://addons/{slug}/";
+        return typeof(EGlobal).Assembly.GetTypes().Any(type => typeof(IEEditorPlugin).IsAssignableFrom(type) &&
+            type.GetCustomAttribute<ScriptPathAttribute>()?.Path.StartsWith(prefix, StringComparison.Ordinal) == true);
+    }
+
+    private static IReadOnlySet<string> GetEnabledPluginSlugs()
+    {
+        return ProjectSettings.GetSetting("editor_plugins/enabled", Array.Empty<string>()).AsStringArray()
+            .Where(path => path.StartsWith("res://addons/", StringComparison.Ordinal) &&
+                           path.EndsWith("/plugin.cfg", StringComparison.Ordinal))
+            .Select(path => path["res://addons/".Length..^"/plugin.cfg".Length])
+            .Where(slug => slug.Length > 0 && !slug.Contains('/') && !slug.Contains('\\'))
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
     public void RetryFailedPlugins()
     {
+        RefreshPlainPlugins();
         if (_stateStore is null || _stateStore.IsReadOnly)
         {
             return;
@@ -222,6 +256,28 @@ internal sealed class EGlobal
         foreach (var attempt in _stateStore.LocalAttempts.ToArray())
         {
             var context = _contexts.FirstOrDefault(c => c.Slug == attempt.Slug && c.Plugin is not null);
+            if (context is null && attempt.Reason == "invalid_plugin_version" &&
+                !IsManagedPlugin(attempt.Slug))
+            {
+                if (_plainPluginObserver?.RetryInvalid(attempt.Slug) == true)
+                {
+                    var plain = _contexts.FirstOrDefault(c => c.Slug == attempt.Slug);
+                    if (plain is not null)
+                    {
+                        plain.State = GetEnabledPluginSlugs().Contains(attempt.Slug)
+                            ? EEditorPluginState.Activated : EEditorPluginState.Deactivated;
+                    }
+                }
+
+                continue;
+            }
+
+            if (context is null && !IsManagedPlugin(attempt.Slug))
+            {
+                _ePluginContext?.Logger.Error($"Cannot retry {attempt.Slug}: {attempt.Reason} requires manual recovery.");
+                continue;
+            }
+
             if (context is null)
             {
                 try

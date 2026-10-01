@@ -1,10 +1,15 @@
 {
   "schemaVersion": 1,
-  "lastCompletedAttemptId": null,
+  "lastCompletedAttemptId": "f04664d8-434d-4c0f-b530-44b8e3b246ae",
   "plugins": [
     {
       "slug": "ePlugin",
       "version": "1.0",
+      "state": "activated"
+    },
+    {
+      "slug": "gdUnit4",
+      "version": "6.2.1",
       "state": "activated"
     },
     {

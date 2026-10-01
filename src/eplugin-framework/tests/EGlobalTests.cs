@@ -1,4 +1,7 @@
-﻿using System.Collections.Generic;
+using System;
+using System.IO;
+using System.Reflection;
+using System.Collections.Generic;
 using Enaweg.Plugin.Internal;
 using Enaweg.Plugin.Logging;
 using GdUnit4;
@@ -29,6 +32,84 @@ public class EGlobalTests
         var pluginBase = new EditorPlugin();
         _createdPlugins.Add(pluginBase);
         return pluginBase;
+    }
+
+    [TestCase]
+    public void PlainInvalidRetryRereadsVersionAndUnsupportedMarkerStaysBlocked()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "eplugin-retry-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new PluginStateStore(Path.Combine(directory, "state.json"), new NullLogger());
+            store.Load();
+            store.TryCreateBaseline([]);
+            store.TryRecordInvalid("plain-retry", null, "invalid_plugin_version");
+            store.TryBeginAttempt("plain-blocked", "1.0", PersistedPluginState.Activated, out _);
+            var global = (EGlobal)Activator.CreateInstance(typeof(EGlobal), nonPublic: true)!;
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            typeof(EGlobal).GetField("_stateStore", flags)!.SetValue(global, store);
+            string? installed = null;
+            var observer = new PlainPluginObserver(store, () => new HashSet<string>(), _ => installed,
+                _ => false, _ => false, new NullLogger());
+            typeof(EGlobal).GetField("_plainPluginObserver", flags)!.SetValue(global, observer);
+            var contexts = (List<PluginContext>)typeof(EGlobal).GetField("_contexts", flags)!.GetValue(global)!;
+            foreach (var slug in new[] { "plain-retry", "plain-blocked" })
+            {
+                contexts.Add(new PluginContext(null, CreatePluginBase(), new NullLogger())
+                {
+                    Slug = slug,
+                    State = EEditorPluginState.Error
+                });
+            }
+
+            global.RetryFailedPlugins();
+            Assertions.AssertBool(store.IsBlocked("plain-retry")).IsTrue();
+            installed = "2.0.0";
+            global.RetryFailedPlugins();
+            Assertions.AssertBool(store.IsBlocked("plain-retry")).IsFalse();
+            Assertions.AssertString(store.GetShared("plain-retry")!.Version).IsEqual("2.0.0");
+            Assertions.AssertObject(store.GetShared("plain-retry")!.State).IsEqual(PersistedPluginState.Deactivated);
+            Assertions.AssertBool(store.IsBlocked("plain-blocked")).IsTrue();
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+        }
+    }
+
+    [TestCase]
+    public void BaselineIncludesPlainContextsAndExcludesBlockedAndInvalidVersions()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "eplugin-baseline-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new PluginStateStore(Path.Combine(directory, "state.json"), new NullLogger());
+            store.Load();
+            store.TryRecordInvalid("blocked", null, "invalid_plugin_version");
+            var global = (EGlobal)Activator.CreateInstance(typeof(EGlobal), nonPublic: true)!;
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            typeof(EGlobal).GetField("_stateStore", flags)!.SetValue(global, store);
+            var contexts = (List<PluginContext>)typeof(EGlobal).GetField("_contexts", flags)!.GetValue(global)!;
+            foreach (var slug in new[] { "plain", "invalid", "blocked" })
+            {
+                contexts.Add(new PluginContext(null, CreatePluginBase(), new NullLogger())
+                {
+                    Slug = slug,
+                    Metadata = new EEditorPluginMetadata { Version = slug == "invalid" ? " " : "1.0.0" },
+                    State = EEditorPluginState.Activated
+                });
+            }
+
+            typeof(EGlobal).GetMethod("CreateStateBaseline", flags)!.Invoke(global, null);
+            Assertions.AssertString(store.GetShared("plain")!.Version).IsEqual("1.0.0");
+            Assertions.AssertObject(store.GetShared("invalid")).IsNull();
+            Assertions.AssertObject(store.GetShared("blocked")).IsNull();
+            Assertions.AssertString(store.GetLocal("invalid")!.Reason).IsEqual("invalid_plugin_version");
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+        }
     }
 
     [TestCase]
