@@ -33,8 +33,23 @@ internal sealed class UnsupportedUpdateSource(string url) : IUpdateSource
     public Task<UpdateCandidate?> CheckAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct) =>
         Task.FromException<UpdateCandidate?>(new NotSupportedException($"Unsupported update_url '{url}'."));
 }
-internal sealed class UpdateSourceFactory : IUpdateSourceFactory
+internal sealed class UpdateSourceFactory(UpdateHttp? http = null, IGitRunner? git = null) : IUpdateSourceFactory
 {
-    public IUpdateSource Create(string url) => new UnsupportedUpdateSource(url);
+    public IUpdateSource Create(string url)
+    {
+        var transport = http ?? new UpdateHttp();
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == "https")
+        {
+            var segments = uri.AbsolutePath.Trim('/').Split('/');
+            if (uri.Host == "github.com" && segments.Length >= 3 && segments[2] == "releases")
+                return new GitHubReleaseSource(transport, segments[0], segments[1].Replace(".git", ""), segments.Length > 3 && segments[3] == "tag");
+            var index = Array.IndexOf(segments, "-");
+            if (index > 0 && segments.Length > index + 1 && segments[index + 1] == "releases")
+                return new GitLabReleaseSource(transport, uri.Authority, string.Join("/", segments[..index]), segments.Length > index + 2);
+        }
+        if (GitUrl.TryParse(url, out var parsed) && (parsed!.Repository.EndsWith(".git", StringComparison.Ordinal) || url.Contains("?path=")))
+            return new GitSource(transport, git ?? new GitRunner(), parsed!);
+        return new UnsupportedUpdateSource(url);
+    }
 }
 #endif
