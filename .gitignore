@@ -17,6 +17,7 @@ mono_crash.*.json
 # C# IDE files
 .idea/
 *.DotSettings.user
+*.user
 
 # gdUnit Test ignores
 reports/
