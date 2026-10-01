@@ -145,7 +145,7 @@ internal sealed partial class EGlobal
             foreach (var package in packages.Where(p => IsManaged(p.Candidate.Slug)))
                 if (global._contexts.FirstOrDefault(c => c.Slug == package.Candidate.Slug)?.State != EEditorPluginState.Activated)
                     throw new InvalidOperationException($"Finish enabling {package.Candidate.Slug} before updating it.");
-            var findings = global.UpdatePreflightFindings(packages.Select(p => p.Candidate).ToArray());
+            var findings = global.UpdatePreflightFindings(packages.Select(p => p.Candidate with { NewVersion = p.NewVersion.ToString() }).ToArray());
             if (findings.Any(f => f.Severity == FindingSeverity.Error)) throw new InvalidOperationException(string.Join("; ", findings.Where(f => f.Severity == FindingSeverity.Error).Select(f => f.Message)));
             foreach (var warning in findings.Where(f => f.Severity == FindingSeverity.Warning)) Log(warning.Message);
             if (global._toCheckEnable.Any() || global._toCheckDisable.Any()) throw new InvalidOperationException("Finish plugin transitions before updating.");
@@ -153,6 +153,10 @@ internal sealed partial class EGlobal
                 throw new InvalidOperationException("A working dotnet CLI is required for C# updates.");
         }
         public void PrepareJournal(UpdateJournal journal) => global.PrepareUpdateRecipes(journal);
+        public void BeforeSwap(UpdateJournal journal)
+        {
+            if (journal.Plugins.Any(p => p.Slug == "ePlugin")) ActivationProgress.ForceCloseForUpdate();
+        }
         public void Bridge(UpdateJournal journal, UpdatePluginJournal plugin)
         {
             if (!plugin.IsEPlugin || !journal.Recipes.TryGetValue(plugin.Slug, out var recipe)) return;
@@ -179,7 +183,7 @@ internal sealed partial class EGlobal
         public bool Verify(UpdatePluginJournal plugin)
         {
             var metadata = EditorPluginExtensions.ReadMetadata($"res://addons/{plugin.Slug}/plugin.cfg");
-            return IsEnabled(plugin.Slug) && metadata?.Version == plugin.NewVersion &&
+            return (plugin.Slug != "ePlugin" || global.IsValid()) && IsEnabled(plugin.Slug) && metadata?.Version == plugin.NewVersion &&
                 global._contexts.FirstOrDefault(c => c.Slug == plugin.Slug)?.State != EEditorPluginState.Error;
         }
         public void Log(string message) => global._ePluginContext?.Logger.Log(message);

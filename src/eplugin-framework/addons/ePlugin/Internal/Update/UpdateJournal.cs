@@ -48,14 +48,15 @@ internal sealed class UpdateJournal
     public static UpdateJournal Load(string directory)
     {
         var journal = JsonSerializer.Deserialize<UpdateJournal>(File.ReadAllText(Path.Combine(directory, "journal.json")), UpdateStateStore.JsonOptions) ?? throw new InvalidDataException("Empty update journal.");
-        if (journal.Schema is < 1 or > 1 || journal.Id != Path.GetFileName(directory) || journal.AttemptId == Guid.Empty || journal.Plugins.Count == 0 ||
+        if (journal.Schema is < 1 or > 1 || journal.Id != Path.GetFileName(directory) || journal.AttemptId == Guid.Empty || !Enum.IsDefined(journal.State) || journal.Plugins is null || journal.Plugins.Count == 0 || journal.Recipes is null || journal.ProjectFiles is null || journal.AdditionalVersions is null || journal.Builds is null ||
             journal.Plugins.Select(p => p.Slug).Distinct(StringComparer.Ordinal).Count() != journal.Plugins.Count)
             throw new InvalidDataException("Unsupported or invalid update journal; restore its backups manually.");
         foreach (var plugin in journal.Plugins)
             if (PackageFiles.Normalize(plugin.Slug) != plugin.Slug || plugin.Slug.Contains('/') ||
                 !SemVer.TryParse(plugin.OldVersion, out _) || !SemVer.TryParse(plugin.NewVersion, out _))
                 throw new InvalidDataException("Invalid plugin in update journal.");
-        foreach (var path in journal.ProjectFiles) PackageFiles.Normalize(path);
+        foreach (var path in journal.ProjectFiles)
+            if (PackageFiles.Normalize(path) != path || path.Contains('/')) throw new InvalidDataException("Invalid project backup path.");
         foreach (var recipe in journal.Recipes)
         {
             if (PackageFiles.Normalize(recipe.Key) != recipe.Key || recipe.Key.Contains('/')) throw new InvalidDataException("Invalid recipe owner.");

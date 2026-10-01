@@ -18,6 +18,7 @@ internal interface IUpdateHost
     bool IsManaged(string slug);
     void Preflight(IReadOnlyList<ValidatedPackage> packages);
     void PrepareJournal(UpdateJournal journal);
+    void BeforeSwap(UpdateJournal journal) { }
     void Bridge(UpdateJournal journal, UpdatePluginJournal plugin);
     void Reconcile(UpdateJournal journal, bool rollback);
     void SetPlainEnabled(string slug, bool enabled);
@@ -71,6 +72,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         try
         {
             host.SaveScenes();
+            host.BeforeSwap(journal);
             journal.Save(UpdatePhase.Swapped);
             foreach (var plugin in journal.Plugins)
             {
@@ -127,6 +129,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                 return Rollback(journal, "Final build failed.");
             }
             if (journal.Plugins.Any(p => !host.Verify(p))) return Rollback(journal, "Updated plugin verification failed.");
+            if (journal.Plugins.Any(p => p.Slug == "ePlugin")) File.WriteAllText(Path.Combine(journal.Directory, "healthy.marker"), "verified");
             journal.Save(UpdatePhase.Verified);
             return Commit(journal);
         }
@@ -145,16 +148,26 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             host.Log(journal.Failure);
             return UpdateOutcome.KeptWithErrors;
         }
-        foreach (var plugin in journal.Plugins)
+        try
         {
-            cache.State.Revisions[plugin.Slug] = new(plugin.SourceUrl, plugin.Revision, DateTimeOffset.UtcNow);
-            cache.State.Results.RemoveAll(c => c.Slug == plugin.Slug);
-            host.Log($"Updated {plugin.Slug} {plugin.OldVersion} -> {plugin.NewVersion}.");
+            foreach (var plugin in journal.Plugins)
+            {
+                cache.State.Revisions[plugin.Slug] = new(plugin.SourceUrl, plugin.Revision, DateTimeOffset.UtcNow);
+                cache.State.Results.RemoveAll(c => c.Slug == plugin.Slug);
+                host.Log($"Updated {plugin.Slug} {plugin.OldVersion} -> {plugin.NewVersion}.");
+            }
+            cache.Save();
+            journal.Save(UpdatePhase.Committed);
+            System.IO.Directory.Delete(journal.Directory, true);
         }
-        cache.Save();
-        journal.Save(UpdatePhase.Committed);
-        System.IO.Directory.Delete(journal.Directory, true);
-        if (journal.Plugins.Any(p => p.IsEPlugin && p.ContainsCSharp)) host.RequestReload(journal);
+        catch (Exception ex) { host.Log("Update was committed; cleanup will be retried at startup: " + ex.Message); }
+        if (journal.Plugins.Any(p => p.IsEPlugin && p.ContainsCSharp))
+        {
+            // Committed journals must never be written again after their folder was deleted.
+            journal.State = UpdatePhase.Committed;
+            try { host.RequestReload(journal); }
+            catch (Exception ex) { host.Log("Update committed. Reopen the editor to load the final assembly: " + ex.Message); }
+        }
         return UpdateOutcome.Completed;
     }
 
@@ -168,6 +181,11 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
 
     public UpdateOutcome Rollback(UpdateJournal journal, string reason)
     {
+        if (store.LastCompletedAttemptId == journal.AttemptId)
+        {
+            host.Log("Update was committed; cleanup will be retried at startup: " + reason);
+            return UpdateOutcome.Completed;
+        }
         journal.Failure = reason;
         try
         {
@@ -239,7 +257,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
     {
         var backup = Path.Combine(journal.Directory, "backup-project");
         System.IO.Directory.CreateDirectory(backup);
-        foreach (var file in System.IO.Directory.GetFiles(projectRoot).Where(f => new[] { ".csproj", ".sln", ".slnx" }.Contains(Path.GetExtension(f)) || Path.GetFileName(f).Equals("nuget.config", StringComparison.OrdinalIgnoreCase)))
+        foreach (var file in System.IO.Directory.GetFiles(projectRoot).Where(f => new[] { ".csproj", ".sln", ".slnx" }.Contains(Path.GetExtension(f)) || Path.GetFileName(f).Equals("nuget.config", StringComparison.OrdinalIgnoreCase) || Path.GetFileName(f) == "project.godot"))
         {
             journal.ProjectFiles.Add(Path.GetFileName(file));
             File.Copy(file, Path.Combine(backup, Path.GetFileName(file)), false);
@@ -247,7 +265,9 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
     }
     private void RestoreProject(UpdateJournal journal)
     {
-        foreach (var file in journal.ProjectFiles) File.Copy(PackageFiles.Inside(Path.Combine(journal.Directory, "backup-project"), file), PackageFiles.Inside(projectRoot, file), true);
+        // The live editor owns project.godot; normal rollback restores autoloads via recipe operations.
+        // Its backup is reserved for independent early recovery, which reloads settings before restart.
+        foreach (var file in journal.ProjectFiles.Where(f => f != "project.godot")) File.Copy(PackageFiles.Inside(Path.Combine(journal.Directory, "backup-project"), file), PackageFiles.Inside(projectRoot, file), true);
         if (!journal.ProjectFiles.Any(p => p.Equals("nuget.config", StringComparison.OrdinalIgnoreCase)) && File.Exists(Path.Combine(projectRoot, "nuget.config"))) File.Delete(Path.Combine(projectRoot, "nuget.config"));
     }
     private static void Move(string from, string to)

@@ -113,12 +113,42 @@ public class UpdateTransactionTests
         var refused = false; try { UpdateJournal.Load(package.Directory); } catch (InvalidDataException) { refused = true; }
         Assertions.AssertBool(refused).IsTrue();
     }
+    [TestCase]
+    public void SelfUpdateQuiescesBeforeSwapAndRestartsWithoutDisablingFramework()
+    {
+        var package = Package(true);
+        Directory.Move(Path.Combine(_root, "addons/plugin"), Path.Combine(_root, "addons/ePlugin"));
+        Directory.Move(package.Package.StagingDir, Path.Combine(package.Directory, "staging/ePlugin"));
+        var self = package.Package with { Candidate = package.Package.Candidate with { Slug = "ePlugin" }, StagingDir = Path.Combine(package.Directory, "staging/ePlugin") };
+        _host.Managed = true;
+        _host.OnBeforeSwap = () =>
+        {
+            Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/ePlugin/plugin.cfg")).Contains("1.0.0")).IsTrue();
+            Assertions.AssertBool(_store.IsBlocked("ePlugin")).IsTrue();
+        };
+        Assertions.AssertObject(_applier.Apply([self], package.Directory)).IsEqual(UpdateOutcome.AwaitingReload);
+        Assertions.AssertInt(_host.Reloads).IsEqual(1);
+        Assertions.AssertObject(_applier.Resume(UpdateJournal.Load(package.Directory))).IsEqual(UpdateOutcome.Completed);
+        Assertions.AssertInt(_host.Toggles).IsEqual(0);
+        Assertions.AssertInt(_host.Reloads).IsEqual(2);
+    }
+    [TestCase]
+    public void CleanupFailureAfterAcknowledgementNeverRollsBackWorkingFiles()
+    {
+        var package = Package();
+        var applier = new UpdateApplier(_root, _store, _host, new ThrowingCache());
+        Assertions.AssertObject(applier.Apply([package.Package], package.Directory)).IsEqual(UpdateOutcome.Completed);
+        Assertions.AssertString(_store.GetShared("plugin")!.Version).IsEqual("2.0.0");
+        Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/plugin/plugin.cfg")).Contains("2.0.0")).IsTrue();
+        Assertions.AssertInt(_store.LocalAttempts.Count).IsEqual(0);
+    }
+    private sealed class ThrowingCache : IUpdateStateStore { public UpdateCache State { get; } = new(); public void Save() => throw new IOException("cleanup failure"); }
     private static string Config(string version) => $"[plugin]\nname=\"Plugin\"\nversion=\"{version}\"\nscript=\"plugin.gd\"\n";
     private sealed class MemoryStore : IUpdateStateStore { public UpdateCache State { get; } = new(); public void Save() { } }
     private sealed class FakeHost(PluginStateStore store) : IUpdateHost
     {
         public bool Managed; public bool HasUi; public string Policy = "rollback"; public int Toggles; public bool MarkerBeforeToggle;
-        public Action? OnScan;
+        public Action? OnScan; public Action? OnBeforeSwap; public int Reloads;
         public Queue<BuildOutcome> Builds { get; } = new();
         public bool UiAvailable => HasUi;
         public string BuildFailurePolicy => Policy;
@@ -127,13 +157,14 @@ public class UpdateTransactionTests
         public bool IsManaged(string slug) => Managed;
         public void Preflight(IReadOnlyList<ValidatedPackage> packages) { }
         public void PrepareJournal(UpdateJournal journal) { }
+        public void BeforeSwap(UpdateJournal journal) => OnBeforeSwap?.Invoke();
         public void Bridge(UpdateJournal journal, UpdatePluginJournal plugin) { }
         public void Reconcile(UpdateJournal journal, bool rollback) { }
         public void SetPlainEnabled(string slug, bool enabled) { Toggles++; MarkerBeforeToggle |= store.IsBlocked(slug); }
         public void SaveScenes() { }
         public void Scan() => OnScan?.Invoke();
         public BuildOutcome Build() => Builds.Count > 0 ? Builds.Dequeue() : new(0, []);
-        public void RequestReload(UpdateJournal journal) { }
+        public void RequestReload(UpdateJournal journal) { Reloads++; }
         public bool Verify(UpdatePluginJournal plugin) => true;
         public void Log(string message) { }
     }

@@ -1,6 +1,8 @@
 #if TOOLS
 using System;
 using System.Threading;
+using System.IO;
+using Enaweg.Plugin.Internal.Dotnet;
 using Enaweg.Plugin.Internal.Update;
 using Enaweg.Plugin.Internal.Update.UI;
 using System.Runtime.Loader;
@@ -40,6 +42,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin
 
     public override void _Process(double delta)
     {
+        if (!EnsureEarlyUpdateRecovery()) return;
         base._Process(delta);
 
         if (!EGlobal.Instance.IsValid())
@@ -127,8 +130,40 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin
         _updateDialog = null; _failureDialog = null;
     }
 
+    private static void RestoreEarlyUpdateSettings()
+    {
+        using var config = new ConfigFile();
+        if (config.Load("res://project.godot") != Error.Ok) throw new IOException("Cannot reload restored project settings.");
+        foreach (var property in ProjectSettings.Singleton.GetPropertyList())
+        {
+            var name = property["name"].AsString();
+            if (name.StartsWith("autoload/", StringComparison.Ordinal)) ProjectSettings.Clear(name);
+        }
+        if (config.HasSection("autoload")) foreach (var key in config.GetSectionKeys("autoload")) ProjectSettings.SetSetting("autoload/" + key, config.GetValue("autoload", key));
+        if (config.HasSectionKey("editor_plugins", "enabled")) ProjectSettings.SetSetting("editor_plugins/enabled", config.GetValue("editor_plugins", "enabled"));
+    }
+
+    private bool EnsureEarlyUpdateRecovery()
+    {
+        const string recoveryKey = "eplugin_early_update_recovery";
+        if (!Engine.Singleton.HasMeta(recoveryKey))
+        {
+            Engine.Singleton.SetMeta(recoveryKey, false);
+            var recovery = UpdateRecovery.RunIfNeeded(ProjectSettings.GlobalizePath("res://"), Logger,
+                () => new DotnetVersionManager(Logger, EnableDebugLogging).Create(Logger) is ICheckedDotnetCli cli && cli.TryBuild().ExitCode == 0,
+                RestoreEarlyUpdateSettings);
+            if (recovery != UpdateRecovery.Outcome.Continue)
+            {
+                Engine.Singleton.SetMeta(recoveryKey, true);
+                if (recovery == UpdateRecovery.Outcome.Restart) EditorInterface.Singleton.CallDeferred(EditorInterface.MethodName.RestartEditor, true);
+            }
+        }
+        return !Engine.Singleton.GetMeta(recoveryKey).AsBool();
+    }
+
     private void InitializeInternals()
     {
+        if (!EnsureEarlyUpdateRecovery()) return;
         _retryMenuAdded = false; _updateMenuAdded = false;
         _updateOwner = EGlobal.Instance;
         _updateOwner.UpdateDecisionNeeded -= ShowUpdateFailure;

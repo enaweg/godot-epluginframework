@@ -21,7 +21,7 @@ internal sealed class DotnetCli9(ILogger? logger, bool enableDebugLogging)
 
     public override BuildOutcome TryBuild()
     {
-        var result = Execute(["build", SolutionPath]);
+        var result = Execute(["build", SolutionPath, "--no-incremental"]);
         return new BuildOutcome(result.Item1, result.Item2);
     }
 

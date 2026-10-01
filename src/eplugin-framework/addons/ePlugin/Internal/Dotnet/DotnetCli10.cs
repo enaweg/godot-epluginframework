@@ -20,7 +20,7 @@ internal sealed class DotnetCli10(ILogger? logger, bool enableDebugLogging)
 
     public override BuildOutcome TryBuild()
     {
-        var result = Execute("build", null, [SolutionPath]);
+        var result = Execute("build", null, [SolutionPath, "--no-incremental"]);
         return new BuildOutcome(result.Item1, result.Item2);
     }
 
