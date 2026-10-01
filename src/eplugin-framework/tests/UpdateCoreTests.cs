@@ -100,4 +100,3 @@ public class UpdateCoreTests
         public void Save() { }
     }
 }
-
