@@ -97,6 +97,58 @@ public class UpdatePackageTests
         Assertions.AssertString(File.ReadAllText(Path.Combine(staged, "Code.cs.uid"))).IsEqual("uid://author");
     }
 
+    [TestCase]
+    public void ValidatorRejectsEmptyMetadataAndChangedSlug()
+    {
+        var installed = Path.Combine(_root, "installed"); var stage = Path.Combine(_root, "plugin");
+        Directory.CreateDirectory(installed); Directory.CreateDirectory(stage);
+        File.WriteAllText(Path.Combine(installed, "plugin.cfg"), Config("1.0.0"));
+        var target = new PluginUpdateTarget("plugin", "Plugin", "1.0.0", "https://example.org/releases", installed);
+        var candidate = new UpdateCandidate("plugin", "Plugin", "1.0.0", "2.0.0", target.UpdateUrl, null, null, new ZipPackageRef("https://example.org/plugin.zip", "plugin"));
+        var validator = new AddonPackageValidator();
+        var empty = validator.Validate(new(target, candidate, stage));
+        foreach (var rule in new[] { "R1", "R2", "R3" }) Assertions.AssertBool(empty.Findings.Any(f => f.Code == rule && f.Severity == FindingSeverity.Error)).IsTrue();
+        File.WriteAllText(Path.Combine(stage, "plugin.cfg"), Config("2.0.0")); File.WriteAllText(Path.Combine(stage, "plugin.gd"), "script");
+        Assertions.AssertBool(validator.Validate(new(target, candidate with { Slug = "changed" }, stage)).Findings.Any(f => f.Code == "R5")).IsTrue();
+    }
+    [TestCase]
+    public void ValidatorWarnsAboutActualVersionNameAndLanguageAndRejectsReadOnlyState()
+    {
+        var installed = Path.Combine(_root, "installed"); var stage = Path.Combine(_root, "plugin");
+        Directory.CreateDirectory(installed); Directory.CreateDirectory(stage);
+        File.WriteAllText(Path.Combine(installed, "plugin.cfg"), Config("1.0.0"));
+        File.WriteAllText(Path.Combine(stage, "plugin.cfg"), Config("3.0.0").Replace("Plugin", "Renamed").Replace("plugin.gd", "plugin.cs"));
+        File.WriteAllText(Path.Combine(stage, "plugin.cs"), "C# script");
+        var target = new PluginUpdateTarget("plugin", "Plugin", "1.0.0", "https://example.org/releases", installed, StoreReadOnly: true);
+        var candidate = new UpdateCandidate("plugin", "Plugin", "1.0.0", "2.0.0", target.UpdateUrl, null, null, new ZipPackageRef("https://example.org/plugin.zip", "plugin"));
+        var result = new AddonPackageValidator().Validate(new(target, candidate, stage));
+        foreach (var rule in new[] { "R7", "R8", "R13", "R14" }) Assertions.AssertBool(result.Findings.Any(f => f.Code == rule && f.Severity == FindingSeverity.Warning)).IsTrue();
+        Assertions.AssertBool(result.Findings.Any(f => f.Code == "R17" && f.Severity == FindingSeverity.Error)).IsTrue();
+        Assertions.AssertBool(result.ContainsCSharp).IsTrue();
+    }
+    [TestCase]
+    public void ValidatorRefusesOversizedFilesAndNewProjectConfigsButAllowsExistingProjects()
+    {
+        var installed = Path.Combine(_root, "installed"); var stage = Path.Combine(_root, "plugin");
+        Directory.CreateDirectory(installed); Directory.CreateDirectory(stage);
+        File.WriteAllText(Path.Combine(installed, "plugin.cfg"), Config("1.0.0"));
+        File.WriteAllText(Path.Combine(installed, "Existing.csproj"), "old project");
+        File.WriteAllText(Path.Combine(stage, "plugin.cfg"), Config("2.0.0")); File.WriteAllText(Path.Combine(stage, "plugin.gd"), "script");
+        File.WriteAllText(Path.Combine(stage, "Existing.csproj"), "updated project");
+        var target = new PluginUpdateTarget("plugin", "Plugin", "1.0.0", "https://example.org/releases", installed);
+        var candidate = new UpdateCandidate("plugin", "Plugin", "1.0.0", "2.0.0", target.UpdateUrl, null, null, new ZipPackageRef("https://example.org/plugin.zip", "plugin"));
+        var validator = new AddonPackageValidator();
+        Assertions.AssertBool(validator.Validate(new(target, candidate, stage)).Findings.Any(f => f.Code == "R11")).IsFalse();
+        foreach (var name in new[] { "project.godot", "nuget.config", "New.csproj", "New.sln", "New.slnx", ".gitmodules" })
+        {
+            var path = Path.Combine(stage, name); File.WriteAllText(path, "forbidden");
+            Assertions.AssertBool(validator.Validate(new(target, candidate, stage)).Findings.Any(f => f.Code == "R11")).IsTrue();
+            File.Delete(path);
+        }
+        using (var sparse = File.Create(Path.Combine(stage, "oversized.bin"))) sparse.SetLength(PackageFiles.MaximumFile + 1);
+        Assertions.AssertBool(validator.Validate(new(target, candidate, stage)).Findings.Any(f => f.Code == "R12")).IsTrue();
+    }
+
     private string Zip(params (string Path, string Content)[] files)
     {
         var path = Path.Combine(_root, Guid.NewGuid().ToString("N") + ".zip");

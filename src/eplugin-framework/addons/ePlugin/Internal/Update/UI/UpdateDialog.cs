@@ -50,6 +50,7 @@ internal sealed partial class UpdateDialog : ConfirmationDialog
     public void Refresh()
     {
         if (_working) return;
+        ClearStaging();
         var targets = _global.CollectUpdateTargets();
         _model = new(_global.PendingUpdates, targets, _global.UpdateCache, candidate =>
         {
@@ -110,9 +111,14 @@ internal sealed partial class UpdateDialog : ConfirmationDialog
     {
         if (_working) return;
         ClearStaging(); _working = true; Buttons(); _status.Text = "Checking for updates...";
+        string? failure = null;
         try { await _global.CheckForUpdatesAsync(true); }
-        catch (Exception ex) { _status.Text = ex.Message; }
-        finally { _working = false; if (GodotObject.IsInstanceValid(this)) Refresh(); }
+        catch (Exception ex) { failure = ex.Message; }
+        finally
+        {
+            _working = false;
+            if (GodotObject.IsInstanceValid(this) && IsInsideTree()) { Refresh(); if (failure is not null) _status.Text = failure; }
+        }
     }
     private async void Confirm()
     {
@@ -127,6 +133,7 @@ internal sealed partial class UpdateDialog : ConfirmationDialog
                 var relay = new InlineProgress(value => Callable.From(() => { if (GodotObject.IsInstanceValid(this)) _progress.Value = value * 100; }).CallDeferred());
                 var staged = await _global.StageUpdatesAsync(_model.Selected, relay, _cancel.Token);
                 _staged = staged.Packages; _directory = staged.Directory;
+                if (_lifetime.IsCancellationRequested || !GodotObject.IsInstanceValid(this) || !IsInsideTree()) { ClearStaging(); return; }
                 foreach (var package in _staged)
                 {
                     var row = _model.Rows.First(r => r.Candidate.Slug == package.Candidate.Slug);
@@ -144,9 +151,9 @@ internal sealed partial class UpdateDialog : ConfirmationDialog
             _directory = null; _staged = null; Hide();
             if (outcome == UpdateOutcome.Completed) Refresh();
         }
-        catch (OperationCanceledException) { _status.Text = "Download canceled. Addon files were not changed."; ClearStaging(); }
-        catch (Exception ex) { _status.Text = "Update failed: " + ex.Message; if (!_swapping) ClearStaging(); }
-        finally { _working = false; _swapping = false; if (GodotObject.IsInstanceValid(this)) Buttons(); }
+        catch (OperationCanceledException) { if (GodotObject.IsInstanceValid(this) && IsInsideTree()) _status.Text = "Download canceled. Addon files were not changed."; ClearStaging(); }
+        catch (Exception ex) { if (GodotObject.IsInstanceValid(this) && IsInsideTree()) _status.Text = "Update failed: " + ex.Message; if (!_swapping) ClearStaging(); }
+        finally { _working = false; _swapping = false; if (GodotObject.IsInstanceValid(this) && IsInsideTree()) Buttons(); }
     }
     private void Cancel() { if (_swapping) return; _cancel?.Cancel(); if (!_working) ClearStaging(); Hide(); }
     private void ClearStaging()

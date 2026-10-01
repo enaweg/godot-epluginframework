@@ -54,6 +54,18 @@ public class UpdateRecoveryTests
         Assertions.AssertObject(Recover()).IsEqual(UpdateRecovery.Outcome.Continue);
     }
     [TestCase]
+    public void EarlyRecoveryRestoresUnchangedDependantsDirectoryVisibility()
+    {
+        var addon = Path.Combine(_root, "addons/dependant");
+        Directory.CreateDirectory(Path.Combine(addon, ".old"));
+        Directory.CreateDirectory(Path.Combine(addon, "new"));
+        _journal.Recipes["dependant"] = new() { Old = new() { Directories = ["res://addons/dependant/.old"] }, Applied = new() { Directories = ["res://addons/dependant/.new"] } };
+        _journal.StartCount = 1; _journal.Save();
+        Assertions.AssertObject(Recover()).IsEqual(UpdateRecovery.Outcome.Restart);
+        Assertions.AssertBool(Directory.Exists(Path.Combine(addon, "old"))).IsTrue();
+        Assertions.AssertBool(Directory.Exists(Path.Combine(addon, ".new"))).IsTrue();
+    }
+    [TestCase]
     public void HealthyMarkerPreventsEarlyRollback()
     {
         _journal.StartCount = 9; _journal.Save();

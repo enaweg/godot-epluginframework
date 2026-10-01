@@ -145,7 +145,7 @@ internal sealed partial class EGlobal
             foreach (var package in packages.Where(p => IsManaged(p.Candidate.Slug)))
                 if (global._contexts.FirstOrDefault(c => c.Slug == package.Candidate.Slug)?.State != EEditorPluginState.Activated)
                     throw new InvalidOperationException($"Finish enabling {package.Candidate.Slug} before updating it.");
-            var findings = global.UpdatePreflightFindings(packages.Select(p => p.Candidate with { NewVersion = p.NewVersion.ToString() }).ToArray());
+            var findings = global.UpdatePreflightFindings(packages.Select(p => p.Candidate with { NewVersion = PluginIni.Parse(File.ReadAllText(Path.Combine(p.StagingDir, "plugin.cfg")))["version"] }).ToArray());
             if (findings.Any(f => f.Severity == FindingSeverity.Error)) throw new InvalidOperationException(string.Join("; ", findings.Where(f => f.Severity == FindingSeverity.Error).Select(f => f.Message)));
             foreach (var warning in findings.Where(f => f.Severity == FindingSeverity.Warning)) Log(warning.Message);
             if (global._toCheckEnable.Any() || global._toCheckDisable.Any()) throw new InvalidOperationException("Finish plugin transitions before updating.");

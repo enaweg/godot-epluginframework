@@ -126,6 +126,8 @@ internal sealed partial class EGlobal
                     if (updated) context.AppliedOptionalDependencies = null;
                     entry.Value.Target = Snapshot(context, updated ? null : entry.Value.Old.AppliedOptionals);
                 }
+                if (journal.Recipes.Values.SelectMany(r => r.Target!.Nugets).GroupBy(n => n.Name).Any(g => g.Select(n => (n.Version, n.Source)).Distinct().Count() > 1))
+                    throw new InvalidOperationException("Newly enabled dependencies declare conflicting versions or sources for a shared NuGet package.");
                 journal.Save();
                 foreach (var slug in RecipeReconciler.DependencyOrder(journal.Recipes.ToDictionary(p => p.Key, p => p.Value.Target!)))
                 {

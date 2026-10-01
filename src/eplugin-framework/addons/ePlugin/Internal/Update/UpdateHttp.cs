@@ -78,9 +78,11 @@ internal sealed class UpdateHttp
             if (source.Host == "github.com") token = Environment.GetEnvironmentVariable("EPLUGIN_GITHUB_TOKEN") ?? Environment.GetEnvironmentVariable("GITHUB_TOKEN");
             else if (gitlab) token = Environment.GetEnvironmentVariable("EPLUGIN_GITLAB_TOKEN") ?? Environment.GetEnvironmentVariable("GITLAB_TOKEN");
         }
-        using var response = await SendAsync(new Uri(url), HttpMethod.Get, ct, token, gitlab).ConfigureAwait(false);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromMinutes(5));
+        using var response = await SendAsync(new Uri(url), HttpMethod.Get, timeout.Token, token, gitlab).ConfigureAwait(false);
         await using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true);
-        await CopyBounded(response, output, MaximumDownload, progress, ct).ConfigureAwait(false);
+        await CopyBounded(response, output, MaximumDownload, progress, timeout.Token).ConfigureAwait(false);
     }
     private static async Task CopyBounded(HttpResponseMessage response, Stream output, long limit, IProgress<double>? progress, CancellationToken ct)
     {

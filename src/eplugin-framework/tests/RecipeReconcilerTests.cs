@@ -58,6 +58,29 @@ public class RecipeReconcilerTests
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
     [TestCase]
+    public void RelativeProjectBridgePreservesMissingNeighborsWithoutOverwritingNewCode()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "project-bridge-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var backup = Path.Combine(root, "backup"); var installed = Path.Combine(root, "installed");
+            Directory.CreateDirectory(Path.Combine(backup, "src")); Directory.CreateDirectory(Path.Combine(installed, "src"));
+            File.WriteAllText(Path.Combine(backup, "src/External.csproj"), "old project");
+            File.WriteAllText(Path.Combine(backup, "src/Api.cs"), "old API");
+            File.WriteAllText(Path.Combine(backup, "src/Required.cs"), "required old neighbor");
+            File.WriteAllText(Path.Combine(installed, "src/Api.cs"), "new API");
+            var recipe = new RecipeSnapshot { Projects = [new("addons/plugin/src/External.csproj", null, true)] };
+            var preserved = InterimBridge.Restore("plugin", recipe, backup, installed);
+            Assertions.AssertInt(preserved.Count).IsEqual(2);
+            Assertions.AssertString(File.ReadAllText(Path.Combine(installed, "src/Api.cs"))).IsEqual("new API");
+            Assertions.AssertBool(File.Exists(Path.Combine(installed, "src/Required.cs"))).IsTrue();
+            InterimBridge.Remove(installed, preserved);
+            Assertions.AssertBool(File.Exists(Path.Combine(installed, "src/Required.cs"))).IsFalse();
+            Assertions.AssertString(File.ReadAllText(Path.Combine(installed, "src/Api.cs"))).IsEqual("new API");
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+    [TestCase]
     public void RootAndAppliedOptionalsAreSerializedAsInstalledResources()
     {
         var root = new EEditorPluginRecipe { Nugets = [new("Root", "1.0", null)] };

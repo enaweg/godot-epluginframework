@@ -11,10 +11,11 @@ internal static class InterimBridge
 {
     public static List<string> Restore(string slug, RecipeSnapshot old, string backup, string installed)
     {
-        var prefix = $"res://addons/{slug}/";
+        var prefix = $"addons/{slug}/";
         var preserved = new List<string>();
         var paths = old.Directories.Select(RecipeReconciler.VisibleDirectory)
             .Concat(old.Projects.Select(p => p.Path)).Concat(old.Autoloads.Select(a => a.Path))
+            .Select(p => p.StartsWith("res://", StringComparison.Ordinal) ? p[6..] : p)
             .Where(p => p.StartsWith(prefix, StringComparison.Ordinal)).Select(p => p[prefix.Length..])
             .OrderBy(p => p.Count(c => c == '/')).ToArray();
         foreach (var relative in paths)
@@ -27,12 +28,17 @@ internal static class InterimBridge
                 // Project files need their neighboring sources as well.
                 if (relative.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
                 {
-                    var directory = Path.GetDirectoryName(relative);
-                    if (string.IsNullOrEmpty(directory)) throw new InvalidDataException("A missing root-level managed project cannot be bridged safely.");
-                    var destination = PackageFiles.Inside(installed, directory);
-                    if (Directory.Exists(destination)) throw new InvalidDataException("New project directory lacks the old managed project; interim bridge would overwrite new files.");
-                    PackageFiles.Copy(Path.GetDirectoryName(source)!, destination, CancellationToken.None);
-                    preserved.Add(directory);
+                    var directory = Path.GetDirectoryName(relative) ?? "";
+                    var sourceDirectory = string.IsNullOrEmpty(directory) ? backup : PackageFiles.Inside(backup, directory);
+                    foreach (var neighbor in PackageFiles.Files(sourceDirectory))
+                    {
+                        var neighborRelative = Path.GetRelativePath(backup, neighbor).Replace('\\', '/');
+                        var destination = PackageFiles.Inside(installed, neighborRelative);
+                        if (File.Exists(destination)) continue;
+                        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                        File.Copy(neighbor, destination, false);
+                        preserved.Add(neighborRelative);
+                    }
                 }
                 else { Directory.CreateDirectory(Path.GetDirectoryName(target)!); File.Copy(source, target, false); preserved.Add(relative); }
             }
