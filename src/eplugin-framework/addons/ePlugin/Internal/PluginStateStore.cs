@@ -228,9 +228,10 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
         return true;
     }
 
-    public bool TryRecordInvalid(string slug, string? installedVersion, string reason)
+    /// <summary>A manual retry replaces the blocked attempt, so the record reflects why the retry failed.</summary>
+    public bool TryRecordInvalid(string slug, string? installedVersion, string reason, bool manualRetry = false)
     {
-        if (!TryBeginAttempt(slug, installedVersion, PersistedPluginState.Activated, out var attemptId))
+        if (!TryBeginAttempt(slug, installedVersion, PersistedPluginState.Activated, out var attemptId, manualRetry))
         {
             return false;
         }

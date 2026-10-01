@@ -259,7 +259,7 @@ internal sealed partial class EGlobal
         }
 
         var retriedUpdates = new HashSet<Guid>();
-        foreach (var attempt in _stateStore.LocalAttempts.ToArray())
+        foreach (var attempt in OrderRetries(_stateStore.LocalAttempts))
         {
             var updateJournal = _updateJournals?.Read().FirstOrDefault(j => j.AttemptId == attempt.AttemptId);
             if (updateJournal is not null || attempt.Reason.StartsWith("update_", StringComparison.Ordinal))
@@ -268,6 +268,14 @@ internal sealed partial class EGlobal
                 continue;
             }
             var context = _contexts.FirstOrDefault(c => c.Slug == attempt.Slug && c.Plugin is not null);
+            var expectedState = attempt.TargetState == PersistedPluginState.Activated
+                ? EEditorPluginState.Activated
+                : EEditorPluginState.Deactivated;
+            if (_stateStore.GetLocal(attempt.Slug) is null && context?.State == expectedState)
+            {
+                continue; // an earlier retry of this loop already completed it, e.g. as a dependency
+            }
+
             if (context is null && attempt.Reason == "invalid_plugin_version" &&
                 !IsManagedPlugin(attempt.Slug))
             {
@@ -310,6 +318,7 @@ internal sealed partial class EGlobal
                 continue;
             }
 
+            context.RefreshMetadata(); // picks up a repaired plugin.cfg, e.g. a version that was missing
             if (attempt.TargetState == PersistedPluginState.Activated)
             {
                 EnableEPlugin(context, manualRetry: true);
@@ -324,6 +333,78 @@ internal sealed partial class EGlobal
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Orders blocked attempts so a failed hard dependency is retried before the plugins that need it. Otherwise
+    /// a dependant would be retried while its dependency is still in error and fail again.
+    /// </summary>
+    internal IReadOnlyList<LocalPluginAttempt> OrderRetries(IReadOnlyCollection<LocalPluginAttempt> attempts)
+    {
+        var bySlug = attempts.ToDictionary(a => a.Slug, StringComparer.Ordinal);
+        var ordered = new List<LocalPluginAttempt>(attempts.Count);
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+
+        void Visit(LocalPluginAttempt attempt)
+        {
+            if (!visited.Add(attempt.Slug))
+            {
+                return; // already ordered, or a dependency cycle
+            }
+
+            foreach (var dependency in GetHardDependencySlugs(attempt.Slug))
+            {
+                if (bySlug.TryGetValue(dependency, out var blockedDependency))
+                {
+                    Visit(blockedDependency);
+                }
+            }
+
+            ordered.Add(attempt);
+        }
+
+        foreach (var attempt in attempts)
+        {
+            Visit(attempt);
+        }
+
+        return ordered;
+    }
+
+    private IEnumerable<string> GetHardDependencySlugs(string slug)
+    {
+        var context = _contexts.FirstOrDefault(c => c.Slug == slug && c.Plugin is not null);
+        if (context is null)
+        {
+            return [];
+        }
+
+        if (context.IsRecipeCreated)
+        {
+            return context.Builder.PluginRecipe.PluginDependencies.Select(d => d.Slug);
+        }
+
+        try
+        {
+            // a throw-away builder: a failing CreateRecipe must not leave a half-filled recipe on the context
+            var builder = EEditorPluginBuilder.Create();
+            context.Plugin!.CreateRecipe(builder);
+            return builder.PluginRecipe.PluginDependencies.Select(d => d.Slug);
+        }
+        catch (Exception)
+        {
+            return []; // the retry itself reports the recipe failure
+        }
+    }
+
+    private string DescribeLocalState(string slug)
+    {
+        if (_stateStore?.IsReadOnly == true)
+        {
+            return "plugin state files cannot be read";
+        }
+
+        return _stateStore?.GetLocal(slug)?.Reason ?? "unknown";
     }
 
     private bool JoinTransition(PluginContext context, PersistedPluginState target, bool manualRetry = false)
@@ -341,7 +422,8 @@ internal sealed partial class EGlobal
 
         if (_stateStore.IsReadOnly || (_stateStore.IsBlocked(context.Slug) && !manualRetry))
         {
-            context.Logger?.Error($"Plugin {context.Slug} is blocked by local state. Use manual retry after recovery.");
+            context.Logger?.Error(
+                $"Plugin {context.Slug} is blocked by local state ({DescribeLocalState(context.Slug)}). Use manual retry after recovery.");
             context.State = EEditorPluginState.Error;
             FailTransition("participant_blocked");
             return false;
@@ -355,7 +437,9 @@ internal sealed partial class EGlobal
         var version = context.Metadata?.Version;
         if (string.IsNullOrWhiteSpace(version))
         {
-            _stateStore.TryRecordInvalid(context.Slug, version, "invalid_plugin_version");
+            context.Logger?.Error(
+                $"Plugin {context.Slug} has no version in plugin.cfg. Add one and use manual retry.");
+            _stateStore.TryRecordInvalid(context.Slug, version, "invalid_plugin_version", manualRetry);
             context.State = EEditorPluginState.Error;
             FailTransition("invalid_plugin_version");
             return false;
@@ -701,8 +785,13 @@ internal sealed partial class EGlobal
     /// When given, that plugin is treated as if it were still enabled. Used to reconstruct which optional
     /// recipes were installed while a plugin that is being disabled right now was still available.
     /// </param>
+    /// <param name="requireReady">
+    /// When true, an enabled optional plugin that is in the error state (e.g. blocked by local state) does not
+    /// count as satisfied. Used when installing; reconstructing what was installed earlier leaves it false.
+    /// </param>
     internal List<EEditorPluginRecipe.OptionalPlugin> ResolveOptionalRecipes(PluginContext context,
-        EEditorPluginRecipe recipe, string? ignoreSlug = null, string? assumeEnabledSlug = null)
+        EEditorPluginRecipe recipe, string? ignoreSlug = null, string? assumeEnabledSlug = null,
+        bool requireReady = false)
     {
         var resolved = new List<EEditorPluginRecipe.OptionalPlugin>();
 
@@ -710,6 +799,15 @@ internal sealed partial class EGlobal
         {
             if (optional.Slug == ignoreSlug)
             {
+                continue;
+            }
+
+            if (requireReady && optional.Slug != assumeEnabledSlug &&
+                _contexts.FirstOrDefault(c => c.Slug == optional.Slug && c.Plugin is not null)
+                    is { State: EEditorPluginState.Error })
+            {
+                context.Logger?.Warn(
+                    $"Optional dependency {optional.Slug} is in an error state, skipping its recipe for {context.Slug}.");
                 continue;
             }
 
@@ -773,7 +871,7 @@ internal sealed partial class EGlobal
                 ResolveOptionalRecipes(other, otherRecipe, ignoreSlug: enabledContext.Slug));
             other.AppliedOptionalDependencies = applied;
 
-            foreach (var optional in ResolveOptionalRecipes(other, otherRecipe))
+            foreach (var optional in ResolveOptionalRecipes(other, otherRecipe, requireReady: true))
             {
                 if (applied.Contains(optional) || _recipeUpdateJournal is not null && applied.Any(a => a.Slug == optional.Slug && a.Version == optional.Version))
                 {
@@ -885,7 +983,7 @@ internal sealed partial class EGlobal
             return;
         }
 
-        foreach (var optional in ResolveOptionalRecipes(context, recipe))
+        foreach (var optional in ResolveOptionalRecipes(context, recipe, requireReady: true))
         {
             applied.Add(optional);
             ApplyRecipe(context, optional.Recipe);
@@ -1186,7 +1284,7 @@ internal sealed partial class EGlobal
                 {
                     context.State = EEditorPluginState.Error;
                     context.Logger?.Error(
-                        $"Plugin {context.Slug} has unresolved local state; use the manual retry action after recovery.");
+                        $"Plugin {context.Slug} has unresolved local state ({DescribeLocalState(context.Slug)}); use the manual retry action after recovery.");
                 }
                 else if (!updateOwned && _stateStore?.GetShared(context.Slug) is { } saved)
                 {

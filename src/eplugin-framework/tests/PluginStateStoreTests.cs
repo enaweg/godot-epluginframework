@@ -208,4 +208,24 @@ public class PluginStateStoreTests
         ])).IsTrue();
         Assertions.AssertBool(File.Exists(path + ".user")).IsFalse();
     }
+
+    [TestCase]
+    public void ManualRetryReplacesBlockedAttemptWithInvalidRecord()
+    {
+        var (store, _) = NewStore();
+        Assertions.AssertBool(store.TryCreateBaseline([])).IsTrue();
+        Assertions.AssertBool(store.TryRecordInvalid("sample_plugin", "", "invalid_plugin_version")).IsTrue();
+        var first = store.GetLocal("sample_plugin")!.AttemptId;
+
+        // without a manual retry the existing block is kept as is
+        Assertions.AssertBool(store.TryRecordInvalid("sample_plugin", "", "invalid_plugin_version")).IsFalse();
+        Assertions.AssertBool(store.GetLocal("sample_plugin")!.AttemptId == first).IsTrue();
+
+        Assertions.AssertBool(store.TryRecordInvalid("sample_plugin", "", "invalid_plugin_version",
+            manualRetry: true)).IsTrue();
+        var replaced = store.GetLocal("sample_plugin")!;
+        Assertions.AssertBool(replaced.AttemptId != first).IsTrue();
+        Assertions.AssertObject(replaced.State).IsEqual(PersistedPluginState.Invalid);
+        Assertions.AssertString(replaced.Reason).IsEqual("invalid_plugin_version");
+    }
 }
