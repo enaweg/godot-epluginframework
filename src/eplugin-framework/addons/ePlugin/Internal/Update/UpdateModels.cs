@@ -27,6 +27,12 @@ internal interface IUpdateSource
 {
     Task<UpdateCandidate?> CheckAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct);
 }
+/// <summary>A source that can list every published version, so a specific one (also an older one) can be installed.</summary>
+internal interface IVersionListSource
+{
+    /// <summary>One candidate per published version; the order is not defined.</summary>
+    Task<IReadOnlyList<UpdateCandidate>> ListAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct);
+}
 internal interface IUpdateSourceFactory { IUpdateSource Create(string url); }
 internal sealed class UnsupportedUpdateSource(string url) : IUpdateSource
 {

@@ -88,6 +88,10 @@ recipe. From the dialog you can:
 + **Update** — installs the checked updates (see [Updating plugins](#updating-plugins)).
 + **Retry failed** — retries plugins whose activation, deactivation or update failed or was interrupted.
 + **Open release page** — opens the release notes of the selected plugin's update.
++ **Version** — for an enabled plugin with an `update_url`, pick any published version and select **Update** or
+  **Downgrade**. Use a downgrade to undo an update that broke the project; it goes through the same download,
+  validation, backup and rollback as an update. The ePlugin Framework itself cannot be downgraded, because older
+  releases cannot finish or recover the update that installs them.
 
 ## Plugin state files
 
@@ -379,6 +383,9 @@ The ePlugin Manager lists installed/new versions, sources, warnings, and earlier
 select **Update** to download and validate it. Package warnings require another confirmation before installation; a
 changed source host requires the explicit trust checkbox. Canceling the download leaves installed addons
 untouched. Previously failed versions are shown but are not selected automatically.
+
+Versions are listed from the same source: GitHub/GitLab releases (up to 100) or semver tags of a git source. A
+git `update_url` pinned to a branch, tag or commit has no version list.
 
 ### Supported sources
 

@@ -24,6 +24,7 @@ internal sealed class PluginRow(PluginInfo plugin, UpdateRow? update)
     public bool HasUpdate => Update is not null;
     public bool CanToggle => !Plugin.Missing;
 }
+internal sealed record VersionOption(string Version, UpdateCandidate? Candidate, bool Installed, bool IsDowngrade);
 internal sealed class PluginManagerViewModel
 {
     public List<PluginRow> Plugins { get; } = [];
@@ -69,6 +70,32 @@ internal sealed class PluginManagerViewModel
     }
     public PluginRow? Find(string slug) => Plugins.FirstOrDefault(p => p.Plugin.Slug == slug);
 
+    /// <summary>The published versions plus the installed one, newest first.</summary>
+    public static IReadOnlyList<VersionOption> VersionOptions(string installedVersion, IReadOnlyList<UpdateCandidate> versions)
+    {
+        var known = SemVer.TryParse(installedVersion, out var installed);
+        var options = versions.Select(candidate =>
+        {
+            var valid = SemVer.TryParse(candidate.NewVersion, out var version);
+            var current = known && valid && version.CompareTo(installed) == 0;
+            return new VersionOption(candidate.NewVersion, candidate, current, known && valid && version.CompareTo(installed) < 0);
+        }).ToList();
+        if (!options.Any(o => o.Installed)) options.Add(new(installedVersion, null, true, false));
+        return options.OrderByDescending(o => SemVer.TryParse(o.Version, out var v) ? v : default).ToArray();
+    }
+
+    /// <summary>Why the selected version cannot be installed, or null when it can.</summary>
+    public static string? VersionChangeBlocked(PluginRow row, VersionOption option)
+    {
+        if (option.Installed) return "This version is installed.";
+        if (row.Plugin.Missing || option.Candidate is null) return "The plugin folder is missing.";
+        if (!row.Plugin.Enabled) return "Enable the plugin to change its version.";
+        if (row.Plugin.FailedAttempt is not null) return "Resolve the plugin's failed state with Retry failed first.";
+        if (option.IsDowngrade && row.Plugin.Kind == PluginKind.Framework)
+            return "The ePlugin Framework cannot be downgraded: older releases cannot finish or recover the update that installs them.";
+        return null;
+    }
+
     public static string StatusText(PluginInfo plugin)
     {
         if (plugin.Missing) return "Missing (no plugin.cfg)";
@@ -79,7 +106,8 @@ internal sealed class PluginManagerViewModel
     }
 
     /// <summary>The details pane as BBCode. All plugin supplied text is escaped.</summary>
-    public static string Describe(PluginRow row)
+    /// <param name="reviewed">Findings of a staged package for an explicitly chosen version, awaiting confirmation.</param>
+    public static string Describe(PluginRow row, IReadOnlyList<Finding>? reviewed = null)
     {
         var plugin = row.Plugin; var text = new StringBuilder();
         void Line(string label, string? value) { if (!string.IsNullOrWhiteSpace(value)) text.Append($"[b]{label}:[/b] {Escape(value)}\n"); }
@@ -102,6 +130,12 @@ internal sealed class PluginManagerViewModel
         }
         else if (plugin.UpdateUrl is not null) { text.Append("No update known.\n"); Line("Source", plugin.UpdateUrl); }
         else text.Append("Not updatable: plugin.cfg has no update_url.\n");
+
+        if (reviewed is { Count: > 0 })
+        {
+            text.Append("\n[b]Reviewed package[/b]\n");
+            foreach (var finding in reviewed) text.Append($"[color={Color(finding.Severity)}]{finding.Severity}:[/color] {Escape(finding.Message)}\n");
+        }
 
         if (plugin.Recipe is { } recipe)
         {

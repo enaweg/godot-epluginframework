@@ -79,6 +79,16 @@ internal sealed partial class EGlobal
         }
     }
 
+    /// <summary>All published versions of an enabled plugin with an update_url, newest first.</summary>
+    internal async Task<IReadOnlyList<UpdateCandidate>> ListVersionsAsync(string slug, CancellationToken ct)
+    {
+        var service = _updateService ?? throw new InvalidOperationException("Update system is not initialized.");
+        var target = CollectUpdateTargets().FirstOrDefault(t => t.Slug == slug)
+            ?? throw new InvalidOperationException("Enable the plugin to change its version.");
+        var allow = ProjectSettings.GetSetting("eplugin/updates/allow_prerelease", false).AsBool();
+        return await Task.Run(() => service.ListVersionsAsync(target, new(allow), ct), ct);
+    }
+
     internal static Task OnEditorThread(Action action, CancellationToken ct)
     {
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

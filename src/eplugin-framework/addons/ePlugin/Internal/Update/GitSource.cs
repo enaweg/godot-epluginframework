@@ -65,8 +65,36 @@ internal sealed class GitRunner(bool allowFileProtocol = false) : IGitRunner
         return new(process.ExitCode, await output.ConfigureAwait(false), await error.ConfigureAwait(false));
     }
 }
-internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : IUpdateSource
+internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : IUpdateSource, IVersionListSource
 {
+    /// <summary>
+    /// Every semver tag is a version. The announced version is the tag name; the validator warns when the tagged
+    /// plugin.cfg differs. A source pinned to a branch, tag or commit has no versions to choose from.
+    /// </summary>
+    public async Task<IReadOnlyList<UpdateCandidate>> ListAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct)
+    {
+        if (url.Ref is not null) return [];
+        var work = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "eplugin-git-list-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(work);
+        try
+        {
+            await EnsureVersion(work, ct).ConfigureAwait(false);
+            var remote = await Checked(git, work, ["ls-remote", "--tags", "--", url.Repository], ct).ConfigureAwait(false);
+            var refs = remote.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => line.Trim().Split('\t')).Where(p => p.Length == 2).ToArray();
+            return refs.Where(p => p[1].StartsWith("refs/tags/", StringComparison.Ordinal) && !p[1].EndsWith("^{}", StringComparison.Ordinal) &&
+                    SemVer.TryParse(p[1][10..], out var v) && (options.AllowPrerelease || v.Prerelease is null))
+                .Select(p =>
+                {
+                    var tag = p[1][10..];
+                    var commit = refs.FirstOrDefault(r => r[1] == p[1] + "^{}")?[0] ?? p[0];
+                    SemVer.TryParse(tag, out var version);
+                    return (Commit: commit, Candidate: new UpdateCandidate(target.Slug, target.Name, target.InstalledVersion, version.ToString(),
+                        target.UpdateUrl, null, commit, new GitPackageRef(url.Repository, url.Path, commit)));
+                })
+                .Where(c => Regex.IsMatch(c.Commit, "^[a-fA-F0-9]{40}$")).Select(c => c.Candidate).ToArray();
+        }
+        finally { Directory.Delete(work, true); }
+    }
     private static async Task<GitOutcome> Checked(IGitRunner runner, string directory, string[] args, CancellationToken ct, bool trace = false)
     {
         var result = await runner.RunAsync(directory, args, ct, trace).ConfigureAwait(false);

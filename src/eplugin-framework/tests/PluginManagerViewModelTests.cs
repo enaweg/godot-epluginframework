@@ -98,6 +98,26 @@ public class PluginManagerViewModelTests
         Assertions.AssertString(PluginCatalog.ResolveScript("res://addons/x", "Plugin.cs")).IsEqual("res://addons/x/Plugin.cs");
         Assertions.AssertString(PluginCatalog.ResolveScript("res://addons/x", "res://other/Plugin.cs")).IsEqual("res://other/Plugin.cs");
     }
+    [TestCase]
+    public void VersionOptionsMarkInstalledAndDowngrades()
+    {
+        var options = PluginManagerViewModel.VersionOptions("1.5.0", [Version("1.0.0"), Version("2.0.0"), Version("1.5.0")]);
+        Assertions.AssertArray(options.Select(o => o.Version).ToArray()).IsEqual(new[] { "2.0.0", "1.5.0", "1.0.0" });
+        Assertions.AssertBool(options[1].Installed && !options[0].IsDowngrade && options[2].IsDowngrade).IsTrue();
+        var unlisted = PluginManagerViewModel.VersionOptions("1.7.0", [Version("2.0.0"), Version("1.0.0")]);
+        Assertions.AssertArray(unlisted.Select(o => o.Version).ToArray()).IsEqual(new[] { "2.0.0", "1.7.0", "1.0.0" });
+        Assertions.AssertObject(unlisted[1].Candidate).IsNull();
+
+        var plugin = new PluginRow(Plugin("beta", PluginKind.EPlugin, "https://example.org/releases"), null);
+        Assertions.AssertObject(PluginManagerViewModel.VersionChangeBlocked(plugin, options[2])).IsNull();
+        Assertions.AssertObject(PluginManagerViewModel.VersionChangeBlocked(plugin, options[1])).IsNotNull();
+        var framework = new PluginRow(Plugin("ePlugin", PluginKind.Framework, "https://example.org/releases"), null);
+        Assertions.AssertString(PluginManagerViewModel.VersionChangeBlocked(framework, options[2])).Contains("cannot be downgraded");
+        Assertions.AssertObject(PluginManagerViewModel.VersionChangeBlocked(framework, options[0])).IsNull();
+        var disabled = new PluginRow(Plugin("gamma", PluginKind.EPlugin, "https://example.org/releases", enabled: false), null);
+        Assertions.AssertString(PluginManagerViewModel.VersionChangeBlocked(disabled, options[0])).Contains("Enable");
+    }
+    private static UpdateCandidate Version(string version) => Candidate("beta") with { InstalledVersion = "1.5.0", NewVersion = version };
     private static PluginInfo Plugin(string slug, PluginKind kind, string? updateUrl = null, bool enabled = true) =>
         new(slug, slug, kind, enabled) { Version = "1.0.0", UpdateUrl = updateUrl };
     private static UpdateCandidate Candidate(string slug) => new(slug, slug, "1.0.0", "2.0.0", "https://example.org/releases", null, null, new ZipPackageRef("https://example.org/plugin.zip", slug));

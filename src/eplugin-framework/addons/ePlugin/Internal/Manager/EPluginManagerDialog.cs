@@ -34,10 +34,26 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
     private TextureRect _detailsIcon = null!;
     private Label _detailsName = null!;
     private RichTextLabel _detailsText = null!;
+    private Control _versionSeparator = null!;
+    private Control _versionRow = null!;
+    private OptionButton _versionSelect = null!;
+    private Button _installVersion = null!;
+    private Label _versionHint = null!;
+    private ConfirmationDialog _versionConfirm = null!;
+    private readonly Dictionary<string, IReadOnlyList<UpdateCandidate>> _versions = [];
+    private readonly Dictionary<string, string> _versionErrors = [];
+    private readonly HashSet<string> _loadingVersions = [];
+    private IReadOnlyList<VersionOption> _versionOptions = [];
+    private UpdateCandidate? _pendingVersion;
+    private bool _pendingDowngrade;
     private Texture2D? _ePluginIcon;
     private Texture2D? _updateIcon;
     private PluginManagerViewModel _model = null!;
     private IReadOnlyList<ValidatedPackage>? _staged;
+    // What is being staged/installed: the checked updates, or one explicitly chosen version.
+    private IReadOnlyList<UpdateCandidate> _batch = [];
+    private bool _versionInstall;
+    private bool _allowDowngrade;
     private string? _directory;
     private string? _selectedSlug;
     private bool _working;
@@ -61,6 +77,9 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         _trust = GetNode<CheckBox>("%TrustCheck"); _progress = GetNode<ProgressBar>("%Progress");
         _disableFrameworkConfirm = GetNode<ConfirmationDialog>("%DisableFrameworkConfirm");
         _detailsIcon = GetNode<TextureRect>("%DetailsIcon"); _detailsName = GetNode<Label>("%DetailsName"); _detailsText = GetNode<RichTextLabel>("%DetailsText");
+        _versionSeparator = GetNode<Control>("%VersionSeparator"); _versionRow = GetNode<Control>("%VersionRow");
+        _versionSelect = GetNode<OptionButton>("%VersionSelect"); _installVersion = GetNode<Button>("%InstallVersionButton");
+        _versionHint = GetNode<Label>("%VersionHint"); _versionConfirm = GetNode<ConfirmationDialog>("%VersionConfirm");
         _ePluginIcon = ResourceLoader.Exists(EPluginIconPath) ? GD.Load<Texture2D>(EPluginIconPath) : null;
         _updateIcon = ResourceLoader.Exists(UpdateIconPath) ? GD.Load<Texture2D>(UpdateIconPath) : null;
 
@@ -79,6 +98,9 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         _release.Pressed += OpenRelease;
         _tree.ItemEdited += ItemEdited;
         _disableFrameworkConfirm.Confirmed += DisableFramework;
+        _versionSelect.ItemSelected += _ => VersionButtons();
+        _installVersion.Pressed += ConfirmVersion;
+        _versionConfirm.Confirmed += () => { if (_pendingVersion is { } version) Install([version], true, _pendingDowngrade); };
         _tree.ItemSelected += () => ShowDetails(SlugOf(_tree.GetSelected()));
         _tree.ItemActivated += OpenRelease;
         _trust.Toggled += value => { _model.TrustChangedSource = value; Buttons(); };
@@ -167,21 +189,107 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         var row = slug is null ? null : _model.Find(slug);
         _detailsIcon.Texture = row?.IsEPlugin == true ? _ePluginIcon : null;
         _detailsName.Text = row?.Plugin.Name ?? "No plugin selected";
-        _detailsText.Text = row is null ? "Select a plugin to see its details." : PluginManagerViewModel.Describe(row);
+        var reviewed = _versionInstall ? _staged?.FirstOrDefault(p => p.Candidate.Slug == slug)?.Findings : null;
+        _detailsText.Text = row is null ? "Select a plugin to see its details." : PluginManagerViewModel.Describe(row, reviewed);
         _release.Visible = IsSafeUrl(row?.Update?.Candidate.ReleaseUrl);
+        RenderVersions(row);
+    }
+
+    /// <summary>The version choice of an updatable plugin. Versions are listed on demand and kept for the session.</summary>
+    private void RenderVersions(PluginRow? row)
+    {
+        var visible = row is { IsUpdatable: true, Plugin.Missing: false };
+        _versionSeparator.Visible = _versionRow.Visible = visible;
+        _versionSelect.Clear(); _versionOptions = [];
+        if (!visible) { _versionHint.Visible = false; return; }
+        var plugin = row!.Plugin;
+        if (!plugin.Enabled) SetVersionPlaceholder(plugin.Version + " (installed)", "Enable the plugin to change its version.");
+        else if (_loadingVersions.Contains(plugin.Slug)) SetVersionPlaceholder("Loading versions...", null);
+        else if (_versionErrors.TryGetValue(plugin.Slug, out var error)) SetVersionPlaceholder(plugin.Version + " (installed)", "Versions are unavailable: " + error);
+        else if (!_versions.TryGetValue(plugin.Slug, out var versions)) { SetVersionPlaceholder("Loading versions...", null); LoadVersions(plugin.Slug); }
+        else
+        {
+            _versionOptions = PluginManagerViewModel.VersionOptions(plugin.Version, versions);
+            var latest = _versionOptions.FirstOrDefault(o => !o.Installed && o.Candidate is not null && !o.IsDowngrade);
+            for (var i = 0; i < _versionOptions.Count; i++)
+            {
+                var option = _versionOptions[i];
+                _versionSelect.AddItem(option.Version + (option.Installed ? " (installed)" : option == latest ? " (latest)" : ""), i);
+                if (option.Installed) _versionSelect.Select(i);
+            }
+            _versionSelect.Disabled = _versionOptions.Count < 2;
+        }
+        VersionButtons();
+    }
+
+    private void SetVersionPlaceholder(string text, string? hint)
+    {
+        _versionSelect.AddItem(text); _versionSelect.Select(0); _versionSelect.Disabled = true;
+        _versionHint.Text = hint ?? ""; _versionHint.Visible = hint is not null;
+    }
+
+    private async void LoadVersions(string slug)
+    {
+        if (!_loadingVersions.Add(slug)) return;
+        try { _versions[slug] = await _global.ListVersionsAsync(slug, _lifetime); }
+        catch (Exception ex) when (ex is not OperationCanceledException || !_lifetime.IsCancellationRequested) { _versionErrors[slug] = ex.Message; }
+        catch (OperationCanceledException) { return; }
+        finally { _loadingVersions.Remove(slug); }
+        if (GodotObject.IsInstanceValid(this) && IsInsideTree() && _selectedSlug == slug) RenderVersions(_model.Find(slug));
+    }
+
+    private VersionOption? SelectedVersion()
+    {
+        var index = _versionSelect.Selected;
+        return index >= 0 && _versionSelect.GetItemId(index) is var id && id >= 0 && id < _versionOptions.Count && _versionOptions.Count > 0
+            ? _versionOptions[id] : null;
+    }
+
+    private void VersionButtons()
+    {
+        var row = _selectedSlug is null ? null : _model.Find(_selectedSlug);
+        var option = _versionOptions.Count == 0 ? null : SelectedVersion();
+        if (row is null || option is null) { _installVersion.Disabled = true; _installVersion.Text = "Update"; return; }
+        var blocked = PluginManagerViewModel.VersionChangeBlocked(row, option);
+        _installVersion.Text = option.IsDowngrade ? "Downgrade" : "Update";
+        _installVersion.Disabled = blocked is not null || _working || _staged is not null;
+        _installVersion.TooltipText = blocked ?? $"Install version {option.Version} of {row.Plugin.Name}.";
+        var hint = option.Installed ? null : blocked;
+        _versionHint.Text = hint ?? ""; _versionHint.Visible = hint is not null;
+    }
+
+    private void ConfirmVersion()
+    {
+        var row = _selectedSlug is null ? null : _model.Find(_selectedSlug);
+        var option = SelectedVersion();
+        if (row is null || option?.Candidate is null || PluginManagerViewModel.VersionChangeBlocked(row, option) is not null || _working) return;
+        // The listed candidate was built when the list was loaded; the installed version may have changed since.
+        _pendingVersion = option.Candidate with { InstalledVersion = row.Plugin.Version };
+        _pendingDowngrade = option.IsDowngrade;
+        _versionConfirm.OkButtonText = option.IsDowngrade ? "Downgrade" : "Update";
+        _versionConfirm.DialogText = $"Replace {row.Plugin.Name} {row.Plugin.Version} with version {option.Version}?\n\n" +
+            (option.IsDowngrade
+                ? "Use this to undo an update that broke the project. Project code or saved data that already relies on the newer version may stop working. "
+                : "") +
+            "Open scenes are saved first; files and project references are backed up and restored if installation fails.";
+        _versionConfirm.PopupCentered();
     }
 
     private void Buttons()
     {
-        GetOkButton().Text = _staged is null ? _model.OkText : "Install reviewed updates";
-        GetOkButton().Disabled = _working || !_model.CanApply;
+        GetOkButton().Text = _staged is null ? _model.OkText : _versionInstall ? "Install reviewed version" : "Install reviewed updates";
+        GetOkButton().Disabled = _working || !CanProceed;
         GetOkButton().Visible = _model.Updates.Count > 0 || _staged is not null;
         GetCancelButton().Disabled = _swapping;
         GetCancelButton().Text = _working && !_swapping ? "Cancel" : "Close";
-        _trust.Visible = _model.RequiresTrust;
+        _trust.Visible = NeedsTrust;
         _check.Disabled = _working || _staged is not null;
         _retry.Disabled = _working || _staged is not null || !_model.CanRetry;
+        VersionButtons();
     }
+
+    private bool NeedsTrust => _staged is not null ? _staged.Any(p => p.Findings.Any(f => f.RequiresTrust)) : _model.RequiresTrust;
+    private bool CanProceed => _staged is not null ? !NeedsTrust || _model.TrustChangedSource : _model.CanApply;
 
     private static string? SlugOf(TreeItem? item) =>
         item?.GetMetadata(NameColumn).VariantType == Variant.Type.String ? item.GetMetadata(NameColumn).AsString() : null;
@@ -252,7 +360,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
     private async void CheckNow()
     {
         if (_working) return;
-        ClearStaging(); _working = true; Buttons(); _status.Text = "Checking for updates...";
+        ClearStaging(); _versions.Clear(); _versionErrors.Clear();
+        _working = true; Buttons(); _status.Text = "Checking for updates...";
         string? failure = null;
         try
         {
@@ -267,33 +376,42 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         }
     }
 
-    private async void Confirm()
+    private void Confirm()
     {
-        if (_working || !_model.CanApply) return;
+        if (_staged is not null) Install(_batch, _versionInstall, _allowDowngrade);
+        else if (_model.CanApply) Install(_model.Selected, false, false);
+    }
+
+    /// <summary>
+    /// Stages and validates the batch, stops for review when the packages carry warnings, then installs. A second call
+    /// with the batch already staged continues with the installation.
+    /// </summary>
+    private async void Install(IReadOnlyList<UpdateCandidate> batch, bool versionInstall, bool allowDowngrade)
+    {
+        if (_working || batch.Count == 0) return;
+        _batch = batch; _versionInstall = versionInstall; _allowDowngrade = allowDowngrade;
         _working = true; _cancel?.Dispose(); _cancel = CancellationTokenSource.CreateLinkedTokenSource(_lifetime);
         Render();
         try
         {
             if (_staged is null)
             {
-                _progress.Visible = true; _status.Text = "Downloading and validating selected addons...";
+                _progress.Visible = true; _status.Text = versionInstall ? $"Downloading and validating {batch[0].PluginName} {batch[0].NewVersion}..." : "Downloading and validating selected addons...";
                 var relay = new InlineProgress(value => Callable.From(() => { if (GodotObject.IsInstanceValid(this)) _progress.Value = value * 100; }).CallDeferred());
-                var staged = await _global.StageUpdatesAsync(_model.Selected, relay, _cancel.Token);
+                var staged = await _global.StageUpdatesAsync(batch, relay, _cancel.Token, allowDowngrade);
                 _staged = staged.Packages; _directory = staged.Directory;
                 if (_lifetime.IsCancellationRequested || !GodotObject.IsInstanceValid(this) || !IsInsideTree()) { ClearStaging(); return; }
-                foreach (var package in _staged)
-                {
-                    var row = _model.Updates.First(r => r.Candidate.Slug == package.Candidate.Slug);
-                    row.Findings.AddRange(package.Findings);
-                }
+                if (!versionInstall)
+                    foreach (var package in _staged)
+                        _model.Updates.First(r => r.Candidate.Slug == package.Candidate.Slug).Findings.AddRange(package.Findings);
                 // Warnings discovered inside the package are reviewed before the first project side effect.
-                if (_staged.Any(p => p.Findings.Any(f => f.Severity == FindingSeverity.Warning)))
+                if (_staged.Any(p => p.Findings.Any(f => f.Severity == FindingSeverity.Warning)) || NeedsTrust && !_model.TrustChangedSource)
                 { _working = false; _progress.Visible = false; Render(); _status.Text = "Review package warnings in the details, then confirm installation."; return; }
             }
             _cancel.Token.ThrowIfCancellationRequested();
-            if (!_model.CanApply) return;
-            _swapping = true; Buttons(); _status.Text = "Installing selected addons...";
-            var selected = _staged.Where(p => _model.Selected.Any(c => c.Slug == p.Candidate.Slug)).ToArray();
+            if (!CanProceed) return;
+            _swapping = true; Buttons(); _status.Text = versionInstall ? "Installing the selected version..." : "Installing selected addons...";
+            var selected = _staged.Where(p => batch.Any(c => c.Slug == p.Candidate.Slug)).ToArray();
             var outcome = await _global.ApplyUpdatesAsync(selected, _directory!, _model.TrustChangedSource);
             _directory = null; _staged = null; Hide();
             if (outcome == UpdateOutcome.Completed) { _working = false; _swapping = false; Refresh(); }
@@ -318,7 +436,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
     private void ClearStaging()
     {
         if (_directory is not null && !File.Exists(Path.Combine(_directory, "journal.json")) && Directory.Exists(_directory)) Directory.Delete(_directory, true);
-        _directory = null; _staged = null;
+        _directory = null; _staged = null; _batch = []; _versionInstall = false; _allowDowngrade = false;
     }
 
     private static Color ThemeColor(string name, string type, Color fallback)
