@@ -3,6 +3,7 @@ using System;
 using System.Threading;
 using System.IO;
 using Enaweg.Plugin.Internal.Dotnet;
+using Enaweg.Plugin.Internal.Manager;
 using Enaweg.Plugin.Internal.Update;
 using Enaweg.Plugin.Internal.Update.UI;
 using System.Runtime.Loader;
@@ -15,14 +16,14 @@ namespace Enaweg.Plugin;
 [Tool]
 public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin
 {
-    private const string UpdateMenuName = "Update ePlugin addons...";
-    private const string CheckMenuName = "Check for ePlugin addon updates";
-    private bool _updateMenuAdded;
-    private UpdateDialog? _updateDialog;
+    private const string ManagerMenuName = "ePlugin Manager...";
+    // Engine metadata survives assembly reloads, unlike the fields of this script instance.
+    private const string ManagerButtonMeta = "eplugin_manager_button";
+    private bool _managerUiAdded;
+    private Button? _managerButton;
+    private EPluginManagerDialog? _managerDialog;
     private UpdateFailureDialog? _failureDialog;
     private EGlobal? _updateOwner;
-    private const string RetryMenuName = "Retry failed ePlugin addons";
-    private bool _retryMenuAdded;
     private CancellationTokenSource _updateLifetime = new();
     internal CancellationToken UpdateLifetime => _updateLifetime.Token;
     public bool EnableDebugLogging => false;
@@ -53,63 +54,72 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin
             InitializeInternals();
         }
 
-        if (!_retryMenuAdded && EGlobal.Instance.IsValid())
+        if (!_managerUiAdded && EGlobal.Instance.IsValid())
         {
-            // A C# assembly reload recreates this field while the native editor node survives.
-            RemoveToolMenuItem(RetryMenuName);
-            AddToolMenuItem(RetryMenuName, Callable.From(() => EGlobal.Instance.RetryFailedPlugins()));
-            _retryMenuAdded = true;
-        }
-        if (!_updateMenuAdded && EGlobal.Instance.IsValid())
-        {
-            RemoveToolMenuItem(UpdateMenuName); RemoveToolMenuItem(CheckMenuName);
-            AddToolMenuItem(UpdateMenuName, Callable.From(OpenUpdates));
-            AddToolMenuItem(CheckMenuName, Callable.From(CheckUpdates));
-            _updateMenuAdded = true;
+            AddManagerUi();
         }
     }
 
     public override void _DisablePlugin()
     {
-        RemoveUpdateMenus();
+        RemoveManagerUi();
         EGlobal.Instance.RecordFrameworkDisabled(this);
-        if (_retryMenuAdded)
-        {
-            RemoveToolMenuItem(RetryMenuName);
-            _retryMenuAdded = false;
-        }
 
         base._DisablePlugin();
     }
 
     public override void _ExitTree()
     {
-        RemoveUpdateMenus();
+        RemoveManagerUi();
         _updateLifetime.Cancel();
         _updateLifetime.Dispose();
-        if (_retryMenuAdded)
-        {
-            RemoveToolMenuItem(RetryMenuName);
-            _retryMenuAdded = false;
-        }
 
         base._ExitTree();
     }
     
-    private void OpenUpdates()
+    private void AddManagerUi()
     {
-        if (_updateDialog is null || !GodotObject.IsInstanceValid(_updateDialog))
+        // A C# assembly reload resets this script's fields while the native menu item and toolbar button survive.
+        RemoveToolMenuItem(ManagerMenuName);
+        AddToolMenuItem(ManagerMenuName, Callable.From(OpenManager));
+        RemoveManagerButton();
+        _managerButton = new Button
         {
-            _updateDialog = new UpdateDialog();
-            _updateDialog.Initialize(EGlobal.Instance, UpdateLifetime);
-            EditorInterface.Singleton.GetBaseControl().AddChild(_updateDialog);
-        }
-        _updateDialog.Open();
+            Name = "EPluginManagerButton", Flat = true, TooltipText = "ePlugin Manager",
+            FocusMode = Control.FocusModeEnum.None,
+            Icon = ResourceLoader.Exists(EPluginManagerDialog.EPluginIconPath) ? GD.Load<Texture2D>(EPluginManagerDialog.EPluginIconPath) : null,
+            Text = ResourceLoader.Exists(EPluginManagerDialog.EPluginIconPath) ? "" : "ePlugin"
+        };
+        _managerButton.Pressed += OpenManager;
+        AddControlToContainer(CustomControlContainer.Toolbar, _managerButton);
+        Engine.Singleton.SetMeta(ManagerButtonMeta, _managerButton.GetInstanceId());
+        _managerUiAdded = true;
     }
-    private async void CheckUpdates()
+    private void RemoveManagerButton()
     {
-        await EGlobal.Instance.CheckForUpdatesAsync(true);
-        if (_updateDialog is not null && GodotObject.IsInstanceValid(_updateDialog)) _updateDialog.Refresh();
+        var button = _managerButton;
+        if (button is null && Engine.Singleton.HasMeta(ManagerButtonMeta))
+            button = GodotObject.InstanceFromId(Engine.Singleton.GetMeta(ManagerButtonMeta).AsUInt64()) as Button;
+        if (button is not null && GodotObject.IsInstanceValid(button))
+        {
+            if (button.IsInsideTree()) RemoveControlFromContainer(CustomControlContainer.Toolbar, button);
+            button.QueueFree();
+        }
+        if (Engine.Singleton.HasMeta(ManagerButtonMeta)) Engine.Singleton.RemoveMeta(ManagerButtonMeta);
+        _managerButton = null;
+    }
+    private void OpenManager()
+    {
+        if (!EGlobal.Instance.IsValid()) return;
+        if (_managerDialog is null || !GodotObject.IsInstanceValid(_managerDialog))
+        {
+            // A dialog left over from before an assembly reload has lost its state; replace it.
+            var parent = EditorInterface.Singleton.GetBaseControl();
+            if (parent.GetNodeOrNull(nameof(EPluginManagerDialog)) is { } stale) { parent.RemoveChild(stale); stale.QueueFree(); }
+            _managerDialog = EPluginManagerDialog.Create(EGlobal.Instance, UpdateLifetime);
+            parent.AddChild(_managerDialog);
+        }
+        _managerDialog.Open();
     }
     private void ShowUpdateFailure(UpdateJournal journal)
     {
@@ -122,13 +132,14 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin
         }
         catch (Exception ex) { Logger.Error($"Cannot show update decision: {ex.Message}"); EGlobal.Instance.DecideUpdate(journal, false); }
     }
-    private void RemoveUpdateMenus()
+    private void RemoveManagerUi()
     {
-        if (_updateMenuAdded) { RemoveToolMenuItem(UpdateMenuName); RemoveToolMenuItem(CheckMenuName); _updateMenuAdded = false; }
+        if (_managerUiAdded) { RemoveToolMenuItem(ManagerMenuName); _managerUiAdded = false; }
+        RemoveManagerButton();
         if (_updateOwner is not null) _updateOwner.UpdateDecisionNeeded -= ShowUpdateFailure;
-        if (_updateDialog is not null && GodotObject.IsInstanceValid(_updateDialog)) _updateDialog.QueueFree();
+        if (_managerDialog is not null && GodotObject.IsInstanceValid(_managerDialog)) _managerDialog.QueueFree();
         if (_failureDialog is not null && GodotObject.IsInstanceValid(_failureDialog)) _failureDialog.QueueFree();
-        _updateDialog = null; _failureDialog = null;
+        _managerDialog = null; _failureDialog = null;
     }
 
     private static void RestoreEarlyUpdateSettings()
@@ -165,7 +176,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin
     private void InitializeInternals()
     {
         if (!EnsureEarlyUpdateRecovery()) return;
-        _retryMenuAdded = false; _updateMenuAdded = false;
+        _managerUiAdded = false;
         _updateOwner = EGlobal.Instance;
         _updateOwner.UpdateDecisionNeeded -= ShowUpdateFailure;
         _updateOwner.UpdateDecisionNeeded += ShowUpdateFailure;
