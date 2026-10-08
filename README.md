@@ -69,6 +69,22 @@ The repository also contains a sample project in `src/eplugin-framework`.
 
 Enabled addons can be checked and updated from release or git sources; see [Updating plugins](#updating-plugins).
 
+## ePlugin Manager
+
+Open the **ePlugin Manager** with the ePlugin button at the right of the editor's main toolbar or with
+**Project > Tools > ePlugin Manager...**. It lists every plugin below `res://addons`, enabled or not, with its
+type (ePlugin Framework, ePlugin, C# plugin, GDScript plugin) and version. ePlugins are marked with the ePlugin
+icon. Plugins with an `update_url` show an update icon that turns green when an update is available.
+
+Select a plugin to see its details next to the list: status, author, description, the available update
+(installed → new version, source, warnings and earlier failures), and the dependencies of an active ePlugin's
+recipe. From the dialog you can:
+
++ **Check for updates** — checks now, regardless of the check interval.
++ **Update** — installs the checked updates (see [Updating plugins](#updating-plugins)).
++ **Retry failed** — retries plugins whose activation, deactivation or update failed or was interrupted.
++ **Open release page** — opens the release notes of the selected plugin's update.
+
 ## Plugin state files
 
 The framework creates `res://addons/eplugin-state.json` from the currently active plugins (both ePlugin-managed and plain Godot plugins) when the file is
@@ -86,7 +102,7 @@ Entries remain after disabling or removing a plugin. A missing version creates o
 The adjacent `res://addons/eplugin-state.json.user` records unfinished or failed work on one machine. Keep it out of
 Git by adding `addons/eplugin-state.json.user` to your project's `.gitignore`. An unresolved entry blocks automatic
 recipe retry after an editor restart or assembly reload. After fixing the cause and any partial side effects, use
-**Project > Tools > Retry failed ePlugin addons** to retry explicitly. A failed operation leaves the checked-in JSON
+**Retry failed** in the [ePlugin Manager](#eplugin-manager) to retry explicitly. A failed operation leaves the checked-in JSON
 at its last completed state. The state files provide the basis for future migration and rollback tooling; they do not
 restore addon files or undo partial recipe changes themselves.
 
@@ -353,11 +369,10 @@ state index. A manual version change does not block updates; an unfinished local
 
 The framework checks once per editor session when the last successful check is at least 20 hours old. Results
 and the timestamp are cached under `.godot/eplugin/update-state.json`. A check reports available updates without
-installing them. Use **Project → Tools → Check for ePlugin addon updates** to bypass the interval, or open
-**Update ePlugin addons...** and select **Check now**.
+installing them. Select **Check for updates** in the [ePlugin Manager](#eplugin-manager) to bypass the interval.
 
-The update dialog lists installed/new versions, sources, warnings, and earlier failures. Select a batch and
-confirm to download and validate it. Package warnings require another confirmation before installation; a
+The ePlugin Manager lists installed/new versions, sources, warnings, and earlier failures. Check a batch and
+select **Update** to download and validate it. Package warnings require another confirmation before installation; a
 changed source host requires the explicit trust checkbox. Canceling the download leaves installed addons
 untouched. Previously failed versions are shown but are not selected automatically.
 
@@ -429,7 +444,7 @@ Interim build failures, installation failures, and every self-update failure rol
 build failure normally offers **Roll back**, **Keep new version**, and **Open build log**. Esc/closing the dialog
 rolls back; closing the editor while a decision is pending preserves it for the next startup. Headless execution
 always rolls back. Keeping a failed version retains its backup and `update_kept_build_failed` local marker,
-without advancing the shared index. Fix the build and use **Retry failed ePlugin addons** to verify and acknowledge it.
+without advancing the shared index. Fix the build and use **Retry failed** in the ePlugin Manager to verify and acknowledge it.
 An externally changed index leaves `update_commit_failed`; merge it, then retry acknowledgement.
 
 C# updates conservatively restart for the assembly handoff. Managed C# recipes also restart after their final
@@ -440,7 +455,7 @@ its local marker, and request a restart.
 
 If automatic recovery cannot run, close the editor, restore `updates/<id>/backup/<slug>` to `addons/<slug>` for
 all affected addons, and restore the files in `backup-project/` to the project root. Delete `.godot/mono/temp`
-and rebuild the solution. Reopen the editor and use **Retry failed ePlugin addons** to finish recovery; keep the
+and rebuild the solution. Reopen the editor and use **Retry failed** in the ePlugin Manager to finish recovery; keep the
 journal and local marker until restoration succeeds. Each transaction includes a `README.txt` with this hint.
 
 Settings under **Project Settings → eplugin/updates**:

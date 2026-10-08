@@ -154,7 +154,7 @@ the actual process execution. Any new dotnet CLI operation needs a corresponding
 ### Update system
 
 `Internal/Update/` contains pure checks/sources, bounded ZIP and sparse-git staging, validation, the transaction
-applier, recipe snapshots/diffs, journal/cache persistence, early self-update recovery, and dialog view models.
+applier, recipe snapshots/diffs, journal/cache persistence, and early self-update recovery.
 `EGlobal.Updates.cs`, `EGlobal.UpdateApply.cs`, `EGlobal.UpdateRecipes.cs`, and `EGlobal.RecipeOperations.cs`
 provide the Godot integration. HTTP/git work runs off the editor thread; lifecycle and recipe changes stay on it.
 
@@ -183,6 +183,17 @@ backward compatible across framework versions; unknown/newer schemas need manual
 
 See README's update/publishing/recovery contract and
 `docs/implementation-plans/update-system-spikes.md` for measured engine behavior and pending platform checks.
+
+### ePlugin Manager
+
+`Internal/Manager/` holds the framework's only editor UI entry point, opened from the single Tools menu entry and
+the toolbar button that `EPluginPlugin.AddManagerUi` installs (the button's instance id is kept in Engine metadata
+so a stale one can be removed after an assembly reload). The dialog layout is `EPluginManagerDialog.tscn`; its
+script only binds `%`-unique nodes and sets what Tree cannot store in a scene (column titles/widths). Keep layout
+changes in the scene. `EGlobal.CollectPlugins` scans every `res://addons/<slug>/plugin.cfg`; `PluginCatalog.Classify`
+recognizes disabled ePlugins by the `ScriptPathAttribute` of their compiled type. `PluginManagerViewModel` is pure
+(rows, update selection, BBCode details) and unit-tested. New user-facing actions belong in this dialog, not in
+additional Tools menu entries.
 
 ### Logging
 
