@@ -57,6 +57,8 @@ public class PluginManagerViewModelTests
         Assertions.AssertBool(beta.HasUpdate && beta.IsUpdatable && beta.IsEPlugin).IsTrue();
         Assertions.AssertBool(model.Find("gamma")!.IsUpdatable || model.Find("gamma")!.IsEPlugin).IsFalse();
         Assertions.AssertBool(model.Find("orphan")!.Plugin.Missing).IsTrue();
+        Assertions.AssertBool(model.Find("orphan")!.CanToggle).IsFalse();
+        Assertions.AssertBool(model.Find("gamma")!.CanToggle && model.Find("ePlugin")!.CanToggle).IsTrue();
         Assertions.AssertBool(model.CanRetry).IsFalse();
     }
     [TestCase]

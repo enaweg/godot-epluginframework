@@ -22,6 +22,7 @@ internal sealed class PluginRow(PluginInfo plugin, UpdateRow? update)
     public bool IsEPlugin => Plugin.Kind is PluginKind.Framework or PluginKind.EPlugin;
     public bool IsUpdatable => Plugin.UpdateUrl is not null || Update is not null;
     public bool HasUpdate => Update is not null;
+    public bool CanToggle => !Plugin.Missing;
 }
 internal sealed class PluginManagerViewModel
 {

@@ -80,6 +80,10 @@ Select a plugin to see its details next to the list: status, author, description
 (installed → new version, source, warnings and earlier failures), and the dependencies of an active ePlugin's
 recipe. From the dialog you can:
 
++ **On** — enable or disable any plugin. Enabling an ePlugin installs its recipe and dependencies; disabling it
+  also disables the plugins that depend on it. The list is reloaded afterwards, so automatically toggled
+  dependencies show up immediately. Disabling the ePlugin Framework itself asks for confirmation first, since it
+  closes the manager.
 + **Check for updates** — checks now, regardless of the check interval.
 + **Update** — installs the checked updates (see [Updating plugins](#updating-plugins)).
 + **Retry failed** — retries plugins whose activation, deactivation or update failed or was interrupted.

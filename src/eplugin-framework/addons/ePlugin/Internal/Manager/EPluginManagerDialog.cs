@@ -18,7 +18,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
     internal const string ScenePath = "res://addons/ePlugin/Internal/Manager/EPluginManagerDialog.tscn";
     internal const string EPluginIconPath = "res://addons/ePlugin/icons/eplugin.svg";
     internal const string UpdateIconPath = "res://addons/ePlugin/icons/update.svg";
-    private const int CheckColumn = 0, NameColumn = 1, TypeColumn = 2, VersionColumn = 3, UpdateColumn = 4;
+    private const int EnabledColumn = 0, NameColumn = 1, TypeColumn = 2, VersionColumn = 3, UpdateColumn = 4;
 
     private EGlobal _global = null!;
     private CancellationToken _lifetime;
@@ -30,6 +30,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
     private Button _release = null!;
     private CheckBox _trust = null!;
     private ProgressBar _progress = null!;
+    private ConfirmationDialog _disableFrameworkConfirm = null!;
     private TextureRect _detailsIcon = null!;
     private Label _detailsName = null!;
     private RichTextLabel _detailsText = null!;
@@ -41,6 +42,9 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
     private string? _selectedSlug;
     private bool _working;
     private bool _swapping;
+
+    /// <summary>False once an assembly reload dropped the C# state of this still existing editor node.</summary>
+    public bool IsInitialized => _global is not null;
 
     public static EPluginManagerDialog Create(EGlobal global, CancellationToken lifetime)
     {
@@ -55,24 +59,26 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         _tree = GetNode<Tree>("%PluginTree"); _status = GetNode<Label>("%Status");
         _check = GetNode<Button>("%CheckButton"); _retry = GetNode<Button>("%RetryButton"); _release = GetNode<Button>("%ReleaseButton");
         _trust = GetNode<CheckBox>("%TrustCheck"); _progress = GetNode<ProgressBar>("%Progress");
+        _disableFrameworkConfirm = GetNode<ConfirmationDialog>("%DisableFrameworkConfirm");
         _detailsIcon = GetNode<TextureRect>("%DetailsIcon"); _detailsName = GetNode<Label>("%DetailsName"); _detailsText = GetNode<RichTextLabel>("%DetailsText");
         _ePluginIcon = ResourceLoader.Exists(EPluginIconPath) ? GD.Load<Texture2D>(EPluginIconPath) : null;
         _updateIcon = ResourceLoader.Exists(UpdateIconPath) ? GD.Load<Texture2D>(UpdateIconPath) : null;
 
         // Column titles and sizing are not scene properties of Tree.
-        _tree.SetColumnTitle(NameColumn, "Plugin"); _tree.SetColumnTitle(TypeColumn, "Type");
+        _tree.SetColumnTitle(EnabledColumn, "On"); _tree.SetColumnTitle(NameColumn, "Plugin"); _tree.SetColumnTitle(TypeColumn, "Type");
         _tree.SetColumnTitle(VersionColumn, "Version"); _tree.SetColumnTitle(UpdateColumn, "Update");
-        _tree.SetColumnExpand(CheckColumn, false); _tree.SetColumnExpand(TypeColumn, false);
+        _tree.SetColumnExpand(EnabledColumn, false); _tree.SetColumnExpand(TypeColumn, false);
         _tree.SetColumnExpand(VersionColumn, false); _tree.SetColumnExpand(UpdateColumn, false);
         var scale = EditorInterface.Singleton.GetEditorScale();
         Size = (Vector2I)((Vector2)Size * scale); MinSize = (Vector2I)((Vector2)MinSize * scale);
-        _tree.SetColumnCustomMinimumWidth(CheckColumn, (int)(32 * scale)); _tree.SetColumnCustomMinimumWidth(TypeColumn, (int)(130 * scale));
-        _tree.SetColumnCustomMinimumWidth(VersionColumn, (int)(80 * scale)); _tree.SetColumnCustomMinimumWidth(UpdateColumn, (int)(100 * scale));
+        _tree.SetColumnCustomMinimumWidth(EnabledColumn, (int)(40 * scale)); _tree.SetColumnCustomMinimumWidth(TypeColumn, (int)(130 * scale));
+        _tree.SetColumnCustomMinimumWidth(VersionColumn, (int)(80 * scale)); _tree.SetColumnCustomMinimumWidth(UpdateColumn, (int)(120 * scale));
 
         _check.Pressed += CheckNow;
         _retry.Pressed += RetryFailed;
         _release.Pressed += OpenRelease;
-        _tree.ItemEdited += SelectionChanged;
+        _tree.ItemEdited += ItemEdited;
+        _disableFrameworkConfirm.Confirmed += DisableFramework;
         _tree.ItemSelected += () => ShowDetails(SlugOf(_tree.GetSelected()));
         _tree.ItemActivated += OpenRelease;
         _trust.Toggled += value => { _model.TrustChangedSource = value; Buttons(); };
@@ -116,13 +122,11 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
             var plugin = row.Plugin;
             var item = _tree.CreateItem(root);
             item.SetMetadata(NameColumn, plugin.Slug);
-            if (row.Update is { } update)
-            {
-                item.SetCellMode(CheckColumn, TreeItem.TreeCellMode.Check);
-                item.SetEditable(CheckColumn, !update.HasError && editable);
-                item.SetChecked(CheckColumn, update.Selected);
-                item.SetTooltipText(CheckColumn, update.HasError ? "This update cannot be installed, see details." : "Install this update");
-            }
+            item.SetCellMode(EnabledColumn, TreeItem.TreeCellMode.Check);
+            item.SetChecked(EnabledColumn, plugin.Enabled);
+            item.SetEditable(EnabledColumn, row.CanToggle && editable);
+            item.SetTooltipText(EnabledColumn, !row.CanToggle ? "The plugin folder or its plugin.cfg is missing."
+                : plugin.Enabled ? "Enabled. Uncheck to disable the plugin." : "Disabled. Check to enable the plugin.");
             item.SetText(NameColumn, plugin.Name);
             item.SetTooltipText(NameColumn, $"{plugin.Name} (res://addons/{plugin.Slug})");
             if (row.IsEPlugin && _ePluginIcon is not null) item.SetIcon(NameColumn, _ePluginIcon);
@@ -131,13 +135,20 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
             item.SetText(TypeColumn, PluginCatalog.KindName(plugin.Kind));
             item.SetText(VersionColumn, plugin.Version);
             item.SetTooltipText(VersionColumn, PluginManagerViewModel.StatusText(plugin));
+            if (row.Update is { } update)
+            {
+                item.SetCellMode(UpdateColumn, TreeItem.TreeCellMode.Check);
+                item.SetEditable(UpdateColumn, !update.HasError && editable);
+                item.SetChecked(UpdateColumn, update.Selected);
+            }
             if (row.IsUpdatable)
             {
                 if (_updateIcon is not null) item.SetIcon(UpdateColumn, _updateIcon);
                 item.SetIconModulate(UpdateColumn, row.HasUpdate ? (row.Update!.HasError ? ErrorColor() : UpdateColor()) : DisabledColor());
                 item.SetText(UpdateColumn, row.Update?.Candidate.NewVersion ?? "");
                 item.SetTooltipText(UpdateColumn, row.Update is { } available
-                    ? $"Update available: {available.Candidate.InstalledVersion} → {available.Candidate.NewVersion}"
+                    ? $"Update available: {available.Candidate.InstalledVersion} → {available.Candidate.NewVersion}" +
+                      (available.HasError ? "\nThis update cannot be installed, see details." : "\nCheck to include it in Update.")
                     : "Updatable, no update known");
             }
             if (plugin.Slug == _selectedSlug) selected = item;
@@ -175,13 +186,51 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
     private static string? SlugOf(TreeItem? item) =>
         item?.GetMetadata(NameColumn).VariantType == Variant.Type.String ? item.GetMetadata(NameColumn).AsString() : null;
 
-    private void SelectionChanged()
+    private void ItemEdited()
     {
-        if (_working || _staged is not null) return;
         var item = _tree.GetEdited();
-        var update = SlugOf(item) is { } slug ? _model.Find(slug)?.Update : null;
-        if (update is not null) update.Selected = item!.IsChecked(CheckColumn);
-        Buttons();
+        var row = SlugOf(item) is { } slug ? _model.Find(slug) : null;
+        if (item is null || row is null || _working || _staged is not null) return;
+        if (_tree.GetEditedColumn() == UpdateColumn && row.Update is { } update)
+        {
+            update.Selected = item.IsChecked(UpdateColumn);
+            Buttons();
+        }
+        else if (_tree.GetEditedColumn() == EnabledColumn)
+        {
+            var enable = item.IsChecked(EnabledColumn);
+            if (!enable && row.Plugin.Kind == PluginKind.Framework)
+            {
+                item.SetChecked(EnabledColumn, true);
+                _disableFrameworkConfirm.PopupCentered();
+                return;
+            }
+            // Enabling or disabling runs the plugin's recipe and may rebuild; never do that, or rebuild the tree,
+            // inside the Tree's own edit signal.
+            _working = true; Buttons();
+            _status.Text = (enable ? "Enabling " : "Disabling ") + row.Plugin.Name + "...";
+            Callable.From(() => SetPluginEnabled(row.Plugin.Slug, enable)).CallDeferred();
+        }
+    }
+
+    private void SetPluginEnabled(string slug, bool enable)
+    {
+        try { EditorInterface.Singleton.SetPluginEnabled(slug, enable); }
+        catch (Exception ex) { GD.PushError($"Cannot {(enable ? "enable" : "disable")} {slug}: {ex.Message}"); }
+        finally
+        {
+            _working = false;
+            // Dependencies and dependants may have been toggled too, so reload the whole list.
+            if (GodotObject.IsInstanceValid(this) && IsInsideTree()) Refresh();
+        }
+    }
+
+    private void DisableFramework()
+    {
+        // The framework removes this dialog while it is disabled.
+        Hide();
+        var slug = _model.Plugins.First(p => p.Plugin.Kind == PluginKind.Framework).Plugin.Slug;
+        Callable.From(() => EditorInterface.Singleton.SetPluginEnabled(slug, false)).CallDeferred();
     }
 
     private void OpenRelease()

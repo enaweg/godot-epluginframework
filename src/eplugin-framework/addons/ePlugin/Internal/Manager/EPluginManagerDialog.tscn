@@ -113,3 +113,14 @@ text = "I trust the changed update source"
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
+
+[node name="DisableFrameworkConfirm" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+title = "Disable ePlugin Framework"
+initial_position = 2
+size = Vector2i(480, 160)
+ok_button_text = "Disable"
+dialog_text = "Disabling the ePlugin Framework closes the ePlugin Manager and removes its toolbar button and Tools menu entry.
+
+Enable it again in Project Settings > Plugins."
+dialog_autowrap = true

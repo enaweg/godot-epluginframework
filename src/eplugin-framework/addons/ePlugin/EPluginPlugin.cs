@@ -94,6 +94,19 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin
         AddControlToContainer(CustomControlContainer.Toolbar, _managerButton);
         Engine.Singleton.SetMeta(ManagerButtonMeta, _managerButton.GetInstanceId());
         _managerUiAdded = true;
+        // Toggling a plugin in the manager may rebuild and reload the assembly while the dialog is open.
+        if (RemoveStaleManagerDialog()) Callable.From(OpenManager).CallDeferred();
+    }
+    /// <summary>Frees a dialog whose C# state was lost to an assembly reload; returns whether it was showing.</summary>
+    private bool RemoveStaleManagerDialog()
+    {
+        var parent = EditorInterface.Singleton.GetBaseControl();
+        if (parent.GetNodeOrNull(nameof(EPluginManagerDialog)) is not Window stale ||
+            stale is EPluginManagerDialog { IsInitialized: true }) return false;
+        var visible = stale.Visible;
+        stale.Hide(); parent.RemoveChild(stale); stale.QueueFree();
+        if (stale == _managerDialog) _managerDialog = null;
+        return visible;
     }
     private void RemoveManagerButton()
     {
@@ -111,13 +124,11 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin
     private void OpenManager()
     {
         if (!EGlobal.Instance.IsValid()) return;
-        if (_managerDialog is null || !GodotObject.IsInstanceValid(_managerDialog))
+        if (_managerDialog is null || !GodotObject.IsInstanceValid(_managerDialog) || !_managerDialog.IsInitialized)
         {
-            // A dialog left over from before an assembly reload has lost its state; replace it.
-            var parent = EditorInterface.Singleton.GetBaseControl();
-            if (parent.GetNodeOrNull(nameof(EPluginManagerDialog)) is { } stale) { parent.RemoveChild(stale); stale.QueueFree(); }
+            RemoveStaleManagerDialog();
             _managerDialog = EPluginManagerDialog.Create(EGlobal.Instance, UpdateLifetime);
-            parent.AddChild(_managerDialog);
+            EditorInterface.Singleton.GetBaseControl().AddChild(_managerDialog);
         }
         _managerDialog.Open();
     }
