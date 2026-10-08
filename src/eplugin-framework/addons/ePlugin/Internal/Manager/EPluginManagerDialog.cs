@@ -20,6 +20,9 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
     internal const string UpdateIconPath = "res://addons/ePlugin/icons/update.svg";
     private const int EnabledColumn = 0, NameColumn = 1, TypeColumn = 2, VersionColumn = 3;
     private const int TypeMinimumWidth = 120;
+    // DisplayServer.window_set_icon exists from Godot 4.7 on; the addon is compiled against 4.4 to 4.7.
+    private static readonly StringName WindowSetIcon = "window_set_icon";
+    private Image? _windowIcon;
 
     private EGlobal _global = null!;
     private CancellationToken _lifetime;
@@ -113,6 +116,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         _tree.ItemSelected += () => ShowDetails(SlugOf(_tree.GetSelected()));
         _tree.ItemActivated += OpenRelease;
         _tree.ButtonClicked += (item, _, _, _) => item.Select(NameColumn);
+        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm })
+            window.VisibilityChanged += () => { if (window.Visible) Callable.From(() => ApplyWindowIcon(window)).CallDeferred(); };
         _tree.Resized += () => { if (_model is not null) FitNameColumn(); };
         _trust.Toggled += value => { _model.TrustChangedSource = value; Buttons(); };
         Confirmed += Confirm;
@@ -201,6 +206,34 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
     }
 
     private static string PluginDirectory(string slug) => "res://addons/" + slug;
+
+    /// <summary>
+    /// Shows the ePlugin icon in the title bar of a separate OS window. Godot recreates that window on every popup, so
+    /// this runs each time it is shown. An embedded dialog has no title bar icon of its own and must not change the
+    /// editor's.
+    /// </summary>
+    private void ApplyWindowIcon(Window window)
+    {
+        var display = DisplayServer.Singleton;
+        if (!GodotObject.IsInstanceValid(window) || !window.Visible || window.IsEmbedded() || !display.HasMethod(WindowSetIcon)) return;
+        var id = window.GetWindowId();
+        if (id == DisplayServer.InvalidWindowId || id == DisplayServer.MainWindowId) return;
+        _windowIcon ??= WindowIconImage();
+        if (_windowIcon is not null) display.Call(WindowSetIcon, _windowIcon, id);
+    }
+
+    /// <summary>The logo rendered large and centered on a square, as title bar icons are square.</summary>
+    private static Image? WindowIconImage()
+    {
+        if (!Godot.FileAccess.FileExists(EPluginIconPath)) return null;
+        var logo = new Image();
+        if (logo.LoadSvgFromString(Godot.FileAccess.GetFileAsString(EPluginIconPath), 4f) != Error.Ok) return null;
+        logo.Convert(Image.Format.Rgba8);
+        var side = Math.Max(logo.GetWidth(), logo.GetHeight());
+        var icon = Image.CreateEmpty(side, side, false, Image.Format.Rgba8);
+        icon.BlitRect(logo, new Rect2I(Vector2I.Zero, logo.GetSize()), new Vector2I((side - logo.GetWidth()) / 2, (side - logo.GetHeight()) / 2));
+        return icon;
+    }
 
     /// <summary>
     /// Tree draws cell buttons at the right edge of the cell. Sizing the Plugin column to its longest title keeps the
