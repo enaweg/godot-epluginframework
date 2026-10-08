@@ -25,7 +25,7 @@ internal sealed partial class EGlobal
         return _updateApplier ??= new(UpdateProjectRoot, _stateStore, new GodotUpdateHost(this), _updateCache);
     }
 
-    internal async Task<(IReadOnlyList<ValidatedPackage> Packages, string Directory)> StageUpdatesAsync(IReadOnlyList<UpdateCandidate> candidates, IProgress<double>? progress, CancellationToken ct)
+    internal async Task<(IReadOnlyList<ValidatedPackage> Packages, string Directory)> StageUpdatesAsync(IReadOnlyList<UpdateCandidate> candidates, IProgress<double>? progress, CancellationToken ct, bool allowDowngrade = false)
     {
         if (_fetchingUpdate || _updateJournals is null || _updateJournals.Read().Any(j => j.IsActive)) throw new InvalidOperationException("An update is already in progress.");
         _fetchingUpdate = true;
@@ -33,7 +33,7 @@ internal sealed partial class EGlobal
         var directory = _updateJournals.NewDirectory();
         try
         {
-            var result = await Task.Run(() => new PackageFetcher(new(), new GitRunner()).FetchAsync(candidates, targets, directory, progress, ct), ct);
+            var result = await Task.Run(() => new PackageFetcher(new(), new GitRunner()).FetchAsync(candidates, targets, directory, progress, ct, allowDowngrade), ct);
             return (result, directory);
         }
         finally { _fetchingUpdate = false; }
@@ -91,7 +91,7 @@ internal sealed partial class EGlobal
             var attempts = _stateStore.LocalAttempts.Where(a => a.AttemptId == journal.AttemptId).ToArray();
             if (attempts.Any(a => a.Reason.StartsWith("update_", StringComparison.Ordinal)))
             {
-                _ePluginContext?.Logger.Warn($"Update needs manual recovery: {journal.Directory}. Use Retry failed ePlugin addons.");
+                _ePluginContext?.Logger.Warn($"Update needs manual recovery: {journal.Directory}. Use Retry failed in the ePlugin Manager.");
                 continue;
             }
             UpdateOutcome result;

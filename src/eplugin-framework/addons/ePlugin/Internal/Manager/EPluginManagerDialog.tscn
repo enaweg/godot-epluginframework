@@ -1,0 +1,192 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" uid="uid://bvv1rdcwentgp" path="res://addons/ePlugin/Internal/Manager/EPluginManagerDialog.cs" id="1_script"]
+[ext_resource type="Texture2D" uid="uid://c0e8d5lpm8fxh" path="res://addons/ePlugin/icons/update.svg" id="2_update"]
+
+[node name="EPluginManagerDialog" type="ConfirmationDialog"]
+title = "ePlugin Manager"
+initial_position = 2
+size = Vector2i(1000, 600)
+min_size = Vector2i(760, 420)
+ok_button_text = "Update"
+dialog_hide_on_ok = false
+cancel_button_text = "Close"
+script = ExtResource("1_script")
+
+[node name="Content" type="VBoxContainer" parent="."]
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 992.0
+offset_bottom = 551.0
+theme_override_constants/separation = 8
+
+[node name="Header" type="HBoxContainer" parent="Content"]
+layout_mode = 2
+
+[node name="Status" type="Label" parent="Content/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Last checked: never"
+text_overrun_behavior = 3
+
+[node name="RetryButton" type="Button" parent="Content/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Retry plugin activations, deactivations and updates that failed or were interrupted."
+text = "Retry failed"
+
+[node name="CheckButton" type="Button" parent="Content/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Check every plugin with an update_url for a new version now."
+text = "Check for updates"
+icon = ExtResource("2_update")
+
+[node name="Split" type="HSplitContainer" parent="Content"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="PluginTree" type="Tree" parent="Content/Split"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(420, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+columns = 4
+column_titles_visible = true
+hide_root = true
+select_mode = 1
+
+[node name="Details" type="PanelContainer" parent="Content/Split"]
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+
+[node name="DetailsBox" type="VBoxContainer" parent="Content/Split/Details"]
+layout_mode = 2
+
+[node name="DetailsHeader" type="HBoxContainer" parent="Content/Split/Details/DetailsBox"]
+layout_mode = 2
+
+[node name="DetailsIcon" type="TextureRect" parent="Content/Split/Details/DetailsBox/DetailsHeader"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+stretch_mode = 5
+
+[node name="DetailsName" type="Label" parent="Content/Split/Details/DetailsBox/DetailsHeader"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"HeaderMedium"
+text = "No plugin selected"
+autowrap_mode = 3
+
+[node name="LocationRow" type="HBoxContainer" parent="Content/Split/Details/DetailsBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="LocationLabel" type="Label" parent="Content/Split/Details/DetailsBox/LocationRow"]
+layout_mode = 2
+text = "Location:"
+
+[node name="LocationLink" type="LinkButton" parent="Content/Split/Details/DetailsBox/LocationRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+tooltip_text = "Select this folder in the FileSystem dock."
+text = "res://addons"
+
+[node name="OpenFolderButton" type="Button" parent="Content/Split/Details/DetailsBox/LocationRow"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Show this folder in the system file manager."
+text = "Open"
+flat = true
+
+[node name="DetailsText" type="RichTextLabel" parent="Content/Split/Details/DetailsBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+focus_mode = 2
+bbcode_enabled = true
+text = "Select a plugin to see its details."
+context_menu_enabled = true
+selection_enabled = true
+
+[node name="ReleaseButton" type="Button" parent="Content/Split/Details/DetailsBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+tooltip_text = "Open the release page of the available update in the browser."
+text = "Open release page"
+
+[node name="VersionSeparator" type="HSeparator" parent="Content/Split/Details/DetailsBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="VersionRow" type="HBoxContainer" parent="Content/Split/Details/DetailsBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="VersionLabel" type="Label" parent="Content/Split/Details/DetailsBox/VersionRow"]
+layout_mode = 2
+text = "Version:"
+
+[node name="VersionSelect" type="OptionButton" parent="Content/Split/Details/DetailsBox/VersionRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "All published versions. Choose an older one to undo an update that broke the project."
+clip_text = true
+
+[node name="InstallVersionButton" type="Button" parent="Content/Split/Details/DetailsBox/VersionRow"]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+text = "Update"
+
+[node name="VersionHint" type="Label" parent="Content/Split/Details/DetailsBox"]
+unique_name_in_owner = true
+visible = false
+modulate = Color(1, 1, 1, 0.7)
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="Note" type="Label" parent="Content"]
+layout_mode = 2
+text = "Selected addons will be replaced. Open scenes are saved first.
+Files and project references are backed up and restored if installation fails."
+
+[node name="TrustCheck" type="CheckBox" parent="Content"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+text = "I trust the changed update source"
+
+[node name="Progress" type="ProgressBar" parent="Content"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="DisableFrameworkConfirm" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+title = "Disable ePlugin Framework"
+initial_position = 2
+size = Vector2i(480, 160)
+ok_button_text = "Disable"
+dialog_text = "Disabling the ePlugin Framework closes the ePlugin Manager and removes its toolbar button and Tools menu entry.
+
+Enable it again in Project Settings > Plugins."
+dialog_autowrap = true
+
+[node name="VersionConfirm" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+title = "Change plugin version"
+initial_position = 2
+size = Vector2i(520, 200)
+ok_button_text = "Install"
+dialog_autowrap = true

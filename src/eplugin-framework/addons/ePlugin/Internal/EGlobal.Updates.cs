@@ -79,6 +79,16 @@ internal sealed partial class EGlobal
         }
     }
 
+    /// <summary>All published versions of an enabled plugin with an update_url, newest first.</summary>
+    internal async Task<IReadOnlyList<UpdateCandidate>> ListVersionsAsync(string slug, CancellationToken ct)
+    {
+        var service = _updateService ?? throw new InvalidOperationException("Update system is not initialized.");
+        var target = CollectUpdateTargets().FirstOrDefault(t => t.Slug == slug)
+            ?? throw new InvalidOperationException("Enable the plugin to change its version.");
+        var allow = ProjectSettings.GetSetting("eplugin/updates/allow_prerelease", false).AsBool();
+        return await Task.Run(() => service.ListVersionsAsync(target, new(allow), ct), ct);
+    }
+
     internal static Task OnEditorThread(Action action, CancellationToken ct)
     {
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -107,7 +117,7 @@ internal sealed partial class EGlobal
             if (_updateCache?.State.FailedUpdates.GetValueOrDefault(update.Slug)?.Any(f => f.Version == update.NewVersion) == true)
                 _ePluginContext?.Logger.Warn($"  {update.Slug} {update.NewVersion} failed previously; repair the cause before retrying.");
         }
-        _ePluginContext?.Logger.Log("Use Project > Tools > Update ePlugin addons... to install them.");
+        _ePluginContext?.Logger.Log("Open the ePlugin Manager (Project > Tools > ePlugin Manager... or the ePlugin toolbar button) to install them.");
     }
 }
 #endif

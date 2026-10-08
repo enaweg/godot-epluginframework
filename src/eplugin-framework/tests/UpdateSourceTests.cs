@@ -119,6 +119,33 @@ public class UpdateSourceTests
         finally { Directory.Delete(root, true); }
     }
 
+    [TestCase]
+    public async Task SourcesListEveryPublishedVersion()
+    {
+        using var github = new HttpClient(new Handler(_ => Json("""
+            [{"tag_name":"v1.2.0","draft":false,"prerelease":false,"assets":[{"name":"plugin.zip","browser_download_url":"https://example.org/1.2.zip"}]},
+             {"tag_name":"v1.1.0","draft":false,"prerelease":false,"assets":[]},
+             {"tag_name":"2.0.0-beta.1","draft":false,"prerelease":true,"assets":[]},
+             {"tag_name":"3.0.0","draft":true,"assets":[]}]
+            """)));
+        var listed = await new GitHubReleaseSource(new(github), "owner", "repo").ListAsync(Target(), new(), CancellationToken.None);
+        Assertions.AssertArray(listed.Select(c => c.NewVersion).ToArray()).IsEqual(new[] { "1.2.0", "1.1.0" });
+        Assertions.AssertString(((ZipPackageRef)listed[1].Package).Url).IsEqual("https://github.com/owner/repo/archive/refs/tags/v1.1.0.zip");
+        Assertions.AssertInt((await new GitHubReleaseSource(new(github), "owner", "repo").ListAsync(Target(), new(AllowPrerelease: true), CancellationToken.None)).Count).IsEqual(3);
+
+        using var gitlab = new HttpClient(new Handler(_ => Json("""
+            [{"tag_name":"1.3.0","upcoming_release":false,"assets":{"links":[],"sources":[{"format":"zip","url":"https://git.example/1.3.zip"}]}},
+             {"tag_name":"1.2.0","upcoming_release":false,"assets":{"links":[],"sources":[]}}]
+            """)));
+        var gitlabVersions = await new GitLabReleaseSource(new(gitlab), "git.example", "team/project").ListAsync(Target(), new(), CancellationToken.None);
+        Assertions.AssertArray(gitlabVersions.Select(c => c.NewVersion).ToArray()).IsEqual(new[] { "1.3.0" });
+
+        var tags = await new GitSource(new(), new FakeGit(), new("https://host/repo.git", "addon", null)).ListAsync(Target(), new(), CancellationToken.None);
+        Assertions.AssertString(tags.Single().NewVersion).IsEqual("2.0.0");
+        Assertions.AssertString(((GitPackageRef)tags[0].Package).Commit).IsEqual(FakeGit.Commit);
+        Assertions.AssertInt((await new GitSource(new(), new FakeGit(), new("https://host/repo.git", "addon", "main")).ListAsync(Target(), new(), CancellationToken.None)).Count).IsEqual(0);
+    }
+
     private static PluginUpdateTarget Target() => new("plugin", "Plugin", "1.0.0", "https://github.com/owner/repo/releases", "/unused");
     private static HttpResponseMessage Json(string text) => new(HttpStatusCode.OK) { Content = new StringContent(text) };
     private static HttpResponseMessage Redirect(string url)

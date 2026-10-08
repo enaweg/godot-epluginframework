@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -78,12 +80,30 @@ public class UpdateCoreTests
         Assertions.AssertBool(cancelled).IsTrue();
     }
 
+    [TestCase]
+    public async Task VersionListIsNewestFirstAndNeedsAListingSource()
+    {
+        var service = new UpdateService(new Factory(), new SystemClock(), new MemoryStore());
+        var versions = await service.ListVersionsAsync(Target("listed") with { UpdateUrl = "https://example.org/listed/releases" }, new(), CancellationToken.None);
+        Assertions.AssertArray(versions.Select(v => v.NewVersion).ToArray()).IsEqual(new[] { "2.0.0", "1.10.0", "1.2.0" });
+        var refused = false;
+        try { await service.ListVersionsAsync(Target("plain"), new(), CancellationToken.None); }
+        catch (NotSupportedException) { refused = true; }
+        Assertions.AssertBool(refused).IsTrue();
+    }
+
     private static PluginUpdateTarget Target(string slug, string installed = "1.0.0") => new(slug, slug, installed, "https://example.org/releases", "/unused");
     private static UpdateCandidate Candidate(string slug, string version) => new(slug, slug, "1.0.0", version,
         "https://example.org/releases", null, null, new ZipPackageRef("https://example.org/package.zip", "plugin"));
     private sealed class Factory : IUpdateSourceFactory
     {
-        public IUpdateSource Create(string url) => new Source();
+        public IUpdateSource Create(string url) => url.Contains("listed") ? new ListingSource() : new Source();
+    }
+    private sealed class ListingSource : IUpdateSource, IVersionListSource
+    {
+        public Task<UpdateCandidate?> CheckAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct) => Task.FromResult<UpdateCandidate?>(null);
+        public Task<IReadOnlyList<UpdateCandidate>> ListAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<UpdateCandidate>>([Candidate(target.Slug, "1.2.0"), Candidate(target.Slug, "2.0.0"), Candidate(target.Slug, "1.10.0"), Candidate(target.Slug, "2.0.0"), Candidate(target.Slug, "bad")]);
     }
     private sealed class Source : IUpdateSource
     {

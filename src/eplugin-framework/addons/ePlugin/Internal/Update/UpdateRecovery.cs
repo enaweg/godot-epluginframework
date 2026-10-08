@@ -141,7 +141,7 @@ internal static class UpdateRecovery
                     }
                     catch (Exception) { /* Preserve backups even if the marker cannot be written. */ }
                 }
-                logger.Error($"Self-update recovery needs manual repair: {ex.Message}. Close the editor, restore {folder}/backup/<slug> to addons/<slug> and backup-project files to the project root, delete .godot/mono/temp, rebuild, then use Retry failed ePlugin addons. See {folder}/README.txt.");
+                logger.Error($"Self-update recovery needs manual repair: {ex.Message}. Close the editor, restore {folder}/backup/<slug> to addons/<slug> and backup-project files to the project root, delete .godot/mono/temp, rebuild, then use Retry failed in the ePlugin Manager. See {folder}/README.txt.");
                 return Outcome.ManualRepair;
             }
         }

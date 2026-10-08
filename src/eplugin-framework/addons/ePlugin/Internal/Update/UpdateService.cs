@@ -44,5 +44,25 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
         }
         return result;
     }
+
+    /// <summary>
+    /// Every published version of one plugin, newest first, so a specific one can be installed. Unlike checks this
+    /// does not touch the cache: the list is only shown, and installing re-validates the chosen package.
+    /// </summary>
+    public async Task<IReadOnlyList<UpdateCandidate>> ListVersionsAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct)
+    {
+        if (factory.Create(target.UpdateUrl) is not IVersionListSource source)
+            throw new NotSupportedException("This update source cannot list versions.");
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(options.TimeoutSeconds * 2));
+        try
+        {
+            var versions = await source.ListAsync(target, options, timeout.Token).WaitAsync(timeout.Token).ConfigureAwait(false);
+            return versions.Where(c => SemVer.TryParse(c.NewVersion, out _))
+                .OrderByDescending(c => { SemVer.TryParse(c.NewVersion, out var v); return v; })
+                .DistinctBy(c => c.NewVersion).ToArray();
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { throw new TimeoutException("Request timed out."); }
+    }
 }
 #endif

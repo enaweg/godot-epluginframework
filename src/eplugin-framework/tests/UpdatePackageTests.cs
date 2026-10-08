@@ -67,6 +67,30 @@ public class UpdatePackageTests
     }
 
     [TestCase]
+    public void DowngradeNeedsExplicitChoiceAndNeverAppliesToTheFramework()
+    {
+        var installed = Path.Combine(_root, "installed");
+        Directory.CreateDirectory(installed);
+        File.WriteAllText(Path.Combine(installed, "plugin.cfg"), Config("2.0.0"));
+        foreach (var slug in new[] { "plugin", "ePlugin" })
+        {
+            var stage = Path.Combine(_root, slug);
+            Directory.CreateDirectory(stage);
+            File.WriteAllText(Path.Combine(stage, "plugin.cfg"), Config("1.0.0"));
+            File.WriteAllText(Path.Combine(stage, "plugin.gd"), "extends EditorPlugin");
+            var candidate = new UpdateCandidate(slug, "Plugin", "2.0.0", "1.0.0", "https://example.org/releases", null, null, new ZipPackageRef("https://example.org/plugin.zip", slug));
+            var target = new PluginUpdateTarget(slug, "Plugin", "2.0.0", candidate.SourceUrl, installed);
+            var validator = new AddonPackageValidator();
+            Assertions.AssertBool(validator.Validate(new(target, candidate, stage)).IsValid).IsFalse();
+            var chosen = validator.Validate(new(target, candidate, stage, AllowDowngrade: true));
+            Assertions.AssertBool(chosen.IsValid).IsEqual(slug == "plugin");
+            if (slug == "plugin") Assertions.AssertBool(chosen.Findings.Any(f => f.Code == "R6" && f.Severity == FindingSeverity.Info)).IsTrue();
+            File.WriteAllText(Path.Combine(stage, "plugin.cfg"), Config("2.0.0"));
+            Assertions.AssertBool(validator.Validate(new(target, candidate, stage, AllowDowngrade: true)).IsValid).IsFalse();
+        }
+    }
+
+    [TestCase]
     public void HostChangeRequiresTrustAndNewProjectFilesAreRefused()
     {
         var installed = Path.Combine(_root, "installed"); var stage = Path.Combine(_root, "plugin");
