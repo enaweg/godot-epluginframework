@@ -52,7 +52,7 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(420, 0)
 layout_mode = 2
 size_flags_horizontal = 3
-columns = 5
+columns = 4
 column_titles_visible = true
 hide_root = true
 select_mode = 1
@@ -80,6 +80,30 @@ size_flags_horizontal = 3
 theme_type_variation = &"HeaderMedium"
 text = "No plugin selected"
 autowrap_mode = 3
+
+[node name="LocationRow" type="HBoxContainer" parent="Content/Split/Details/DetailsBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="LocationLabel" type="Label" parent="Content/Split/Details/DetailsBox/LocationRow"]
+layout_mode = 2
+text = "Location:"
+
+[node name="LocationLink" type="LinkButton" parent="Content/Split/Details/DetailsBox/LocationRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+tooltip_text = "Select this folder in the FileSystem dock."
+text = "res://addons"
+
+[node name="OpenFolderButton" type="Button" parent="Content/Split/Details/DetailsBox/LocationRow"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Show this folder in the system file manager."
+text = "Open"
+flat = true
 
 [node name="DetailsText" type="RichTextLabel" parent="Content/Split/Details/DetailsBox"]
 unique_name_in_owner = true

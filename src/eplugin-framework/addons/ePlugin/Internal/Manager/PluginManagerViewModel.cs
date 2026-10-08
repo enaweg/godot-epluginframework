@@ -111,11 +111,15 @@ internal sealed class PluginManagerViewModel
     {
         var plugin = row.Plugin; var text = new StringBuilder();
         void Line(string label, string? value) { if (!string.IsNullOrWhiteSpace(value)) text.Append($"[b]{label}:[/b] {Escape(value)}\n"); }
+        void Link(string label, string? value)
+        {
+            if (value is null || !IsWebUrl(value)) Line(label, value);
+            else text.Append($"[b]{label}:[/b] [url={value}]{Escape(value)}[/url]\n");
+        }
         Line("Type", PluginCatalog.KindName(plugin.Kind));
         Line("Status", StatusText(plugin));
         Line("Version", plugin.Version);
         Line("Author", plugin.Author);
-        Line("Folder", "res://addons/" + plugin.Slug);
         if (!string.IsNullOrWhiteSpace(plugin.Description)) text.Append('\n').Append(Escape(plugin.Description)).Append('\n');
         if (plugin.Error is not null) text.Append($"\n[color=#ff7070]{Escape(plugin.Error)}[/color]\n");
 
@@ -123,12 +127,12 @@ internal sealed class PluginManagerViewModel
         if (row.Update is { } update)
         {
             text.Append($"{Escape(update.Candidate.InstalledVersion)} → [color=#70e070]{Escape(update.Candidate.NewVersion)}[/color]\n");
-            Line("Source", update.Candidate.SourceUrl);
-            if (update.Candidate.ReleaseUrl is not null) Line("Release", update.Candidate.ReleaseUrl);
+            Link("Update site", update.Candidate.SourceUrl);
+            if (update.Candidate.ReleaseUrl is not null) Link("Release", update.Candidate.ReleaseUrl);
             foreach (var finding in update.Findings) text.Append($"[color={Color(finding.Severity)}]{finding.Severity}:[/color] {Escape(finding.Message)}\n");
             if (update.Failed is { } failed) text.Append($"[color=#ff7070]Previously failed {failed.Utc:u}:[/color] {Escape(failed.Reason)}\n");
         }
-        else if (plugin.UpdateUrl is not null) { text.Append("No update known.\n"); Line("Source", plugin.UpdateUrl); }
+        else if (plugin.UpdateUrl is not null) { text.Append("No update known.\n"); Link("Update site", plugin.UpdateUrl); }
         else text.Append("Not updatable: plugin.cfg has no update_url.\n");
 
         if (reviewed is { Count: > 0 })
@@ -163,6 +167,10 @@ internal sealed class PluginManagerViewModel
         FindingSeverity.Error => "#ff7070", FindingSeverity.Warning => "#ffd070", _ => "#a0c0ff"
     };
     internal static string Escape(string value) => value.Replace("[", "[lb]");
+    /// <summary>An http(s) URL without credentials that can be embedded in a BBCode url tag and opened in a browser.</summary>
+    internal static bool IsWebUrl(string? value) =>
+        Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme is "https" or "http" && uri.UserInfo.Length == 0 &&
+        value!.IndexOfAny(['[', ']']) < 0;
     private static bool SameVersion(string left, string right) => SemVer.TryParse(left, out var l) && SemVer.TryParse(right, out var r) ? l.CompareTo(r) == 0 : left == right;
 }
 #endif

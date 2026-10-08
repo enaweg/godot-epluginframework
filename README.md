@@ -74,11 +74,15 @@ Enabled addons can be checked and updated from release or git sources; see [Upda
 Open the **ePlugin Manager** with the ePlugin button at the right of the editor's main toolbar or with
 **Project > Tools > ePlugin Manager...**. It lists every plugin below `res://addons`, enabled or not, with its
 type (ePlugin Framework, ePlugin, C# plugin, GDScript plugin) and version. ePlugins are marked with the ePlugin
-icon. Plugins with an `update_url` show an update icon that turns green when an update is available.
+icon. Plugins with an `update_url` show an update icon after their name that turns green when an update is
+available; the Version column then shows the change (e.g. `1.0.0 → 1.1.0`) with a checkbox to include it in
+**Update**.
 
 Select a plugin to see its details next to the list: status, author, description, the available update
 (installed → new version, source, warnings and earlier failures), and the dependencies of an active ePlugin's
-recipe. From the dialog you can:
+recipe. Click the location to select the plugin folder in the FileSystem dock, or the folder button next to it to
+open it in the system file manager. The update site and release page are links that open in the browser. From the
+dialog you can:
 
 + **On** — enable or disable any plugin. Enabling an ePlugin installs its recipe and dependencies; disabling it
   also disables the plugins that depend on it. The list is reloaded afterwards, so automatically toggled

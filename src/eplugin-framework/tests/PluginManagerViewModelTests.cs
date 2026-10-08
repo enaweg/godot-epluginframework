@@ -84,6 +84,11 @@ public class PluginManagerViewModelTests
         Assertions.AssertString(details).Contains("• other 1.2");
         Assertions.AssertString(details).Contains("• Newtonsoft.Json 13.0.3");
         Assertions.AssertString(details).NotContains("• ePlugin");
+        Assertions.AssertString(details).Contains("[b]Update site:[/b] [url=https://example.org/releases]https://example.org/releases[/url]");
+        var git = new PluginRow(Plugin("git", PluginKind.GDScript, "git@host:owner/repo.git"), null);
+        Assertions.AssertString(PluginManagerViewModel.Describe(git)).Contains("[b]Update site:[/b] git@host:owner/repo.git");
+        foreach (var unsafeUrl in new[] { "git@host:owner/repo.git", "ssh://host/repo.git", "https://user:pw@host/x", "https://host/a]b", "file:///etc" })
+            Assertions.AssertBool(PluginManagerViewModel.IsWebUrl(unsafeUrl)).IsFalse();
         Assertions.AssertString(PluginManagerViewModel.Describe(new(Plugin("plain", PluginKind.GDScript), null))).Contains("no update_url");
     }
     [TestCase]

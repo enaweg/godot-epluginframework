@@ -18,7 +18,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
     internal const string ScenePath = "res://addons/ePlugin/Internal/Manager/EPluginManagerDialog.tscn";
     internal const string EPluginIconPath = "res://addons/ePlugin/icons/eplugin.svg";
     internal const string UpdateIconPath = "res://addons/ePlugin/icons/update.svg";
-    private const int EnabledColumn = 0, NameColumn = 1, TypeColumn = 2, VersionColumn = 3, UpdateColumn = 4;
+    private const int EnabledColumn = 0, NameColumn = 1, TypeColumn = 2, VersionColumn = 3;
+    private const int TypeMinimumWidth = 120;
 
     private EGlobal _global = null!;
     private CancellationToken _lifetime;
@@ -34,6 +35,9 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
     private TextureRect _detailsIcon = null!;
     private Label _detailsName = null!;
     private RichTextLabel _detailsText = null!;
+    private Control _locationRow = null!;
+    private LinkButton _locationLink = null!;
+    private Button _openFolder = null!;
     private Control _versionSeparator = null!;
     private Control _versionRow = null!;
     private OptionButton _versionSelect = null!;
@@ -80,22 +84,27 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         _versionSeparator = GetNode<Control>("%VersionSeparator"); _versionRow = GetNode<Control>("%VersionRow");
         _versionSelect = GetNode<OptionButton>("%VersionSelect"); _installVersion = GetNode<Button>("%InstallVersionButton");
         _versionHint = GetNode<Label>("%VersionHint"); _versionConfirm = GetNode<ConfirmationDialog>("%VersionConfirm");
+        _locationRow = GetNode<Control>("%LocationRow"); _locationLink = GetNode<LinkButton>("%LocationLink"); _openFolder = GetNode<Button>("%OpenFolderButton");
+        if (EditorInterface.Singleton.GetEditorTheme() is { } editorTheme && editorTheme.HasIcon("Folder", "EditorIcons"))
+        { _openFolder.Icon = editorTheme.GetIcon("Folder", "EditorIcons"); _openFolder.Text = ""; }
         _ePluginIcon = ResourceLoader.Exists(EPluginIconPath) ? GD.Load<Texture2D>(EPluginIconPath) : null;
         _updateIcon = ResourceLoader.Exists(UpdateIconPath) ? GD.Load<Texture2D>(UpdateIconPath) : null;
 
         // Column titles and sizing are not scene properties of Tree.
         _tree.SetColumnTitle(EnabledColumn, "On"); _tree.SetColumnTitle(NameColumn, "Plugin"); _tree.SetColumnTitle(TypeColumn, "Type");
-        _tree.SetColumnTitle(VersionColumn, "Version"); _tree.SetColumnTitle(UpdateColumn, "Update");
-        _tree.SetColumnExpand(EnabledColumn, false); _tree.SetColumnExpand(TypeColumn, false);
-        _tree.SetColumnExpand(VersionColumn, false); _tree.SetColumnExpand(UpdateColumn, false);
+        _tree.SetColumnTitle(VersionColumn, "Version");
+        _tree.SetColumnExpand(EnabledColumn, false); _tree.SetColumnExpand(TypeColumn, false); _tree.SetColumnExpand(VersionColumn, false);
         var scale = EditorInterface.Singleton.GetEditorScale();
         Size = (Vector2I)((Vector2)Size * scale); MinSize = (Vector2I)((Vector2)MinSize * scale);
-        _tree.SetColumnCustomMinimumWidth(EnabledColumn, (int)(40 * scale)); _tree.SetColumnCustomMinimumWidth(TypeColumn, (int)(130 * scale));
-        _tree.SetColumnCustomMinimumWidth(VersionColumn, (int)(80 * scale)); _tree.SetColumnCustomMinimumWidth(UpdateColumn, (int)(120 * scale));
+        _tree.SetColumnCustomMinimumWidth(EnabledColumn, (int)(40 * scale)); _tree.SetColumnCustomMinimumWidth(TypeColumn, (int)(TypeMinimumWidth * scale));
+        _tree.SetColumnCustomMinimumWidth(VersionColumn, (int)(150 * scale));
 
         _check.Pressed += CheckNow;
         _retry.Pressed += RetryFailed;
         _release.Pressed += OpenRelease;
+        _locationLink.Pressed += () => { if (_selectedSlug is not null) EditorInterface.Singleton.SelectFile(PluginDirectory(_selectedSlug)); };
+        _openFolder.Pressed += () => { if (_selectedSlug is not null) OS.ShellShowInFileManager(ProjectSettings.GlobalizePath(PluginDirectory(_selectedSlug)), true); };
+        _detailsText.MetaClicked += meta => { if (PluginManagerViewModel.IsWebUrl(meta.AsString())) OS.ShellOpen(meta.AsString()); };
         _tree.ItemEdited += ItemEdited;
         _disableFrameworkConfirm.Confirmed += DisableFramework;
         _versionSelect.ItemSelected += _ => VersionButtons();
@@ -103,6 +112,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         _versionConfirm.Confirmed += () => { if (_pendingVersion is { } version) Install([version], true, _pendingDowngrade); };
         _tree.ItemSelected += () => ShowDetails(SlugOf(_tree.GetSelected()));
         _tree.ItemActivated += OpenRelease;
+        _tree.ButtonClicked += (item, _, _, _) => item.Select(NameColumn);
+        _tree.Resized += () => { if (_model is not null) FitNameColumn(); };
         _trust.Toggled += value => { _model.TrustChangedSource = value; Buttons(); };
         Confirmed += Confirm;
         Canceled += Cancel;
@@ -150,37 +161,74 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
             item.SetTooltipText(EnabledColumn, !row.CanToggle ? "The plugin folder or its plugin.cfg is missing."
                 : plugin.Enabled ? "Enabled. Uncheck to disable the plugin." : "Disabled. Check to enable the plugin.");
             item.SetText(NameColumn, plugin.Name);
-            item.SetTooltipText(NameColumn, $"{plugin.Name} (res://addons/{plugin.Slug})");
+            item.SetTooltipText(NameColumn, $"{plugin.Name} ({PluginDirectory(plugin.Slug)})" + (!row.IsUpdatable ? "" : row.Update is { } available
+                ? $"\nUpdate available: {available.Candidate.InstalledVersion} → {available.Candidate.NewVersion}"
+                : "\nUpdatable, no update known"));
             if (row.IsEPlugin && _ePluginIcon is not null) item.SetIcon(NameColumn, _ePluginIcon);
+            if (row.IsUpdatable && _updateIcon is not null)
+            {
+                item.AddButton(NameColumn, _updateIcon, 0, false, row.Update is { } known
+                    ? $"Update available: {known.Candidate.InstalledVersion} → {known.Candidate.NewVersion}" : "Updatable, no update known");
+                item.SetButtonColor(NameColumn, 0, row.Update is { } state ? (state.HasError ? ErrorColor() : UpdateColor()) : DisabledColor());
+            }
             if (!plugin.Enabled) item.SetCustomColor(NameColumn, DisabledColor());
             if (plugin.FailedAttempt is not null || plugin.State == EEditorPluginState.Error) item.SetCustomColor(NameColumn, ErrorColor());
             item.SetText(TypeColumn, PluginCatalog.KindName(plugin.Kind));
-            item.SetText(VersionColumn, plugin.Version);
-            item.SetTooltipText(VersionColumn, PluginManagerViewModel.StatusText(plugin));
             if (row.Update is { } update)
             {
-                item.SetCellMode(UpdateColumn, TreeItem.TreeCellMode.Check);
-                item.SetEditable(UpdateColumn, !update.HasError && editable);
-                item.SetChecked(UpdateColumn, update.Selected);
+                // An available update is selected for the batch right where its version change is shown.
+                item.SetCellMode(VersionColumn, TreeItem.TreeCellMode.Check);
+                item.SetEditable(VersionColumn, !update.HasError && editable);
+                item.SetChecked(VersionColumn, update.Selected);
+                item.SetText(VersionColumn, $"{plugin.Version} → {update.Candidate.NewVersion}");
+                if (update.HasError) item.SetCustomColor(VersionColumn, ErrorColor());
+                item.SetTooltipText(VersionColumn, update.HasError ? "This update cannot be installed, see details." : "Check to include this update in Update.");
             }
-            if (row.IsUpdatable)
+            else
             {
-                if (_updateIcon is not null) item.SetIcon(UpdateColumn, _updateIcon);
-                item.SetIconModulate(UpdateColumn, row.HasUpdate ? (row.Update!.HasError ? ErrorColor() : UpdateColor()) : DisabledColor());
-                item.SetText(UpdateColumn, row.Update?.Candidate.NewVersion ?? "");
-                item.SetTooltipText(UpdateColumn, row.Update is { } available
-                    ? $"Update available: {available.Candidate.InstalledVersion} → {available.Candidate.NewVersion}" +
-                      (available.HasError ? "\nThis update cannot be installed, see details." : "\nCheck to include it in Update.")
-                    : "Updatable, no update known");
+                item.SetText(VersionColumn, plugin.Version);
+                item.SetTooltipText(VersionColumn, PluginManagerViewModel.StatusText(plugin));
             }
             if (plugin.Slug == _selectedSlug) selected = item;
         }
+        FitNameColumn();
         if (selected is not null) { selected.Select(NameColumn); _tree.ScrollToItem(selected); }
         else ShowDetails(null);
         var count = _model.Updates.Count;
         _status.Text = (count == 0 ? "No updates known" : $"{count} update{(count == 1 ? "" : "s")} available") +
                        " · Last checked: " + (_global.LastUpdateCheck?.ToLocalTime().ToString("g") ?? "never");
         Buttons();
+    }
+
+    private static string PluginDirectory(string slug) => "res://addons/" + slug;
+
+    /// <summary>
+    /// Tree draws cell buttons at the right edge of the cell. Sizing the Plugin column to its longest title keeps the
+    /// update icons right after the titles; the Type column takes the remaining width.
+    /// </summary>
+    private void FitNameColumn()
+    {
+        var font = _tree.GetThemeFont("font"); var fontSize = _tree.GetThemeFontSize("font_size");
+        var separation = _tree.GetThemeConstant("h_separation");
+        var width = 0f;
+        for (var item = _tree.GetRoot()?.GetFirstChild(); item is not null; item = item.GetNext())
+        {
+            var text = font.GetStringSize(item.GetText(NameColumn), HorizontalAlignment.Left, -1, fontSize).X;
+            if (item.GetIcon(NameColumn) is { } icon) text += icon.GetWidth() + separation;
+            width = Math.Max(width, text);
+        }
+        var button = _updateIcon is null ? 0 : _updateIcon.GetWidth() + 4 * separation;
+        var margins = _tree.GetThemeConstant("inner_item_margin_left") + _tree.GetThemeConstant("inner_item_margin_right") + 2 * separation;
+        var desired = width + button + margins;
+        // Never wider than the list leaves next to the other columns, or the tree scrolls horizontally.
+        if (_tree.Size.X > 0)
+        {
+            var others = _tree.GetColumnWidth(EnabledColumn) + _tree.GetColumnWidth(VersionColumn) + TypeMinimumWidth * EditorInterface.Singleton.GetEditorScale() +
+                         _tree.GetThemeStylebox("panel").GetMinimumSize().X + 16 * EditorInterface.Singleton.GetEditorScale();
+            desired = Math.Max(Math.Min(desired, _tree.Size.X - others), 120 * EditorInterface.Singleton.GetEditorScale());
+        }
+        _tree.SetColumnExpand(NameColumn, false); _tree.SetColumnExpand(TypeColumn, true);
+        _tree.SetColumnCustomMinimumWidth(NameColumn, (int)Math.Ceiling(desired));
     }
 
     private void ShowDetails(string? slug)
@@ -192,6 +240,13 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         var reviewed = _versionInstall ? _staged?.FirstOrDefault(p => p.Candidate.Slug == slug)?.Findings : null;
         _detailsText.Text = row is null ? "Select a plugin to see its details." : PluginManagerViewModel.Describe(row, reviewed);
         _release.Visible = IsSafeUrl(row?.Update?.Candidate.ReleaseUrl);
+        _locationRow.Visible = row is not null;
+        if (row is not null)
+        {
+            var directory = PluginDirectory(row.Plugin.Slug);
+            _locationLink.Text = directory;
+            _locationLink.Disabled = _openFolder.Disabled = row.Plugin.Missing || !DirAccess.DirExistsAbsolute(directory);
+        }
         RenderVersions(row);
     }
 
@@ -299,9 +354,9 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         var item = _tree.GetEdited();
         var row = SlugOf(item) is { } slug ? _model.Find(slug) : null;
         if (item is null || row is null || _working || _staged is not null) return;
-        if (_tree.GetEditedColumn() == UpdateColumn && row.Update is { } update)
+        if (_tree.GetEditedColumn() == VersionColumn && row.Update is { } update)
         {
-            update.Selected = item.IsChecked(UpdateColumn);
+            update.Selected = item.IsChecked(VersionColumn);
             Buttons();
         }
         else if (_tree.GetEditedColumn() == EnabledColumn)
