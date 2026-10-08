@@ -107,7 +107,7 @@ internal sealed partial class EGlobal
             if (_updateCache?.State.FailedUpdates.GetValueOrDefault(update.Slug)?.Any(f => f.Version == update.NewVersion) == true)
                 _ePluginContext?.Logger.Warn($"  {update.Slug} {update.NewVersion} failed previously; repair the cause before retrying.");
         }
-        _ePluginContext?.Logger.Log("Use Project > Tools > Update ePlugin addons... to install them.");
+        _ePluginContext?.Logger.Log("Open the ePlugin Manager (Project > Tools > ePlugin Manager... or the ePlugin toolbar button) to install them.");
     }
 }
 #endif

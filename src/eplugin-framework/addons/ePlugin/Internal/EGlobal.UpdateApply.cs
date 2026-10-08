@@ -91,7 +91,7 @@ internal sealed partial class EGlobal
             var attempts = _stateStore.LocalAttempts.Where(a => a.AttemptId == journal.AttemptId).ToArray();
             if (attempts.Any(a => a.Reason.StartsWith("update_", StringComparison.Ordinal)))
             {
-                _ePluginContext?.Logger.Warn($"Update needs manual recovery: {journal.Directory}. Use Retry failed ePlugin addons.");
+                _ePluginContext?.Logger.Warn($"Update needs manual recovery: {journal.Directory}. Use Retry failed in the ePlugin Manager.");
                 continue;
             }
             UpdateOutcome result;
