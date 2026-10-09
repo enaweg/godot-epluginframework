@@ -10,8 +10,9 @@ namespace Enaweg.Plugin.Internal.Manager;
 /// Adds, removes and rescans the user's local plugin directories. The layout lives in LocalSourcesDialog.tscn.
 /// </summary>
 [Tool]
-internal sealed partial class LocalSourcesDialog : AcceptDialog
+internal sealed partial class LocalSourcesDialog : AcceptDialog, ISerializationListener
 {
+    private readonly EditorSignalConnections _signals = new();
     private EGlobal _global = null!;
     private ItemList _list = null!;
     private Label _status = null!;
@@ -26,12 +27,20 @@ internal sealed partial class LocalSourcesDialog : AcceptDialog
         _global = global;
         _list = GetNode<ItemList>("%LocalSourceList"); _status = GetNode<Label>("%LocalSourceStatus");
         _rescan = GetNode<Button>("%RescanLocalSourcesButton"); _add = GetNode<Button>("%AddLocalSourceButton"); _remove = GetNode<Button>("%RemoveLocalSourceButton"); _folderDialog = GetNode<FileDialog>("%LocalSourceFolderDialog");
-        EditorWindows.Prepare(this); EditorWindows.Prepare(_folderDialog);
-        _rescan.Pressed += () => { _error = null; _ = _global.RebuildLocalIndexAsync(); };
-        _add.Pressed += () => _folderDialog.PopupCentered();
-        _remove.Pressed += RemoveSelected;
-        _list.ItemSelected += _ => _remove.Disabled = _global.LocalDirectoriesProblem is not null;
-        _folderDialog.DirSelected += Add;
+        EditorWindows.Prepare(this, _signals, this, nameof(QueueWindowIcons));
+        EditorWindows.Prepare(_folderDialog, _signals, this, nameof(QueueWindowIcons));
+        _signals.Connect(_rescan, BaseButton.SignalName.Pressed, Callable.From(() => { _error = null; _ = _global.RebuildLocalIndexAsync(); }));
+        _signals.Connect(_add, BaseButton.SignalName.Pressed, Callable.From(() => _folderDialog.PopupCentered()));
+        _signals.Connect(_remove, BaseButton.SignalName.Pressed, Callable.From(RemoveSelected));
+        _signals.Connect(_list, ItemList.SignalName.ItemSelected, Callable.From<long>(_ => _remove.Disabled = _global.LocalDirectoriesProblem is not null));
+        _signals.Connect(_folderDialog, FileDialog.SignalName.DirSelected, Callable.From<string>(Add));
+    }
+
+    private void QueueWindowIcons() => CallDeferred(nameof(RefreshWindowIcons));
+    private void RefreshWindowIcons()
+    {
+        EditorWindows.ApplyIcon(this);
+        EditorWindows.ApplyIcon(_folderDialog);
     }
 
     public void Open()
@@ -96,9 +105,25 @@ internal sealed partial class LocalSourcesDialog : AcceptDialog
         if (_global is not null) _global.LocalIndexChanged += Render;
     }
 
+    private void ReleaseCallbacks()
+    {
+        _signals.Dispose();
+        if (_global is not null) _global.LocalIndexChanged -= Render;
+    }
+
+    // Reload serializes every script before disposing any of them, so callback targets are still valid here.
+    public void OnBeforeSerialize() => ReleaseCallbacks();
+    public void OnAfterDeserialize() { }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) ReleaseCallbacks();
+        base.Dispose(disposing);
+    }
+
     public override void _ExitTree()
     {
-        if (_global is not null) _global.LocalIndexChanged -= Render;
+        ReleaseCallbacks();
         base._ExitTree();
     }
 }

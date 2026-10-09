@@ -12,12 +12,14 @@ internal static class EditorWindows
     private static Image? _icon;
 
     /// <summary>Scales the sizes a scene authored for 100% editor scale, and shows the ePlugin icon whenever it opens.</summary>
-    public static void Prepare(Window window)
+    public static void Prepare(Window window, EditorSignalConnections signals, GodotObject owner, StringName visibilityChanged)
     {
         var scale = EditorInterface.Singleton.GetEditorScale();
         window.Size = (Vector2I)((Vector2)window.Size * scale);
         window.MinSize = (Vector2I)((Vector2)window.MinSize * scale);
-        window.VisibilityChanged += () => { if (window.Visible) Callable.From(() => ApplyIcon(window)).CallDeferred(); };
+        if (DisplayServer.Singleton.HasMethod(WindowSetIcon))
+            // A closure capturing Window cannot be serialized by Godot on reload. Use a native method callable.
+            signals.Connect(window, Window.SignalName.VisibilityChanged, new Callable(owner, visibilityChanged));
     }
 
     /// <summary>
@@ -25,7 +27,7 @@ internal static class EditorWindows
     /// this runs each time it is shown. An embedded dialog has no title bar icon of its own and must not change the
     /// editor's.
     /// </summary>
-    private static void ApplyIcon(Window window)
+    public static void ApplyIcon(Window window)
     {
         var display = DisplayServer.Singleton;
         if (!GodotObject.IsInstanceValid(window) || !window.Visible || window.IsEmbedded() || !display.HasMethod(WindowSetIcon)) return;

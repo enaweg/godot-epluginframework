@@ -13,12 +13,13 @@ namespace Enaweg.Plugin.Internal.Manager;
 /// Lists every addon with its details and installs updates. The layout lives in EPluginManagerDialog.tscn.
 /// </summary>
 [Tool]
-internal sealed partial class EPluginManagerDialog : ConfirmationDialog
+internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerializationListener
 {
     internal const string ScenePath = "res://addons/ePlugin/Internal/Manager/EPluginManagerDialog.tscn";
     private const int EnabledColumn = 0, NameColumn = 1, AuthorColumn = 2, TypeColumn = 3, VersionColumn = 4;
     private const int AuthorMinimumWidth = 100;
 
+    private readonly EditorSignalConnections _signals = new();
     private EGlobal _global = null!;
     private CancellationToken _lifetime;
     private CancellationTokenSource? _cancel;
@@ -92,38 +93,45 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         _localSources = GetNode<LocalSourcesDialog>("%LocalSourcesDialog"); _localSources.Initialize(global);
         _locationRow = GetNode<Control>("%LocationRow"); _locationLink = GetNode<LinkButton>("%LocationLink"); _openFolder = GetNode<Button>("%OpenFolderButton");
         RefreshTheme();
-        ThemeChanged += () => Callable.From(RefreshTheme).CallDeferred();
+        _signals.Connect(this, Control.SignalName.ThemeChanged, Callable.From(() => CallDeferred(nameof(RefreshTheme))));
 
         // Column titles and sizing are not scene properties of Tree.
         _tree.SetColumnTitle(EnabledColumn, "On"); _tree.SetColumnTitle(NameColumn, "Plugin"); _tree.SetColumnTitle(AuthorColumn, "Author");
         _tree.SetColumnTitle(TypeColumn, "Type"); _tree.SetColumnTitle(VersionColumn, "Version");
         _tree.SetColumnExpand(EnabledColumn, false); _tree.SetColumnExpand(NameColumn, false); _tree.SetColumnExpand(AuthorColumn, true);
         _tree.SetColumnExpand(TypeColumn, false); _tree.SetColumnExpand(VersionColumn, false);
-        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm }) EditorWindows.Prepare(window);
+        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm }) EditorWindows.Prepare(window, _signals, this, nameof(QueueWindowIcons));
         var scale = EditorInterface.Singleton.GetEditorScale();
         _tree.SetColumnCustomMinimumWidth(EnabledColumn, (int)(40 * scale)); _tree.SetColumnCustomMinimumWidth(AuthorColumn, (int)(AuthorMinimumWidth * scale));
         _tree.SetColumnCustomMinimumWidth(VersionColumn, (int)(150 * scale));
 
-        _check.Pressed += CheckNow;
-        GetNode<Button>("%LocalSourcesButton").Pressed += _localSources.Open;
-        _retry.Pressed += RetryFailed;
-        _release.Pressed += OpenRelease;
-        _locationLink.Pressed += () => { if (_selectedSlug is not null) EditorInterface.Singleton.SelectFile(PluginDirectory(_selectedSlug)); };
-        _openFolder.Pressed += () => { if (_selectedSlug is not null) OS.ShellShowInFileManager(ProjectSettings.GlobalizePath(PluginDirectory(_selectedSlug)), true); };
-        _detailsText.MetaClicked += meta => { if (PluginManagerViewModel.IsWebUrl(meta.AsString())) OS.ShellOpen(meta.AsString()); };
-        _tree.ItemEdited += ItemEdited;
-        _disableFrameworkConfirm.Confirmed += DisableFramework;
-        _versionSelect.ItemSelected += _ => VersionButtons();
-        _installVersion.Pressed += ConfirmVersion;
-        _versionConfirm.Confirmed += () => { if (_pendingVersion is { } version) Install([version], true, _pendingDowngrade); };
-        _tree.ItemSelected += () => ShowDetails(SlugOf(_tree.GetSelected()));
-        _tree.ItemActivated += OpenRelease;
-        _tree.ButtonClicked += (item, _, _, _) => item.Select(NameColumn);
-        _tree.Resized += () => { if (_model is not null) FitColumns(); };
-        _trust.Toggled += value => { _model.TrustChangedSource = value; Buttons(); };
-        Confirmed += Confirm;
-        Canceled += Cancel;
-        CloseRequested += Cancel;
+        _signals.Connect(_check, BaseButton.SignalName.Pressed, Callable.From(CheckNow));
+        _signals.Connect(GetNode<Button>("%LocalSourcesButton"), BaseButton.SignalName.Pressed, Callable.From(_localSources.Open));
+        _signals.Connect(_retry, BaseButton.SignalName.Pressed, Callable.From(RetryFailed));
+        _signals.Connect(_release, BaseButton.SignalName.Pressed, Callable.From(OpenRelease));
+        _signals.Connect(_locationLink, BaseButton.SignalName.Pressed, Callable.From(() => { if (_selectedSlug is not null) EditorInterface.Singleton.SelectFile(PluginDirectory(_selectedSlug)); }));
+        _signals.Connect(_openFolder, BaseButton.SignalName.Pressed, Callable.From(() => { if (_selectedSlug is not null) OS.ShellShowInFileManager(ProjectSettings.GlobalizePath(PluginDirectory(_selectedSlug)), true); }));
+        _signals.Connect(_detailsText, RichTextLabel.SignalName.MetaClicked, Callable.From<Variant>(meta => { if (PluginManagerViewModel.IsWebUrl(meta.AsString())) OS.ShellOpen(meta.AsString()); }));
+        _signals.Connect(_tree, Tree.SignalName.ItemEdited, Callable.From(ItemEdited));
+        _signals.Connect(_disableFrameworkConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(DisableFramework));
+        _signals.Connect(_versionSelect, OptionButton.SignalName.ItemSelected, Callable.From<long>(_ => VersionButtons()));
+        _signals.Connect(_installVersion, BaseButton.SignalName.Pressed, Callable.From(ConfirmVersion));
+        _signals.Connect(_versionConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(() => { if (_pendingVersion is { } version) Install([version], true, _pendingDowngrade); }));
+        _signals.Connect(_tree, Tree.SignalName.ItemSelected, Callable.From(() => ShowDetails(SlugOf(_tree.GetSelected()))));
+        _signals.Connect(_tree, Tree.SignalName.ItemActivated, Callable.From(OpenRelease));
+        _signals.Connect(_tree, Tree.SignalName.ButtonClicked, Callable.From<TreeItem, long, long, long>((item, _, _, _) => item.Select(NameColumn)));
+        _signals.Connect(_tree, Tree.SignalName.Resized, Callable.From(() => { if (_model is not null) FitColumns(); }));
+        _signals.Connect(_trust, BaseButton.SignalName.Toggled, Callable.From<bool>(value => { _model.TrustChangedSource = value; Buttons(); }));
+        _signals.Connect(this, AcceptDialog.SignalName.Confirmed, Callable.From(Confirm));
+        _signals.Connect(this, AcceptDialog.SignalName.Canceled, Callable.From(Cancel));
+        _signals.Connect(this, Window.SignalName.CloseRequested, Callable.From(Cancel));
+    }
+
+    private void QueueWindowIcons() => CallDeferred(nameof(RefreshWindowIcons));
+    private void RefreshWindowIcons()
+    {
+        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm })
+            EditorWindows.ApplyIcon(window);
     }
 
     private void RefreshTheme()
@@ -555,10 +563,27 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         if (_global is not null) _global.LocalIndexChanged += LocalIndexChanged;
     }
 
+    private void ReleaseCallbacks()
+    {
+        _signals.Dispose();
+        _cancel?.Cancel(); _cancel?.Dispose(); _cancel = null;
+        if (_global is not null) _global.LocalIndexChanged -= LocalIndexChanged;
+    }
+
+    // Reload serializes every script before disposing any of them, so callback targets are still valid here.
+    public void OnBeforeSerialize() => ReleaseCallbacks();
+    public void OnAfterDeserialize() { }
+
+    protected override void Dispose(bool disposing)
+    {
+        // Reload removes the C# script without exiting the native node from the tree.
+        if (disposing) ReleaseCallbacks();
+        base.Dispose(disposing);
+    }
+
     public override void _ExitTree()
     {
-        _cancel?.Cancel(); _cancel?.Dispose();
-        if (_global is not null) _global.LocalIndexChanged -= LocalIndexChanged;
+        ReleaseCallbacks();
         if (!_swapping) ClearStaging();
         base._ExitTree();
     }
