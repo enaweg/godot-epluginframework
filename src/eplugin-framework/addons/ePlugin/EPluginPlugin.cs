@@ -5,7 +5,6 @@ using System.IO;
 using Enaweg.Plugin.Internal.Dotnet;
 using Enaweg.Plugin.Internal.Manager;
 using Enaweg.Plugin.Internal.Update;
-using Enaweg.Plugin.Internal.Update.UI;
 using System.Runtime.Loader;
 using Enaweg.Plugin.Internal;
 using Enaweg.Plugin.Logging;
