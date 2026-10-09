@@ -7,7 +7,7 @@ using Godot;
 namespace Enaweg.Plugin.Internal.Manager;
 
 /// <summary>
-/// Adds, removes and rescans the user's local plugin directories. The layout lives in EPluginManagerDialog.tscn.
+/// Adds, removes and rescans the user's local plugin directories. The layout lives in LocalSourcesDialog.tscn.
 /// </summary>
 [Tool]
 internal sealed partial class LocalSourcesDialog : AcceptDialog

@@ -16,10 +16,8 @@ namespace Enaweg.Plugin.Internal.Manager;
 internal sealed partial class EPluginManagerDialog : ConfirmationDialog
 {
     internal const string ScenePath = "res://addons/ePlugin/Internal/Manager/EPluginManagerDialog.tscn";
-    internal const string EPluginIconPath = "res://addons/ePlugin/icons/eplugin.svg";
-    internal const string UpdateIconPath = "res://addons/ePlugin/icons/update.svg";
-    private const int EnabledColumn = 0, NameColumn = 1, TypeColumn = 2, VersionColumn = 3;
-    private const int TypeMinimumWidth = 120;
+    private const int EnabledColumn = 0, NameColumn = 1, AuthorColumn = 2, TypeColumn = 3, VersionColumn = 4;
+    private const int AuthorMinimumWidth = 100;
 
     private EGlobal _global = null!;
     private CancellationToken _lifetime;
@@ -57,6 +55,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
     private UpdateCandidate? _pendingVersion;
     private bool _pendingDowngrade;
     private Texture2D? _ePluginIcon;
+    private Texture2D? _logo;
     private Texture2D? _updateIcon;
     private PluginManagerViewModel _model = null!;
     private IReadOnlyList<ValidatedPackage>? _staged;
@@ -94,16 +93,17 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         _locationRow = GetNode<Control>("%LocationRow"); _locationLink = GetNode<LinkButton>("%LocationLink"); _openFolder = GetNode<Button>("%OpenFolderButton");
         if (EditorInterface.Singleton.GetEditorTheme() is { } editorTheme && editorTheme.HasIcon("Folder", "EditorIcons"))
         { _openFolder.Icon = editorTheme.GetIcon("Folder", "EditorIcons"); _openFolder.Text = ""; }
-        _ePluginIcon = ResourceLoader.Exists(EPluginIconPath) ? GD.Load<Texture2D>(EPluginIconPath) : null;
-        _updateIcon = ResourceLoader.Exists(UpdateIconPath) ? GD.Load<Texture2D>(UpdateIconPath) : null;
+        _ePluginIcon = EditorIcons.EPlugin; _logo = EditorIcons.Logo; _updateIcon = EditorIcons.Update;
+        if (_updateIcon is not null) _check.Icon = _updateIcon;
 
         // Column titles and sizing are not scene properties of Tree.
-        _tree.SetColumnTitle(EnabledColumn, "On"); _tree.SetColumnTitle(NameColumn, "Plugin"); _tree.SetColumnTitle(TypeColumn, "Type");
-        _tree.SetColumnTitle(VersionColumn, "Version");
-        _tree.SetColumnExpand(EnabledColumn, false); _tree.SetColumnExpand(TypeColumn, false); _tree.SetColumnExpand(VersionColumn, false);
+        _tree.SetColumnTitle(EnabledColumn, "On"); _tree.SetColumnTitle(NameColumn, "Plugin"); _tree.SetColumnTitle(AuthorColumn, "Author");
+        _tree.SetColumnTitle(TypeColumn, "Type"); _tree.SetColumnTitle(VersionColumn, "Version");
+        _tree.SetColumnExpand(EnabledColumn, false); _tree.SetColumnExpand(NameColumn, false); _tree.SetColumnExpand(AuthorColumn, true);
+        _tree.SetColumnExpand(TypeColumn, false); _tree.SetColumnExpand(VersionColumn, false);
         foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm }) EditorWindows.Prepare(window);
         var scale = EditorInterface.Singleton.GetEditorScale();
-        _tree.SetColumnCustomMinimumWidth(EnabledColumn, (int)(40 * scale)); _tree.SetColumnCustomMinimumWidth(TypeColumn, (int)(TypeMinimumWidth * scale));
+        _tree.SetColumnCustomMinimumWidth(EnabledColumn, (int)(40 * scale)); _tree.SetColumnCustomMinimumWidth(AuthorColumn, (int)(AuthorMinimumWidth * scale));
         _tree.SetColumnCustomMinimumWidth(VersionColumn, (int)(150 * scale));
 
         _check.Pressed += CheckNow;
@@ -121,7 +121,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         _tree.ItemSelected += () => ShowDetails(SlugOf(_tree.GetSelected()));
         _tree.ItemActivated += OpenRelease;
         _tree.ButtonClicked += (item, _, _, _) => item.Select(NameColumn);
-        _tree.Resized += () => { if (_model is not null) FitNameColumn(); };
+        _tree.Resized += () => { if (_model is not null) FitColumns(); };
         _trust.Toggled += value => { _model.TrustChangedSource = value; Buttons(); };
         Confirmed += Confirm;
         Canceled += Cancel;
@@ -172,6 +172,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
             }
             if (!plugin.Enabled) item.SetCustomColor(NameColumn, DisabledColor());
             if (plugin.FailedAttempt is not null || plugin.State == EEditorPluginState.Error) item.SetCustomColor(NameColumn, ErrorColor());
+            item.SetText(AuthorColumn, plugin.Author);
+            if (!string.IsNullOrWhiteSpace(plugin.Author)) item.SetTooltipText(AuthorColumn, plugin.Author);
             item.SetText(TypeColumn, PluginCatalog.KindName(plugin.Kind));
             if (row.Update is { } update)
             {
@@ -190,12 +192,12 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
             }
             if (plugin.Slug == _selectedSlug) selected = item;
         }
-        FitNameColumn();
+        FitColumns();
         if (selected is not null) { selected.Select(NameColumn); _tree.ScrollToItem(selected); }
         else ShowDetails(null);
         var count = _model.Updates.Count;
-        _status.Text = (count == 0 ? "No updates known" : $"{count} update{(count == 1 ? "" : "s")} available") +
-                       " · Last checked: " + (_global.LastUpdateCheck?.ToLocalTime().ToString("g") ?? "never") +
+        _status.Text = (count == 0 ? "" : $"{count} update{(count == 1 ? "" : "s")} available · ") +
+                       "Last checked: " + (_global.LastUpdateCheck?.ToLocalTime().ToString("g") ?? "never") +
                        (_global.IsIndexingLocalSources ? " · Indexing local directories..." : "");
         Buttons();
     }
@@ -204,38 +206,42 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
 
     /// <summary>
     /// Tree draws cell buttons at the right edge of the cell. Sizing the Plugin column to its longest title keeps the
-    /// update icons right after the titles; the Type column takes the remaining width.
+    /// update icons right after the titles; the Type column fits its texts and the Author column takes the remaining width.
     /// </summary>
-    private void FitNameColumn()
+    private void FitColumns()
     {
+        var scale = EditorInterface.Singleton.GetEditorScale();
         var font = _tree.GetThemeFont("font"); var fontSize = _tree.GetThemeFontSize("font_size");
         var separation = _tree.GetThemeConstant("h_separation");
-        var width = 0f;
+        var margins = _tree.GetThemeConstant("inner_item_margin_left") + _tree.GetThemeConstant("inner_item_margin_right") + 2 * separation;
+        float TextWidth(string text) => font.GetStringSize(text, HorizontalAlignment.Left, -1, fontSize).X;
+        float name = 0f, type = TextWidth(_tree.GetColumnTitle(TypeColumn));
         for (var item = _tree.GetRoot()?.GetFirstChild(); item is not null; item = item.GetNext())
         {
-            var text = font.GetStringSize(item.GetText(NameColumn), HorizontalAlignment.Left, -1, fontSize).X;
+            var text = TextWidth(item.GetText(NameColumn));
             if (item.GetIcon(NameColumn) is { } icon) text += icon.GetWidth() + separation;
-            width = Math.Max(width, text);
+            name = Math.Max(name, text);
+            type = Math.Max(type, TextWidth(item.GetText(TypeColumn)));
         }
+        var typeWidth = type + margins;
         var button = _updateIcon is null ? 0 : _updateIcon.GetWidth() + 4 * separation;
-        var margins = _tree.GetThemeConstant("inner_item_margin_left") + _tree.GetThemeConstant("inner_item_margin_right") + 2 * separation;
-        var desired = width + button + margins;
+        var desired = name + button + margins;
         // Never wider than the list leaves next to the other columns, or the tree scrolls horizontally.
         if (_tree.Size.X > 0)
         {
-            var others = _tree.GetColumnWidth(EnabledColumn) + _tree.GetColumnWidth(VersionColumn) + TypeMinimumWidth * EditorInterface.Singleton.GetEditorScale() +
-                         _tree.GetThemeStylebox("panel").GetMinimumSize().X + 16 * EditorInterface.Singleton.GetEditorScale();
-            desired = Math.Max(Math.Min(desired, _tree.Size.X - others), 120 * EditorInterface.Singleton.GetEditorScale());
+            var others = _tree.GetColumnWidth(EnabledColumn) + _tree.GetColumnWidth(VersionColumn) + typeWidth + AuthorMinimumWidth * scale +
+                         _tree.GetThemeStylebox("panel").GetMinimumSize().X + 16 * scale;
+            desired = Math.Max(Math.Min(desired, _tree.Size.X - others), 120 * scale);
         }
-        _tree.SetColumnExpand(NameColumn, false); _tree.SetColumnExpand(TypeColumn, true);
         _tree.SetColumnCustomMinimumWidth(NameColumn, (int)Math.Ceiling(desired));
+        _tree.SetColumnCustomMinimumWidth(TypeColumn, (int)Math.Ceiling(typeWidth));
     }
 
     private void ShowDetails(string? slug)
     {
         _selectedSlug = slug;
         var row = slug is null ? null : _model.Find(slug);
-        _detailsIcon.Texture = row?.IsEPlugin == true ? _ePluginIcon : null;
+        _detailsIcon.Texture = row?.IsEPlugin == true ? _logo : null;
         _detailsName.Text = row?.Plugin.Name ?? "No plugin selected";
         var reviewed = _versionInstall ? _staged?.FirstOrDefault(p => p.Candidate.Slug == slug)?.Findings : null;
         _detailsText.Text = row is null ? "Select a plugin to see its details." : PluginManagerViewModel.Describe(row, reviewed);

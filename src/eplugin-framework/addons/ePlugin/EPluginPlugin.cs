@@ -86,9 +86,9 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin
         {
             Name = "EPluginManagerButton", Flat = true, TooltipText = "ePlugin Manager",
             FocusMode = Control.FocusModeEnum.None,
-            Icon = ResourceLoader.Exists(EPluginManagerDialog.EPluginIconPath) ? GD.Load<Texture2D>(EPluginManagerDialog.EPluginIconPath) : null,
-            Text = ResourceLoader.Exists(EPluginManagerDialog.EPluginIconPath) ? "" : "ePlugin"
+            Icon = EditorIcons.EPlugin
         };
+        if (_managerButton.Icon is null) _managerButton.Text = "ePlugin";
         _managerButton.Pressed += OpenManager;
         AddControlToContainer(CustomControlContainer.Toolbar, _managerButton);
         Engine.Singleton.SetMeta(ManagerButtonMeta, _managerButton.GetInstanceId());
@@ -135,8 +135,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin
     {
         try
         {
-            _failureDialog = new UpdateFailureDialog();
-            _failureDialog.Initialize(journal, keep => EGlobal.Instance.DecideUpdate(journal, keep));
+            _failureDialog = UpdateFailureDialog.Create(journal, keep => EGlobal.Instance.DecideUpdate(journal, keep));
             EditorInterface.Singleton.GetBaseControl().AddChild(_failureDialog);
             _failureDialog.Open();
         }

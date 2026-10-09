@@ -1,0 +1,67 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" uid="uid://j0sfynrpwqe6b" path="res://addons/ePlugin/Internal/Manager/LocalSourcesDialog.cs" id="1_script"]
+
+[node name="LocalSourcesDialog" type="AcceptDialog"]
+auto_translate_mode = 2
+title = "Local plugin directories"
+initial_position = 2
+size = Vector2i(640, 360)
+min_size = Vector2i(460, 260)
+ok_button_text = "Close"
+script = ExtResource("1_script")
+
+[node name="LocalBox" type="VBoxContainer" parent="."]
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 632.0
+offset_bottom = 311.0
+theme_override_constants/separation = 8
+
+[node name="LocalHelp" type="Label" parent="LocalBox"]
+custom_minimum_size = Vector2(440, 0)
+layout_mode = 2
+text = "ZIP files in these directories and their subdirectories are offered as plugin updates and versions. The list belongs to your user account and is shared by all projects; it is not stored in the project."
+autowrap_mode = 3
+
+[node name="LocalSourceList" type="ItemList" parent="LocalBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="LocalButtons" type="HBoxContainer" parent="LocalBox"]
+layout_mode = 2
+
+[node name="LocalSourceStatus" type="Label" parent="LocalBox/LocalButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 1
+text_overrun_behavior = 3
+
+[node name="RescanLocalSourcesButton" type="Button" parent="LocalBox/LocalButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Index the directories again to find ZIP files that were added or changed since. Update sites are not contacted."
+text = "Rescan"
+
+[node name="AddLocalSourceButton" type="Button" parent="LocalBox/LocalButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Add a directory with plugin ZIP files."
+text = "Add..."
+
+[node name="RemoveLocalSourceButton" type="Button" parent="LocalBox/LocalButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+tooltip_text = "Remove the selected directory from the list. Its files are not touched."
+text = "Remove"
+
+[node name="LocalSourceFolderDialog" type="FileDialog" parent="."]
+unique_name_in_owner = true
+initial_position = 2
+size = Vector2i(720, 480)
+ok_button_text = "Select Current Folder"
+file_mode = 2
+access = 2

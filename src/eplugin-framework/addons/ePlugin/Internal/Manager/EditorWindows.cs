@@ -38,9 +38,9 @@ internal static class EditorWindows
     /// <summary>The logo rendered large and centered on a square, as title bar icons are square.</summary>
     private static Image? IconImage()
     {
-        if (!Godot.FileAccess.FileExists(EPluginManagerDialog.EPluginIconPath)) return null;
+        if (!Godot.FileAccess.FileExists(EditorIcons.LogoPath)) return null;
         var logo = new Image();
-        if (logo.LoadSvgFromString(Godot.FileAccess.GetFileAsString(EPluginManagerDialog.EPluginIconPath), 4f) != Error.Ok) return null;
+        if (logo.LoadSvgFromString(Godot.FileAccess.GetFileAsString(EditorIcons.LogoPath), 4f) != Error.Ok) return null;
         logo.Convert(Image.Format.Rgba8);
         var side = Math.Max(logo.GetWidth(), logo.GetHeight());
         var icon = Image.CreateEmpty(side, side, false, Image.Format.Rgba8);

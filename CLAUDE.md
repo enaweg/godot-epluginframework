@@ -196,9 +196,12 @@ See README's update/publishing/recovery contract and
 
 `Internal/Manager/` holds the framework's only editor UI entry point, opened from the single Tools menu entry and
 the toolbar button that `EPluginPlugin.AddManagerUi` installs (the button's instance id is kept in Engine metadata
-so a stale one can be removed after an assembly reload). The dialog layout is `EPluginManagerDialog.tscn`; its
-script only binds `%`-unique nodes and sets what Tree cannot store in a scene (column titles/widths). Keep layout
-changes in the scene. `EGlobal.CollectPlugins` scans every `res://addons/<slug>/plugin.cfg`; `PluginCatalog.Classify`
+so a stale one can be removed after an assembly reload). Every dialog is its own scene (`EPluginManagerDialog.tscn`,
+`LocalSourcesDialog.tscn`, `UpdateFailureDialog.tscn`); scripts only bind `%`-unique nodes and set what a scene cannot
+store (e.g. Tree column titles/widths). Keep layout changes in the scenes. Scene roots set `auto_translate_mode = 2`,
+otherwise the editor translates the English UI into its own language. An autowrapping Label needs a
+`custom_minimum_size` width, or the dialog measures it at zero width and pops up taller than the screen. Icons come
+from `EditorIcons`, which renders the SVGs at the editor scale (a headless editor re-imports them at 100%). `EGlobal.CollectPlugins` scans every `res://addons/<slug>/plugin.cfg`; `PluginCatalog.Classify`
 recognizes disabled ePlugins by the `ScriptPathAttribute` of their compiled type. `PluginManagerViewModel` is pure
 (rows, update selection, BBCode details) and unit-tested. New user-facing actions belong in this dialog, not in
 additional Tools menu entries.
