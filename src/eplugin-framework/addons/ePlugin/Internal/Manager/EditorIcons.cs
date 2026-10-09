@@ -14,37 +14,46 @@ internal static class EditorIcons
     public const string LogoPath = "res://addons/ePlugin/icons/eplugin.svg";
     /// <summary>The ePlugin icon in the style of the editor's own icons, for the toolbar and lists.</summary>
     public const string EPluginPath = "res://addons/ePlugin/icons/eplugin_editor.svg";
-    /// <summary>A white update icon, tinted by whoever draws it.</summary>
+    /// <summary>The update icon, for buttons using the editor's normal icon palette.</summary>
     public const string UpdatePath = "res://addons/ePlugin/icons/update.svg";
 
     // The common icon color of the editor's icons and what a light editor theme turns it into.
     private const string IconColor = "#e0e0e0", LightThemeIconColor = "#5a5a5a";
-    private static readonly Dictionary<(string Path, bool Dark), Texture2D?> Cache = [];
+    private static readonly Dictionary<(string Path, bool LightIcons, float Scale, bool Tintable), Texture2D?> Cache = [];
 
     public static Texture2D? Logo => Get(LogoPath);
     public static Texture2D? EPlugin => Get(EPluginPath);
     public static Texture2D? Update => Get(UpdatePath);
+    /// <summary>A white update mask, so status colors can tint it without multiplying by the icon palette.</summary>
+    public static Texture2D? UpdateIndicator => Get(UpdatePath, tintable: true);
 
-    private static Texture2D? Get(string path)
+    private static Texture2D? Get(string path, bool tintable = false) =>
+        Get(path, EditorInterface.Singleton.GetEditorTheme(), EditorInterface.Singleton.GetEditorScale(), tintable);
+
+    internal static Texture2D? Get(string path, Theme? theme, float scale, bool tintable = false)
     {
-        var dark = IsDarkTheme();
-        if (Cache.TryGetValue((path, dark), out var texture) && (texture is null || GodotObject.IsInstanceValid(texture))) return texture;
-        return Cache[(path, dark)] = Render(path, dark);
+        // In newer Godot versions the icon/font palette can be selected independently of the background.
+        // mono_color describes the background contrast; font_color follows the actual icon/font preference.
+        var lightIcons = theme is null || (!theme.HasColor("font_color", "Editor") && !theme.HasColor("mono_color", "Editor")) ||
+            theme.GetColor(theme.HasColor("font_color", "Editor") ? "font_color" : "mono_color", "Editor").Luminance > 0.5f;
+        var key = (path, lightIcons, scale, tintable);
+        if (Cache.TryGetValue(key, out var texture) && (texture is null || GodotObject.IsInstanceValid(texture))) return texture;
+        return Cache[key] = Render(path, lightIcons, scale, tintable);
     }
 
-    private static Texture2D? Render(string path, bool dark)
+    private static Texture2D? Render(string path, bool lightIcons, float scale, bool tintable)
     {
         if (!FileAccess.FileExists(path)) return null;
         var svg = FileAccess.GetFileAsString(path);
-        if (!dark) svg = svg.Replace(IconColor, LightThemeIconColor);
-        var image = new Image();
-        if (image.LoadSvgFromString(svg, EditorInterface.Singleton.GetEditorScale()) != Error.Ok) return null;
+        if (!tintable)
+        {
+            // Keep the logo's brand colors and the SVG's black/white mask values intact.
+            if (path == UpdatePath) svg = svg.Replace("#fff", IconColor);
+            if (!lightIcons && path != LogoPath) svg = svg.Replace(IconColor, LightThemeIconColor);
+        }
+        using var image = new Image();
+        if (image.LoadSvgFromString(svg, scale) != Error.Ok) return null;
         return ImageTexture.CreateFromImage(image);
     }
-
-    /// <summary>The editor's mono color is white in a dark theme and black in a light one.</summary>
-    private static bool IsDarkTheme() =>
-        EditorInterface.Singleton.GetEditorTheme() is not { } theme || !theme.HasColor("mono_color", "Editor") ||
-        theme.GetColor("mono_color", "Editor").Luminance > 0.5f;
 }
 #endif
