@@ -1,0 +1,9 @@
+# Plugin state files
+
+The framework creates `res://addons/eplugin-state.json` from the currently active plugins (ePlugin-managed and plain Godot plugins) if the file is missing. Commit this file with the addon files. It records the last acknowledged plugin versions and completed activation or deactivation states, including ePlugin Framework itself.
+
+The first snapshot is a baseline of the editor's current state; it cannot recover versions installed before the file existed. Later edits to `plugin.cfg` do not advance the acknowledged version until a migration or update completes. Plain GDScript and C# plugins are observed on demand at startup and before manual retry, without polling. Later consumers refresh the index before use. Startup discrepancies are reported without overwriting existing entries, and enabled plugins missing from the index are added. Entries remain after disabling or removing a plugin. If a version is missing, the plugin gets a local invalid record; repair `plugin.cfg` and use **Retry failed** in the [ePlugin Manager](eplugin-manager.md).
+
+The adjacent `res://addons/eplugin-state.json.user` stores unfinished or failed work on one machine. Add `addons/eplugin-state.json.user` to the project's `.gitignore`. An unresolved entry blocks automatic recipe retry after an editor restart or assembly reload. After fixing the cause and any partial side effects, use **Retry failed** in the [ePlugin Manager](eplugin-manager.md) to retry explicitly.
+
+A failed operation leaves the checked-in JSON at its last completed state. These files provide the basis for migration and rollback tooling; they do not restore addon files or undo partial recipe changes themselves. Update journals and recovery steps are covered in [Updating plugins](updating-plugins.md#builds-restart-and-recovery).
