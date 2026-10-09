@@ -89,7 +89,7 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
                     var commit = refs.FirstOrDefault(r => r[1] == p[1] + "^{}")?[0] ?? p[0];
                     SemVer.TryParse(tag, out var version);
                     return (Commit: commit, Candidate: new UpdateCandidate(target.Slug, target.Name, target.InstalledVersion, version.ToString(),
-                        target.UpdateUrl, null, commit, new GitPackageRef(url.Repository, url.Path, commit)));
+                        target.UpdateUrl!, null, commit, new GitPackageRef(url.Repository, url.Path, commit)));
                 })
                 .Where(c => Regex.IsMatch(c.Commit, "^[a-fA-F0-9]{40}$")).Select(c => c.Candidate).ToArray();
         }
@@ -160,7 +160,7 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
             }
             var version = PluginIni.Parse(metadata).GetValueOrDefault("version");
             if (!SemVer.TryParse(version, out var parsed)) throw new IOException("Remote plugin.cfg has no comparable version.");
-            return new(target.Slug, target.Name, target.InstalledVersion, parsed.ToString(), target.UpdateUrl, null, commit,
+            return new(target.Slug, target.Name, target.InstalledVersion, parsed.ToString(), target.UpdateUrl!, null, commit,
                 new GitPackageRef(url.Repository, url.Path, commit));
         }
         finally { Directory.Delete(work, true); }

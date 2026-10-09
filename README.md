@@ -88,11 +88,13 @@ dialog you can:
   also disables the plugins that depend on it. The list is reloaded afterwards, so automatically toggled
   dependencies show up immediately. Disabling the ePlugin Framework itself asks for confirmation first, since it
   closes the manager.
-+ **Check for updates** — checks now, regardless of the check interval.
++ **Check for updates** — checks now, regardless of the check interval, and indexes the local plugin
+  directories again.
++ **Local directories...** — adds and removes your [local plugin directories](#local-plugin-directories).
 + **Update** — installs the checked updates (see [Updating plugins](#updating-plugins)).
 + **Retry failed** — retries plugins whose activation, deactivation or update failed or was interrupted.
 + **Open release page** — opens the release notes of the selected plugin's update.
-+ **Version** — for an enabled plugin with an `update_url`, pick any published version and select **Update** or
++ **Version** — for an enabled plugin with an `update_url` or a package in a local plugin directory, pick any published version and select **Update** or
   **Downgrade**. Use a downgrade to undo an update that broke the project; it goes through the same download,
   validation, backup and rollback as an update. The ePlugin Framework itself cannot be downgraded, because older
   releases cannot finish or recover the update that installs them.
@@ -399,6 +401,7 @@ git `update_url` pinned to a branch, tag or commit has no version list.
 | GitLab releases, including self-hosted instances | `https://gitlab.example/group/subgroup/repository/-/releases` |
 | Git subtree tracking a branch | `https://host/owner/repository.git?path=addons/my_plugin#main` |
 | Git over SSH | `git@host:owner/repository.git?path=addons/my_plugin#main` |
+| [Local plugin directories](#local-plugin-directories) | ZIP files in folders you choose; no `update_url` needed |
 
 Release sources select the highest semantic version and a ZIP asset (prefer a slug/addon/plugin-named ZIP if
 there are several); if no suitable asset exists, the release source archive is used. An ambiguous asset list
@@ -414,6 +417,28 @@ For private release APIs, set `EPLUGIN_GITHUB_TOKEN` (fallback `GITHUB_TOKEN`) o
 (fallback `GITLAB_TOKEN`) in the editor's environment. Tokens are never written to project files or caches;
 HTTP credentials are scoped to the source host and stripped on redirects to another host. Git authentication
 uses your normal git/SSH credentials and runs without interactive prompts.
+
+### Local plugin directories
+
+Besides an `update_url`, plugins can be updated from ZIP files in local directories, such as a network share
+or a folder of downloaded releases. Add the directories with **Local directories...** in the
+[ePlugin Manager](#eplugin-manager). The list belongs to your user account: it is stored in
+`eplugin/local-sources.json` in the Godot editor's configuration folder (e.g. `%APPDATA%\Godot` on Windows),
+is shared by all projects, and is never written to a project. A directory that does not exist (an unplugged
+drive, an unmounted share) stays in the list and is used again once it reappears.
+
+Every editor start indexes all `*.zip` files in these directories and their subdirectories in the background.
+Indexing reads only each archive's file list and its `plugin.cfg`, never the whole archive, and is kept in memory
+only. When it finishes, updates are checked. Adding or removing a directory, or **Check for updates**, indexes
+again. Hidden and system folders and folder links are skipped; ZIP files without a `plugin.cfg` are ignored, and
+archives that cannot be read are listed (hover the status in the dialog) and logged as warnings.
+
+A package belongs to an installed plugin when it contains `addons/<slug>/plugin.cfg` with the plugin's slug.
+An addon at the archive root or in one wrapper folder belongs to the plugin whose slug equals the wrapper folder
+name, or whose `name` equals the package's `name`. Local packages work for plugins without an `update_url` too;
+for plugins with one, both sources are offered and the higher version wins (a local package wins a tie). Local
+packages go through the same validation, backup and rollback as downloads, and their files are read in place,
+never changed. Scheduled checks of `update_url`s keep their interval; the local index is checked on every start.
 
 ### Publishing an updatable release
 

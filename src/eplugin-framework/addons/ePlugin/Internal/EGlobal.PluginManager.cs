@@ -30,14 +30,16 @@ internal sealed partial class EGlobal
             string Value(string key) => config.GetValue("plugin", key, "").AsString().Trim();
             var script = PluginCatalog.ResolveScript(directory, Value("script"));
             var context = _contexts.FirstOrDefault(c => c.Slug == slug && c.Plugin is not null);
-            plugins.Add(new PluginInfo(slug, Value("name") is { Length: > 0 } name ? name : slug,
+            var name = Value("name");
+            plugins.Add(new PluginInfo(slug, name.Length > 0 ? name : slug,
                 PluginCatalog.Classify(script, slug == framework, types), enabled.Contains(slug))
             {
                 Version = Value("version"), Author = Value("author"), Description = Value("description"),
                 UpdateUrl = Value("update_url") is { Length: > 0 } url ? url : null, Script = script,
                 State = context?.State, Error = context?.ErrorDetail?.Message,
                 FailedAttempt = _stateStore?.GetLocal(slug),
-                Recipe = context is { IsRecipeCreated: true } ? context.Builder.PluginRecipe : null
+                Recipe = context is { IsRecipeCreated: true } ? context.Builder.PluginRecipe : null,
+                LocalPackages = LocalIndex.Matching(slug, name).Count()
             });
         }
         foreach (var attempt in _stateStore?.LocalAttempts ?? [])

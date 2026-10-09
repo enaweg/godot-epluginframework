@@ -10,10 +10,14 @@ namespace Enaweg.Plugin.Internal.Update;
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
 [JsonDerivedType(typeof(ZipPackageRef), "zip")]
 [JsonDerivedType(typeof(GitPackageRef), "git")]
+[JsonDerivedType(typeof(LocalZipPackageRef), "local-zip")]
 internal abstract record UpdatePackageRef;
 internal sealed record ZipPackageRef(string Url, string ExpectedName) : UpdatePackageRef;
 internal sealed record GitPackageRef(string Repository, string Path, string Commit) : UpdatePackageRef;
-internal sealed record PluginUpdateTarget(string Slug, string Name, string InstalledVersion, string UpdateUrl,
+/// <summary>A ZIP file found by indexing one of the user's local plugin directories.</summary>
+internal sealed record LocalZipPackageRef(string Path) : UpdatePackageRef;
+/// <param name="UpdateUrl">The plugin.cfg update_url; null when only local plugin directories can update the plugin.</param>
+internal sealed record PluginUpdateTarget(string Slug, string Name, string InstalledVersion, string? UpdateUrl,
     string Directory, bool IsBlocked = false, bool StoreReadOnly = false, string? RecordedVersion = null);
 internal sealed record UpdateCandidate(string Slug, string PluginName, string InstalledVersion, string NewVersion,
     string SourceUrl, string? ReleaseUrl, string? ResolvedRevision, UpdatePackageRef Package);

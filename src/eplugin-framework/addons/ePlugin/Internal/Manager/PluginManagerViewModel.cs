@@ -20,7 +20,7 @@ internal sealed class PluginRow(PluginInfo plugin, UpdateRow? update)
     public PluginInfo Plugin { get; } = plugin;
     public UpdateRow? Update { get; } = update;
     public bool IsEPlugin => Plugin.Kind is PluginKind.Framework or PluginKind.EPlugin;
-    public bool IsUpdatable => Plugin.UpdateUrl is not null || Update is not null;
+    public bool IsUpdatable => Plugin.UpdateUrl is not null || Plugin.LocalPackages > 0 || Update is not null;
     public bool HasUpdate => Update is not null;
     public bool CanToggle => !Plugin.Missing;
 }
@@ -42,9 +42,11 @@ internal sealed class PluginManagerViewModel
         {
             var target = targets.FirstOrDefault(t => t.Slug == candidate.Slug);
             var messages = findings(candidate).ToList();
-            if (target is null) messages.Add(new("disabled", FindingSeverity.Error, "Plugin is no longer enabled or its update URL was removed."));
+            if (target is null) messages.Add(new("disabled", FindingSeverity.Error, "Plugin is no longer enabled."));
             else
             {
+                if (candidate.Package is not LocalZipPackageRef && target.UpdateUrl != candidate.SourceUrl)
+                    messages.Add(new("source_changed", FindingSeverity.Error, "The plugin's update_url changed or was removed; check for updates again."));
                 if (target.IsBlocked || target.StoreReadOnly) messages.Add(new("R17", FindingSeverity.Error, "Resolve local state with Retry failed first."));
                 if (target.RecordedVersion is not null && target.RecordedVersion != target.InstalledVersion)
                     messages.Add(new("recorded_version", FindingSeverity.Info, "Last working version: " + target.RecordedVersion));
@@ -127,13 +129,19 @@ internal sealed class PluginManagerViewModel
         if (row.Update is { } update)
         {
             text.Append($"{Escape(update.Candidate.InstalledVersion)} → [color=#70e070]{Escape(update.Candidate.NewVersion)}[/color]\n");
-            Link("Update site", update.Candidate.SourceUrl);
+            if (update.Candidate.Package is LocalZipPackageRef local) Line("Local package", local.Path);
+            else Link("Update site", update.Candidate.SourceUrl);
             if (update.Candidate.ReleaseUrl is not null) Link("Release", update.Candidate.ReleaseUrl);
             foreach (var finding in update.Findings) text.Append($"[color={Color(finding.Severity)}]{finding.Severity}:[/color] {Escape(finding.Message)}\n");
             if (update.Failed is { } failed) text.Append($"[color=#ff7070]Previously failed {failed.Utc:u}:[/color] {Escape(failed.Reason)}\n");
         }
-        else if (plugin.UpdateUrl is not null) { text.Append("No update known.\n"); Link("Update site", plugin.UpdateUrl); }
-        else text.Append("Not updatable: plugin.cfg has no update_url.\n");
+        else if (plugin.UpdateUrl is not null || plugin.LocalPackages > 0)
+        {
+            text.Append("No update known.\n");
+            if (plugin.UpdateUrl is not null) Link("Update site", plugin.UpdateUrl);
+        }
+        else text.Append("Not updatable: plugin.cfg has no update_url and no local plugin directory holds a package of it.\n");
+        if (plugin.LocalPackages > 0) Line("Local packages", plugin.LocalPackages.ToString());
 
         if (reviewed is { Count: > 0 })
         {
