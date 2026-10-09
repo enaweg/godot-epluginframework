@@ -91,10 +91,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         _versionHint = GetNode<Label>("%VersionHint"); _versionConfirm = GetNode<ConfirmationDialog>("%VersionConfirm");
         _localSources = GetNode<LocalSourcesDialog>("%LocalSourcesDialog"); _localSources.Initialize(global);
         _locationRow = GetNode<Control>("%LocationRow"); _locationLink = GetNode<LinkButton>("%LocationLink"); _openFolder = GetNode<Button>("%OpenFolderButton");
-        if (EditorInterface.Singleton.GetEditorTheme() is { } editorTheme && editorTheme.HasIcon("Folder", "EditorIcons"))
-        { _openFolder.Icon = editorTheme.GetIcon("Folder", "EditorIcons"); _openFolder.Text = ""; }
-        _ePluginIcon = EditorIcons.EPlugin; _logo = EditorIcons.Logo; _updateIcon = EditorIcons.Update;
-        if (_updateIcon is not null) _check.Icon = _updateIcon;
+        RefreshTheme();
+        ThemeChanged += () => Callable.From(RefreshTheme).CallDeferred();
 
         // Column titles and sizing are not scene properties of Tree.
         _tree.SetColumnTitle(EnabledColumn, "On"); _tree.SetColumnTitle(NameColumn, "Plugin"); _tree.SetColumnTitle(AuthorColumn, "Author");
@@ -126,6 +124,17 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         Confirmed += Confirm;
         Canceled += Cancel;
         CloseRequested += Cancel;
+    }
+
+    private void RefreshTheme()
+    {
+        if (!GodotObject.IsInstanceValid(this) || _global is null) return;
+        if (EditorInterface.Singleton.GetEditorTheme() is { } editorTheme && editorTheme.HasIcon("Folder", "EditorIcons"))
+        { _openFolder.Icon = editorTheme.GetIcon("Folder", "EditorIcons"); _openFolder.Text = ""; }
+        _ePluginIcon = EditorIcons.EPlugin; _logo = EditorIcons.Logo; _updateIcon = EditorIcons.UpdateIndicator;
+        _check.Icon = EditorIcons.Update;
+        // Render the existing model rather than refreshing it: a theme change must preserve a staged update.
+        if (_model is not null) Render();
     }
 
     public void Open()

@@ -89,12 +89,20 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin
             Icon = EditorIcons.EPlugin
         };
         if (_managerButton.Icon is null) _managerButton.Text = "ePlugin";
+        _managerButton.ThemeChanged += () => Callable.From(RefreshManagerIcon).CallDeferred();
         _managerButton.Pressed += OpenManager;
         AddControlToContainer(CustomControlContainer.Toolbar, _managerButton);
         Engine.Singleton.SetMeta(ManagerButtonMeta, _managerButton.GetInstanceId());
         _managerUiAdded = true;
         // Toggling a plugin in the manager may rebuild and reload the assembly while the dialog is open.
         if (RemoveStaleManagerDialog()) Callable.From(OpenManager).CallDeferred();
+    }
+
+    private void RefreshManagerIcon()
+    {
+        if (_managerButton is null || !GodotObject.IsInstanceValid(_managerButton)) return;
+        _managerButton.Icon = EditorIcons.EPlugin;
+        _managerButton.Text = _managerButton.Icon is null ? "ePlugin" : "";
     }
     /// <summary>Frees a dialog whose C# state was lost to an assembly reload; returns whether it was showing.</summary>
     private bool RemoveStaleManagerDialog()
