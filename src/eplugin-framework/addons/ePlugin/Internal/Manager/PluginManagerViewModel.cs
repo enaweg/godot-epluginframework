@@ -24,7 +24,10 @@ internal sealed class PluginRow(PluginInfo plugin, UpdateRow? update)
     public bool HasUpdate => Update is not null;
     public bool CanToggle => !Plugin.Missing;
 }
-internal sealed record VersionOption(string Version, UpdateCandidate? Candidate, bool Installed, bool IsDowngrade);
+internal sealed record VersionOption(string Version, UpdateCandidate? Candidate, bool Installed, bool IsDowngrade)
+{
+    public bool IsLocal => Candidate?.Package is LocalZipPackageRef;
+}
 internal sealed class PluginManagerViewModel
 {
     public List<PluginRow> Plugins { get; } = [];
@@ -85,6 +88,24 @@ internal sealed class PluginManagerViewModel
         if (!options.Any(o => o.Installed)) options.Add(new(installedVersion, null, true, false));
         return options.OrderByDescending(o => SemVer.TryParse(o.Version, out var v) ? v : default).ToArray();
     }
+
+    /// <summary>The text of a version in the version choice, e.g. "2.1.0 (latest, local)".</summary>
+    public static string VersionLabel(VersionOption option, bool latest)
+    {
+        var notes = new List<string>();
+        if (option.Installed) notes.Add("installed");
+        else if (latest) notes.Add("latest");
+        if (option.IsLocal) notes.Add("local");
+        return notes.Count == 0 ? option.Version : $"{option.Version} ({string.Join(", ", notes)})";
+    }
+
+    /// <summary>Where a listed version would be installed from.</summary>
+    public static string? VersionSource(VersionOption option) => option.Candidate switch
+    {
+        { Package: LocalZipPackageRef local } => "Local package: " + local.Path,
+        { SourceUrl: { } url } => "From the update site " + url,
+        _ => null
+    };
 
     /// <summary>Why the selected version cannot be installed, or null when it can.</summary>
     public static string? VersionChangeBlocked(PluginRow row, VersionOption option)

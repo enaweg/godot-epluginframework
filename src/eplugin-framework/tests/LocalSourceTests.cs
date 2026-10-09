@@ -130,17 +130,22 @@ public class LocalSourceTests
     }
 
     [TestCase]
-    public async Task VersionListCombinesSourcesAndWorksWithoutUpdateUrl()
+    public async Task VersionListsOfBothSourcesAreMergedAndRemoteFailuresStayVisible()
     {
         var index = new LocalPackageIndex([Package("a.zip", "addons/plugin/", "1.5.0"), Package("b.zip", "addons/plugin/", "1.2.0")], [], 2, []);
         var service = new UpdateService(new Factory(), new SystemClock(), new MemoryStore());
-        var local = await service.ListVersionsAsync(Target(), new(), CancellationToken.None, index);
-        Assertions.AssertArray(local.Select(v => v.NewVersion).ToArray()).IsEqual(new[] { "1.5.0", "1.2.0" });
-        var combined = await service.ListVersionsAsync(Target() with { UpdateUrl = "https://example.org/listed" }, new(), CancellationToken.None, index);
+        var local = LocalDirectorySource.Versions(index, Target(), new());
+        var remote = await service.ListVersionsAsync(Target() with { UpdateUrl = "https://example.org/listed" }, new(), CancellationToken.None);
+        var combined = UpdateService.MergeVersions(local, remote);
         Assertions.AssertArray(combined.Select(v => v.NewVersion).ToArray()).IsEqual(new[] { "2.0.0", "1.5.0", "1.2.0" });
+        // The update site lists 1.2.0 too; the local package of the same version wins.
         Assertions.AssertBool(combined.Single(v => v.NewVersion == "1.2.0").Package is LocalZipPackageRef).IsTrue();
-        var offline = await service.ListVersionsAsync(Target() with { UpdateUrl = "https://example.org/offline" }, new(), CancellationToken.None, index);
-        Assertions.AssertInt(offline.Count).IsEqual(2);
+
+        // A failing update site is reported to the caller, which still has the local versions to offer.
+        var failed = false;
+        try { await service.ListVersionsAsync(Target() with { UpdateUrl = "https://example.org/offline" }, new(), CancellationToken.None); }
+        catch (IOException) { failed = true; }
+        Assertions.AssertBool(failed).IsTrue();
         var refused = false;
         try { await service.ListVersionsAsync(Target(), new(), CancellationToken.None); }
         catch (NotSupportedException) { refused = true; }

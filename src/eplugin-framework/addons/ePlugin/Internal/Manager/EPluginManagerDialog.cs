@@ -48,10 +48,15 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
     private Label _versionHint = null!;
     private ConfirmationDialog _versionConfirm = null!;
     private LocalSourcesDialog _localSources = null!;
-    private readonly Dictionary<string, IReadOnlyList<UpdateCandidate>> _versions = [];
-    private readonly Dictionary<string, string> _versionErrors = [];
+    // Versions published at each update_url, loaded on demand and kept until Check for updates. Local versions come from
+    // the in-memory index on every render, so a new index never fetches these again.
+    private readonly Dictionary<string, IReadOnlyList<UpdateCandidate>> _remoteVersions = [];
+    private readonly Dictionary<string, string> _remoteVersionErrors = [];
     private readonly HashSet<string> _loadingVersions = [];
+    private IReadOnlyList<PluginUpdateTarget> _targets = [];
     private IReadOnlyList<VersionOption> _versionOptions = [];
+    /// <summary>A note under the version choice when nothing more specific is shown, e.g. why remote versions are missing.</summary>
+    private string? _versionNote;
     private UpdateCandidate? _pendingVersion;
     private bool _pendingDowngrade;
     private Texture2D? _ePluginIcon;
@@ -141,7 +146,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         if (_working) return;
         ClearStaging();
         var plugins = _global.CollectPlugins();
-        var targets = _global.CollectUpdateTargets();
+        var targets = _targets = _global.CollectUpdateTargets();
         _model = new(plugins, _global.PendingUpdates, targets, _global.UpdateCache, candidate =>
         {
             var target = targets.FirstOrDefault(t => t.Slug == candidate.Slug);
@@ -288,45 +293,64 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         RenderVersions(row);
     }
 
-    /// <summary>The version choice of an updatable plugin. Versions are listed on demand and kept for the session.</summary>
+    /// <summary>
+    /// The version choice of an updatable plugin: the versions in the local plugin directories, plus those of its
+    /// update_url once they are loaded. Without the update site's versions the local ones are still offered.
+    /// </summary>
     private void RenderVersions(PluginRow? row)
     {
         var visible = row is { IsUpdatable: true, Plugin.Missing: false };
         _versionSeparator.Visible = _versionRow.Visible = visible;
-        _versionSelect.Clear(); _versionOptions = [];
-        if (!visible) { _versionHint.Visible = false; return; }
-        var plugin = row!.Plugin;
-        if (!plugin.Enabled) SetVersionPlaceholder(plugin.Version + " (installed)", "Enable the plugin to change its version.");
-        else if (_loadingVersions.Contains(plugin.Slug)) SetVersionPlaceholder("Loading versions...", null);
-        else if (_versionErrors.TryGetValue(plugin.Slug, out var error)) SetVersionPlaceholder(plugin.Version + " (installed)", "Versions are unavailable: " + error);
-        else if (!_versions.TryGetValue(plugin.Slug, out var versions)) { SetVersionPlaceholder("Loading versions...", null); LoadVersions(plugin.Slug); }
+        _versionSelect.Clear(); _versionOptions = []; _versionNote = null;
+        var target = visible ? _targets.FirstOrDefault(t => t.Slug == row!.Plugin.Slug) : null;
+        if (!visible) { }
+        else if (!row!.Plugin.Enabled || target is null) SetVersionPlaceholder(row.Plugin.Version + " (installed)", "Enable the plugin to change its version.");
         else
         {
-            _versionOptions = PluginManagerViewModel.VersionOptions(plugin.Version, versions);
-            var latest = _versionOptions.FirstOrDefault(o => !o.Installed && o.Candidate is not null && !o.IsDowngrade);
-            for (var i = 0; i < _versionOptions.Count; i++)
+            var local = _global.ListLocalVersions(target);
+            var remote = _remoteVersions.GetValueOrDefault(target.Slug) ?? [];
+            string? missing = null;
+            if (target.UpdateUrl is not null && !_remoteVersions.ContainsKey(target.Slug))
             {
-                var option = _versionOptions[i];
-                _versionSelect.AddItem(option.Version + (option.Installed ? " (installed)" : option == latest ? " (latest)" : ""), i);
-                if (option.Installed) _versionSelect.Select(i);
+                if (_remoteVersionErrors.TryGetValue(target.Slug, out var error)) missing = "Versions from the update site are unavailable: " + error;
+                else { missing = "Loading versions from the update site..."; LoadVersions(target); }
             }
-            _versionSelect.Disabled = _versionOptions.Count < 2;
+            if (local.Count == 0 && missing is not null)
+            {
+                var loading = _loadingVersions.Contains(target.Slug);
+                SetVersionPlaceholder(loading ? "Loading versions..." : row.Plugin.Version + " (installed)", loading ? null : missing);
+            }
+            else
+            {
+                _versionOptions = PluginManagerViewModel.VersionOptions(row.Plugin.Version, UpdateService.MergeVersions(local, remote));
+                var latest = _versionOptions.FirstOrDefault(o => !o.Installed && o.Candidate is not null && !o.IsDowngrade);
+                for (var i = 0; i < _versionOptions.Count; i++)
+                {
+                    var option = _versionOptions[i];
+                    _versionSelect.AddItem(PluginManagerViewModel.VersionLabel(option, option == latest), i);
+                    if (PluginManagerViewModel.VersionSource(option) is { } source) _versionSelect.SetItemTooltip(i, source);
+                    if (option.Installed) _versionSelect.Select(i);
+                }
+                _versionSelect.Disabled = _versionOptions.Count < 2;
+                _versionNote = missing;
+            }
         }
         VersionButtons();
     }
 
-    private void SetVersionPlaceholder(string text, string? hint)
+    private void SetVersionPlaceholder(string text, string? note)
     {
         _versionSelect.AddItem(text); _versionSelect.Select(0); _versionSelect.Disabled = true;
-        _versionHint.Text = hint ?? ""; _versionHint.Visible = hint is not null;
+        _versionNote = note;
     }
 
-    private async void LoadVersions(string slug)
+    private async void LoadVersions(PluginUpdateTarget target)
     {
+        var slug = target.Slug;
         if (!_loadingVersions.Add(slug)) return;
-        try { _versions[slug] = await _global.ListVersionsAsync(slug, _lifetime); }
-        catch (Exception ex) when (ex is not OperationCanceledException || !_lifetime.IsCancellationRequested) { _versionErrors[slug] = ex.Message; }
-        catch (OperationCanceledException) { return; }
+        try { _remoteVersions[slug] = await _global.ListRemoteVersionsAsync(target, _lifetime); }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { return; }
+        catch (Exception ex) { _remoteVersionErrors[slug] = ex.Message; }
         finally { _loadingVersions.Remove(slug); }
         if (GodotObject.IsInstanceValid(this) && IsInsideTree() && _selectedSlug == slug) RenderVersions(_model.Find(slug));
     }
@@ -342,14 +366,15 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
     {
         var row = _selectedSlug is null ? null : _model.Find(_selectedSlug);
         var option = _versionOptions.Count == 0 ? null : SelectedVersion();
-        if (row is null || option is null) { _installVersion.Disabled = true; _installVersion.Text = "Update"; return; }
+        if (row is null || option is null) { _installVersion.Disabled = true; _installVersion.Text = "Update"; ShowVersionHint(_versionNote); return; }
         var blocked = PluginManagerViewModel.VersionChangeBlocked(row, option);
         _installVersion.Text = option.IsDowngrade ? "Downgrade" : "Update";
         _installVersion.Disabled = blocked is not null || _working || _staged is not null;
         _installVersion.TooltipText = blocked ?? $"Install version {option.Version} of {row.Plugin.Name}.";
-        var hint = option.Installed ? null : blocked;
-        _versionHint.Text = hint ?? ""; _versionHint.Visible = hint is not null;
+        ShowVersionHint((option.Installed ? null : blocked) ?? _versionNote);
     }
+
+    private void ShowVersionHint(string? hint) { _versionHint.Text = hint ?? ""; _versionHint.Visible = hint is not null; }
 
     private void ConfirmVersion()
     {
@@ -443,13 +468,11 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
     private static bool IsSafeUrl(string? url) =>
         Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == "https" && uri.UserInfo.Length == 0;
 
-    /// <summary>A new local index can add or remove versions and updates, so the lists are read again.</summary>
+    /// <summary>A new local index can add or remove local versions and updates, so the lists are read again.</summary>
     private void LocalIndexChanged()
     {
-        if (!GodotObject.IsInstanceValid(this) || !IsInsideTree()) return;
-        if (!_global.IsIndexingLocalSources) { _versions.Clear(); _versionErrors.Clear(); }
         // Never discard a staged batch awaiting review or interrupt work; those refresh when they finish.
-        if (!Visible || _working || _staged is not null) return;
+        if (!GodotObject.IsInstanceValid(this) || !IsInsideTree() || !Visible || _working || _staged is not null) return;
         if (_global.IsIndexingLocalSources) Render();
         else Refresh();
     }
@@ -464,7 +487,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
     private async void CheckNow()
     {
         if (_working) return;
-        ClearStaging(); _versions.Clear(); _versionErrors.Clear();
+        ClearStaging(); _remoteVersions.Clear(); _remoteVersionErrors.Clear();
         _working = true; Buttons(); _status.Text = "Checking for updates...";
         string? failure = null;
         try

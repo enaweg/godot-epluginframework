@@ -135,6 +135,17 @@ public class PluginManagerViewModelTests
         var disabled = new PluginRow(Plugin("gamma", PluginKind.EPlugin, "https://example.org/releases", enabled: false), null);
         Assertions.AssertString(PluginManagerViewModel.VersionChangeBlocked(disabled, options[0])).Contains("Enable");
     }
+    [TestCase]
+    public void VersionLabelsMarkLatestInstalledAndLocalVersions()
+    {
+        var local = Version("2.1.0") with { SourceUrl = null, Package = new LocalZipPackageRef("/packages/beta.zip") };
+        var options = PluginManagerViewModel.VersionOptions("1.5.0", [local, Version("2.0.0"), Version("1.5.0")]);
+        Assertions.AssertString(PluginManagerViewModel.VersionLabel(options[0], latest: true)).IsEqual("2.1.0 (latest, local)");
+        Assertions.AssertString(PluginManagerViewModel.VersionLabel(options[1], latest: false)).IsEqual("2.0.0");
+        Assertions.AssertString(PluginManagerViewModel.VersionLabel(options[2], latest: false)).IsEqual("1.5.0 (installed)");
+        Assertions.AssertString(PluginManagerViewModel.VersionSource(options[0])).IsEqual("Local package: /packages/beta.zip");
+        Assertions.AssertString(PluginManagerViewModel.VersionSource(options[1])).Contains("https://example.org/releases");
+    }
     private static UpdateCandidate Version(string version) => Candidate("beta") with { InstalledVersion = "1.5.0", NewVersion = version };
     private static PluginInfo Plugin(string slug, PluginKind kind, string? updateUrl = null, bool enabled = true) =>
         new(slug, slug, kind, enabled) { Version = "1.0.0", UpdateUrl = updateUrl };

@@ -106,15 +106,16 @@ internal sealed partial class EGlobal
         finally { _checkingUpdates = false; }
     }
 
-    /// <summary>All published versions of an enabled plugin, from its update_url and the local plugin directories, newest first.</summary>
-    internal async Task<IReadOnlyList<UpdateCandidate>> ListVersionsAsync(string slug, CancellationToken ct)
+    /// <summary>The versions of an enabled plugin in the local plugin directories, newest first. Never touches the disk.</summary>
+    internal IReadOnlyList<UpdateCandidate> ListLocalVersions(PluginUpdateTarget target) =>
+        LocalDirectorySource.Versions(LocalIndex, target, new(AllowPrerelease));
+
+    /// <summary>All versions published at an enabled plugin's update_url, newest first.</summary>
+    internal async Task<IReadOnlyList<UpdateCandidate>> ListRemoteVersionsAsync(PluginUpdateTarget target, CancellationToken ct)
     {
         var service = _updateService ?? throw new InvalidOperationException("Update system is not initialized.");
-        var target = CollectUpdateTargets().FirstOrDefault(t => t.Slug == slug)
-            ?? throw new InvalidOperationException("Enable the plugin to change its version.");
         var allow = AllowPrerelease;
-        var local = LocalIndex;
-        return await Task.Run(() => service.ListVersionsAsync(target, new(allow), ct, local), ct);
+        return await Task.Run(() => service.ListVersionsAsync(target, new(allow), ct), ct);
     }
 
     internal static Task OnEditorThread(Action action, CancellationToken ct)
