@@ -86,9 +86,9 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin
         {
             Name = "EPluginManagerButton", Flat = true, TooltipText = "ePlugin Manager",
             FocusMode = Control.FocusModeEnum.None,
-            Icon = ResourceLoader.Exists(EPluginManagerDialog.EPluginIconPath) ? GD.Load<Texture2D>(EPluginManagerDialog.EPluginIconPath) : null,
-            Text = ResourceLoader.Exists(EPluginManagerDialog.EPluginIconPath) ? "" : "ePlugin"
+            Icon = EditorIcons.EPlugin
         };
+        if (_managerButton.Icon is null) _managerButton.Text = "ePlugin";
         _managerButton.Pressed += OpenManager;
         AddControlToContainer(CustomControlContainer.Toolbar, _managerButton);
         Engine.Singleton.SetMeta(ManagerButtonMeta, _managerButton.GetInstanceId());

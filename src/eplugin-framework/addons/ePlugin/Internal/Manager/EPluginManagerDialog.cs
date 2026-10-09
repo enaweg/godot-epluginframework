@@ -16,8 +16,6 @@ namespace Enaweg.Plugin.Internal.Manager;
 internal sealed partial class EPluginManagerDialog : ConfirmationDialog
 {
     internal const string ScenePath = "res://addons/ePlugin/Internal/Manager/EPluginManagerDialog.tscn";
-    internal const string EPluginIconPath = "res://addons/ePlugin/icons/eplugin.svg";
-    internal const string UpdateIconPath = "res://addons/ePlugin/icons/update.svg";
     private const int EnabledColumn = 0, NameColumn = 1, TypeColumn = 2, VersionColumn = 3;
     private const int TypeMinimumWidth = 120;
 
@@ -57,6 +55,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
     private UpdateCandidate? _pendingVersion;
     private bool _pendingDowngrade;
     private Texture2D? _ePluginIcon;
+    private Texture2D? _logo;
     private Texture2D? _updateIcon;
     private PluginManagerViewModel _model = null!;
     private IReadOnlyList<ValidatedPackage>? _staged;
@@ -94,8 +93,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         _locationRow = GetNode<Control>("%LocationRow"); _locationLink = GetNode<LinkButton>("%LocationLink"); _openFolder = GetNode<Button>("%OpenFolderButton");
         if (EditorInterface.Singleton.GetEditorTheme() is { } editorTheme && editorTheme.HasIcon("Folder", "EditorIcons"))
         { _openFolder.Icon = editorTheme.GetIcon("Folder", "EditorIcons"); _openFolder.Text = ""; }
-        _ePluginIcon = ResourceLoader.Exists(EPluginIconPath) ? GD.Load<Texture2D>(EPluginIconPath) : null;
-        _updateIcon = ResourceLoader.Exists(UpdateIconPath) ? GD.Load<Texture2D>(UpdateIconPath) : null;
+        _ePluginIcon = EditorIcons.EPlugin; _logo = EditorIcons.Logo; _updateIcon = EditorIcons.Update;
+        if (_updateIcon is not null) _check.Icon = _updateIcon;
 
         // Column titles and sizing are not scene properties of Tree.
         _tree.SetColumnTitle(EnabledColumn, "On"); _tree.SetColumnTitle(NameColumn, "Plugin"); _tree.SetColumnTitle(TypeColumn, "Type");
@@ -235,7 +234,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
     {
         _selectedSlug = slug;
         var row = slug is null ? null : _model.Find(slug);
-        _detailsIcon.Texture = row?.IsEPlugin == true ? _ePluginIcon : null;
+        _detailsIcon.Texture = row?.IsEPlugin == true ? _logo : null;
         _detailsName.Text = row?.Plugin.Name ?? "No plugin selected";
         var reviewed = _versionInstall ? _staged?.FirstOrDefault(p => p.Candidate.Slug == slug)?.Findings : null;
         _detailsText.Text = row is null ? "Select a plugin to see its details." : PluginManagerViewModel.Describe(row, reviewed);
