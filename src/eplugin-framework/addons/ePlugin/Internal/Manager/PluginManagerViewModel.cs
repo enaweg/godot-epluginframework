@@ -78,7 +78,7 @@ internal sealed class PluginManagerViewModel
     /// <summary>The update state shown on the update icon of an updatable plugin; null for a plugin that is not.</summary>
     public static string? UpdateState(PluginRow row) =>
         row.Update is { } update ? $"Update available: {update.Candidate.InstalledVersion} → {update.Candidate.NewVersion}"
-        : row.IsUpdatable ? "Updatable, no update known" : null;
+        : row.IsUpdatable ? "Updatable" : null;
 
     /// <summary>The published versions plus the installed one, newest first.</summary>
     public static IReadOnlyList<VersionOption> VersionOptions(string installedVersion, IReadOnlyList<UpdateCandidate> versions)
@@ -161,12 +161,8 @@ internal sealed class PluginManagerViewModel
             foreach (var finding in update.Findings) text.Append($"[color={Color(finding.Severity)}]{finding.Severity}:[/color] {Escape(finding.Message)}\n");
             if (update.Failed is { } failed) text.Append($"[color=#ff7070]Previously failed {failed.Utc:u}:[/color] {Escape(failed.Reason)}\n");
         }
-        else if (plugin.UpdateUrl is not null || plugin.LocalPackages > 0)
-        {
-            text.Append("No update known.\n");
-            if (plugin.UpdateUrl is not null) Link("Update site", plugin.UpdateUrl);
-        }
-        else text.Append("Not updatable: plugin.cfg has no update_url and no local plugin directory holds a package of it.\n");
+        else if (plugin.UpdateUrl is not null) Link("Update site", plugin.UpdateUrl);
+        else if (plugin.LocalPackages == 0) text.Append("Not updatable: plugin.cfg has no update_url and no local plugin directory holds a package of it.\n");
         if (plugin.LocalPackages > 0) Line("Local packages", plugin.LocalPackages.ToString());
 
         if (reviewed is { Count: > 0 })
