@@ -42,6 +42,9 @@ internal static class PackageFiles
     public const int MaximumFiles = 20000;
     public const long MaximumTotal = 512L * 1024 * 1024;
     public const long MaximumFile = 256L * 1024 * 1024;
+    /// <summary>How the local file system compares paths: case-insensitively on Windows only.</summary>
+    public static readonly StringComparison PathComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+    public static readonly StringComparer PathComparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
     public static string Normalize(string path)
     {
         path = path.Replace('\\', '/');
@@ -58,7 +61,7 @@ internal static class PackageFiles
     {
         var prefix = System.IO.Path.GetFullPath(root).TrimEnd(System.IO.Path.DirectorySeparatorChar) + System.IO.Path.DirectorySeparatorChar;
         var full = System.IO.Path.GetFullPath(System.IO.Path.Combine(root, Normalize(relative)));
-        if (!full.StartsWith(prefix, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) throw new InvalidDataException("Package path leaves addon root.");
+        if (!full.StartsWith(prefix, PathComparison)) throw new InvalidDataException("Package path leaves addon root.");
         return full;
     }
     public static IEnumerable<string> Files(string root)

@@ -51,7 +51,7 @@ internal static class LocalPackageIndexer
         var packages = new List<LocalPackage>();
         var failures = new List<LocalIndexFailure>();
         var states = new List<LocalDirectoryState>();
-        var seen = new HashSet<string>(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        var seen = new HashSet<string>(PackageFiles.PathComparer);
         foreach (var directory in directories)
         {
             var exists = Directory.Exists(directory);

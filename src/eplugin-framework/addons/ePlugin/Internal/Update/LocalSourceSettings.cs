@@ -20,7 +20,6 @@ internal sealed class LocalSourceConfig
 /// </summary>
 internal sealed class LocalSourceSettings(string path)
 {
-    private static readonly StringComparer PathComparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
     private LocalSourceConfig _config = new();
     public string FilePath { get; } = path;
     public IReadOnlyList<string> Directories => _config.Directories;
@@ -31,7 +30,7 @@ internal sealed class LocalSourceSettings(string path)
         {
             var config = JsonSerializer.Deserialize<LocalSourceConfig>(File.ReadAllText(FilePath), UpdateStateStore.JsonOptions);
             _config = config is { Directories: not null } ? config : new();
-            _config.Directories = _config.Directories.Where(d => !string.IsNullOrWhiteSpace(d)).Distinct(PathComparer).ToList();
+            _config.Directories = _config.Directories.Where(d => !string.IsNullOrWhiteSpace(d)).Distinct(PackageFiles.PathComparer).ToList();
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException) { _config = new(); }
     }
@@ -40,7 +39,7 @@ internal sealed class LocalSourceSettings(string path)
     public bool Add(string directory)
     {
         var normalized = Normalize(directory);
-        if (_config.Directories.Contains(normalized, PathComparer)) return false;
+        if (_config.Directories.Contains(normalized, PackageFiles.PathComparer)) return false;
         _config.Directories.Add(normalized);
         Save();
         return true;
@@ -48,7 +47,7 @@ internal sealed class LocalSourceSettings(string path)
 
     public bool Remove(string directory)
     {
-        if (_config.Directories.RemoveAll(d => PathComparer.Equals(d, directory)) == 0) return false;
+        if (_config.Directories.RemoveAll(d => PackageFiles.PathComparer.Equals(d, directory)) == 0) return false;
         Save();
         return true;
     }

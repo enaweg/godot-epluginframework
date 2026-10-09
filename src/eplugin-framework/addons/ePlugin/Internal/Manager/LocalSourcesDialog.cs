@@ -2,6 +2,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using Enaweg.Plugin.Internal.Update;
 using Godot;
 
 namespace Enaweg.Plugin.Internal.Manager;
@@ -68,7 +69,7 @@ internal sealed partial class LocalSourcesDialog : AcceptDialog
 
     private static bool IsBelow(string file, string directory) =>
         file.StartsWith(directory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar,
-            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+            PackageFiles.PathComparison);
 
     private void Add(string directory)
     {
