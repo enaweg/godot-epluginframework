@@ -90,7 +90,7 @@ dialog you can:
   closes the manager.
 + **Check for updates** — checks now, regardless of the check interval, and indexes the local plugin
   directories again.
-+ **Local directories...** — adds and removes your [local plugin directories](#local-plugin-directories).
++ **Local directories...** — adds, removes and rescans your [local plugin directories](#local-plugin-directories).
 + **Update** — installs the checked updates (see [Updating plugins](#updating-plugins)).
 + **Retry failed** — retries plugins whose activation, deactivation or update failed or was interrupted.
 + **Open release page** — opens the release notes of the selected plugin's update.
@@ -431,9 +431,10 @@ Every editor start, and every assembly reload after a C# build, indexes all `*.z
 their subdirectories in the background. Indexing reads only each archive's file list and its `plugin.cfg`, never
 the whole archive. What it read is remembered per ZIP file in `eplugin/local-index.json` next to the list, so only
 new or changed ZIP files (by size and modification time) are opened again; deleting that file is always safe. When
-indexing finishes, updates are checked. Adding or removing a directory, or **Check for updates**, indexes
-again. Hidden and system folders and folder links are skipped; ZIP files without a `plugin.cfg` are ignored, and
-archives that cannot be read are listed (hover the status in the dialog) and logged as warnings.
+indexing finishes, updates are checked. Adding or removing a directory, **Rescan** in that dialog, or **Check for
+updates** indexes again. Hidden and system folders and folder links are skipped; ZIP files without a `plugin.cfg`
+are ignored, and archives that cannot be read are listed (hover the status in the dialog) and logged as a warning
+when they are first found.
 
 A ZIP holds one plugin: its root is the folder of the shallowest `plugin.cfg`, and the name of that folder is
 the slug of the plugin the package belongs to, e.g. `addons/my_plugin/` or `my_plugin/` for `my_plugin`. Further

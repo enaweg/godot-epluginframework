@@ -7,7 +7,7 @@ using Godot;
 namespace Enaweg.Plugin.Internal.Manager;
 
 /// <summary>
-/// Adds and removes the user's local plugin directories. The layout lives in EPluginManagerDialog.tscn.
+/// Adds, removes and rescans the user's local plugin directories. The layout lives in EPluginManagerDialog.tscn.
 /// </summary>
 [Tool]
 internal sealed partial class LocalSourcesDialog : AcceptDialog
@@ -15,6 +15,7 @@ internal sealed partial class LocalSourcesDialog : AcceptDialog
     private EGlobal _global = null!;
     private ItemList _list = null!;
     private Label _status = null!;
+    private Button _rescan = null!;
     private Button _add = null!;
     private Button _remove = null!;
     private FileDialog _folderDialog = null!;
@@ -24,8 +25,9 @@ internal sealed partial class LocalSourcesDialog : AcceptDialog
     {
         _global = global;
         _list = GetNode<ItemList>("%LocalSourceList"); _status = GetNode<Label>("%LocalSourceStatus");
-        _add = GetNode<Button>("%AddLocalSourceButton"); _remove = GetNode<Button>("%RemoveLocalSourceButton"); _folderDialog = GetNode<FileDialog>("%LocalSourceFolderDialog");
+        _rescan = GetNode<Button>("%RescanLocalSourcesButton"); _add = GetNode<Button>("%AddLocalSourceButton"); _remove = GetNode<Button>("%RemoveLocalSourceButton"); _folderDialog = GetNode<FileDialog>("%LocalSourceFolderDialog");
         EditorWindows.Prepare(this); EditorWindows.Prepare(_folderDialog);
+        _rescan.Pressed += () => { _error = null; _ = _global.RebuildLocalIndexAsync(); };
         _add.Pressed += () => _folderDialog.PopupCentered();
         _remove.Pressed += RemoveSelected;
         _list.ItemSelected += _ => _remove.Disabled = _global.LocalDirectoriesProblem is not null;
@@ -61,6 +63,7 @@ internal sealed partial class LocalSourcesDialog : AcceptDialog
             if (directory == selected) _list.Select(item);
         }
         var problem = _global.LocalDirectoriesProblem;
+        _rescan.Disabled = _global.IsIndexingLocalSources || _global.LocalDirectories.Count == 0;
         _add.Disabled = problem is not null;
         _remove.Disabled = problem is not null || _list.GetSelectedItems().Length == 0;
         _status.TooltipText = problem ?? string.Join("\n", index.Failures.Select(f => $"{f.Path}: {f.Message}"));
