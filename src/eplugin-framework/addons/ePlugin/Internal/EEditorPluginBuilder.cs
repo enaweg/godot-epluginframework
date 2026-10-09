@@ -26,6 +26,16 @@ internal sealed class EEditorPluginBuilder : IEEditorPluginBuilder
         return this;
     }
 
+    public IEEditorPluginBuilder SetLicense(string license)
+    {
+        if (string.IsNullOrWhiteSpace(license)) throw new ArgumentException("The license must not be empty.", nameof(license));
+        var path = license.Trim();
+        PluginRecipe.PluginLicense = path.StartsWith("res://", StringComparison.Ordinal) && !path.Contains('\n')
+            ? new EEditorPluginRecipe.License(null, path)
+            : new EEditorPluginRecipe.License(license, null);
+        return this;
+    }
+
     public IEEditorPluginBuilder AddPluginDependency(string pluginSlug, string? version = null)
     {
         PluginRecipe.PluginDependencies.Add(new EEditorPluginRecipe.Plugin(pluginSlug, version));

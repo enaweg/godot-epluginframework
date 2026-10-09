@@ -21,6 +21,16 @@ internal enum PersistedPluginState
 
 internal sealed record SharedPluginState(string Slug, string Version, PersistedPluginState State);
 
+/// <summary>A plugin license accepted for the project.</summary>
+/// <param name="License">
+/// What was accepted: the license file relative to the plugin directory, a res:// path set by the recipe, or
+/// <c>text:</c> and a hash of a license text set by the recipe. A license counts as accepted while this stays the same.
+/// </param>
+/// <param name="Version">The plugin version whose license was accepted.</param>
+/// <param name="Automatic">Accepted by <c>eplugin/licenses/auto_accept</c>, without being shown.</param>
+internal sealed record AcceptedLicense(string Slug, string License, string Version, DateTimeOffset AcceptedUtc,
+    bool Automatic);
+
 internal sealed record LocalPluginAttempt(
     Guid AttemptId,
     string Slug,
@@ -30,9 +40,13 @@ internal sealed record LocalPluginAttempt(
     string Reason);
 
 /// <summary>
-/// The committed file contains only completed states. The adjacent .user file is a local journal
-/// that blocks an automatic retry when a transition fails or an assembly reload interrupts it.
+/// The committed file contains only completed states and the accepted plugin licenses. The adjacent .user file is a
+/// local journal that blocks an automatic retry when a transition fails or an assembly reload interrupts it.
 /// </summary>
+/// <remarks>
+/// <c>licenses</c> is left out while no license was accepted, so such files stay readable by framework versions that
+/// do not know it.
+/// </remarks>
 internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
 {
     private const int SchemaVersion = 1;
@@ -48,6 +62,7 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
     private readonly string _localPath = sharedPath + ".user";
     private Dictionary<string, SharedPluginState> _shared = new(StringComparer.Ordinal);
     private Dictionary<string, LocalPluginAttempt> _local = new(StringComparer.Ordinal);
+    private Dictionary<string, AcceptedLicense> _licenses = new(StringComparer.Ordinal);
     private byte[]? _sharedBytes;
     private Guid? _lastCompletedAttemptId;
 
@@ -61,6 +76,33 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
     public SharedPluginState? GetShared(string slug) => _shared.GetValueOrDefault(slug);
     public LocalPluginAttempt? GetLocal(string slug) => _local.GetValueOrDefault(slug);
     public bool IsBlocked(string slug) => _local.ContainsKey(slug);
+    public AcceptedLicense? GetLicense(string slug) => _licenses.GetValueOrDefault(slug);
+
+    /// <summary>Whether the license of <paramref name="slug"/> was accepted as <paramref name="license"/>.</summary>
+    public bool IsLicenseAccepted(string slug, string license) =>
+        GetLicense(slug) is { } accepted && string.Equals(accepted.License, license, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Records accepted licenses in the shared file. They count as accepted for this session even when they cannot be
+    /// saved, e.g. while the files are read-only, so a plugin is not asked about again right after it was accepted.
+    /// </summary>
+    public bool TryRecordLicenses(IEnumerable<AcceptedLicense> accepted)
+    {
+        var next = new Dictionary<string, AcceptedLicense>(_licenses, StringComparer.Ordinal);
+        foreach (var license in accepted.Where(ValidLicense))
+        {
+            next[license.Slug] = license;
+        }
+
+        // without a shared file the baseline has not been created yet, and must not be replaced by this entry
+        if (!IsReadOnly && HasSharedFile && SaveShared(_shared, _lastCompletedAttemptId, next))
+        {
+            return true;
+        }
+
+        _licenses = next;
+        return false;
+    }
 
     public bool Load()
     {
@@ -84,6 +126,9 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
             _local = local.Attempts!.ToDictionary(x => x.Slug!, x =>
                 new LocalPluginAttempt(x.AttemptId!.Value, x.Slug!, x.InstalledVersion,
                     x.TargetState!.Value, x.State!.Value, x.Reason!), StringComparer.Ordinal);
+            _licenses = (shared.Licenses ?? []).ToDictionary(x => x.Slug!, x =>
+                new AcceptedLicense(x.Slug!, x.License!, x.Version ?? "", x.AcceptedUtc ?? default, x.Automatic),
+                StringComparer.Ordinal);
             _lastCompletedAttemptId = shared.LastCompletedAttemptId;
             IsReadOnly = false;
 
@@ -305,8 +350,10 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
         return true;
     }
 
-    private bool SaveShared(Dictionary<string, SharedPluginState> states, Guid? completedAttemptId)
+    private bool SaveShared(Dictionary<string, SharedPluginState> states, Guid? completedAttemptId,
+        Dictionary<string, AcceptedLicense>? licenses = null)
     {
+        licenses ??= _licenses;
         try
         {
             var actual = File.Exists(_sharedPath) ? File.ReadAllBytes(_sharedPath) : null;
@@ -324,11 +371,18 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
                     .Select(x => new SharedEntry
                     {
                         Slug = x.Slug, Version = x.Version, State = x.State
+                    }).ToList(),
+                Licenses = licenses.Count == 0 ? null : licenses.Values.OrderBy(x => x.Slug, StringComparer.Ordinal)
+                    .Select(x => new LicenseDocumentEntry
+                    {
+                        Slug = x.Slug, License = x.License, Version = x.Version, AcceptedUtc = x.AcceptedUtc,
+                        Automatic = x.Automatic
                     }).ToList()
             };
             var bytes = Serialize(document);
             AtomicWrite(_sharedPath, bytes);
             _shared = states;
+            _licenses = licenses;
             _sharedBytes = bytes;
             _lastCompletedAttemptId = completedAttemptId;
             return true;
@@ -437,6 +491,15 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
         }
 
         slugs.Clear();
+        foreach (var entry in shared.Licenses ?? [])
+        {
+            if (!ValidSlug(entry.Slug) || string.IsNullOrWhiteSpace(entry.License) || !slugs.Add(entry.Slug!))
+            {
+                throw new InvalidDataException("Shared plugin state has an invalid or duplicate license.");
+            }
+        }
+
+        slugs.Clear();
         foreach (var entry in local.Attempts)
         {
             if (entry.AttemptId is null || entry.AttemptId == Guid.Empty ||
@@ -455,6 +518,9 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
     private static bool ValidShared(SharedPluginState state) =>
         ValidSlug(state.Slug) && !string.IsNullOrWhiteSpace(state.Version) && IsCompleted(state.State);
 
+    private static bool ValidLicense(AcceptedLicense license) =>
+        ValidSlug(license.Slug) && !string.IsNullOrWhiteSpace(license.License);
+
     private static bool ValidSlug(string? slug) =>
         !string.IsNullOrWhiteSpace(slug) && slug != "." && slug != ".." &&
         slug.IndexOfAny(['/', '\\']) < 0;
@@ -467,6 +533,18 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
         public int SchemaVersion { get; set; }
         public Guid? LastCompletedAttemptId { get; set; }
         public List<SharedEntry>? Plugins { get; set; } = [];
+
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<LicenseDocumentEntry>? Licenses { get; set; }
+    }
+
+    private sealed class LicenseDocumentEntry
+    {
+        public string? Slug { get; set; }
+        public string? License { get; set; }
+        public string? Version { get; set; }
+        public DateTimeOffset? AcceptedUtc { get; set; }
+        public bool Automatic { get; set; }
     }
 
     private sealed class SharedEntry
