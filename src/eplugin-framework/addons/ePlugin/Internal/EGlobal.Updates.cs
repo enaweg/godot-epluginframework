@@ -141,7 +141,7 @@ internal sealed partial class EGlobal
         _ePluginContext?.Logger.Log($"Plugin updates available ({result.Updates.Count}):");
         foreach (var update in result.Updates)
         {
-            _ePluginContext?.Logger.Log($"  {update.Slug} {update.InstalledVersion} -> {update.NewVersion}  {update.ReleaseUrl ?? update.SourceUrl}");
+            _ePluginContext?.Logger.Log($"  {update.Slug} {update.InstalledVersion} -> {update.NewVersion}  {update.ReleaseUrl ?? update.Origin}");
             if (_updateCache?.State.FailedUpdates.GetValueOrDefault(update.Slug)?.Any(f => f.Version == update.NewVersion) == true)
                 _ePluginContext?.Logger.Warn($"  {update.Slug} {update.NewVersion} failed previously; repair the cause before retrying.");
         }

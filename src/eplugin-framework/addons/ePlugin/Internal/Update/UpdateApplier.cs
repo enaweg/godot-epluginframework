@@ -54,7 +54,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             if (old != package.Candidate.InstalledVersion) throw new InvalidOperationException($"Plugin {slug} changed since the update check; check again.");
             var next = PluginIni.Parse(File.ReadAllText(Path.Combine(package.StagingDir, "plugin.cfg"))).GetValueOrDefault("version")!;
             journal.Plugins.Add(new() { Slug = slug, OldVersion = old!, NewVersion = next, IsEPlugin = host.IsManaged(slug),
-                WasEnabled = true, ContainsCSharp = package.ContainsCSharp, SourceUrl = package.Candidate.SourceUrl, Revision = package.Candidate.ResolvedRevision,
+                WasEnabled = true, ContainsCSharp = package.ContainsCSharp, SourceUrl = package.Candidate.Origin, Revision = package.Candidate.ResolvedRevision,
                 Uids = UidMap.Collect(Installed(slug)) });
         }
         host.PrepareJournal(journal);

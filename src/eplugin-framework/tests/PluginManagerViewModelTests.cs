@@ -62,6 +62,19 @@ public class PluginManagerViewModelTests
         Assertions.AssertBool(model.CanRetry).IsFalse();
     }
     [TestCase]
+    public void LocalPackagesShowTheirFileAndNeverAnUpdateSite()
+    {
+        var local = Candidate("local") with { SourceUrl = null, Package = new LocalZipPackageRef("/packages/local.zip") };
+        var model = new PluginManagerViewModel([Plugin("local", PluginKind.GDScript, "https://example.org/releases")], [local, local with { Slug = "gone" }],
+            [new("local", "local", "1.0.0", "https://example.org/releases", "/unused")], null, _ => []);
+        // A local package is not tied to the update_url, so a differing one is no source change.
+        Assertions.AssertBool(model.Find("local")!.Update!.HasError).IsFalse();
+        var details = PluginManagerViewModel.Describe(model.Find("local")!);
+        Assertions.AssertString(details).Contains("[b]Local package:[/b] /packages/local.zip");
+        Assertions.AssertObject(model.Find("gone")!.Plugin.UpdateUrl).IsNull();
+        Assertions.AssertString(PluginManagerViewModel.Describe(model.Find("gone")!)).NotContains("Update site");
+    }
+    [TestCase]
     public void FailedAttemptEnablesRetryAndIsShownInStatus()
     {
         var attempt = new LocalPluginAttempt(Guid.NewGuid(), "broken", "1.0", PersistedPluginState.Activated, PersistedPluginState.Failed, "build_failed");

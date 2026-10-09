@@ -120,7 +120,9 @@ public class LocalSourceTests
         var older = Package("old.zip", "addons/plugin/", "2.0.0") with { ModifiedUtc = DateTime.UtcNow.AddDays(-1) };
         var newer = Package("new.zip", "addons/plugin/", "2.0.0");
         var local = LocalDirectorySource.Versions(new([older, newer], [], 2, []), Target(), new()).Single();
-        Assertions.AssertString(local.SourceUrl).IsEqual("new.zip");
+        Assertions.AssertString(((LocalZipPackageRef)local.Package).Path).IsEqual("new.zip");
+        Assertions.AssertString(local.SourceUrl).IsNull();
+        Assertions.AssertString(local.Origin).IsEqual("new.zip");
         var remote = new UpdateCandidate("plugin", "Plugin", "1.0.0", "2.0.0", "https://example.org/releases", null, null, new ZipPackageRef("https://example.org/p.zip", "plugin"));
         Assertions.AssertBool(UpdateService.Merge([remote], [local]).Single().Package is LocalZipPackageRef).IsTrue();
         var newerRemote = remote with { NewVersion = "2.1.0" };
@@ -170,8 +172,8 @@ public class LocalSourceTests
         Assertions.AssertBool(File.Exists(Path.Combine(staged.Single().StagingDir, "plugin.gd"))).IsTrue();
         Assertions.AssertBool(File.Exists(zip)).IsTrue();
 
-        // A candidate whose path does not match its source is refused rather than read from somewhere else.
-        var forged = candidate with { Package = new LocalZipPackageRef(Path.Combine(_root, "elsewhere.zip")) };
+        // A local package claiming an update_url, or not naming an absolute ZIP file, is refused rather than read.
+        var forged = candidate with { SourceUrl = "https://example.org/releases" };
         var refused = false;
         try { await new PackageFetcher(new UpdateHttp(), new GitRunner()).FetchAsync([forged], [target], Path.Combine(_root, "forged"), null, CancellationToken.None); }
         catch (InvalidDataException) { refused = true; }
@@ -254,7 +256,7 @@ public class LocalSourceTests
     private sealed class Source(bool offline) : IUpdateSource, IVersionListSource
     {
         private static UpdateCandidate Candidate(PluginUpdateTarget target, string version) => new(target.Slug, target.Name, target.InstalledVersion, version,
-            target.UpdateUrl!, null, null, new ZipPackageRef("https://example.org/package.zip", target.Slug));
+            target.UpdateUrl, null, null, new ZipPackageRef("https://example.org/package.zip", target.Slug));
         public Task<UpdateCandidate?> CheckAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct) => Task.FromResult<UpdateCandidate?>(Candidate(target, "2.0.0"));
         public Task<IReadOnlyList<UpdateCandidate>> ListAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct) => offline
             ? Task.FromException<IReadOnlyList<UpdateCandidate>>(new IOException("offline"))

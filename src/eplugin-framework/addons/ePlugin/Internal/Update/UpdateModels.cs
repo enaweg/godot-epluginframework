@@ -19,8 +19,13 @@ internal sealed record LocalZipPackageRef(string Path) : UpdatePackageRef;
 /// <param name="UpdateUrl">The plugin.cfg update_url; null when only local plugin directories can update the plugin.</param>
 internal sealed record PluginUpdateTarget(string Slug, string Name, string InstalledVersion, string? UpdateUrl,
     string Directory, bool IsBlocked = false, bool StoreReadOnly = false, string? RecordedVersion = null);
+/// <param name="SourceUrl">The update_url the candidate was found at; null for a package of a local plugin directory.</param>
 internal sealed record UpdateCandidate(string Slug, string PluginName, string InstalledVersion, string NewVersion,
-    string SourceUrl, string? ReleaseUrl, string? ResolvedRevision, UpdatePackageRef Package);
+    string? SourceUrl, string? ReleaseUrl, string? ResolvedRevision, UpdatePackageRef Package)
+{
+    /// <summary>Where the package comes from: the update_url, or the ZIP file of a local package.</summary>
+    [JsonIgnore] public string Origin => SourceUrl ?? (Package as LocalZipPackageRef)?.Path ?? "";
+}
 internal sealed record UpdateCheckFailure(string Slug, string Message);
 internal sealed record UpdateCheckResult(IReadOnlyList<UpdateCandidate> Updates,
     IReadOnlyList<UpdateCheckFailure> Failures, DateTimeOffset CheckedAtUtc);

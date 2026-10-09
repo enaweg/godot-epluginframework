@@ -130,7 +130,7 @@ internal static class LocalDirectorySource
             .Where(p => options.AllowPrerelease || p.Version.Prerelease is null)
             .OrderByDescending(p => p.Version).ThenByDescending(p => p.Package.ModifiedUtc)
             .DistinctBy(p => p.Package.Version)
-            .Select(p => new UpdateCandidate(target.Slug, target.Name, target.InstalledVersion, p.Package.Version, p.Package.ZipPath,
+            .Select(p => new UpdateCandidate(target.Slug, target.Name, target.InstalledVersion, p.Package.Version, null,
                 null, null, new LocalZipPackageRef(p.Package.ZipPath)))
             .ToArray();
 }

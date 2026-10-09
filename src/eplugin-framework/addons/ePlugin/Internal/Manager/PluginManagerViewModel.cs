@@ -45,7 +45,7 @@ internal sealed class PluginManagerViewModel
             if (target is null) messages.Add(new("disabled", FindingSeverity.Error, "Plugin is no longer enabled."));
             else
             {
-                if (candidate.Package is not LocalZipPackageRef && target.UpdateUrl != candidate.SourceUrl)
+                if (candidate.SourceUrl is not null && target.UpdateUrl != candidate.SourceUrl)
                     messages.Add(new("source_changed", FindingSeverity.Error, "The plugin's update_url changed or was removed; check for updates again."));
                 if (target.IsBlocked || target.StoreReadOnly) messages.Add(new("R17", FindingSeverity.Error, "Resolve local state with Retry failed first."));
                 if (target.RecordedVersion is not null && target.RecordedVersion != target.InstalledVersion)
