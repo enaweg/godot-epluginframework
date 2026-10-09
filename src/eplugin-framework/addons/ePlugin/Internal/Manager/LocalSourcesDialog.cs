@@ -25,14 +25,11 @@ internal sealed partial class LocalSourcesDialog : AcceptDialog
         _global = global;
         _list = GetNode<ItemList>("%LocalSourceList"); _status = GetNode<Label>("%LocalSourceStatus");
         _add = GetNode<Button>("%AddLocalSourceButton"); _remove = GetNode<Button>("%RemoveLocalSourceButton"); _folderDialog = GetNode<FileDialog>("%LocalSourceFolderDialog");
-        var scale = EditorInterface.Singleton.GetEditorScale();
-        Size = (Vector2I)((Vector2)Size * scale); MinSize = (Vector2I)((Vector2)MinSize * scale);
-        _folderDialog.Size = (Vector2I)((Vector2)_folderDialog.Size * scale);
+        EditorWindows.Prepare(this); EditorWindows.Prepare(_folderDialog);
         _add.Pressed += () => _folderDialog.PopupCentered();
         _remove.Pressed += RemoveSelected;
         _list.ItemSelected += _ => _remove.Disabled = _global.LocalDirectoriesProblem is not null;
         _folderDialog.DirSelected += Add;
-        _global.LocalIndexChanged += Render;
     }
 
     public void Open()
@@ -88,6 +85,12 @@ internal sealed partial class LocalSourcesDialog : AcceptDialog
         try { _global.RemoveLocalDirectory(_list.GetItemMetadata(items[0]).AsString()); }
         catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException) { _error = "Cannot remove the directory: " + ex.Message; }
         Render();
+    }
+
+    public override void _EnterTree()
+    {
+        base._EnterTree();
+        if (_global is not null) _global.LocalIndexChanged += Render;
     }
 
     public override void _ExitTree()

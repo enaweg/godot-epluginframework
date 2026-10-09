@@ -75,6 +75,11 @@ internal sealed class PluginManagerViewModel
     }
     public PluginRow? Find(string slug) => Plugins.FirstOrDefault(p => p.Plugin.Slug == slug);
 
+    /// <summary>The update state shown on the update icon of an updatable plugin; null for a plugin that is not.</summary>
+    public static string? UpdateState(PluginRow row) =>
+        row.Update is { } update ? $"Update available: {update.Candidate.InstalledVersion} → {update.Candidate.NewVersion}"
+        : row.IsUpdatable ? "Updatable, no update known" : null;
+
     /// <summary>The published versions plus the installed one, newest first.</summary>
     public static IReadOnlyList<VersionOption> VersionOptions(string installedVersion, IReadOnlyList<UpdateCandidate> versions)
     {

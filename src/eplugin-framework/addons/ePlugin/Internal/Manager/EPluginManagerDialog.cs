@@ -20,9 +20,6 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
     internal const string UpdateIconPath = "res://addons/ePlugin/icons/update.svg";
     private const int EnabledColumn = 0, NameColumn = 1, TypeColumn = 2, VersionColumn = 3;
     private const int TypeMinimumWidth = 120;
-    // DisplayServer.window_set_icon exists from Godot 4.7 on; the addon is compiled against 4.4 to 4.7.
-    private static readonly StringName WindowSetIcon = "window_set_icon";
-    private Image? _windowIcon;
 
     private EGlobal _global = null!;
     private CancellationToken _lifetime;
@@ -104,14 +101,13 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         _tree.SetColumnTitle(EnabledColumn, "On"); _tree.SetColumnTitle(NameColumn, "Plugin"); _tree.SetColumnTitle(TypeColumn, "Type");
         _tree.SetColumnTitle(VersionColumn, "Version");
         _tree.SetColumnExpand(EnabledColumn, false); _tree.SetColumnExpand(TypeColumn, false); _tree.SetColumnExpand(VersionColumn, false);
+        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm }) EditorWindows.Prepare(window);
         var scale = EditorInterface.Singleton.GetEditorScale();
-        Size = (Vector2I)((Vector2)Size * scale); MinSize = (Vector2I)((Vector2)MinSize * scale);
         _tree.SetColumnCustomMinimumWidth(EnabledColumn, (int)(40 * scale)); _tree.SetColumnCustomMinimumWidth(TypeColumn, (int)(TypeMinimumWidth * scale));
         _tree.SetColumnCustomMinimumWidth(VersionColumn, (int)(150 * scale));
 
         _check.Pressed += CheckNow;
         GetNode<Button>("%LocalSourcesButton").Pressed += _localSources.Open;
-        _global.LocalIndexChanged += LocalIndexChanged;
         _retry.Pressed += RetryFailed;
         _release.Pressed += OpenRelease;
         _locationLink.Pressed += () => { if (_selectedSlug is not null) EditorInterface.Singleton.SelectFile(PluginDirectory(_selectedSlug)); };
@@ -125,8 +121,6 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         _tree.ItemSelected += () => ShowDetails(SlugOf(_tree.GetSelected()));
         _tree.ItemActivated += OpenRelease;
         _tree.ButtonClicked += (item, _, _, _) => item.Select(NameColumn);
-        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm, _localSources })
-            window.VisibilityChanged += () => { if (window.Visible) Callable.From(() => ApplyWindowIcon(window)).CallDeferred(); };
         _tree.Resized += () => { if (_model is not null) FitNameColumn(); };
         _trust.Toggled += value => { _model.TrustChangedSource = value; Buttons(); };
         Confirmed += Confirm;
@@ -168,14 +162,12 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
             item.SetTooltipText(EnabledColumn, !row.CanToggle ? "The plugin folder or its plugin.cfg is missing."
                 : plugin.Enabled ? "Enabled. Uncheck to disable the plugin." : "Disabled. Check to enable the plugin.");
             item.SetText(NameColumn, plugin.Name);
-            item.SetTooltipText(NameColumn, $"{plugin.Name} ({PluginDirectory(plugin.Slug)})" + (!row.IsUpdatable ? "" : row.Update is { } available
-                ? $"\nUpdate available: {available.Candidate.InstalledVersion} → {available.Candidate.NewVersion}"
-                : "\nUpdatable, no update known"));
+            var updateState = PluginManagerViewModel.UpdateState(row);
+            item.SetTooltipText(NameColumn, $"{plugin.Name} ({PluginDirectory(plugin.Slug)})" + (updateState is null ? "" : "\n" + updateState));
             if (row.IsEPlugin && _ePluginIcon is not null) item.SetIcon(NameColumn, _ePluginIcon);
-            if (row.IsUpdatable && _updateIcon is not null)
+            if (updateState is not null && _updateIcon is not null)
             {
-                item.AddButton(NameColumn, _updateIcon, 0, false, row.Update is { } known
-                    ? $"Update available: {known.Candidate.InstalledVersion} → {known.Candidate.NewVersion}" : "Updatable, no update known");
+                item.AddButton(NameColumn, _updateIcon, 0, false, updateState);
                 item.SetButtonColor(NameColumn, 0, row.Update is { } state ? (state.HasError ? ErrorColor() : UpdateColor()) : DisabledColor());
             }
             if (!plugin.Enabled) item.SetCustomColor(NameColumn, DisabledColor());
@@ -209,34 +201,6 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
     }
 
     private static string PluginDirectory(string slug) => "res://addons/" + slug;
-
-    /// <summary>
-    /// Shows the ePlugin icon in the title bar of a separate OS window. Godot recreates that window on every popup, so
-    /// this runs each time it is shown. An embedded dialog has no title bar icon of its own and must not change the
-    /// editor's.
-    /// </summary>
-    private void ApplyWindowIcon(Window window)
-    {
-        var display = DisplayServer.Singleton;
-        if (!GodotObject.IsInstanceValid(window) || !window.Visible || window.IsEmbedded() || !display.HasMethod(WindowSetIcon)) return;
-        var id = window.GetWindowId();
-        if (id == DisplayServer.InvalidWindowId || id == DisplayServer.MainWindowId) return;
-        _windowIcon ??= WindowIconImage();
-        if (_windowIcon is not null) display.Call(WindowSetIcon, _windowIcon, id);
-    }
-
-    /// <summary>The logo rendered large and centered on a square, as title bar icons are square.</summary>
-    private static Image? WindowIconImage()
-    {
-        if (!Godot.FileAccess.FileExists(EPluginIconPath)) return null;
-        var logo = new Image();
-        if (logo.LoadSvgFromString(Godot.FileAccess.GetFileAsString(EPluginIconPath), 4f) != Error.Ok) return null;
-        logo.Convert(Image.Format.Rgba8);
-        var side = Math.Max(logo.GetWidth(), logo.GetHeight());
-        var icon = Image.CreateEmpty(side, side, false, Image.Format.Rgba8);
-        icon.BlitRect(logo, new Rect2I(Vector2I.Zero, logo.GetSize()), new Vector2I((side - logo.GetWidth()) / 2, (side - logo.GetHeight()) / 2));
-        return icon;
-    }
 
     /// <summary>
     /// Tree draws cell buttons at the right edge of the cell. Sizing the Plugin column to its longest title keeps the
@@ -512,6 +476,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         _batch = batch; _versionInstall = versionInstall; _allowDowngrade = allowDowngrade;
         _working = true; _cancel?.Dispose(); _cancel = CancellationTokenSource.CreateLinkedTokenSource(_lifetime);
         Render();
+        var refresh = false;
         try
         {
             if (_staged is null)
@@ -534,14 +499,15 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
             var selected = _staged.Where(p => batch.Any(c => c.Slug == p.Candidate.Slug)).ToArray();
             var outcome = await _global.ApplyUpdatesAsync(selected, _directory!, _model.TrustChangedSource);
             _directory = null; _staged = null; Hide();
-            if (outcome == UpdateOutcome.Completed) { _working = false; _swapping = false; Refresh(); }
+            // Installed versions changed, so the list is read again rather than only redrawn.
+            refresh = outcome == UpdateOutcome.Completed;
         }
         catch (OperationCanceledException) { if (GodotObject.IsInstanceValid(this) && IsInsideTree()) _status.Text = "Download canceled. Addon files were not changed."; ClearStaging(); }
         catch (Exception ex) { if (GodotObject.IsInstanceValid(this) && IsInsideTree()) _status.Text = "Update failed: " + ex.Message; if (!_swapping) ClearStaging(); }
         finally
         {
             _working = false; _swapping = false;
-            if (GodotObject.IsInstanceValid(this) && IsInsideTree()) { _progress.Visible = false; Render(); }
+            if (GodotObject.IsInstanceValid(this) && IsInsideTree()) { _progress.Visible = false; if (refresh) Refresh(); else Render(); }
         }
     }
 
@@ -567,6 +533,12 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
     private static Color UpdateColor() => ThemeColor("success_color", "Editor", new Color(0.45f, 0.95f, 0.5f));
     private static Color ErrorColor() => ThemeColor("error_color", "Editor", new Color(1f, 0.47f, 0.42f));
     private static Color DisabledColor() => ThemeColor("font_disabled_color", "Button", new Color(0.5f, 0.5f, 0.5f));
+
+    public override void _EnterTree()
+    {
+        base._EnterTree();
+        if (_global is not null) _global.LocalIndexChanged += LocalIndexChanged;
+    }
 
     public override void _ExitTree()
     {
