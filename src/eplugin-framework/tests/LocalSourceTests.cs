@@ -36,7 +36,11 @@ public class LocalSourceTests
         Assertions.AssertInt(index.Archives).IsEqual(4);
         Assertions.AssertInt(index.Failures.Count).IsEqual(1);
         Assertions.AssertString(Path.GetFileName(index.Failures[0].Path)).IsEqual("broken.zip");
-        Assertions.AssertBool(index.Directories.Single(d => d.Path == missing).Exists).IsFalse();
+        Assertions.AssertBool(index.StateOf(missing)!.Exists).IsFalse();
+        // Each listed directory counts the packages below it, also those another listed directory holds too.
+        Assertions.AssertInt(index.StateOf(packages)!.Packages).IsEqual(2);
+        Assertions.AssertInt(index.StateOf(Path.Combine(packages, "nested"))!.Packages).IsEqual(1);
+        Assertions.AssertObject(index.StateOf(Path.Combine(_root, "never-indexed"))).IsNull();
         var addon = index.Packages.Single(p => p.Root == "addons/plugin/");
         Assertions.AssertString(addon.Slug).IsEqual("plugin");
         Assertions.AssertString(addon.Version).IsEqual("1.1.0");

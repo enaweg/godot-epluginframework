@@ -2,7 +2,6 @@
 using System;
 using System.IO;
 using System.Linq;
-using Enaweg.Plugin.Internal.Update;
 using Godot;
 
 namespace Enaweg.Plugin.Internal.Manager;
@@ -53,12 +52,14 @@ internal sealed partial class LocalSourcesDialog : AcceptDialog
         var index = _global.LocalIndex;
         foreach (var directory in _global.LocalDirectories)
         {
-            var missing = !Directory.Exists(directory);
+            // Only the index looks at the disk: an unreachable network share can block for a long time.
+            var state = index.StateOf(directory);
+            var missing = state is { Exists: false };
             var item = _list.AddItem(missing ? directory + "  (not found)" : directory);
             _list.SetItemMetadata(item, directory);
-            _list.SetItemTooltip(item, missing
-                ? "This directory does not exist right now. It stays in the list and is indexed again when it reappears."
-                : $"{index.Packages.Count(p => IsBelow(p.ZipPath, directory))} plugin packages found here.");
+            _list.SetItemTooltip(item, state is null ? "Not indexed yet."
+                : missing ? "This directory was not found when it was indexed. It stays in the list and is indexed again when it reappears."
+                : $"{state.Packages} plugin package{(state.Packages == 1 ? "" : "s")} found here.");
             if (missing) _list.SetItemCustomFgColor(item, EditorInterface.Singleton.GetEditorTheme()?.GetColor("font_disabled_color", "Button") ?? new Color(0.5f, 0.5f, 0.5f));
             if (directory == selected) _list.Select(item);
         }
@@ -71,10 +72,6 @@ internal sealed partial class LocalSourcesDialog : AcceptDialog
             : $"{index.Packages.Count} plugin package{(index.Packages.Count == 1 ? "" : "s")} in {index.Archives} ZIP file{(index.Archives == 1 ? "" : "s")}" +
               (index.Failures.Count == 0 ? "" : $", {index.Failures.Count} unreadable (hover for details)"));
     }
-
-    private static bool IsBelow(string file, string directory) =>
-        file.StartsWith(directory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar,
-            PackageFiles.PathComparison);
 
     private void Add(string directory)
     {

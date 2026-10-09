@@ -12,7 +12,8 @@ namespace Enaweg.Plugin.Internal.Update;
 /// <param name="Root">The plugin root inside the archive, e.g. <c>addons/my_plugin/</c>, see <see cref="SafeZipExtractor.PluginRoot"/>.</param>
 /// <param name="Slug">The name of the root folder, which is the slug of the plugin the package belongs to.</param>
 internal sealed record LocalPackage(string ZipPath, string Root, string Slug, string Version, DateTime ModifiedUtc);
-internal sealed record LocalDirectoryState(string Path, bool Exists);
+/// <param name="Packages">The plugin packages below the directory, also those another listed directory contains too.</param>
+internal sealed record LocalDirectoryState(string Path, bool Exists, int Packages);
 internal sealed record LocalIndexFailure(string Path, string Message);
 
 /// <summary>An immutable snapshot of every plugin package found in the local plugin directories.</summary>
@@ -21,6 +22,8 @@ internal sealed record LocalPackageIndex(IReadOnlyList<LocalPackage> Packages, I
 {
     public static readonly LocalPackageIndex Empty = new([], [], 0, []);
     public IEnumerable<LocalPackage> Matching(string slug) => Packages.Where(p => p.Slug == slug);
+    /// <summary>What the last indexing found for a listed directory; null when it was added since.</summary>
+    public LocalDirectoryState? StateOf(string directory) => Directories.FirstOrDefault(d => PackageFiles.PathComparer.Equals(d.Path, directory));
 }
 
 internal static class LocalPackageIndexer
@@ -42,27 +45,32 @@ internal static class LocalPackageIndexer
         var packages = new List<LocalPackage>();
         var failures = new List<LocalIndexFailure>();
         var states = new List<LocalDirectoryState>();
-        var seen = new HashSet<string>(PackageFiles.PathComparer);
+        // Nested or overlapping directories read and list the same archive only once.
+        var read = new Dictionary<string, LocalPackage?>(PackageFiles.PathComparer);
         foreach (var directory in directories)
         {
-            var exists = Directory.Exists(directory);
-            states.Add(new(directory, exists));
-            if (!exists) continue;
+            if (!Directory.Exists(directory)) { states.Add(new(directory, false, 0)); continue; }
+            var count = 0;
             try
             {
                 foreach (var file in Directory.EnumerateFiles(directory, "*.zip", Search))
                 {
                     ct.ThrowIfCancellationRequested();
-                    // Nested or overlapping directories list the same archive only once.
-                    if (!seen.Add(Path.GetFullPath(file))) continue;
-                    try { if (Read(file) is { } package) packages.Add(package); }
-                    catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or System.Text.Json.JsonException)
-                    { failures.Add(new(file, ex.Message)); }
+                    var path = Path.GetFullPath(file);
+                    if (!read.TryGetValue(path, out var package))
+                    {
+                        try { package = Read(path); if (package is not null) packages.Add(package); }
+                        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or System.Text.Json.JsonException)
+                        { failures.Add(new(path, ex.Message)); }
+                        read[path] = package;
+                    }
+                    if (package is not null) count++;
                 }
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { failures.Add(new(directory, ex.Message)); }
+            states.Add(new(directory, true, count));
         }
-        return new(packages, states, seen.Count, failures);
+        return new(packages, states, read.Count, failures);
     }
 
     /// <summary>
