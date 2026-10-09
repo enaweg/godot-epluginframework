@@ -1,8 +1,10 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" uid="uid://bvv1rdcwentgp" path="res://addons/ePlugin/Internal/Manager/EPluginManagerDialog.cs" id="1_script"]
 [ext_resource type="Texture2D" uid="uid://c0e8d5lpm8fxh" path="res://addons/ePlugin/icons/update.svg" id="2_update"]
 [ext_resource type="PackedScene" path="res://addons/ePlugin/Internal/Manager/LocalSourcesDialog.tscn" id="3_local"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_details"]
 
 [node name="EPluginManagerDialog" type="ConfirmationDialog"]
 auto_translate_mode = 2
@@ -119,6 +121,7 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 focus_mode = 2
+theme_override_styles/normal = SubResource("StyleBoxEmpty_details")
 bbcode_enabled = true
 text = "Select a plugin to see its details."
 context_menu_enabled = true
