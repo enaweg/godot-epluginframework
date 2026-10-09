@@ -38,6 +38,12 @@ Release archives include a small shared progress helper (about 20 KB) that runs 
 - **Plugin state tracking** records acknowledged versions and completed lifecycle operations in a project file, with separate per-user markers for interrupted or failed work.
 - **Editor refresh** rescans the filesystem and rebuilds the solution after recipe changes. Project Settings is refreshed after activation and deactivation when possible.
 
+| [ePlugin Manager](docs/eplugin-manager.md) | [Available updates](docs/updating-plugins.md#checks-and-installation) |
+|---|---|
+| ![ePlugin Manager showing the plugin overview](docs/images/eplugin-manager.png) | ![ePlugin Manager showing selected plugin updates](docs/images/eplugin-updates.png) |
+
+Screenshots show the repository's sample plugins and example update packages.
+
 ## Documentation
 
 - [Create an ePlugin](docs/creating-plugins.md): starter code, recipe resources, dependencies, helpers, and initializers.

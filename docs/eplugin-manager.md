@@ -2,7 +2,11 @@
 
 Open **ePlugin Manager** with the ePlugin button at the right of the editor's main toolbar or from **Project > Tools > ePlugin Manager...**.
 
-The manager lists plugins below `res://addons`, whether they are enabled or not. It shows each plugin's type (ePlugin Framework, ePlugin, C# plugin, or GDScript plugin), version, and enabled state. ePlugins have the ePlugin icon. A plugin with an `update_url` or a matching local package gets an update indicator when a newer version is available; the Version column shows the installed and available versions and lets you select updates.
+![ePlugin Manager listing enabled and disabled sample plugins with the selected plugin's details](images/eplugin-manager.png)
+
+The overview above uses the repository's sample plugins in Godot's default dark editor theme.
+
+The manager lists plugins below `res://addons`, whether they are enabled or not. It shows each plugin's author, type (ePlugin Framework, ePlugin, C# plugin, or GDScript plugin), version, and enabled state. ePlugins have the ePlugin icon. A plugin with an `update_url` or a matching local package gets an update indicator when a newer version is available; the Version column shows the installed and available versions and lets you select updates.
 
 Select a plugin to see its status, author, description, update source and warnings, earlier failures, and the dependencies declared by an active ePlugin recipe. Click the plugin location to select it in the FileSystem dock, or use the folder button to open it in the system file manager. Update site and release page links open in a browser.
 

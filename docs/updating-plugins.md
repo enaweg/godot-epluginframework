@@ -36,6 +36,8 @@ For private release APIs, set `EPLUGIN_GITHUB_TOKEN` (fallback `GITHUB_TOKEN`) o
 
 Local directories provide ZIP packages from a folder, network share, or downloaded release collection. Add them with **Local directories...** in the [ePlugin Manager](eplugin-manager.md). The list is stored in `eplugin/local-sources.json` in the Godot editor's user configuration folder, shared by projects, and never written to a project. A missing directory remains in the list for when a drive or share returns.
 
+![Local plugin directories dialog showing a release folder, six indexed packages, and the Rescan action](images/eplugin-local-directories.png)
+
 At editor startup and after C# assembly reloads, the framework indexes `*.zip` files in these directories and their subdirectories in the background. It reads each archive's file list and `plugin.cfg`, not the full archive. A cache in `eplugin/local-index.json` remembers each ZIP's metadata, so only new or changed ZIPs are opened again. Deleting the cache is safe. Adding or removing a directory, choosing **Rescan**, or selecting **Check for updates** indexes again. Hidden and system folders and folder links are skipped. ZIPs without a `plugin.cfg` are ignored; unreadable archives appear in the dialog with a status and are logged when first found.
 
 A ZIP holds one plugin. The plugin root is the folder of its shallowest `plugin.cfg`, and that folder name is the plugin slug, for example `addons/my_plugin/` or `my_plugin/`. Deeper `plugin.cfg` files are sub-plugins and ship with it. A `plugin.cfg` at the archive root, or any other plugin root, makes the ZIP ambiguous and it will not be indexed. Local packages also work for plugins without an `update_url`. If both sources provide a version, the higher version wins and a local package wins a tie. Local packages use the same validation, backup, and rollback as downloads; their files are read in place and never changed.
@@ -60,6 +62,12 @@ An enabled ePlugin stays enabled during its update. Its existing visible resourc
 Before swapping addon files, the updater saves and closes open scenes so no scene keeps nodes whose scripts or resources are missing during the change. Untitled scenes cannot be saved, so an update will not start while one is open. Closing scenes requires Godot 4.5 or newer; on Godot 4.4 scenes are saved but remain open. Reopen scenes after the update.
 
 ## Checks and installation
+
+The update list is part of ePlugin Manager. Select updates with the checkboxes in the **Version** column, then use the bottom **Update** button to install the batch.
+
+![ePlugin Manager showing three selected updates from version 1.0 to 1.1.0 and the selected plugin's local package](images/eplugin-updates.png)
+
+This screenshot uses example local ZIP releases of the repository's sample plugins; the displayed update versions are sample data.
 
 By default, the framework checks once per editor session when the last successful check was at least 20 hours ago. Results and the timestamp are cached under `.godot/eplugin/update-state.json`. The manager's **Check for updates** action bypasses the interval and also indexes local directories. Settings are under **Project Settings > eplugin/updates**.
 
