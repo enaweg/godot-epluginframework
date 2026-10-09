@@ -5,6 +5,7 @@
 [ext_resource type="PackedScene" path="res://addons/ePlugin/Internal/Manager/LocalSourcesDialog.tscn" id="3_local"]
 
 [node name="EPluginManagerDialog" type="ConfirmationDialog"]
+auto_translate_mode = 2
 title = "ePlugin Manager"
 initial_position = 2
 size = Vector2i(1000, 600)
@@ -82,6 +83,7 @@ stretch_mode = 5
 
 [node name="DetailsName" type="Label" parent="Content/Split/Details/DetailsBox/DetailsHeader"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"HeaderMedium"

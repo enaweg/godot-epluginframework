@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://j0sfynrpwqe6b" path="res://addons/ePlugin/Internal/Manager/LocalSourcesDialog.cs" id="1_script"]
 
 [node name="LocalSourcesDialog" type="AcceptDialog"]
+auto_translate_mode = 2
 title = "Local plugin directories"
 initial_position = 2
 size = Vector2i(640, 360)
@@ -18,6 +19,7 @@ offset_bottom = 311.0
 theme_override_constants/separation = 8
 
 [node name="LocalHelp" type="Label" parent="LocalBox"]
+custom_minimum_size = Vector2(440, 0)
 layout_mode = 2
 text = "ZIP files in these directories and their subdirectories are offered as plugin updates and versions. The list belongs to your user account and is shared by all projects; it is not stored in the project."
 autowrap_mode = 3
