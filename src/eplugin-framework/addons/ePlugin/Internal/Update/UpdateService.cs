@@ -53,9 +53,8 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
     /// </summary>
     public static IReadOnlyList<UpdateCandidate> CheckLocal(IReadOnlyList<PluginUpdateTarget> targets, LocalPackageIndex index, UpdateCheckOptions options)
     {
-        var source = new LocalDirectorySource(index);
         return targets.Select(target => SemVer.TryParse(target.InstalledVersion, out var installed) &&
-                source.Versions(target, options).FirstOrDefault() is { } candidate && SemVer.TryParse(candidate.NewVersion, out var local) &&
+                LocalDirectorySource.Versions(index, target, options).FirstOrDefault() is { } candidate && SemVer.TryParse(candidate.NewVersion, out var local) &&
                 local.CompareTo(installed) > 0 ? candidate : null)
             .OfType<UpdateCandidate>().OrderBy(c => c.Slug, StringComparer.Ordinal).ToArray();
     }
@@ -74,7 +73,7 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
     public async Task<IReadOnlyList<UpdateCandidate>> ListVersionsAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct,
         LocalPackageIndex? localIndex = null)
     {
-        var local = new LocalDirectorySource(localIndex ?? LocalPackageIndex.Empty).Versions(target, options);
+        var local = LocalDirectorySource.Versions(localIndex ?? LocalPackageIndex.Empty, target, options);
         var source = target.UpdateUrl is null ? null : factory.Create(target.UpdateUrl) as IVersionListSource;
         if (source is null && local.Count == 0) throw new NotSupportedException("This update source cannot list versions.");
         IReadOnlyList<UpdateCandidate> remote = [];

@@ -39,7 +39,7 @@ internal sealed partial class EGlobal
                 State = context?.State, Error = context?.ErrorDetail?.Message,
                 FailedAttempt = _stateStore?.GetLocal(slug),
                 Recipe = context is { IsRecipeCreated: true } ? context.Builder.PluginRecipe : null,
-                LocalPackages = LocalIndex.Matching(slug, name).Count()
+                LocalPackages = LocalIndex.Matching(slug).Count()
             });
         }
         foreach (var attempt in _stateStore?.LocalAttempts ?? [])

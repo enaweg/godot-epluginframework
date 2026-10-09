@@ -160,7 +160,8 @@ provide the Godot integration. HTTP/git work runs off the editor thread; lifecyc
 
 Local plugin directories (`LocalSourceSettings`, per-user JSON in the editor config folder, never in the project)
 are a second source next to `update_url`: `LocalPackageIndexer` reads only the central directory and `plugin.cfg`
-of every ZIP below them, mirroring `SafeZipExtractor`'s root selection so it never lists what staging would refuse.
+of every ZIP below them, using `SafeZipExtractor.PluginRoot` (one root `plugin.cfg`, sub-plugins below it, anything
+else ambiguous) so it never lists what staging would refuse; the root folder's name is the slug it matches.
 The index is in memory only, rebuilt on every start by `EGlobal.LocalSources.cs` before the startup check, and never
 cached; missing directories are skipped but kept in the list. `PendingUpdates` merges remote and local candidates.
 Checks use installed metadata and a 20-hour local cache, never the shared working-version index. Every apply

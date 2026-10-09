@@ -33,6 +33,28 @@ public class UpdatePackageTests
     }
 
     [TestCase]
+    public void ExtractionTakesTheOneRootPluginWithItsSubPlugins()
+    {
+        bool Extracts(string zip, bool requireSlugFolder = false) =>
+            !Refused(() => SafeZipExtractor.Extract(zip, "plugin", Path.Combine(_root, Guid.NewGuid().ToString("N")), CancellationToken.None, requireSlugFolder));
+        var withSub = Zip(("repo/addons/plugin/plugin.cfg", Config("2.0.0")), ("repo/addons/plugin/sub/plugin.cfg", Config("1.0.0")));
+        var stage = Path.Combine(_root, "plugin");
+        SafeZipExtractor.Extract(withSub, "plugin", stage, CancellationToken.None, requireSlugFolder: true);
+        Assertions.AssertBool(File.Exists(Path.Combine(stage, "sub", "plugin.cfg"))).IsTrue();
+
+        // Another plugin next to the root, or anywhere outside it, makes the package ambiguous.
+        Assertions.AssertBool(Extracts(Zip(("addons/plugin/plugin.cfg", Config("2.0.0")), ("addons/other/plugin.cfg", Config("2.0.0"))))).IsFalse();
+        Assertions.AssertBool(Extracts(Zip(("addons/plugin/plugin.cfg", Config("2.0.0")), ("tests/addons/gdUnit4/plugin.cfg", Config("2.0.0"))))).IsFalse();
+        Assertions.AssertBool(Extracts(Zip(("repo/addons/other/plugin.cfg", Config("2.0.0"))))).IsFalse();
+        // A download may wrap the plugin in one folder of any name or have it at the archive root; a local package may not.
+        foreach (var loose in new[] { Zip(("plugin-2.0/plugin.cfg", Config("2.0.0"))), Zip(("plugin.cfg", Config("2.0.0"))) })
+        {
+            Assertions.AssertBool(Extracts(loose)).IsTrue();
+            Assertions.AssertBool(Extracts(loose, requireSlugFolder: true)).IsFalse();
+        }
+    }
+
+    [TestCase]
     public void SymlinksAndGitFilesAreSkippedButGitmodulesRefused()
     {
         var zip = Zip(("plugin.cfg", Config("2.0.0")), (".git/config", "bad"), ("link", "../outside"));

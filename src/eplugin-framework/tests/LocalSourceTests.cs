@@ -21,9 +21,10 @@ public class LocalSourceTests
     public void IndexReadsPluginCfgOfZipsInSubdirectoriesAndSkipsMissingDirectories()
     {
         var packages = Path.Combine(_root, "packages");
+        // A sub-plugin below the plugin root belongs to the package and does not make it ambiguous.
         Zip(Path.Combine(packages, "plugin-1.1.zip"), ("addons/plugin/plugin.cfg", Config("1.1.0")), ("addons/plugin/plugin.gd", "extends EditorPlugin"),
-            ("addons/other/plugin.cfg", Config("4.0.0", "Other")));
-        Zip(Path.Combine(packages, "nested", "deeper", "plugin-2.0.zip"), ("plugin-2.0/plugin.cfg", Config("2.0.0")), ("plugin-2.0/plugin.gd", "extends EditorPlugin"));
+            ("addons/plugin/tools/sub/plugin.cfg", Config("4.0.0", "Sub")));
+        Zip(Path.Combine(packages, "nested", "deeper", "plugin-2.0.zip"), ("plugin/plugin.cfg", Config("2.0.0")), ("plugin/plugin.gd", "extends EditorPlugin"));
         Zip(Path.Combine(packages, "documents.zip"), ("readme.txt", "not a plugin"));
         File.WriteAllText(Path.Combine(packages, "broken.zip"), "not a zip");
         var missing = Path.Combine(_root, "unplugged-drive");
@@ -31,49 +32,52 @@ public class LocalSourceTests
         // A nested directory listed as well must not index its archives twice.
         var index = LocalPackageIndexer.Build([packages, Path.Combine(packages, "nested"), missing], CancellationToken.None);
 
-        Assertions.AssertInt(index.Packages.Count).IsEqual(3);
+        Assertions.AssertInt(index.Packages.Count).IsEqual(2);
         Assertions.AssertInt(index.Archives).IsEqual(4);
         Assertions.AssertInt(index.Failures.Count).IsEqual(1);
         Assertions.AssertString(Path.GetFileName(index.Failures[0].Path)).IsEqual("broken.zip");
         Assertions.AssertBool(index.Directories.Single(d => d.Path == missing).Exists).IsFalse();
-        var addon = index.Packages.Single(p => p.Slug == "plugin");
-        Assertions.AssertString(addon.Root).IsEqual("addons/plugin/");
+        var addon = index.Packages.Single(p => p.Root == "addons/plugin/");
+        Assertions.AssertString(addon.Slug).IsEqual("plugin");
         Assertions.AssertString(addon.Version).IsEqual("1.1.0");
-        var wrapped = index.Packages.Single(p => p.Slug is null);
-        Assertions.AssertString(wrapped.Root).IsEqual("plugin-2.0/");
-        Assertions.AssertString(wrapped.Name).IsEqual("Plugin");
+        var wrapped = index.Packages.Single(p => p.Root == "plugin/");
+        Assertions.AssertString(wrapped.Slug).IsEqual("plugin");
+        Assertions.AssertString(wrapped.Version).IsEqual("2.0.0");
     }
 
     [TestCase]
-    public void IndexLeavesOutWhatTheExtractorWouldRefuse()
+    public void IndexReportsWhatTheExtractorWouldRefuse()
     {
         var packages = Path.Combine(_root, "packages");
-        Zip(Path.Combine(packages, "ambiguous.zip"), ("one/addons/plugin/plugin.cfg", Config("2.0.0")), ("two/addons/plugin/plugin.cfg", Config("3.0.0")),
-            ("a/plugin.cfg", Config("2.0.0")), ("b/plugin.cfg", Config("2.0.0")));
-        Zip(Path.Combine(packages, "noversion.zip"), ("plugin.cfg", "[plugin]\nname=\"Plugin\"\nscript=\"plugin.gd\"\n"));
-        Zip(Path.Combine(packages, "unsafe.zip"), ("plugin.cfg", Config("2.0.0")), ("../evil", "bad"));
+        Zip(Path.Combine(packages, "two-roots.zip"), ("addons/plugin/plugin.cfg", Config("2.0.0")), ("addons/other/plugin.cfg", Config("3.0.0")));
+        Zip(Path.Combine(packages, "outside-root.zip"), ("addons/plugin/plugin.cfg", Config("2.0.0")), ("extras/deep/other/plugin.cfg", Config("3.0.0")));
+        Zip(Path.Combine(packages, "archive-root.zip"), ("plugin.cfg", Config("2.0.0")), ("plugin.gd", "extends EditorPlugin"));
+        Zip(Path.Combine(packages, "noversion.zip"), ("plugin/plugin.cfg", "[plugin]\nname=\"Plugin\"\nscript=\"plugin.gd\"\n"));
+        Zip(Path.Combine(packages, "unsafe.zip"), ("plugin/plugin.cfg", Config("2.0.0")), ("../evil", "bad"));
         var index = LocalPackageIndexer.Build([packages], CancellationToken.None);
         Assertions.AssertInt(index.Packages.Count).IsEqual(0);
-        Assertions.AssertString(Path.GetFileName(index.Failures.Single().Path)).IsEqual("unsafe.zip");
+        Assertions.AssertArray(index.Failures.Select(f => Path.GetFileName(f.Path)).Order().ToArray())
+            .IsEqual(new[] { "archive-root.zip", "noversion.zip", "outside-root.zip", "two-roots.zip", "unsafe.zip" });
     }
 
     [TestCase]
-    public void LocalSourceMatchesBySlugThenFolderThenNameAndOffersTheNewestVersion()
+    public void LocalSourceMatchesTheRootFolderAndOffersTheNewestVersion()
     {
         var index = new LocalPackageIndex([
-            Package("a.zip", "addons/plugin/", "plugin", "1.5.0"),
-            Package("b.zip", "", null, "2.0.0"),
-            Package("c.zip", "plugin/", null, "3.0.0-beta.1", "Renamed"),
-            Package("d.zip", "addons/other/", "other", "9.0.0", "Plugin")
-        ], [], 4, []);
+            Package("a.zip", "addons/plugin/", "1.5.0"),
+            Package("b.zip", "plugin/", "2.0.0"),
+            Package("c.zip", "repo/plugin/", "3.0.0-beta.1"),
+            // The plugin.cfg of these may well name the plugin "Plugin"; only the folder decides.
+            Package("d.zip", "addons/other/", "9.0.0"),
+            Package("e.zip", "plugin-9.0/", "9.0.0")
+        ], [], 5, []);
         var target = Target();
-        var stable = new LocalDirectorySource(index).Versions(target, new());
+        var stable = LocalDirectorySource.Versions(index, target, new());
         Assertions.AssertArray(stable.Select(c => c.NewVersion).ToArray()).IsEqual(new[] { "2.0.0", "1.5.0" });
         Assertions.AssertString(((LocalZipPackageRef)stable[0].Package).Path).IsEqual("b.zip");
-        Assertions.AssertString(stable[0].SourceUrl).IsEqual("b.zip");
-        Assertions.AssertString(new LocalDirectorySource(index).Versions(target, new(AllowPrerelease: true))[0].NewVersion).IsEqual("3.0.0-beta.1");
+        Assertions.AssertString(LocalDirectorySource.Versions(index, target, new(AllowPrerelease: true))[0].NewVersion).IsEqual("3.0.0-beta.1");
 
-        var updates = UpdateService.CheckLocal([target, Target("unrelated", "Unrelated")], index, new());
+        var updates = UpdateService.CheckLocal([target, Target("unrelated")], index, new());
         Assertions.AssertInt(updates.Count).IsEqual(1);
         Assertions.AssertString(updates[0].NewVersion).IsEqual("2.0.0");
         Assertions.AssertInt(UpdateService.CheckLocal([target with { InstalledVersion = "2.0.0" }], index, new()).Count).IsEqual(0);
@@ -82,9 +86,9 @@ public class LocalSourceTests
     [TestCase]
     public void SameVersionPrefersTheNewestFileAndLocalWinsOverRemote()
     {
-        var older = Package("old.zip", "addons/plugin/", "plugin", "2.0.0") with { ModifiedUtc = DateTime.UtcNow.AddDays(-1) };
-        var newer = Package("new.zip", "addons/plugin/", "plugin", "2.0.0");
-        var local = new LocalDirectorySource(new([older, newer], [], 2, [])).Versions(Target(), new()).Single();
+        var older = Package("old.zip", "addons/plugin/", "2.0.0") with { ModifiedUtc = DateTime.UtcNow.AddDays(-1) };
+        var newer = Package("new.zip", "addons/plugin/", "2.0.0");
+        var local = LocalDirectorySource.Versions(new([older, newer], [], 2, []), Target(), new()).Single();
         Assertions.AssertString(local.SourceUrl).IsEqual("new.zip");
         var remote = new UpdateCandidate("plugin", "Plugin", "1.0.0", "2.0.0", "https://example.org/releases", null, null, new ZipPackageRef("https://example.org/p.zip", "plugin"));
         Assertions.AssertBool(UpdateService.Merge([remote], [local]).Single().Package is LocalZipPackageRef).IsTrue();
@@ -95,7 +99,7 @@ public class LocalSourceTests
     [TestCase]
     public async Task VersionListCombinesSourcesAndWorksWithoutUpdateUrl()
     {
-        var index = new LocalPackageIndex([Package("a.zip", "addons/plugin/", "plugin", "1.5.0"), Package("b.zip", "addons/plugin/", "plugin", "1.2.0")], [], 2, []);
+        var index = new LocalPackageIndex([Package("a.zip", "addons/plugin/", "1.5.0"), Package("b.zip", "addons/plugin/", "1.2.0")], [], 2, []);
         var service = new UpdateService(new Factory(), new SystemClock(), new MemoryStore());
         var local = await service.ListVersionsAsync(Target(), new(), CancellationToken.None, index);
         Assertions.AssertArray(local.Select(v => v.NewVersion).ToArray()).IsEqual(new[] { "1.5.0", "1.2.0" });
@@ -128,7 +132,7 @@ public class LocalSourceTests
         var zip = Path.Combine(_root, "packages", "plugin.zip");
         Zip(zip, ("addons/plugin/plugin.cfg", Config("2.0.0")), ("addons/plugin/plugin.gd", "extends EditorPlugin"));
         var target = new PluginUpdateTarget("plugin", "Plugin", "1.0.0", null, installed);
-        var candidate = new LocalDirectorySource(LocalPackageIndexer.Build([Path.GetDirectoryName(zip)!], CancellationToken.None)).Versions(target, new()).Single();
+        var candidate = LocalDirectorySource.Versions(LocalPackageIndexer.Build([Path.GetDirectoryName(zip)!], CancellationToken.None), target, new()).Single();
         var transaction = Path.Combine(_root, "transaction");
         var staged = await new PackageFetcher(new UpdateHttp(), new GitRunner()).FetchAsync([candidate], [target], transaction, null, CancellationToken.None);
         Assertions.AssertBool(staged.Single().IsValid).IsTrue();
@@ -202,9 +206,9 @@ public class LocalSourceTests
         Assertions.AssertBool(first.Add(two)).IsTrue();
     }
 
-    private static PluginUpdateTarget Target(string slug = "plugin", string name = "Plugin") => new(slug, name, "1.0.0", null, "/unused");
-    private static LocalPackage Package(string zip, string root, string? slug, string version, string name = "Plugin") =>
-        new(zip, root, slug, name, version, DateTime.UtcNow);
+    private static PluginUpdateTarget Target(string slug = "plugin") => new(slug, "Plugin", "1.0.0", null, "/unused");
+    private static LocalPackage Package(string zip, string root, string version) =>
+        new(zip, root, SafeZipExtractor.RootSlug(root)!, version, DateTime.UtcNow);
     private static void Zip(string path, params (string Path, string Content)[] files)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);

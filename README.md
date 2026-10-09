@@ -433,18 +433,21 @@ only. When it finishes, updates are checked. Adding or removing a directory, or 
 again. Hidden and system folders and folder links are skipped; ZIP files without a `plugin.cfg` are ignored, and
 archives that cannot be read are listed (hover the status in the dialog) and logged as warnings.
 
-A package belongs to an installed plugin when it contains `addons/<slug>/plugin.cfg` with the plugin's slug.
-An addon at the archive root or in one wrapper folder belongs to the plugin whose slug equals the wrapper folder
-name, or whose `name` equals the package's `name`. Local packages work for plugins without an `update_url` too;
+A ZIP holds one plugin: its root is the folder of the shallowest `plugin.cfg`, and the name of that folder is
+the slug of the plugin the package belongs to, e.g. `addons/my_plugin/` or `my_plugin/` for `my_plugin`. Further
+`plugin.cfg` files below the root belong to sub-plugins and are shipped with it; any other `plugin.cfg`, and a
+`plugin.cfg` at the archive root (which has no folder to name the slug), make the ZIP fail to index. Local packages work for plugins without an `update_url` too;
 for plugins with one, both sources are offered and the higher version wins (a local package wins a tie). Local
 packages go through the same validation, backup and rollback as downloads, and their files are read in place,
 never changed. Scheduled checks of `update_url`s keep their interval; the local index is checked on every start.
 
 ### Publishing an updatable release
 
-Keep the addon slug stable and include `plugin.cfg` plus its entry script. A ZIP may contain
-`addons/<slug>/`, an addon at its root, or one wrapper folder containing the addon. Source archives may contain
-other addons; only the selected addon is staged. Do not include symlinks, submodules, a `project.godot`, or
+Keep the addon slug stable and include `plugin.cfg` plus its entry script. A ZIP holds exactly one plugin: the
+folder of its shallowest `plugin.cfg` is the plugin root, and it must be named like the slug (e.g.
+`addons/<slug>/`), unless it is the archive root or a single wrapper folder such as a repository archive's.
+`plugin.cfg` files below the root are sub-plugins and are installed with it; a `plugin.cfg` anywhere else, such as
+a second addon or a bundled test framework, makes the package ambiguous and it is refused. Do not include symlinks, submodules, a `project.godot`, or
 `nuget.config`. New `.csproj`, `.sln`, and `.slnx` paths are refused; existing addon project paths may be updated.
 Downloads are limited to 256 MiB; extracted packages to 512 MiB and 20,000 files, with 256 MiB per file.
 Plugins containing `.gdextension` files, including an installed native payload, are currently refused.
