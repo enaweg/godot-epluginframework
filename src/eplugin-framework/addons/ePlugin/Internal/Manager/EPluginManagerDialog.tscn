@@ -65,7 +65,7 @@ column_titles_visible = true
 hide_root = true
 select_mode = 1
 
-[node name="Details" type="PanelContainer" parent="Content/Split"]
+[node name="Details" type="MarginContainer" parent="Content/Split"]
 custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
 
