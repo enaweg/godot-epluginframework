@@ -18,6 +18,11 @@ internal sealed record ValidatedPackage(UpdateCandidate Candidate, string Stagin
 }
 internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules = null)
 {
+    /// <summary>R10 when the files contain a GDExtension, which ePlugin updates cannot replace yet.</summary>
+    public static Finding? NativeExtension(IEnumerable<string> files) =>
+        files.Any(f => f.EndsWith(".gdextension", StringComparison.OrdinalIgnoreCase))
+            ? new("R10", FindingSeverity.Error, "GDExtension plugins are not supported by ePlugin updates yet.") : null;
+
     public ValidatedPackage Validate(ValidationContext context)
     {
         var findings = new List<Finding>();
@@ -62,8 +67,7 @@ internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules 
             Add("R9", FindingSeverity.Warning, "Update source changed: " + (newUrl ?? "removed"), !string.IsNullOrWhiteSpace(newUrl) && oldHost != newHost);
         }
         var installedFiles = Directory.Exists(installed.Directory) ? PackageFiles.Files(installed.Directory).ToArray() : [];
-        if (files.Concat(installedFiles).Any(f => f.EndsWith(".gdextension", StringComparison.OrdinalIgnoreCase)))
-            Add("R10", FindingSeverity.Error, "GDExtension plugins are not supported by ePlugin updates yet.");
+        if (NativeExtension(files.Concat(installedFiles)) is { } native) findings.Add(native);
         long bytes = 0;
         foreach (var file in files)
         {

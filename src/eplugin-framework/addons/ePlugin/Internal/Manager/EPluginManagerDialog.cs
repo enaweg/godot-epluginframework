@@ -146,15 +146,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         if (_working) return;
         ClearStaging();
         var plugins = _global.CollectPlugins();
-        var targets = _targets = _global.CollectUpdateTargets();
-        _model = new(plugins, _global.PendingUpdates, targets, _global.UpdateCache, candidate =>
-        {
-            var target = targets.FirstOrDefault(t => t.Slug == candidate.Slug);
-            var findings = _global.UpdatePreflightFindings([candidate]).ToList();
-            if (target is not null && Directory.Exists(target.Directory) && PackageFiles.Files(target.Directory).Any(f => f.EndsWith(".gdextension", StringComparison.OrdinalIgnoreCase)))
-                findings.Add(new("R10", FindingSeverity.Error, "GDExtension plugins are not supported by ePlugin updates yet."));
-            return findings;
-        });
+        _targets = _global.CollectUpdateTargets();
+        _model = new(plugins, _global.PendingUpdates, _targets, _global.UpdateCache, candidate => _global.UpdatePreflightFindings([candidate]));
         _trust.SetPressedNoSignal(false);
         Render();
     }
