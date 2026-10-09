@@ -13,11 +13,12 @@ using Godot;
 namespace Enaweg.Plugin;
 
 [Tool]
-public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin
+public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializationListener
 {
     private const string ManagerMenuName = "ePlugin Manager...";
     // Engine metadata survives assembly reloads, unlike the fields of this script instance.
     private const string ManagerButtonMeta = "eplugin_manager_button";
+    private readonly EditorSignalConnections _managerSignals = new();
     private bool _managerUiAdded;
     private Button? _managerButton;
     private EPluginManagerDialog? _managerDialog;
@@ -76,6 +77,27 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin
         base._ExitTree();
     }
     
+    public void OnBeforeSerialize() => ReleaseManagerCallbacks();
+    public void OnAfterDeserialize() { }
+
+    private void ReleaseManagerCallbacks()
+    {
+        _managerSignals.Dispose();
+        if (_updateOwner is not null) _updateOwner.UpdateDecisionNeeded -= ShowUpdateFailure;
+        try { _updateLifetime.Cancel(); } catch (ObjectDisposedException) { }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            // Godot disposes the script on reload while its native editor controls remain in the tree.
+            ReleaseManagerCallbacks();
+            _updateLifetime.Dispose();
+        }
+        base.Dispose(disposing);
+    }
+
     private void AddManagerUi()
     {
         // A C# assembly reload resets this script's fields while the native menu item and toolbar button survive.
@@ -89,8 +111,8 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin
             Icon = EditorIcons.EPlugin
         };
         if (_managerButton.Icon is null) _managerButton.Text = "ePlugin";
-        _managerButton.ThemeChanged += () => Callable.From(RefreshManagerIcon).CallDeferred();
-        _managerButton.Pressed += OpenManager;
+        _managerSignals.Connect(_managerButton, Control.SignalName.ThemeChanged, Callable.From(() => CallDeferred(nameof(RefreshManagerIcon))));
+        _managerSignals.Connect(_managerButton, BaseButton.SignalName.Pressed, Callable.From(OpenManager));
         AddControlToContainer(CustomControlContainer.Toolbar, _managerButton);
         Engine.Singleton.SetMeta(ManagerButtonMeta, _managerButton.GetInstanceId());
         _managerUiAdded = true;
@@ -117,6 +139,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin
     }
     private void RemoveManagerButton()
     {
+        _managerSignals.Dispose();
         var button = _managerButton;
         if (button is null && Engine.Singleton.HasMeta(ManagerButtonMeta))
             button = GodotObject.InstanceFromId(Engine.Singleton.GetMeta(ManagerButtonMeta).AsUInt64()) as Button;
