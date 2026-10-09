@@ -84,7 +84,8 @@ internal sealed partial class EGlobal
             var enabled = ProjectSettings.GetSetting("eplugin/updates/check_enabled", true).AsBool();
             var interval = ProjectSettings.GetSetting("eplugin/updates/check_interval_hours", 20).AsDouble();
             _localUpdates = UpdateService.CheckLocal(targets, LocalIndex, new(allow));
-            if (!force && !enabled) return new([], [], LastUpdateCheck ?? DateTimeOffset.UtcNow);
+            // Scheduled checks are off: nothing is fetched or logged, but the known updates stay what callers see.
+            if (!force && !enabled) return new(PendingUpdates, [], LastUpdateCheck ?? DateTimeOffset.UtcNow);
             if (!force && !UpdateScheduler.ShouldCheck(DateTimeOffset.UtcNow, LastUpdateCheck, enabled, interval))
             {
                 _remoteUpdates = UpdateScheduler.CurrentCached(_updateCache.State, targets, allow);
