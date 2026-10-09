@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 
 namespace Enaweg.Plugin.Internal.Update;
@@ -14,7 +15,8 @@ namespace Enaweg.Plugin.Internal.Update;
 internal sealed record LocalPackage(string ZipPath, string Root, string Slug, string Version, DateTime ModifiedUtc);
 /// <param name="Packages">The plugin packages below the directory, also those another listed directory contains too.</param>
 internal sealed record LocalDirectoryState(string Path, bool Exists, int Packages);
-internal sealed record LocalIndexFailure(string Path, string Message);
+/// <param name="Cached">Known from an earlier indexing, as the archive did not change since.</param>
+internal sealed record LocalIndexFailure(string Path, string Message, bool Cached = false);
 
 /// <summary>An immutable snapshot of every plugin package found in the local plugin directories.</summary>
 internal sealed record LocalPackageIndex(IReadOnlyList<LocalPackage> Packages, IReadOnlyList<LocalDirectoryState> Directories,
@@ -36,17 +38,22 @@ internal static class LocalPackageIndexer
         AttributesToSkip = FileAttributes.Hidden | FileAttributes.System | FileAttributes.ReparsePoint
     };
 
+    /// <inheritdoc cref="Build(IReadOnlyList{string}, LocalIndexCache?, CancellationToken)"/>
+    public static LocalPackageIndex Build(IReadOnlyList<string> directories, CancellationToken ct) => Build(directories, null, ct);
+
     /// <summary>
     /// Indexes every *.zip below the given directories. Only the central directory and the plugin.cfg entries are
-    /// read; nothing is extracted. A directory that does not exist is skipped and reported as missing.
+    /// read; nothing is extracted. A directory that does not exist is skipped and reported as missing. With a cache,
+    /// archives whose size and modification time did not change are not opened again.
     /// </summary>
-    public static LocalPackageIndex Build(IReadOnlyList<string> directories, CancellationToken ct)
+    public static LocalPackageIndex Build(IReadOnlyList<string> directories, LocalIndexCache? cache, CancellationToken ct)
     {
+        var cached = cache?.Load() ?? new Dictionary<string, LocalIndexCacheEntry>();
         var packages = new List<LocalPackage>();
         var failures = new List<LocalIndexFailure>();
         var states = new List<LocalDirectoryState>();
         // Nested or overlapping directories read and list the same archive only once.
-        var read = new Dictionary<string, LocalPackage?>(PackageFiles.PathComparer);
+        var read = new Dictionary<string, LocalIndexCacheEntry>(PackageFiles.PathComparer);
         foreach (var directory in directories)
         {
             if (!Directory.Exists(directory)) { states.Add(new(directory, false, 0)); continue; }
@@ -57,20 +64,33 @@ internal static class LocalPackageIndexer
                 {
                     ct.ThrowIfCancellationRequested();
                     var path = Path.GetFullPath(file);
-                    if (!read.TryGetValue(path, out var package))
+                    if (!read.TryGetValue(path, out var entry))
                     {
-                        try { package = Read(path); if (package is not null) packages.Add(package); }
-                        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or System.Text.Json.JsonException)
-                        { failures.Add(new(path, ex.Message)); }
-                        read[path] = package;
+                        read[path] = entry = Inspect(path, cached, out var known);
+                        if (entry.Package is not null) packages.Add(entry.Package);
+                        if (entry.Failure is not null) failures.Add(new(path, entry.Failure, known));
                     }
-                    if (package is not null) count++;
+                    if (entry.Package is not null) count++;
                 }
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { failures.Add(new(directory, ex.Message)); }
             states.Add(new(directory, true, count));
         }
+        cache?.Save(read.Values);
         return new(packages, states, read.Count, failures);
+    }
+
+    private static LocalIndexCacheEntry Inspect(string path, IReadOnlyDictionary<string, LocalIndexCacheEntry> cached, out bool known)
+    {
+        known = false;
+        var info = new FileInfo(path);
+        long length; DateTime modified;
+        try { length = info.Length; modified = info.LastWriteTimeUtc; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return new(path, -1, default, null, ex.Message); }
+        if (cached.TryGetValue(path, out var entry) && entry.Length == length && entry.ModifiedUtc == modified) { known = true; return entry; }
+        try { return new(path, length, modified, Read(path), null); }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or JsonException)
+        { return new(path, length, modified, null, ex.Message); }
     }
 
     /// <summary>

@@ -12,11 +12,13 @@ namespace Enaweg.Plugin.Internal;
 
 /// <summary>
 /// Local plugin directories: per-user folders whose ZIP files (also in subfolders) are offered as plugin versions. The
-/// index lives in memory only and is rebuilt in the background on every editor start.
+/// index is rebuilt in the background on every editor start and assembly reload; a per-user cache of what each ZIP file
+/// held keeps that from opening unchanged archives again.
 /// </summary>
 internal sealed partial class EGlobal
 {
     private LocalSourceSettings? _localSources;
+    private LocalIndexCache? _localIndexCache;
     private CancellationTokenSource? _indexing;
     private IReadOnlyList<UpdateCandidate> _localUpdates = [];
     internal LocalPackageIndex LocalIndex { get; private set; } = LocalPackageIndex.Empty;
@@ -32,6 +34,7 @@ internal sealed partial class EGlobal
         // The editor's configuration folder belongs to the user and is shared by all projects and Godot versions.
         var config = EditorInterface.Singleton.GetEditorPaths().GetConfigDir();
         _localSources = new LocalSourceSettings(Path.Combine(config, "eplugin", "local-sources.json"));
+        _localIndexCache = new LocalIndexCache(Path.Combine(config, "eplugin", "local-index.json"));
         _localSources.Load();
         if (_localSources.Problem is { } problem) _ePluginContext?.Logger.Warn($"Local plugin directories: {problem}");
     }
@@ -67,25 +70,32 @@ internal sealed partial class EGlobal
     /// </summary>
     internal async Task RebuildLocalIndexAsync()
     {
-        if (_localSources is null || _ePluginContext is null) return;
+        if (_localSources is null || _localIndexCache is null || _ePluginContext is null) return;
+        var lifetime = _ePluginContext.UpdateLifetime;
         _indexing?.Cancel();
         var run = _indexing = new CancellationTokenSource();
-        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(run.Token, _ePluginContext.UpdateLifetime);
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(run.Token, lifetime);
         var directories = _localSources.Directories.ToArray();
+        var cache = _localIndexCache;
         LocalIndexChanged?.Invoke();
         try
         {
-            var index = await Task.Run(() => LocalPackageIndexer.Build(directories, cancel.Token), cancel.Token).ConfigureAwait(false);
+            var index = await Task.Run(() => LocalPackageIndexer.Build(directories, cache, cancel.Token), cancel.Token).ConfigureAwait(false);
             await OnEditorThread(() => { if (_indexing == run) ApplyLocalIndex(index); }, cancel.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            await OnEditorThread(() =>
+            try
             {
-                _ePluginContext?.Logger.Warn($"Indexing local plugin directories failed: {ex.Message}");
-                if (_indexing == run) { _indexing = null; LocalIndexChanged?.Invoke(); }
-            }, _ePluginContext?.UpdateLifetime ?? CancellationToken.None).ConfigureAwait(false);
+                await OnEditorThread(() =>
+                {
+                    _ePluginContext?.Logger.Warn($"Indexing local plugin directories failed: {ex.Message}");
+                    if (_indexing == run) { _indexing = null; LocalIndexChanged?.Invoke(); }
+                }, lifetime).ConfigureAwait(false);
+            }
+            // The plugin is being unloaded; nothing is left to report to.
+            catch (OperationCanceledException) { }
         }
     }
 
@@ -93,7 +103,8 @@ internal sealed partial class EGlobal
     {
         _indexing = null;
         LocalIndex = index;
-        foreach (var failure in index.Failures) _ePluginContext?.Logger.Warn($"Local plugin package skipped: {failure.Path}: {failure.Message}");
+        // Failures remembered from an earlier indexing were logged then; the dialog still lists all of them.
+        foreach (var failure in index.Failures.Where(f => !f.Cached)) _ePluginContext?.Logger.Warn($"Local plugin package skipped: {failure.Path}: {failure.Message}");
         RefreshLocalUpdates();
         LocalIndexChanged?.Invoke();
     }

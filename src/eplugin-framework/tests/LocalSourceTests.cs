@@ -50,6 +50,33 @@ public class LocalSourceTests
     }
 
     [TestCase]
+    public void IndexCacheSkipsUnchangedArchivesAndKeepsNewerFiles()
+    {
+        var packages = Path.Combine(_root, "packages");
+        var zip = Path.Combine(packages, "plugin.zip");
+        Zip(zip, ("plugin/plugin.cfg", Config("1.0.0")));
+        File.WriteAllText(Path.Combine(packages, "broken.zip"), "not a zip");
+        var file = Path.Combine(_root, "config", "local-index.json");
+        var first = LocalPackageIndexer.Build([packages], new LocalIndexCache(file), CancellationToken.None);
+        Assertions.AssertBool(first.Failures.Single().Cached).IsFalse();
+
+        // An entry whose path, size and time still match is trusted without opening the archive.
+        var cache = new LocalIndexCache(file);
+        var entries = cache.Load().Values.Select(e => e.Package is null ? e : e with { Package = e.Package with { Version = "9.9.9" } }).ToArray();
+        cache.Save(entries);
+        var cached = LocalPackageIndexer.Build([packages], new LocalIndexCache(file), CancellationToken.None);
+        Assertions.AssertString(cached.Packages.Single().Version).IsEqual("9.9.9");
+        Assertions.AssertBool(cached.Failures.Single().Cached).IsTrue();
+        File.SetLastWriteTimeUtc(zip, DateTime.UtcNow.AddMinutes(1));
+        Assertions.AssertString(LocalPackageIndexer.Build([packages], new LocalIndexCache(file), CancellationToken.None).Packages.Single().Version).IsEqual("1.0.0");
+
+        var newer = "{\"schema\": 1, \"indexer\": 99, \"archives\": []}";
+        File.WriteAllText(file, newer);
+        Assertions.AssertInt(LocalPackageIndexer.Build([packages], new LocalIndexCache(file), CancellationToken.None).Packages.Count).IsEqual(1);
+        Assertions.AssertString(File.ReadAllText(file)).IsEqual(newer);
+    }
+
+    [TestCase]
     public void IndexReportsWhatTheExtractorWouldRefuse()
     {
         var packages = Path.Combine(_root, "packages");

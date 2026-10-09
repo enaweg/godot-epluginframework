@@ -427,9 +427,11 @@ or a folder of downloaded releases. Add the directories with **Local directories
 is shared by all projects, and is never written to a project. A directory that does not exist (an unplugged
 drive, an unmounted share) stays in the list and is used again once it reappears.
 
-Every editor start indexes all `*.zip` files in these directories and their subdirectories in the background.
-Indexing reads only each archive's file list and its `plugin.cfg`, never the whole archive, and is kept in memory
-only. When it finishes, updates are checked. Adding or removing a directory, or **Check for updates**, indexes
+Every editor start, and every assembly reload after a C# build, indexes all `*.zip` files in these directories and
+their subdirectories in the background. Indexing reads only each archive's file list and its `plugin.cfg`, never
+the whole archive. What it read is remembered per ZIP file in `eplugin/local-index.json` next to the list, so only
+new or changed ZIP files (by size and modification time) are opened again; deleting that file is always safe. When
+indexing finishes, updates are checked. Adding or removing a directory, or **Check for updates**, indexes
 again. Hidden and system folders and folder links are skipped; ZIP files without a `plugin.cfg` are ignored, and
 archives that cannot be read are listed (hover the status in the dialog) and logged as warnings.
 
