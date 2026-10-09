@@ -33,9 +33,6 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private CheckBox _trust = null!;
     private ProgressBar _progress = null!;
     private ConfirmationDialog _disableFrameworkConfirm = null!;
-    private CheckBox _autoAcceptLicenses = null!;
-    private Label _autoAcceptWarning = null!;
-    private ConfirmationDialog _autoAcceptConfirm = null!;
     private TextureRect _detailsIcon = null!;
     private Label _detailsName = null!;
     private RichTextLabel _detailsText = null!;
@@ -93,8 +90,6 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _check = GetNode<Button>("%CheckButton"); _retry = GetNode<Button>("%RetryButton"); _release = GetNode<Button>("%ReleaseButton");
         _trust = GetNode<CheckBox>("%TrustCheck"); _progress = GetNode<ProgressBar>("%Progress");
         _disableFrameworkConfirm = GetNode<ConfirmationDialog>("%DisableFrameworkConfirm");
-        _autoAcceptLicenses = GetNode<CheckBox>("%AutoAcceptLicenses"); _autoAcceptWarning = GetNode<Label>("%AutoAcceptWarning");
-        _autoAcceptConfirm = GetNode<ConfirmationDialog>("%AutoAcceptConfirm");
         _detailsIcon = GetNode<TextureRect>("%DetailsIcon"); _detailsName = GetNode<Label>("%DetailsName"); _detailsText = GetNode<RichTextLabel>("%DetailsText");
         _versionSeparator = GetNode<Control>("%VersionSeparator"); _versionRow = GetNode<Control>("%VersionRow");
         _versionSelect = GetNode<OptionButton>("%VersionSelect"); _installVersion = GetNode<Button>("%InstallVersionButton");
@@ -109,7 +104,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _tree.SetColumnTitle(TypeColumn, "Type"); _tree.SetColumnTitle(VersionColumn, "Version");
         _tree.SetColumnExpand(EnabledColumn, false); _tree.SetColumnExpand(NameColumn, false); _tree.SetColumnExpand(AuthorColumn, true);
         _tree.SetColumnExpand(TypeColumn, false); _tree.SetColumnExpand(VersionColumn, false);
-        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm, _autoAcceptConfirm }) EditorWindows.Prepare(window, _signals, this, nameof(QueueWindowIcons));
+        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm }) EditorWindows.Prepare(window, _signals, this, nameof(QueueWindowIcons));
         var scale = EditorInterface.Singleton.GetEditorScale();
         _tree.SetColumnCustomMinimumWidth(EnabledColumn, (int)(40 * scale)); _tree.SetColumnCustomMinimumWidth(AuthorColumn, (int)(AuthorMinimumWidth * scale));
         _tree.SetColumnCustomMinimumWidth(VersionColumn, (int)(150 * scale));
@@ -130,8 +125,6 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _signals.Connect(_tree, Tree.SignalName.ItemActivated, Callable.From(OpenRelease));
         _signals.Connect(_tree, Tree.SignalName.ButtonClicked, Callable.From<TreeItem, long, long, long>((item, _, _, _) => item.Select(NameColumn)));
         _signals.Connect(_tree, Tree.SignalName.Resized, Callable.From(() => { if (_model is not null) FitColumns(); }));
-        _signals.Connect(_autoAcceptLicenses, BaseButton.SignalName.Toggled, Callable.From<bool>(AutoAcceptToggled));
-        _signals.Connect(_autoAcceptConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(() => SetAutoAccept(true)));
         _signals.Connect(_trust, BaseButton.SignalName.Toggled, Callable.From<bool>(value => { _model.TrustChangedSource = value; Buttons(); }));
         _signals.Connect(this, AcceptDialog.SignalName.Confirmed, Callable.From(Confirm));
         _signals.Connect(this, AcceptDialog.SignalName.Canceled, Callable.From(Cancel));
@@ -141,7 +134,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private void QueueWindowIcons() => CallDeferred(nameof(RefreshWindowIcons));
     private void RefreshWindowIcons()
     {
-        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm, _autoAcceptConfirm })
+        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm })
             EditorWindows.ApplyIcon(window);
     }
 
@@ -152,7 +145,6 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         { _openFolder.Icon = editorTheme.GetIcon("Folder", "EditorIcons"); _openFolder.Text = ""; }
         _ePluginIcon = EditorIcons.EPlugin; _logo = EditorIcons.Logo; _updateIcon = EditorIcons.UpdateIndicator;
         _check.Icon = EditorIcons.Update;
-        _autoAcceptWarning.AddThemeColorOverride("font_color", WarningColor());
         // Render the existing model rather than refreshing it: a theme change must preserve a staged update.
         if (_model is not null) Render();
     }
@@ -174,29 +166,6 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _model = new(plugins, _global.PendingUpdates, _targets, _global.UpdateCache, candidate => _global.UpdatePreflightFindings([candidate]));
         _trust.SetPressedNoSignal(false);
         Render();
-    }
-
-    private void AutoAcceptToggled(bool enabled)
-    {
-        if (!enabled) { SetAutoAccept(false); return; }
-        // only turned on once the risk was confirmed
-        _autoAcceptLicenses.SetPressedNoSignal(false);
-        _autoAcceptConfirm.PopupCentered();
-    }
-
-    private void SetAutoAccept(bool enabled)
-    {
-        try { LicenseSettings.SetAutoAccept(enabled); }
-        catch (Exception ex) { GD.PushError($"Cannot change {LicenseSettings.AutoAcceptKey}: {ex.Message}"); }
-        LicenseButtons();
-    }
-
-    private void LicenseButtons()
-    {
-        var enabled = LicenseSettings.AutoAccept;
-        _autoAcceptLicenses.SetPressedNoSignal(enabled);
-        _autoAcceptLicenses.Disabled = _working;
-        _autoAcceptWarning.Visible = enabled;
     }
 
     private void Render()
@@ -437,7 +406,6 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _trust.Visible = NeedsTrust;
         _check.Disabled = _working || _staged is not null;
         _retry.Disabled = _working || _staged is not null || !_model.CanRetry;
-        LicenseButtons();
         VersionButtons();
     }
 
@@ -668,7 +636,6 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         return theme is not null && theme.HasColor(name, type) ? theme.GetColor(name, type) : fallback;
     }
     private static Color UpdateColor() => ThemeColor("success_color", "Editor", new Color(0.45f, 0.95f, 0.5f));
-    private static Color WarningColor() => ThemeColor("warning_color", "Editor", new Color(1f, 0.87f, 0.4f));
     private static Color ErrorColor() => ThemeColor("error_color", "Editor", new Color(1f, 0.47f, 0.42f));
     private static Color DisabledColor() => ThemeColor("font_disabled_color", "Button", new Color(0.5f, 0.5f, 0.5f));
 

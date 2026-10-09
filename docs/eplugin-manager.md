@@ -13,7 +13,6 @@ Select a plugin to see its status, author, license, description, update source a
 ## Actions
 
 - **On** enables or disables the selected plugin. Enabling an ePlugin installs its recipe and required dependencies. Plugins that ask for their [license](plugin-licenses.md) to be accepted show it first. Disabling a plugin also disables plugins that require it. The manager refreshes the list after toggles. Disabling ePlugin Framework itself requires confirmation because it closes the manager.
-- **Accept plugin licenses automatically** accepts the licenses of plugins that are enabled or updated without showing them. Turning it on is risky and requires confirmation; see [Plugin licenses](plugin-licenses.md#accepting-licenses-automatically).
 - **Check for updates** checks immediately regardless of the scheduled interval and indexes local plugin directories again.
 - **Local directories...** adds, removes, or rescans folders containing plugin ZIP packages. The folders are user-wide settings; see [Updating plugins](updating-plugins.md#local-plugin-directories).
 - **Update** installs the checked updates after validation and confirmation. See [Updating plugins](updating-plugins.md).
