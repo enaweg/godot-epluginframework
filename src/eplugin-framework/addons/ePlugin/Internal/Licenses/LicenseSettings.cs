@@ -7,7 +7,7 @@ internal static class LicenseSettings
 {
     /// <summary>
     /// Accepts every plugin license without showing it. Risky: the user agrees to terms nobody read, for the whole
-    /// project. The ePlugin Manager asks for confirmation before turning it on.
+    /// project. Only set in the project settings, mainly for headless editors such as CI exports.
     /// </summary>
     public const string AutoAcceptKey = "eplugin/licenses/auto_accept";
 
@@ -21,12 +21,6 @@ internal static class LicenseSettings
         {
             { "name", AutoAcceptKey }, { "type", (int)Variant.Type.Bool }, { "hint", (int)PropertyHint.None }, { "hint_string", "" }
         });
-    }
-
-    public static void SetAutoAccept(bool value)
-    {
-        ProjectSettings.SetSetting(AutoAcceptKey, value);
-        ProjectSettings.Save();
     }
 }
 #endif

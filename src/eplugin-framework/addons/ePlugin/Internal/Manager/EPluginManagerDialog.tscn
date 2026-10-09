@@ -1,8 +1,10 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" uid="uid://bvv1rdcwentgp" path="res://addons/ePlugin/Internal/Manager/EPluginManagerDialog.cs" id="1_script"]
 [ext_resource type="Texture2D" uid="uid://c0e8d5lpm8fxh" path="res://addons/ePlugin/icons/update.svg" id="2_update"]
 [ext_resource type="PackedScene" path="res://addons/ePlugin/Internal/Manager/LocalSourcesDialog.tscn" id="3_local"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_details"]
 
 [node name="EPluginManagerDialog" type="ConfirmationDialog"]
 auto_translate_mode = 2
@@ -65,7 +67,7 @@ column_titles_visible = true
 hide_root = true
 select_mode = 1
 
-[node name="Details" type="PanelContainer" parent="Content/Split"]
+[node name="Details" type="MarginContainer" parent="Content/Split"]
 custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
 
@@ -119,6 +121,7 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 focus_mode = 2
+theme_override_styles/normal = SubResource("StyleBoxEmpty_details")
 bbcode_enabled = true
 text = "Select a plugin to see its details."
 context_menu_enabled = true
@@ -165,26 +168,6 @@ modulate = Color(1, 1, 1, 0.7)
 layout_mode = 2
 autowrap_mode = 3
 
-[node name="LicenseRow" type="HBoxContainer" parent="Content"]
-layout_mode = 2
-
-[node name="AutoAcceptLicenses" type="CheckBox" parent="Content/LicenseRow"]
-unique_name_in_owner = true
-layout_mode = 2
-tooltip_text = "Accept the license of every plugin that is enabled or updated in this project without showing it.
-Stored in the project settings as eplugin/licenses/auto_accept, so it applies to everyone working on the project."
-text = "Accept plugin licenses automatically"
-
-[node name="AutoAcceptWarning" type="Label" parent="Content/LicenseRow"]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-size_flags_horizontal = 3
-mouse_filter = 1
-tooltip_text = "Turn this off to review each license before its plugin is enabled or updated."
-text = "Risky: licenses are accepted without anyone reading them."
-text_overrun_behavior = 3
-
 [node name="Note" type="Label" parent="Content"]
 layout_mode = 2
 text = "Selected addons will be replaced. Open scenes are saved first.
@@ -218,17 +201,6 @@ title = "Change plugin version"
 initial_position = 2
 size = Vector2i(520, 200)
 ok_button_text = "Install"
-dialog_autowrap = true
-
-[node name="AutoAcceptConfirm" type="ConfirmationDialog" parent="."]
-unique_name_in_owner = true
-title = "Accept licenses automatically"
-initial_position = 2
-size = Vector2i(560, 240)
-ok_button_text = "Accept automatically"
-dialog_text = "Plugins that ask you to accept their license are then enabled and updated without showing it.
-
-This is risky: you agree to terms nobody has read, which may for example restrict commercial use, require attribution or forbid redistribution. The setting is stored in project.godot (eplugin/licenses/auto_accept) and applies to everyone working on this project."
 dialog_autowrap = true
 
 [node name="LocalSourcesDialog" parent="." instance=ExtResource("3_local")]

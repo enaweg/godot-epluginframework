@@ -223,7 +223,7 @@ still inside its `_EnablePlugin`), the review is queued, and `EPluginPlugin._Pro
 later; accepting re-enables it. `ReviewEnabledLicenses` (end of `Initialize`) asks about enabled plugins whose license
 source is not accepted, e.g. a recipe license an update changed; declining disables them. The ePlugin Manager asks
 before `SetPluginEnabled` and before installing staged updates (skipping recipe-licensed plugins), and its details link
-the license to `LicenseDialog.CreateViewer`. `eplugin/licenses/auto_accept` (manager checkbox, confirmed, logged)
+the license to `LicenseDialog.CreateViewer`. The `eplugin/licenses/auto_accept` project setting (no manager UI, logged)
 skips the dialog.
 
 ### Logging
