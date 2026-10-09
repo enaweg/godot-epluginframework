@@ -22,6 +22,8 @@ internal sealed partial class EGlobal
     internal LocalPackageIndex LocalIndex { get; private set; } = LocalPackageIndex.Empty;
     internal bool IsIndexingLocalSources => _indexing is not null;
     internal IReadOnlyList<string> LocalDirectories => _localSources?.Directories ?? [];
+    /// <summary>Why the list of local plugin directories cannot be changed; null when it can.</summary>
+    internal string? LocalDirectoriesProblem => _localSources?.Problem;
     /// <summary>Raised on the editor thread when indexing starts or a new index is in place.</summary>
     internal event Action? LocalIndexChanged;
 
@@ -31,21 +33,32 @@ internal sealed partial class EGlobal
         var config = EditorInterface.Singleton.GetEditorPaths().GetConfigDir();
         _localSources = new LocalSourceSettings(Path.Combine(config, "eplugin", "local-sources.json"));
         _localSources.Load();
+        if (_localSources.Problem is { } problem) _ePluginContext?.Logger.Warn($"Local plugin directories: {problem}");
     }
 
     /// <summary>Adds a directory to the user's list and indexes again; false when it is already listed.</summary>
-    internal bool AddLocalDirectory(string directory)
-    {
-        if (_localSources is null || !_localSources.Add(directory)) return false;
-        _ = RebuildLocalIndexAsync();
-        return true;
-    }
+    /// <exception cref="InvalidOperationException">The list is read-only, see <see cref="LocalDirectoriesProblem"/>.</exception>
+    internal bool AddLocalDirectory(string directory) => ChangeLocalDirectories(settings => settings.Add(directory));
 
-    internal bool RemoveLocalDirectory(string directory)
+    /// <inheritdoc cref="AddLocalDirectory"/>
+    internal bool RemoveLocalDirectory(string directory) => ChangeLocalDirectories(settings => settings.Remove(directory));
+
+    /// <summary>
+    /// Reads the list again, as another open editor may have changed it, and indexes again when it differs from the
+    /// one indexed.
+    /// </summary>
+    internal void ReloadLocalDirectories() => ChangeLocalDirectories(settings => { settings.Load(); return false; });
+
+    private bool ChangeLocalDirectories(Func<LocalSourceSettings, bool> change)
     {
-        if (_localSources is null || !_localSources.Remove(directory)) return false;
-        _ = RebuildLocalIndexAsync();
-        return true;
+        if (_localSources is null) return false;
+        var before = _localSources.Directories.ToArray();
+        try { return change(_localSources); }
+        finally
+        {
+            // Reading the file before a change also picks up what other editors changed.
+            if (!before.SequenceEqual(_localSources.Directories, PackageFiles.PathComparer)) _ = RebuildLocalIndexAsync();
+        }
     }
 
     /// <summary>

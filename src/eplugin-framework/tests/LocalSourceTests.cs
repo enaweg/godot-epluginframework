@@ -171,6 +171,37 @@ public class LocalSourceTests
         Assertions.AssertInt(reloaded.Directories.Count).IsEqual(0);
     }
 
+    [TestCase]
+    public void SettingsChangedByAnotherEditorAreKeptAndUnreadableFilesAreNeverOverwritten()
+    {
+        var file = Path.Combine(_root, "config", "local-sources.json");
+        var first = new LocalSourceSettings(file); first.Load();
+        var second = new LocalSourceSettings(file); second.Load();
+        var one = Path.Combine(_root, "one"); var two = Path.Combine(_root, "two");
+        Assertions.AssertBool(first.Add(one)).IsTrue();
+        // The second editor still holds the list it loaded before; its change must not drop the first one's.
+        Assertions.AssertBool(second.Add(two)).IsTrue();
+        Assertions.AssertArray(second.Directories.ToArray()).IsEqual(new[] { one, two });
+        Assertions.AssertBool(first.Remove(two)).IsTrue();
+        Assertions.AssertArray(first.Directories.ToArray()).IsEqual(new[] { one });
+
+        foreach (var content in new[] { "broken json", "{\"schema\": 2, \"directories\": []}" })
+        {
+            File.WriteAllText(file, content);
+            first.Load();
+            Assertions.AssertString(first.Problem).IsNotNull();
+            var refused = false;
+            try { first.Add(two); }
+            catch (InvalidOperationException) { refused = true; }
+            Assertions.AssertBool(refused).IsTrue();
+            Assertions.AssertString(File.ReadAllText(file)).IsEqual(content);
+        }
+        File.Delete(file);
+        first.Load();
+        Assertions.AssertString(first.Problem).IsNull();
+        Assertions.AssertBool(first.Add(two)).IsTrue();
+    }
+
     private static PluginUpdateTarget Target(string slug = "plugin", string name = "Plugin") => new(slug, name, "1.0.0", null, "/unused");
     private static LocalPackage Package(string zip, string root, string? slug, string version, string name = "Plugin") =>
         new(zip, root, slug, name, version, DateTime.UtcNow);
