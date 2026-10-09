@@ -27,9 +27,18 @@ internal sealed partial class EGlobal
         return snapshot;
     }
 
+    /// <summary>
+    /// What the project already rules out for these updates before anything is downloaded: an installed GDExtension, or
+    /// an enabled plugin's version constraint on an updated plugin.
+    /// </summary>
     internal IReadOnlyList<Finding> UpdatePreflightFindings(IReadOnlyList<UpdateCandidate> candidates)
     {
         var findings = new List<Finding>();
+        foreach (var candidate in candidates)
+        {
+            var directory = ProjectSettings.GlobalizePath($"res://addons/{candidate.Slug}");
+            if (Directory.Exists(directory) && AddonPackageValidator.NativeExtension(PackageFiles.Files(directory)) is { } native) findings.Add(native);
+        }
         var updated = candidates.ToDictionary(c => c.Slug, StringComparer.Ordinal);
         foreach (var context in _contexts.Where(c => c.Plugin is not null && c.State == EEditorPluginState.Activated))
         {

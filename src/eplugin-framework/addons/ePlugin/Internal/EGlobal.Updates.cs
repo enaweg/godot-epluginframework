@@ -84,7 +84,8 @@ internal sealed partial class EGlobal
             var enabled = ProjectSettings.GetSetting("eplugin/updates/check_enabled", true).AsBool();
             var interval = ProjectSettings.GetSetting("eplugin/updates/check_interval_hours", 20).AsDouble();
             _localUpdates = UpdateService.CheckLocal(targets, LocalIndex, new(allow));
-            if (!force && !enabled) return new([], [], LastUpdateCheck ?? DateTimeOffset.UtcNow);
+            // Scheduled checks are off: nothing is fetched or logged, but the known updates stay what callers see.
+            if (!force && !enabled) return new(PendingUpdates, [], LastUpdateCheck ?? DateTimeOffset.UtcNow);
             if (!force && !UpdateScheduler.ShouldCheck(DateTimeOffset.UtcNow, LastUpdateCheck, enabled, interval))
             {
                 _remoteUpdates = UpdateScheduler.CurrentCached(_updateCache.State, targets, allow);
@@ -106,15 +107,16 @@ internal sealed partial class EGlobal
         finally { _checkingUpdates = false; }
     }
 
-    /// <summary>All published versions of an enabled plugin, from its update_url and the local plugin directories, newest first.</summary>
-    internal async Task<IReadOnlyList<UpdateCandidate>> ListVersionsAsync(string slug, CancellationToken ct)
+    /// <summary>The versions of an enabled plugin in the local plugin directories, newest first. Never touches the disk.</summary>
+    internal IReadOnlyList<UpdateCandidate> ListLocalVersions(PluginUpdateTarget target) =>
+        LocalDirectorySource.Versions(LocalIndex, target, new(AllowPrerelease));
+
+    /// <summary>All versions published at an enabled plugin's update_url, newest first.</summary>
+    internal async Task<IReadOnlyList<UpdateCandidate>> ListRemoteVersionsAsync(PluginUpdateTarget target, CancellationToken ct)
     {
         var service = _updateService ?? throw new InvalidOperationException("Update system is not initialized.");
-        var target = CollectUpdateTargets().FirstOrDefault(t => t.Slug == slug)
-            ?? throw new InvalidOperationException("Enable the plugin to change its version.");
         var allow = AllowPrerelease;
-        var local = LocalIndex;
-        return await Task.Run(() => service.ListVersionsAsync(target, new(allow), ct, local), ct);
+        return await Task.Run(() => service.ListVersionsAsync(target, new(allow), ct), ct);
     }
 
     internal static Task OnEditorThread(Action action, CancellationToken ct)
@@ -141,7 +143,7 @@ internal sealed partial class EGlobal
         _ePluginContext?.Logger.Log($"Plugin updates available ({result.Updates.Count}):");
         foreach (var update in result.Updates)
         {
-            _ePluginContext?.Logger.Log($"  {update.Slug} {update.InstalledVersion} -> {update.NewVersion}  {update.ReleaseUrl ?? update.SourceUrl}");
+            _ePluginContext?.Logger.Log($"  {update.Slug} {update.InstalledVersion} -> {update.NewVersion}  {update.ReleaseUrl ?? update.Origin}");
             if (_updateCache?.State.FailedUpdates.GetValueOrDefault(update.Slug)?.Any(f => f.Version == update.NewVersion) == true)
                 _ePluginContext?.Logger.Warn($"  {update.Slug} {update.NewVersion} failed previously; repair the cause before retrying.");
         }

@@ -36,14 +36,14 @@ internal sealed class PackageFetcher(UpdateHttp http, IGitRunner git)
                 else if (candidate.Package is LocalZipPackageRef local)
                 {
                     // Read in place: the archive is only opened, never changed, and staging validates it like a download.
-                    if (local.Path != candidate.SourceUrl || !Path.IsPathFullyQualified(local.Path) || !local.Path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                    if (candidate.SourceUrl is not null || !Path.IsPathFullyQualified(local.Path) || !local.Path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
                         throw new InvalidDataException("Local package does not match its declared source.");
                     if (!File.Exists(local.Path)) throw new FileNotFoundException($"Local package '{local.Path}' no longer exists; check for updates again.");
-                    SafeZipExtractor.Extract(local.Path, candidate.Slug, stage, ct);
+                    SafeZipExtractor.Extract(local.Path, candidate.Slug, stage, ct, requireSlugFolder: true);
                 }
                 else if (candidate.Package is GitPackageRef package)
                 {
-                    if (!GitUrl.TryParse(candidate.SourceUrl, out var url) || url!.Repository != package.Repository || url.Path != package.Path)
+                    if (candidate.SourceUrl is null || !GitUrl.TryParse(candidate.SourceUrl, out var url) || url!.Repository != package.Repository || url.Path != package.Path)
                         throw new InvalidDataException("Git package does not match its declared source.");
                     await new GitSource(http, git, url).FetchAsync(package, stage, ct).ConfigureAwait(false);
                 }

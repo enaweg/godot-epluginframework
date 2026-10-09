@@ -10,16 +10,20 @@ namespace Enaweg.Plugin.Internal.Update;
 
 internal static class SafeZipExtractor
 {
-    public static void Extract(string archivePath, string slug, string destination, CancellationToken ct)
+    /// <summary>Extracts the plugin root of the archive (see <see cref="PluginRoot"/>) into <paramref name="destination"/>.</summary>
+    /// <param name="requireSlugFolder">
+    /// The root folder must be named like the slug. Downloads may also have the plugin at the archive root or in one
+    /// wrapper folder, such as a repository archive, because their update_url already identifies the plugin.
+    /// </param>
+    public static void Extract(string archivePath, string slug, string destination, CancellationToken ct, bool requireSlugFolder = false)
     {
         PackageFiles.Normalize(slug);
         if (slug.Contains('/')) throw new InvalidDataException("Invalid addon slug.");
         using var archive = ZipFile.OpenRead(archivePath);
         var entries = Inspect(archive);
-        var roots = AddonRoots(entries.Select(e => e.Path)).Where(r => r.Slug == slug).Select(r => r.Root).ToArray();
-        if (roots.Length == 0) roots = LooseRoots(entries.Select(e => e.Path));
-        if (roots.Length != 1) throw new InvalidDataException(roots.Length == 0 ? $"No plugin.cfg for '{slug}' found in package." : "Ambiguous package: " + string.Join(", ", roots));
-        var root = roots[0];
+        var root = PluginRoot(entries.Select(e => e.Path));
+        if (RootSlug(root) != slug && (requireSlugFolder || root.Count(c => c == '/') > 1))
+            throw new InvalidDataException($"The plugin root '{(root.Length == 0 ? "/" : root)}' of the package is not a folder named '{slug}'.");
         if (entries.Any(e => e.Path.StartsWith(root, StringComparison.Ordinal) && e.Path.Split('/').Last().Equals(".gitmodules", StringComparison.OrdinalIgnoreCase)))
             throw new InvalidDataException("Packages cannot contain .gitmodules.");
         Directory.CreateDirectory(destination);
@@ -67,14 +71,26 @@ internal static class SafeZipExtractor
         return entries;
     }
 
-    /// <summary>Every <c>addons/&lt;slug&gt;/</c> folder holding a plugin.cfg, at any depth, with its slug.</summary>
-    internal static IEnumerable<(string Slug, string Root)> AddonRoots(IEnumerable<string> paths) =>
-        paths.Select(p => p.Split('/')).Where(parts => parts.Length >= 3 && parts[^1] == "plugin.cfg" && parts[^3] == "addons")
-            .Select(parts => (parts[^2], string.Join('/', parts[..^1]) + "/"));
+    /// <summary>
+    /// The folder of the package's one root plugin.cfg, the shallowest one ("" at the archive root). plugin.cfg files
+    /// below that folder belong to sub-plugins; any other plugin.cfg makes the package ambiguous and it is refused.
+    /// </summary>
+    internal static string PluginRoot(IEnumerable<string> paths)
+    {
+        var folders = paths.Where(IsPluginConfig).Select(p => p[..^"plugin.cfg".Length]).ToArray();
+        if (folders.Length == 0) throw new InvalidDataException("The package contains no plugin.cfg.");
+        var depth = folders.Min(Depth);
+        var roots = folders.Where(f => Depth(f) == depth).ToArray();
+        if (roots.Length > 1) throw new InvalidDataException("Ambiguous package, it has several plugin roots: " + string.Join(", ", roots));
+        var outside = folders.FirstOrDefault(f => !f.StartsWith(roots[0], StringComparison.Ordinal));
+        if (outside is not null) throw new InvalidDataException($"Ambiguous package, {outside}plugin.cfg is outside the plugin root {roots[0]}.");
+        return roots[0];
+        static int Depth(string folder) => folder.Count(c => c == '/');
+    }
 
-    /// <summary>An addon at the archive root or in one wrapper folder, used when no matching addons/&lt;slug&gt;/ exists.</summary>
-    internal static string[] LooseRoots(IEnumerable<string> paths) =>
-        paths.Where(p => p == "plugin.cfg" || p.EndsWith("/plugin.cfg", StringComparison.Ordinal) && p.Count(c => c == '/') == 1)
-            .Select(p => p[..^"plugin.cfg".Length]).ToArray();
+    /// <summary>The slug a plugin root names: its folder name, or null for a plugin at the archive root.</summary>
+    internal static string? RootSlug(string root) => root.Length == 0 ? null : root.TrimEnd('/').Split('/')[^1];
+
+    internal static bool IsPluginConfig(string path) => path == "plugin.cfg" || path.EndsWith("/plugin.cfg", StringComparison.Ordinal);
 }
 #endif

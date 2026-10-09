@@ -33,6 +33,28 @@ public class UpdatePackageTests
     }
 
     [TestCase]
+    public void ExtractionTakesTheOneRootPluginWithItsSubPlugins()
+    {
+        bool Extracts(string zip, bool requireSlugFolder = false) =>
+            !Refused(() => SafeZipExtractor.Extract(zip, "plugin", Path.Combine(_root, Guid.NewGuid().ToString("N")), CancellationToken.None, requireSlugFolder));
+        var withSub = Zip(("repo/addons/plugin/plugin.cfg", Config("2.0.0")), ("repo/addons/plugin/sub/plugin.cfg", Config("1.0.0")));
+        var stage = Path.Combine(_root, "plugin");
+        SafeZipExtractor.Extract(withSub, "plugin", stage, CancellationToken.None, requireSlugFolder: true);
+        Assertions.AssertBool(File.Exists(Path.Combine(stage, "sub", "plugin.cfg"))).IsTrue();
+
+        // Another plugin next to the root, or anywhere outside it, makes the package ambiguous.
+        Assertions.AssertBool(Extracts(Zip(("addons/plugin/plugin.cfg", Config("2.0.0")), ("addons/other/plugin.cfg", Config("2.0.0"))))).IsFalse();
+        Assertions.AssertBool(Extracts(Zip(("addons/plugin/plugin.cfg", Config("2.0.0")), ("tests/addons/gdUnit4/plugin.cfg", Config("2.0.0"))))).IsFalse();
+        Assertions.AssertBool(Extracts(Zip(("repo/addons/other/plugin.cfg", Config("2.0.0"))))).IsFalse();
+        // A download may wrap the plugin in one folder of any name or have it at the archive root; a local package may not.
+        foreach (var loose in new[] { Zip(("plugin-2.0/plugin.cfg", Config("2.0.0"))), Zip(("plugin.cfg", Config("2.0.0"))) })
+        {
+            Assertions.AssertBool(Extracts(loose)).IsTrue();
+            Assertions.AssertBool(Extracts(loose, requireSlugFolder: true)).IsFalse();
+        }
+    }
+
+    [TestCase]
     public void SymlinksAndGitFilesAreSkippedButGitmodulesRefused()
     {
         var zip = Zip(("plugin.cfg", Config("2.0.0")), (".git/config", "bad"), ("link", "../outside"));
@@ -100,7 +122,7 @@ public class UpdatePackageTests
         File.WriteAllText(Path.Combine(stage, "plugin.gd"), "extends EditorPlugin");
         File.WriteAllText(Path.Combine(stage, "new.csproj"), "<Project />");
         var target = new PluginUpdateTarget("plugin", "Plugin", "1.0.0", "https://example.org/releases", installed);
-        var candidate = new UpdateCandidate("plugin", "Plugin", "1.0.0", "2.0.0", target.UpdateUrl!, null, null, new ZipPackageRef("https://example.org/plugin.zip", "plugin"));
+        var candidate = new UpdateCandidate("plugin", "Plugin", "1.0.0", "2.0.0", target.UpdateUrl, null, null, new ZipPackageRef("https://example.org/plugin.zip", "plugin"));
         var findings = new AddonPackageValidator().Validate(new(target, candidate, stage)).Findings;
         Assertions.AssertBool(findings.Any(f => f.Code == "R9" && f.RequiresTrust)).IsTrue();
         Assertions.AssertBool(findings.Any(f => f.Code == "R11" && f.Severity == FindingSeverity.Error)).IsTrue();
@@ -128,7 +150,7 @@ public class UpdatePackageTests
         Directory.CreateDirectory(installed); Directory.CreateDirectory(stage);
         File.WriteAllText(Path.Combine(installed, "plugin.cfg"), Config("1.0.0"));
         var target = new PluginUpdateTarget("plugin", "Plugin", "1.0.0", "https://example.org/releases", installed);
-        var candidate = new UpdateCandidate("plugin", "Plugin", "1.0.0", "2.0.0", target.UpdateUrl!, null, null, new ZipPackageRef("https://example.org/plugin.zip", "plugin"));
+        var candidate = new UpdateCandidate("plugin", "Plugin", "1.0.0", "2.0.0", target.UpdateUrl, null, null, new ZipPackageRef("https://example.org/plugin.zip", "plugin"));
         var validator = new AddonPackageValidator();
         var empty = validator.Validate(new(target, candidate, stage));
         foreach (var rule in new[] { "R1", "R2", "R3" }) Assertions.AssertBool(empty.Findings.Any(f => f.Code == rule && f.Severity == FindingSeverity.Error)).IsTrue();
@@ -144,7 +166,7 @@ public class UpdatePackageTests
         File.WriteAllText(Path.Combine(stage, "plugin.cfg"), Config("3.0.0").Replace("Plugin", "Renamed").Replace("plugin.gd", "plugin.cs"));
         File.WriteAllText(Path.Combine(stage, "plugin.cs"), "C# script");
         var target = new PluginUpdateTarget("plugin", "Plugin", "1.0.0", "https://example.org/releases", installed, StoreReadOnly: true);
-        var candidate = new UpdateCandidate("plugin", "Plugin", "1.0.0", "2.0.0", target.UpdateUrl!, null, null, new ZipPackageRef("https://example.org/plugin.zip", "plugin"));
+        var candidate = new UpdateCandidate("plugin", "Plugin", "1.0.0", "2.0.0", target.UpdateUrl, null, null, new ZipPackageRef("https://example.org/plugin.zip", "plugin"));
         var result = new AddonPackageValidator().Validate(new(target, candidate, stage));
         foreach (var rule in new[] { "R7", "R8", "R13", "R14" }) Assertions.AssertBool(result.Findings.Any(f => f.Code == rule && f.Severity == FindingSeverity.Warning)).IsTrue();
         Assertions.AssertBool(result.Findings.Any(f => f.Code == "R17" && f.Severity == FindingSeverity.Error)).IsTrue();
@@ -160,7 +182,7 @@ public class UpdatePackageTests
         File.WriteAllText(Path.Combine(stage, "plugin.cfg"), Config("2.0.0")); File.WriteAllText(Path.Combine(stage, "plugin.gd"), "script");
         File.WriteAllText(Path.Combine(stage, "Existing.csproj"), "updated project");
         var target = new PluginUpdateTarget("plugin", "Plugin", "1.0.0", "https://example.org/releases", installed);
-        var candidate = new UpdateCandidate("plugin", "Plugin", "1.0.0", "2.0.0", target.UpdateUrl!, null, null, new ZipPackageRef("https://example.org/plugin.zip", "plugin"));
+        var candidate = new UpdateCandidate("plugin", "Plugin", "1.0.0", "2.0.0", target.UpdateUrl, null, null, new ZipPackageRef("https://example.org/plugin.zip", "plugin"));
         var validator = new AddonPackageValidator();
         Assertions.AssertBool(validator.Validate(new(target, candidate, stage)).Findings.Any(f => f.Code == "R11")).IsFalse();
         foreach (var name in new[] { "project.godot", "nuget.config", "New.csproj", "New.sln", "New.slnx", ".gitmodules" })

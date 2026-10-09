@@ -46,7 +46,7 @@ internal sealed class GitHubReleaseSource(UpdateHttp http, string owner, string 
         SemVer.TryParse(tag, out var version);
         var assets = ReleaseAssets.Array(release, "assets").Select(a => (ReleaseAssets.String(a, "name") ?? "", ReleaseAssets.String(a, "browser_download_url") ?? "")).Where(a => a.Item2.Length > 0);
         var download = ReleaseAssets.Select(assets, target.Slug) ?? $"{root}/archive/refs/tags/{Uri.EscapeDataString(tag)}.zip";
-        return new(target.Slug, target.Name, target.InstalledVersion, version.ToString(), target.UpdateUrl!,
+        return new(target.Slug, target.Name, target.InstalledVersion, version.ToString(), target.UpdateUrl,
             ReleaseAssets.String(release, "html_url") ?? $"{root}/releases/tag/{Uri.EscapeDataString(tag)}", tag, new ZipPackageRef(download, target.Slug));
     }
     public async Task<UpdateCandidate?> CheckAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct)
@@ -71,7 +71,7 @@ internal sealed class GitHubReleaseSource(UpdateHttp http, string owner, string 
             if (final.Host != "github.com" || marker < 0 || !SemVer.TryParse(Uri.UnescapeDataString(path[(marker + 14)..]), out var version) ||
                 !options.AllowPrerelease && version.Prerelease is not null) throw;
             var tag = Uri.UnescapeDataString(path[(marker + 14)..]);
-            return new(target.Slug, target.Name, target.InstalledVersion, version.ToString(), target.UpdateUrl!, final.ToString(), tag,
+            return new(target.Slug, target.Name, target.InstalledVersion, version.ToString(), target.UpdateUrl, final.ToString(), tag,
                 new ZipPackageRef($"{root}/archive/refs/tags/{Uri.EscapeDataString(tag)}.zip", target.Slug));
         }
     }
@@ -112,7 +112,7 @@ internal sealed class GitLabReleaseSource(UpdateHttp http, string host, string p
             ?? ReleaseAssets.Array(assets, "sources").Where(a => ReleaseAssets.String(a, "format") == "zip").Select(a => ReleaseAssets.String(a, "url")).FirstOrDefault();
         if (download is null) throw new IOException("Release has no ZIP package.");
         var link = release.TryGetProperty("_links", out var links) ? ReleaseAssets.String(links, "self") : null;
-        return new(target.Slug, target.Name, target.InstalledVersion, version.ToString(), target.UpdateUrl!,
+        return new(target.Slug, target.Name, target.InstalledVersion, version.ToString(), target.UpdateUrl,
             link ?? $"https://{host}/{project}/-/releases/{Uri.EscapeDataString(tag)}", tag, new ZipPackageRef(download, target.Slug));
     }
 }

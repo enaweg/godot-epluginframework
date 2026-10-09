@@ -24,7 +24,10 @@ internal sealed class PluginRow(PluginInfo plugin, UpdateRow? update)
     public bool HasUpdate => Update is not null;
     public bool CanToggle => !Plugin.Missing;
 }
-internal sealed record VersionOption(string Version, UpdateCandidate? Candidate, bool Installed, bool IsDowngrade);
+internal sealed record VersionOption(string Version, UpdateCandidate? Candidate, bool Installed, bool IsDowngrade)
+{
+    public bool IsLocal => Candidate?.Package is LocalZipPackageRef;
+}
 internal sealed class PluginManagerViewModel
 {
     public List<PluginRow> Plugins { get; } = [];
@@ -45,7 +48,7 @@ internal sealed class PluginManagerViewModel
             if (target is null) messages.Add(new("disabled", FindingSeverity.Error, "Plugin is no longer enabled."));
             else
             {
-                if (candidate.Package is not LocalZipPackageRef && target.UpdateUrl != candidate.SourceUrl)
+                if (candidate.SourceUrl is not null && target.UpdateUrl != candidate.SourceUrl)
                     messages.Add(new("source_changed", FindingSeverity.Error, "The plugin's update_url changed or was removed; check for updates again."));
                 if (target.IsBlocked || target.StoreReadOnly) messages.Add(new("R17", FindingSeverity.Error, "Resolve local state with Retry failed first."));
                 if (target.RecordedVersion is not null && target.RecordedVersion != target.InstalledVersion)
@@ -72,6 +75,11 @@ internal sealed class PluginManagerViewModel
     }
     public PluginRow? Find(string slug) => Plugins.FirstOrDefault(p => p.Plugin.Slug == slug);
 
+    /// <summary>The update state shown on the update icon of an updatable plugin; null for a plugin that is not.</summary>
+    public static string? UpdateState(PluginRow row) =>
+        row.Update is { } update ? $"Update available: {update.Candidate.InstalledVersion} → {update.Candidate.NewVersion}"
+        : row.IsUpdatable ? "Updatable, no update known" : null;
+
     /// <summary>The published versions plus the installed one, newest first.</summary>
     public static IReadOnlyList<VersionOption> VersionOptions(string installedVersion, IReadOnlyList<UpdateCandidate> versions)
     {
@@ -85,6 +93,24 @@ internal sealed class PluginManagerViewModel
         if (!options.Any(o => o.Installed)) options.Add(new(installedVersion, null, true, false));
         return options.OrderByDescending(o => SemVer.TryParse(o.Version, out var v) ? v : default).ToArray();
     }
+
+    /// <summary>The text of a version in the version choice, e.g. "2.1.0 (latest, local)".</summary>
+    public static string VersionLabel(VersionOption option, bool latest)
+    {
+        var notes = new List<string>();
+        if (option.Installed) notes.Add("installed");
+        else if (latest) notes.Add("latest");
+        if (option.IsLocal) notes.Add("local");
+        return notes.Count == 0 ? option.Version : $"{option.Version} ({string.Join(", ", notes)})";
+    }
+
+    /// <summary>Where a listed version would be installed from.</summary>
+    public static string? VersionSource(VersionOption option) => option.Candidate switch
+    {
+        { Package: LocalZipPackageRef local } => "Local package: " + local.Path,
+        { SourceUrl: { } url } => "From the update site " + url,
+        _ => null
+    };
 
     /// <summary>Why the selected version cannot be installed, or null when it can.</summary>
     public static string? VersionChangeBlocked(PluginRow row, VersionOption option)

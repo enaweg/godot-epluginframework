@@ -2,9 +2,10 @@
 using System;
 using System.IO;
 using System.Linq;
+using Enaweg.Plugin.Internal.Update;
 using Godot;
 
-namespace Enaweg.Plugin.Internal.Update.UI;
+namespace Enaweg.Plugin.Internal.Manager;
 
 [Tool]
 internal sealed partial class UpdateFailureDialog : AcceptDialog

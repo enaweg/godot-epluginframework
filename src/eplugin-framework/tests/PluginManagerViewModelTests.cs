@@ -56,10 +56,25 @@ public class PluginManagerViewModelTests
         var beta = model.Find("beta")!;
         Assertions.AssertBool(beta.HasUpdate && beta.IsUpdatable && beta.IsEPlugin).IsTrue();
         Assertions.AssertBool(model.Find("gamma")!.IsUpdatable || model.Find("gamma")!.IsEPlugin).IsFalse();
+        Assertions.AssertString(PluginManagerViewModel.UpdateState(beta)).IsEqual("Update available: 1.0.0 → 2.0.0");
+        Assertions.AssertString(PluginManagerViewModel.UpdateState(model.Find("gamma")!)).IsNull();
         Assertions.AssertBool(model.Find("orphan")!.Plugin.Missing).IsTrue();
         Assertions.AssertBool(model.Find("orphan")!.CanToggle).IsFalse();
         Assertions.AssertBool(model.Find("gamma")!.CanToggle && model.Find("ePlugin")!.CanToggle).IsTrue();
         Assertions.AssertBool(model.CanRetry).IsFalse();
+    }
+    [TestCase]
+    public void LocalPackagesShowTheirFileAndNeverAnUpdateSite()
+    {
+        var local = Candidate("local") with { SourceUrl = null, Package = new LocalZipPackageRef("/packages/local.zip") };
+        var model = new PluginManagerViewModel([Plugin("local", PluginKind.GDScript, "https://example.org/releases")], [local, local with { Slug = "gone" }],
+            [new("local", "local", "1.0.0", "https://example.org/releases", "/unused")], null, _ => []);
+        // A local package is not tied to the update_url, so a differing one is no source change.
+        Assertions.AssertBool(model.Find("local")!.Update!.HasError).IsFalse();
+        var details = PluginManagerViewModel.Describe(model.Find("local")!);
+        Assertions.AssertString(details).Contains("[b]Local package:[/b] /packages/local.zip");
+        Assertions.AssertObject(model.Find("gone")!.Plugin.UpdateUrl).IsNull();
+        Assertions.AssertString(PluginManagerViewModel.Describe(model.Find("gone")!)).NotContains("Update site");
     }
     [TestCase]
     public void FailedAttemptEnablesRetryAndIsShownInStatus()
@@ -121,6 +136,17 @@ public class PluginManagerViewModelTests
         Assertions.AssertObject(PluginManagerViewModel.VersionChangeBlocked(framework, options[0])).IsNull();
         var disabled = new PluginRow(Plugin("gamma", PluginKind.EPlugin, "https://example.org/releases", enabled: false), null);
         Assertions.AssertString(PluginManagerViewModel.VersionChangeBlocked(disabled, options[0])).Contains("Enable");
+    }
+    [TestCase]
+    public void VersionLabelsMarkLatestInstalledAndLocalVersions()
+    {
+        var local = Version("2.1.0") with { SourceUrl = null, Package = new LocalZipPackageRef("/packages/beta.zip") };
+        var options = PluginManagerViewModel.VersionOptions("1.5.0", [local, Version("2.0.0"), Version("1.5.0")]);
+        Assertions.AssertString(PluginManagerViewModel.VersionLabel(options[0], latest: true)).IsEqual("2.1.0 (latest, local)");
+        Assertions.AssertString(PluginManagerViewModel.VersionLabel(options[1], latest: false)).IsEqual("2.0.0");
+        Assertions.AssertString(PluginManagerViewModel.VersionLabel(options[2], latest: false)).IsEqual("1.5.0 (installed)");
+        Assertions.AssertString(PluginManagerViewModel.VersionSource(options[0])).IsEqual("Local package: /packages/beta.zip");
+        Assertions.AssertString(PluginManagerViewModel.VersionSource(options[1])).Contains("https://example.org/releases");
     }
     private static UpdateCandidate Version(string version) => Candidate("beta") with { InstalledVersion = "1.5.0", NewVersion = version };
     private static PluginInfo Plugin(string slug, PluginKind kind, string? updateUrl = null, bool enabled = true) =>

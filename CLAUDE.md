@@ -160,9 +160,12 @@ provide the Godot integration. HTTP/git work runs off the editor thread; lifecyc
 
 Local plugin directories (`LocalSourceSettings`, per-user JSON in the editor config folder, never in the project)
 are a second source next to `update_url`: `LocalPackageIndexer` reads only the central directory and `plugin.cfg`
-of every ZIP below them, mirroring `SafeZipExtractor`'s root selection so it never lists what staging would refuse.
-The index is in memory only, rebuilt on every start by `EGlobal.LocalSources.cs` before the startup check, and never
-cached; missing directories are skipped but kept in the list. `PendingUpdates` merges remote and local candidates.
+of every ZIP below them, using `SafeZipExtractor.PluginRoot` (one root `plugin.cfg`, sub-plugins below it, anything
+else ambiguous) so it never lists what staging would refuse; the root folder's name is the slug it matches.
+The index is rebuilt on every start and assembly reload by `EGlobal.LocalSources.cs` before the startup check;
+`LocalIndexCache` (per-user `local-index.json`, keyed by path/size/mtime) keeps unchanged ZIPs from being opened again
+and must be bumped via `IndexerVersion` whenever `LocalPackageIndexer.Read` changes what it extracts. Missing
+directories are skipped but kept in the list. `PendingUpdates` merges remote and local candidates.
 Checks use installed metadata and a 20-hour local cache, never the shared working-version index. Every apply
 requires dialog confirmation. Stage and validate the whole batch before touching addons, then save and close all
 open scenes (`IUpdateHost.CloseScenes`; `close_scene` exists only from Godot 4.5) before the swap. Managed plugins are

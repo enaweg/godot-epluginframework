@@ -53,9 +53,8 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
     /// </summary>
     public static IReadOnlyList<UpdateCandidate> CheckLocal(IReadOnlyList<PluginUpdateTarget> targets, LocalPackageIndex index, UpdateCheckOptions options)
     {
-        var source = new LocalDirectorySource(index);
         return targets.Select(target => SemVer.TryParse(target.InstalledVersion, out var installed) &&
-                source.Versions(target, options).FirstOrDefault() is { } candidate && SemVer.TryParse(candidate.NewVersion, out var local) &&
+                LocalDirectorySource.Versions(index, target, options).FirstOrDefault() is { } candidate && SemVer.TryParse(candidate.NewVersion, out var local) &&
                 local.CompareTo(installed) > 0 ? candidate : null)
             .OfType<UpdateCandidate>().OrderBy(c => c.Slug, StringComparer.Ordinal).ToArray();
     }
@@ -67,33 +66,27 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
             .OrderBy(c => c.Slug, StringComparer.Ordinal).ToArray();
 
     /// <summary>
-    /// Every published version of one plugin, newest first, so a specific one can be installed: the versions of its
-    /// update_url plus those in the local plugin directories. Unlike checks this does not touch the cache: the list is
-    /// only shown, and installing re-validates the chosen package.
+    /// Every version published at a plugin's update_url, newest first, so a specific one can be installed. Unlike
+    /// checks this does not touch the cache: the list is only shown, and installing re-validates the chosen package.
+    /// Combine it with the local plugin directories' versions using <see cref="MergeVersions"/>.
     /// </summary>
-    public async Task<IReadOnlyList<UpdateCandidate>> ListVersionsAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct,
-        LocalPackageIndex? localIndex = null)
+    public async Task<IReadOnlyList<UpdateCandidate>> ListVersionsAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct)
     {
-        var local = new LocalDirectorySource(localIndex ?? LocalPackageIndex.Empty).Versions(target, options);
-        var source = target.UpdateUrl is null ? null : factory.Create(target.UpdateUrl) as IVersionListSource;
-        if (source is null && local.Count == 0) throw new NotSupportedException("This update source cannot list versions.");
-        IReadOnlyList<UpdateCandidate> remote = [];
-        if (source is not null)
-        {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(TimeSpan.FromSeconds(options.TimeoutSeconds * 2));
-            try { remote = await source.ListAsync(target, options, timeout.Token).WaitAsync(timeout.Token).ConfigureAwait(false); }
-            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-            {
-                if (local.Count == 0) throw new TimeoutException("Request timed out.");
-            }
-            // Offline, the local plugin directories still offer their versions.
-            catch (Exception ex) when (ex is not OperationCanceledException && local.Count > 0) { }
-        }
-        // Sorting is stable and local packages come first, so they win over a download of the same version.
-        return local.Concat(remote).Where(c => SemVer.TryParse(c.NewVersion, out _))
-            .OrderByDescending(c => { SemVer.TryParse(c.NewVersion, out var v); return v; })
-            .DistinctBy(c => { SemVer.TryParse(c.NewVersion, out var v); return v.ToString(); }).ToArray();
+        if (target.UpdateUrl is null || factory.Create(target.UpdateUrl) is not IVersionListSource source)
+            throw new NotSupportedException("This update source cannot list versions.");
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(options.TimeoutSeconds * 2));
+        try { return MergeVersions([], await source.ListAsync(target, options, timeout.Token).WaitAsync(timeout.Token).ConfigureAwait(false)); }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { throw new TimeoutException("Request timed out."); }
     }
+
+    /// <summary>One candidate per version, newest first; a local package wins over a download of the same version.</summary>
+    public static IReadOnlyList<UpdateCandidate> MergeVersions(IEnumerable<UpdateCandidate> local, IEnumerable<UpdateCandidate> remote) =>
+        local.Concat(remote)
+            .Select(c => (Candidate: c, Valid: SemVer.TryParse(c.NewVersion, out var v), Version: v))
+            .Where(c => c.Valid)
+            // Sorting is stable and local packages come first, so they win a tie.
+            .OrderByDescending(c => c.Version).DistinctBy(c => c.Version.ToString())
+            .Select(c => c.Candidate).ToArray();
 }
 #endif
