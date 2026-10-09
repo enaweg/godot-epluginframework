@@ -15,24 +15,46 @@ internal sealed partial class EGlobal
     private UpdateStateStore? _updateCache;
     private UpdateService? _updateService;
     private bool _checkingUpdates;
-    public IReadOnlyList<UpdateCandidate> PendingUpdates { get; private set; } = [];
+    private IReadOnlyList<UpdateCandidate> _remoteUpdates = [];
+    /// <summary>The highest known version per plugin, from its update_url or from the local plugin directories.</summary>
+    public IReadOnlyList<UpdateCandidate> PendingUpdates => UpdateService.Merge(_remoteUpdates, _localUpdates);
     internal DateTimeOffset? LastUpdateCheck => _updateCache?.State.LastCheckUtc;
     internal UpdateCache? UpdateCache => _updateCache?.State;
+    private static bool AllowPrerelease => ProjectSettings.GetSetting("eplugin/updates/allow_prerelease", false).AsBool();
 
     private void InitializeUpdates(EPluginPlugin plugin)
     {
         _updateCache ??= new UpdateStateStore(Path.Combine(ProjectSettings.GlobalizePath("res://.godot/eplugin"), "update-state.json"));
         _updateCache.Load();
         _updateService = new UpdateService(new UpdateSourceFactory(), new SystemClock(), _updateCache);
-        PendingUpdates = UpdateScheduler.CurrentCached(_updateCache.State, CollectUpdateTargets(),
-            ProjectSettings.GetSetting("eplugin/updates/allow_prerelease", false).AsBool());
-        if (_updateJournals?.Read().Any(j => j.IsActive) == true) return;
+        InitializeLocalSources();
+        _remoteUpdates = UpdateScheduler.CurrentCached(_updateCache.State, CollectUpdateTargets(), AllowPrerelease);
+        var check = _updateJournals?.Read().Any(j => j.IsActive) != true;
         var engine = Engine.GetSingleton("Engine");
-        if (engine.HasMeta("eplugin_update_check_ran")) return;
-        engine.SetMeta("eplugin_update_check_ran", true);
-        _ = CheckForUpdatesAsync();
+        if (engine.HasMeta("eplugin_update_check_ran")) check = false;
+        else if (check) engine.SetMeta("eplugin_update_check_ran", true);
+        // The local index is regenerated on every start, also after an assembly reload dropped it.
+        _ = IndexThenCheckAsync(check);
     }
 
+    private async Task IndexThenCheckAsync(bool check)
+    {
+        await RebuildLocalIndexAsync();
+        if (check) await CheckForUpdatesAsync();
+    }
+
+    /// <summary>Re-reads installed versions after an update so neither source keeps offering what is installed now.</summary>
+    private void RefreshPendingUpdates()
+    {
+        var targets = CollectUpdateTargets();
+        if (_updateCache is not null) _remoteUpdates = UpdateScheduler.CurrentCached(_updateCache.State, targets, AllowPrerelease);
+        _localUpdates = UpdateService.CheckLocal(targets, LocalIndex, new(AllowPrerelease));
+    }
+
+    /// <summary>
+    /// Every enabled plugin with a readable plugin.cfg. Plugins without an update_url can still be updated from the
+    /// local plugin directories; remote checks skip them.
+    /// </summary>
     internal IReadOnlyList<PluginUpdateTarget> CollectUpdateTargets()
     {
         RefreshPlainPlugins();
@@ -40,7 +62,7 @@ internal sealed partial class EGlobal
         {
             var directory = $"res://addons/{slug}";
             var metadata = EditorPluginExtensions.ReadMetadata(directory + "/plugin.cfg");
-            return metadata?.UpdateUrl is null ? null : new PluginUpdateTarget(slug, metadata.Name,
+            return metadata is null ? null : new PluginUpdateTarget(slug, metadata.Name,
                 metadata.Version, metadata.UpdateUrl, ProjectSettings.GlobalizePath(directory),
                 _stateStore?.IsBlocked(slug) == true, _stateStore?.IsReadOnly != false, _stateStore?.GetShared(slug)?.Version);
         }).Where(t => t is not null).Cast<PluginUpdateTarget>().ToArray();
@@ -51,42 +73,48 @@ internal sealed partial class EGlobal
         if (_updateService is null || _updateCache is null || _ePluginContext is null)
             return new([], [], DateTimeOffset.UtcNow);
         if (_checkingUpdates) return new(PendingUpdates, [], LastUpdateCheck ?? DateTimeOffset.UtcNow);
-        var targets = CollectUpdateTargets();
-        var allow = ProjectSettings.GetSetting("eplugin/updates/allow_prerelease", false).AsBool();
-        var enabled = ProjectSettings.GetSetting("eplugin/updates/check_enabled", true).AsBool();
-        var interval = ProjectSettings.GetSetting("eplugin/updates/check_interval_hours", 20).AsDouble();
-        if (!force && !enabled) return new([], [], LastUpdateCheck ?? DateTimeOffset.UtcNow);
-        if (!force && !UpdateScheduler.ShouldCheck(DateTimeOffset.UtcNow, LastUpdateCheck, enabled, interval))
-        {
-            PendingUpdates = UpdateScheduler.CurrentCached(_updateCache.State, targets, allow);
-            PrintUpdates(new(PendingUpdates, [], LastUpdateCheck ?? DateTimeOffset.UtcNow), false);
-            return new(PendingUpdates, [], LastUpdateCheck ?? DateTimeOffset.UtcNow);
-        }
         _checkingUpdates = true;
         var ct = _ePluginContext.UpdateLifetime;
         try
         {
+            // A manual check also finds ZIP files added to the local plugin directories since they were indexed.
+            if (force) await RebuildLocalIndexAsync();
+            var targets = CollectUpdateTargets();
+            var allow = AllowPrerelease;
+            var enabled = ProjectSettings.GetSetting("eplugin/updates/check_enabled", true).AsBool();
+            var interval = ProjectSettings.GetSetting("eplugin/updates/check_interval_hours", 20).AsDouble();
+            _localUpdates = UpdateService.CheckLocal(targets, LocalIndex, new(allow));
+            if (!force && !enabled) return new([], [], LastUpdateCheck ?? DateTimeOffset.UtcNow);
+            if (!force && !UpdateScheduler.ShouldCheck(DateTimeOffset.UtcNow, LastUpdateCheck, enabled, interval))
+            {
+                _remoteUpdates = UpdateScheduler.CurrentCached(_updateCache.State, targets, allow);
+                var cached = new UpdateCheckResult(PendingUpdates, [], LastUpdateCheck ?? DateTimeOffset.UtcNow);
+                PrintUpdates(cached, false);
+                return cached;
+            }
             var service = _updateService;
             var result = await Task.Run(() => service.CheckAsync(targets, new(allow), ct), ct).ConfigureAwait(false);
-            await OnEditorThread(() => { PendingUpdates = result.Updates; PrintUpdates(result, force); _checkingUpdates = false; }, ct).ConfigureAwait(false);
+            await OnEditorThread(() => { _remoteUpdates = result.Updates; result = result with { Updates = PendingUpdates }; PrintUpdates(result, force); }, ct).ConfigureAwait(false);
             return result;
         }
         catch (OperationCanceledException) { return new([], [], DateTimeOffset.UtcNow); }
         catch (Exception ex)
         {
-            await OnEditorThread(() => { _checkingUpdates = false; _ePluginContext?.Logger.Warn($"Update check failed: {ex.Message}"); }, ct).ConfigureAwait(false);
+            await OnEditorThread(() => _ePluginContext?.Logger.Warn($"Update check failed: {ex.Message}"), ct).ConfigureAwait(false);
             return new([], [new("ePlugin", ex.Message)], DateTimeOffset.UtcNow);
         }
+        finally { _checkingUpdates = false; }
     }
 
-    /// <summary>All published versions of an enabled plugin with an update_url, newest first.</summary>
+    /// <summary>All published versions of an enabled plugin, from its update_url and the local plugin directories, newest first.</summary>
     internal async Task<IReadOnlyList<UpdateCandidate>> ListVersionsAsync(string slug, CancellationToken ct)
     {
         var service = _updateService ?? throw new InvalidOperationException("Update system is not initialized.");
         var target = CollectUpdateTargets().FirstOrDefault(t => t.Slug == slug)
             ?? throw new InvalidOperationException("Enable the plugin to change its version.");
-        var allow = ProjectSettings.GetSetting("eplugin/updates/allow_prerelease", false).AsBool();
-        return await Task.Run(() => service.ListVersionsAsync(target, new(allow), ct), ct);
+        var allow = AllowPrerelease;
+        var local = LocalIndex;
+        return await Task.Run(() => service.ListVersionsAsync(target, new(allow), ct, local), ct);
     }
 
     internal static Task OnEditorThread(Action action, CancellationToken ct)

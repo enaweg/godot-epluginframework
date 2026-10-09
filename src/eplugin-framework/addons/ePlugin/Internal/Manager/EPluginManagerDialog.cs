@@ -47,6 +47,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
     private Button _installVersion = null!;
     private Label _versionHint = null!;
     private ConfirmationDialog _versionConfirm = null!;
+    private LocalSourcesDialog _localSources = null!;
     private readonly Dictionary<string, IReadOnlyList<UpdateCandidate>> _versions = [];
     private readonly Dictionary<string, string> _versionErrors = [];
     private readonly HashSet<string> _loadingVersions = [];
@@ -87,6 +88,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         _versionSeparator = GetNode<Control>("%VersionSeparator"); _versionRow = GetNode<Control>("%VersionRow");
         _versionSelect = GetNode<OptionButton>("%VersionSelect"); _installVersion = GetNode<Button>("%InstallVersionButton");
         _versionHint = GetNode<Label>("%VersionHint"); _versionConfirm = GetNode<ConfirmationDialog>("%VersionConfirm");
+        _localSources = GetNode<LocalSourcesDialog>("%LocalSourcesDialog"); _localSources.Initialize(global);
         _locationRow = GetNode<Control>("%LocationRow"); _locationLink = GetNode<LinkButton>("%LocationLink"); _openFolder = GetNode<Button>("%OpenFolderButton");
         if (EditorInterface.Singleton.GetEditorTheme() is { } editorTheme && editorTheme.HasIcon("Folder", "EditorIcons"))
         { _openFolder.Icon = editorTheme.GetIcon("Folder", "EditorIcons"); _openFolder.Text = ""; }
@@ -103,6 +105,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         _tree.SetColumnCustomMinimumWidth(VersionColumn, (int)(150 * scale));
 
         _check.Pressed += CheckNow;
+        GetNode<Button>("%LocalSourcesButton").Pressed += _localSources.Open;
+        _global.LocalIndexChanged += LocalIndexChanged;
         _retry.Pressed += RetryFailed;
         _release.Pressed += OpenRelease;
         _locationLink.Pressed += () => { if (_selectedSlug is not null) EditorInterface.Singleton.SelectFile(PluginDirectory(_selectedSlug)); };
@@ -116,7 +120,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         _tree.ItemSelected += () => ShowDetails(SlugOf(_tree.GetSelected()));
         _tree.ItemActivated += OpenRelease;
         _tree.ButtonClicked += (item, _, _, _) => item.Select(NameColumn);
-        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm })
+        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm, _localSources })
             window.VisibilityChanged += () => { if (window.Visible) Callable.From(() => ApplyWindowIcon(window)).CallDeferred(); };
         _tree.Resized += () => { if (_model is not null) FitNameColumn(); };
         _trust.Toggled += value => { _model.TrustChangedSource = value; Buttons(); };
@@ -201,7 +205,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
         else ShowDetails(null);
         var count = _model.Updates.Count;
         _status.Text = (count == 0 ? "No updates known" : $"{count} update{(count == 1 ? "" : "s")} available") +
-                       " · Last checked: " + (_global.LastUpdateCheck?.ToLocalTime().ToString("g") ?? "never");
+                       " · Last checked: " + (_global.LastUpdateCheck?.ToLocalTime().ToString("g") ?? "never") +
+                       (_global.IsIndexingLocalSources ? " · Indexing local directories..." : "");
         Buttons();
     }
 
@@ -438,6 +443,17 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
     private static bool IsSafeUrl(string? url) =>
         Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == "https" && uri.UserInfo.Length == 0;
 
+    /// <summary>A new local index can add or remove versions and updates, so the lists are read again.</summary>
+    private void LocalIndexChanged()
+    {
+        if (!GodotObject.IsInstanceValid(this) || !IsInsideTree()) return;
+        if (!_global.IsIndexingLocalSources) { _versions.Clear(); _versionErrors.Clear(); }
+        // Never discard a staged batch awaiting review or interrupt work; those refresh when they finish.
+        if (!Visible || _working || _staged is not null) return;
+        if (_global.IsIndexingLocalSources) Render();
+        else Refresh();
+    }
+
     private void RetryFailed()
     {
         if (_working || _staged is not null) return;
@@ -539,6 +555,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog
     public override void _ExitTree()
     {
         _cancel?.Cancel(); _cancel?.Dispose();
+        if (_global is not null) _global.LocalIndexChanged -= LocalIndexChanged;
         if (!_swapping) ClearStaging();
         base._ExitTree();
     }

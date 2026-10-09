@@ -33,6 +33,14 @@ internal sealed class PackageFetcher(UpdateHttp http, IGitRunner git)
                     }
                     finally { if (File.Exists(download)) File.Delete(download); }
                 }
+                else if (candidate.Package is LocalZipPackageRef local)
+                {
+                    // Read in place: the archive is only opened, never changed, and staging validates it like a download.
+                    if (local.Path != candidate.SourceUrl || !Path.IsPathFullyQualified(local.Path) || !local.Path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidDataException("Local package does not match its declared source.");
+                    if (!File.Exists(local.Path)) throw new FileNotFoundException($"Local package '{local.Path}' no longer exists; check for updates again.");
+                    SafeZipExtractor.Extract(local.Path, candidate.Slug, stage, ct);
+                }
                 else if (candidate.Package is GitPackageRef package)
                 {
                     if (!GitUrl.TryParse(candidate.SourceUrl, out var url) || url!.Repository != package.Repository || url.Path != package.Path)

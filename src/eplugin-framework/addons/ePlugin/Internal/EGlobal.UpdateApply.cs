@@ -67,7 +67,7 @@ internal sealed partial class EGlobal
                 else UpdateDecisionNeeded(journal);
             }).CallDeferred();
         }
-        if (result is UpdateOutcome.Completed or UpdateOutcome.RolledBack) RefreshPlainPlugins();
+        if (result is UpdateOutcome.Completed or UpdateOutcome.RolledBack) RefreshPendingUpdates();
     }
     internal void DecideUpdate(UpdateJournal journal, bool keep)
     {

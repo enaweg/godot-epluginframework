@@ -16,6 +16,8 @@ internal sealed record PluginInfo(string Slug, string Name, PluginKind Kind, boo
     public string Author { get; init; } = "";
     public string Description { get; init; } = "";
     public string? UpdateUrl { get; init; }
+    /// <summary>How many packages of this plugin the local plugin directories hold, of any version.</summary>
+    public int LocalPackages { get; init; }
     public string? Script { get; init; }
     /// <summary>Lifecycle state of an ePlugin that has an editor instance; null for every other plugin.</summary>
     public EEditorPluginState? State { get; init; }
