@@ -206,6 +206,26 @@ recognizes disabled ePlugins by the `ScriptPathAttribute` of their compiled type
 (rows, update selection, BBCode details) and unit-tested. New user-facing actions belong in this dialog, not in
 additional Tools menu entries.
 
+### Plugin licenses
+
+A plugin's license comes from the recipe's `SetLicense` (text, or a `res://` path), else `license_file` in
+`plugin.cfg`, else the plugin's root `LICENSE`. Only `license_required=true` in `plugin.cfg` makes it require
+acceptance, because that has to be known without running plugin code (e.g. for staged updates). `Internal/Licenses/`
+is pure and unit-tested: `PluginLicense` resolves/reads it and gives it a *source* (relative file, `res://` path, or
+`text:<hash>` for recipe text; file contents are never compared), and `LicenseReview` holds per-license decisions
+(declining a dependency's license cancels and skips its dependants). Acceptances live in the optional `licenses` list
+of the shared `eplugin-state.json` (`PluginStateStore.TryRecordLicenses`). It is omitted while empty because the
+store's reader disallows unmapped members, so older framework versions can still read such files.
+`EGlobal.Licenses.cs` gates `EnableEPlugin` before `JoinTransition` (skipped for manual retries and update reconciles)
+over the plugin and every disabled hard dependency it would enable; a disabled ePlugin's recipe comes from a
+throw-away instance of its compiled script type. With pending licenses the plugin is disabled again (deferred: Godot is
+still inside its `_EnablePlugin`), the review is queued, and `EPluginPlugin._Process` shows `LicenseDialog` a frame
+later; accepting re-enables it. `ReviewEnabledLicenses` (end of `Initialize`) asks about enabled plugins whose license
+source is not accepted, e.g. a recipe license an update changed; declining disables them. The ePlugin Manager asks
+before `SetPluginEnabled` and before installing staged updates (skipping recipe-licensed plugins), and its details link
+the license to `LicenseDialog.CreateViewer`. `eplugin/licenses/auto_accept` (manager checkbox, confirmed, logged)
+skips the dialog.
+
 ### Logging
 
 `ILogger`/`ILoggerFactory` are pluggable (`GodotConsoleLogger`, `NullLogger`, `GenericLoggerFactory`).

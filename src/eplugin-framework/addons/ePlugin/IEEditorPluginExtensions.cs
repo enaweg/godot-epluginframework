@@ -44,8 +44,14 @@ public static class IEEditorPluginExtensions
     /// </remarks>
     public static void DisableEPlugin<TEPlugin>(this TEPlugin ePlugin) where TEPlugin : EditorPlugin, IEEditorPlugin
     {
-        using var progress = ActivationProgress.Begin("Deactivating plugin...");
         var context = EGlobal.Instance.GetOrCreateContext(ePlugin);
+        if (context.State == EEditorPluginState.Deactivated)
+        {
+            // nothing is installed, e.g. the plugin is disabled again while it waits for its license to be accepted
+            return;
+        }
+
+        using var progress = ActivationProgress.Begin("Deactivating plugin...");
         ActivationProgress.SetText($"Deactivating {context.Name}...");
         EGlobal.Instance.DisableEPlugin(context);
     }

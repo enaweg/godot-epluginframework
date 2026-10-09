@@ -49,6 +49,7 @@ public partial class SamplePlugin : EditorPlugin, IEEditorPlugin
 - `AddAutoload(name, path)` registers an autoload singleton while the plugin is enabled.
 - `AddDirectory(path)` makes a plugin directory available while enabled and hides it while disabled. Ship managed source directories in hidden form, such as `.src`, so they are inert until activation.
 - `AddPluginDependency(slug, version?)` requires another C# or GDScript plugin. The framework enables it first and disables dependants if it is turned off. A version such as `">2.0.0"` sets a minimum; an exact version such as `"1.2.3"` requires that version.
+- `SetLicense(license)` sets the plugin's license, either as text (BBCode allowed) or as a `res://` path to a file. See [Plugin licenses](plugin-licenses.md#in-the-recipe).
 - `AddOptionalPluginDependency(slug, version?, recipe)` declares resources needed only when another plugin is already enabled and matches the constraint. The other plugin is never enabled automatically and a missing or mismatched plugin does not fail activation.
 
 Optional dependencies are re-evaluated when either ePlugin-managed plugin is enabled or disabled, so activation order does not matter. Disabling the optional plugin removes the nested recipe while leaving the declaring plugin active. Nested recipes receive `IEEditorPluginRecipeBuilder`, which supports resources but cannot declare dependencies of its own.
@@ -60,6 +61,10 @@ builder.AddOptionalPluginDependency("other-plugin", ">1.0.0", optional => option
     .AddAutoload("IntegrationService", "res://addons/my_plugin/integration.tscn")
     .AddDirectory($"{this.GetPluginDirectory()}/.optional-src"));
 ```
+
+## License
+
+Ship a `LICENSE` file in the plugin's root directory; the ePlugin Manager shows it in the plugin details. Set `license_required=true` in `plugin.cfg` to have users accept the license before the plugin is enabled. `license_file` in `plugin.cfg` or `SetLicense` in the recipe provide a different license. See [Plugin licenses](plugin-licenses.md).
 
 ## Plugin helpers and startup initializers
 

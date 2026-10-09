@@ -1,0 +1,73 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/ePlugin/Internal/Manager/LicenseDialog.cs" id="1_script"]
+
+[node name="LicenseDialog" type="AcceptDialog"]
+auto_translate_mode = 2
+title = "ePlugin — Plugin license"
+initial_position = 2
+size = Vector2i(900, 560)
+min_size = Vector2i(600, 360)
+ok_button_text = "Accept"
+dialog_hide_on_ok = false
+script = ExtResource("1_script")
+
+[node name="Content" type="VBoxContainer" parent="."]
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 892.0
+offset_bottom = 511.0
+theme_override_constants/separation = 8
+
+[node name="Summary" type="Label" parent="Content"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(560, 0)
+layout_mode = 2
+text = "Accept the license to enable the plugin."
+autowrap_mode = 3
+
+[node name="Split" type="HSplitContainer" parent="Content"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="LicenseList" type="ItemList" parent="Content/Split"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+tooltip_text = "Plugins that ask you to accept their license. Select one to read it."
+
+[node name="LicenseBox" type="VBoxContainer" parent="Content/Split"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="LicenseName" type="Label" parent="Content/Split/LicenseBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+theme_type_variation = &"HeaderMedium"
+text = "Plugin"
+autowrap_mode = 3
+
+[node name="LicenseSource" type="Label" parent="Content/Split/LicenseBox"]
+unique_name_in_owner = true
+modulate = Color(1, 1, 1, 0.7)
+layout_mode = 2
+mouse_filter = 1
+text_overrun_behavior = 3
+
+[node name="LicenseText" type="RichTextLabel" parent="Content/Split/LicenseBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+focus_mode = 2
+bbcode_enabled = true
+context_menu_enabled = true
+selection_enabled = true
+
+[node name="NeededBy" type="Label" parent="Content/Split/LicenseBox"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(300, 0)
+modulate = Color(1, 1, 1, 0.7)
+layout_mode = 2
+autowrap_mode = 3

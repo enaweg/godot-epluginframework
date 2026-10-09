@@ -38,6 +38,23 @@ public interface IEEditorPluginBuilder : IEEditorPluginRecipeBuilder
     new IEEditorPluginBuilder AddDirectory(string path);
 
     /// <summary>
+    /// Sets the plugin's license. It is shown in the ePlugin Manager and, when <c>plugin.cfg</c> sets
+    /// <c>license_required=true</c>, has to be accepted before the plugin is enabled. It replaces the
+    /// <c>license_file</c> of <c>plugin.cfg</c> and the <c>LICENSE</c> file of the plugin directory.
+    /// </summary>
+    /// <param name="license">
+    /// Either the license text, which may contain BBCode, or the <c>res://</c> path of the file holding it
+    /// (e.g. <c>$"{this.GetPluginDirectory()}/EULA.txt"</c>). A value starting with <c>res://</c> is a path.
+    /// </param>
+    /// <remarks>
+    /// Acceptance is tracked by the path, or for a text by its contents: changing the path or the text asks for the
+    /// license to be accepted again. A license set here is only known once the plugin's code is compiled, so an update
+    /// that changes it is asked about after it is installed: declining then disables the plugin.
+    /// </remarks>
+    /// <returns>The builder itself.</returns>
+    IEEditorPluginBuilder SetLicense(string license);
+
+    /// <summary>
     /// Declares a dependency on another plugin (C# or GDScript). The framework enables the
     /// dependency before activating this plugin and, when a version constraint is given, verifies
     /// the installed dependency satisfies it.
