@@ -6,4 +6,6 @@ The first snapshot is a baseline of the editor's current state; it cannot recove
 
 The adjacent `res://addons/eplugin-state.json.user` stores unfinished or failed work on one machine. Add `addons/eplugin-state.json.user` to the project's `.gitignore`. An unresolved entry blocks automatic recipe retry after an editor restart or assembly reload. After fixing the cause and any partial side effects, use **Retry failed** in the [ePlugin Manager](eplugin-manager.md) to retry explicitly.
 
+The file also records accepted plugin licenses in its `licenses` list. The list is left out until a license is accepted, so the file stays readable by framework versions without license support. See [Plugin licenses](plugin-licenses.md#recorded-acceptances).
+
 A failed operation leaves the checked-in JSON at its last completed state. These files provide the basis for migration and rollback tooling; they do not restore addon files or undo partial recipe changes themselves. Update journals and recovery steps are covered in [Updating plugins](updating-plugins.md#builds-restart-and-recovery).

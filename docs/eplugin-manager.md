@@ -8,11 +8,12 @@ The overview above uses the repository's sample plugins in Godot's default dark 
 
 The manager lists plugins below `res://addons`, whether they are enabled or not. It shows each plugin's author, type (ePlugin Framework, ePlugin, C# plugin, or GDScript plugin), version, and enabled state. ePlugins have the ePlugin icon. A plugin with an `update_url` or a matching local package gets an update indicator when a newer version is available; the Version column shows the installed and available versions and lets you select updates.
 
-Select a plugin to see its status, author, description, update source and warnings, earlier failures, and the dependencies declared by an active ePlugin recipe. Click the plugin location to select it in the FileSystem dock, or use the folder button to open it in the system file manager. Update site and release page links open in a browser.
+Select a plugin to see its status, author, license, description, update source and warnings, earlier failures, and the dependencies declared by an active ePlugin recipe. Click the license to read it again; a plugin without a license of its own shows its missing `LICENSE` file as missing. Click the plugin location to select it in the FileSystem dock, or use the folder button to open it in the system file manager. Update site and release page links open in a browser.
 
 ## Actions
 
-- **On** enables or disables the selected plugin. Enabling an ePlugin installs its recipe and required dependencies. Disabling a plugin also disables plugins that require it. The manager refreshes the list after toggles. Disabling ePlugin Framework itself requires confirmation because it closes the manager.
+- **On** enables or disables the selected plugin. Enabling an ePlugin installs its recipe and required dependencies. Plugins that ask for their [license](plugin-licenses.md) to be accepted show it first. Disabling a plugin also disables plugins that require it. The manager refreshes the list after toggles. Disabling ePlugin Framework itself requires confirmation because it closes the manager.
+- **Accept plugin licenses automatically** accepts the licenses of plugins that are enabled or updated without showing them. Turning it on is risky and requires confirmation; see [Plugin licenses](plugin-licenses.md#accepting-licenses-automatically).
 - **Check for updates** checks immediately regardless of the scheduled interval and indexes local plugin directories again.
 - **Local directories...** adds, removes, or rescans folders containing plugin ZIP packages. The folders are user-wide settings; see [Updating plugins](updating-plugins.md#local-plugin-directories).
 - **Update** installs the checked updates after validation and confirmation. See [Updating plugins](updating-plugins.md).
