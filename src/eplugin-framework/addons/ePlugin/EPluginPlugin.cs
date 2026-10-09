@@ -7,6 +7,7 @@ using Enaweg.Plugin.Internal.Manager;
 using Enaweg.Plugin.Internal.Update;
 using System.Runtime.Loader;
 using Enaweg.Plugin.Internal;
+using Enaweg.Plugin.Internal.Licenses;
 using Enaweg.Plugin.Logging;
 using Godot;
 
@@ -23,6 +24,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
     private Button? _managerButton;
     private EPluginManagerDialog? _managerDialog;
     private UpdateFailureDialog? _failureDialog;
+    private LicenseDialog? _licenseDialog;
     private EGlobal? _updateOwner;
     private CancellationTokenSource _updateLifetime = new();
     internal CancellationToken UpdateLifetime => _updateLifetime.Token;
@@ -57,6 +59,27 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         if (!_managerUiAdded && EGlobal.Instance.IsValid())
         {
             AddManagerUi();
+        }
+
+        ShowLicenseReview();
+    }
+
+    /// <summary>Asks for the licenses of plugins that were enabled outside the ePlugin Manager, one dialog at a time.</summary>
+    private void ShowLicenseReview()
+    {
+        if (!EGlobal.Instance.IsValid() || (_licenseDialog is not null && GodotObject.IsInstanceValid(_licenseDialog))) return;
+        if (EGlobal.Instance.TakeLicenseReview() is not { } review) return;
+        try
+        {
+            _licenseDialog = LicenseDialog.Create(review, decided => { _licenseDialog = null; EGlobal.Instance.CompleteLicenseReview(decided); });
+            _licenseDialog.Open();
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Cannot show the license dialog: {ex.Message}");
+            _licenseDialog = null;
+            review.DeclineRemaining();
+            EGlobal.Instance.CompleteLicenseReview(review);
         }
     }
 
@@ -179,7 +202,8 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         if (_updateOwner is not null) _updateOwner.UpdateDecisionNeeded -= ShowUpdateFailure;
         if (_managerDialog is not null && GodotObject.IsInstanceValid(_managerDialog)) _managerDialog.QueueFree();
         if (_failureDialog is not null && GodotObject.IsInstanceValid(_failureDialog)) _failureDialog.QueueFree();
-        _managerDialog = null; _failureDialog = null;
+        if (_licenseDialog is not null && GodotObject.IsInstanceValid(_licenseDialog)) _licenseDialog.QueueFree();
+        _managerDialog = null; _failureDialog = null; _licenseDialog = null;
     }
 
     private static void RestoreEarlyUpdateSettings()
@@ -223,6 +247,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         var context = AssemblyLoadContext.GetLoadContext(typeof(EPluginPlugin).Assembly);
         if (context is not null) context.Unloading += _ => { try { _updateLifetime.Cancel(); } catch (ObjectDisposedException) { } };
         UpdateSettings.Register();
+        LicenseSettings.Register();
         EGlobal.Instance.Initialize(this, new GenericLoggerFactory(category => new GodotConsoleLogger(category)));
     }
 }

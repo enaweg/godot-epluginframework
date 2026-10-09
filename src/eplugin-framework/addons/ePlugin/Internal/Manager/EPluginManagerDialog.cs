@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
+using Enaweg.Plugin.Internal.Licenses;
 using Enaweg.Plugin.Internal.Update;
 using Godot;
 
@@ -31,6 +33,9 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private CheckBox _trust = null!;
     private ProgressBar _progress = null!;
     private ConfirmationDialog _disableFrameworkConfirm = null!;
+    private CheckBox _autoAcceptLicenses = null!;
+    private Label _autoAcceptWarning = null!;
+    private ConfirmationDialog _autoAcceptConfirm = null!;
     private TextureRect _detailsIcon = null!;
     private Label _detailsName = null!;
     private RichTextLabel _detailsText = null!;
@@ -53,6 +58,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private IReadOnlyList<VersionOption> _versionOptions = [];
     /// <summary>A note under the version choice when nothing more specific is shown, e.g. why remote versions are missing.</summary>
     private string? _versionNote;
+    // Read on selection rather than for every row: a disabled ePlugin's recipe needs a throw-away instance of its plugin.
+    private readonly Dictionary<string, LicenseInfo?> _licenses = [];
     private UpdateCandidate? _pendingVersion;
     private bool _pendingDowngrade;
     private Texture2D? _ePluginIcon;
@@ -86,6 +93,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _check = GetNode<Button>("%CheckButton"); _retry = GetNode<Button>("%RetryButton"); _release = GetNode<Button>("%ReleaseButton");
         _trust = GetNode<CheckBox>("%TrustCheck"); _progress = GetNode<ProgressBar>("%Progress");
         _disableFrameworkConfirm = GetNode<ConfirmationDialog>("%DisableFrameworkConfirm");
+        _autoAcceptLicenses = GetNode<CheckBox>("%AutoAcceptLicenses"); _autoAcceptWarning = GetNode<Label>("%AutoAcceptWarning");
+        _autoAcceptConfirm = GetNode<ConfirmationDialog>("%AutoAcceptConfirm");
         _detailsIcon = GetNode<TextureRect>("%DetailsIcon"); _detailsName = GetNode<Label>("%DetailsName"); _detailsText = GetNode<RichTextLabel>("%DetailsText");
         _versionSeparator = GetNode<Control>("%VersionSeparator"); _versionRow = GetNode<Control>("%VersionRow");
         _versionSelect = GetNode<OptionButton>("%VersionSelect"); _installVersion = GetNode<Button>("%InstallVersionButton");
@@ -100,7 +109,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _tree.SetColumnTitle(TypeColumn, "Type"); _tree.SetColumnTitle(VersionColumn, "Version");
         _tree.SetColumnExpand(EnabledColumn, false); _tree.SetColumnExpand(NameColumn, false); _tree.SetColumnExpand(AuthorColumn, true);
         _tree.SetColumnExpand(TypeColumn, false); _tree.SetColumnExpand(VersionColumn, false);
-        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm }) EditorWindows.Prepare(window, _signals, this, nameof(QueueWindowIcons));
+        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm, _autoAcceptConfirm }) EditorWindows.Prepare(window, _signals, this, nameof(QueueWindowIcons));
         var scale = EditorInterface.Singleton.GetEditorScale();
         _tree.SetColumnCustomMinimumWidth(EnabledColumn, (int)(40 * scale)); _tree.SetColumnCustomMinimumWidth(AuthorColumn, (int)(AuthorMinimumWidth * scale));
         _tree.SetColumnCustomMinimumWidth(VersionColumn, (int)(150 * scale));
@@ -111,7 +120,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _signals.Connect(_release, BaseButton.SignalName.Pressed, Callable.From(OpenRelease));
         _signals.Connect(_locationLink, BaseButton.SignalName.Pressed, Callable.From(() => { if (_selectedSlug is not null) EditorInterface.Singleton.SelectFile(PluginDirectory(_selectedSlug)); }));
         _signals.Connect(_openFolder, BaseButton.SignalName.Pressed, Callable.From(() => { if (_selectedSlug is not null) OS.ShellShowInFileManager(ProjectSettings.GlobalizePath(PluginDirectory(_selectedSlug)), true); }));
-        _signals.Connect(_detailsText, RichTextLabel.SignalName.MetaClicked, Callable.From<Variant>(meta => { if (PluginManagerViewModel.IsWebUrl(meta.AsString())) OS.ShellOpen(meta.AsString()); }));
+        _signals.Connect(_detailsText, RichTextLabel.SignalName.MetaClicked, Callable.From<Variant>(DetailsLinkClicked));
         _signals.Connect(_tree, Tree.SignalName.ItemEdited, Callable.From(ItemEdited));
         _signals.Connect(_disableFrameworkConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(DisableFramework));
         _signals.Connect(_versionSelect, OptionButton.SignalName.ItemSelected, Callable.From<long>(_ => VersionButtons()));
@@ -121,6 +130,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _signals.Connect(_tree, Tree.SignalName.ItemActivated, Callable.From(OpenRelease));
         _signals.Connect(_tree, Tree.SignalName.ButtonClicked, Callable.From<TreeItem, long, long, long>((item, _, _, _) => item.Select(NameColumn)));
         _signals.Connect(_tree, Tree.SignalName.Resized, Callable.From(() => { if (_model is not null) FitColumns(); }));
+        _signals.Connect(_autoAcceptLicenses, BaseButton.SignalName.Toggled, Callable.From<bool>(AutoAcceptToggled));
+        _signals.Connect(_autoAcceptConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(() => SetAutoAccept(true)));
         _signals.Connect(_trust, BaseButton.SignalName.Toggled, Callable.From<bool>(value => { _model.TrustChangedSource = value; Buttons(); }));
         _signals.Connect(this, AcceptDialog.SignalName.Confirmed, Callable.From(Confirm));
         _signals.Connect(this, AcceptDialog.SignalName.Canceled, Callable.From(Cancel));
@@ -130,7 +141,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private void QueueWindowIcons() => CallDeferred(nameof(RefreshWindowIcons));
     private void RefreshWindowIcons()
     {
-        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm })
+        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm, _autoAcceptConfirm })
             EditorWindows.ApplyIcon(window);
     }
 
@@ -141,6 +152,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         { _openFolder.Icon = editorTheme.GetIcon("Folder", "EditorIcons"); _openFolder.Text = ""; }
         _ePluginIcon = EditorIcons.EPlugin; _logo = EditorIcons.Logo; _updateIcon = EditorIcons.UpdateIndicator;
         _check.Icon = EditorIcons.Update;
+        _autoAcceptWarning.AddThemeColorOverride("font_color", WarningColor());
         // Render the existing model rather than refreshing it: a theme change must preserve a staged update.
         if (_model is not null) Render();
     }
@@ -156,11 +168,35 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     {
         if (_working) return;
         ClearStaging();
+        _licenses.Clear();
         var plugins = _global.CollectPlugins();
         _targets = _global.CollectUpdateTargets();
         _model = new(plugins, _global.PendingUpdates, _targets, _global.UpdateCache, candidate => _global.UpdatePreflightFindings([candidate]));
         _trust.SetPressedNoSignal(false);
         Render();
+    }
+
+    private void AutoAcceptToggled(bool enabled)
+    {
+        if (!enabled) { SetAutoAccept(false); return; }
+        // only turned on once the risk was confirmed
+        _autoAcceptLicenses.SetPressedNoSignal(false);
+        _autoAcceptConfirm.PopupCentered();
+    }
+
+    private void SetAutoAccept(bool enabled)
+    {
+        try { LicenseSettings.SetAutoAccept(enabled); }
+        catch (Exception ex) { GD.PushError($"Cannot change {LicenseSettings.AutoAcceptKey}: {ex.Message}"); }
+        LicenseButtons();
+    }
+
+    private void LicenseButtons()
+    {
+        var enabled = LicenseSettings.AutoAccept;
+        _autoAcceptLicenses.SetPressedNoSignal(enabled);
+        _autoAcceptLicenses.Disabled = _working;
+        _autoAcceptWarning.Visible = enabled;
     }
 
     private void Render()
@@ -261,7 +297,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _detailsIcon.Texture = row?.IsEPlugin == true ? _logo : null;
         _detailsName.Text = row?.Plugin.Name ?? "No plugin selected";
         var reviewed = _versionInstall ? _staged?.FirstOrDefault(p => p.Candidate.Slug == slug)?.Findings : null;
-        _detailsText.Text = row is null ? "Select a plugin to see its details." : PluginManagerViewModel.Describe(row, reviewed);
+        _detailsText.Text = row is null ? "Select a plugin to see its details." : PluginManagerViewModel.Describe(row, reviewed, LicenseOf(row));
         _release.Visible = IsSafeUrl(row?.Update?.Candidate.ReleaseUrl);
         _locationRow.Visible = row is not null;
         if (row is not null)
@@ -271,6 +307,24 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             _locationLink.Disabled = _openFolder.Disabled = row.Plugin.Missing || !DirAccess.DirExistsAbsolute(directory);
         }
         RenderVersions(row);
+    }
+
+    private LicenseInfo? LicenseOf(PluginRow row)
+    {
+        if (row.Plugin.Missing) return null;
+        if (_licenses.TryGetValue(row.Plugin.Slug, out var license)) return license;
+        try { license = _global.DescribeLicense(row.Plugin.Slug); }
+        catch (Exception ex) { GD.PushError($"Cannot read the license of {row.Plugin.Slug}: {ex.Message}"); license = null; }
+        return _licenses[row.Plugin.Slug] = license;
+    }
+
+    private void DetailsLinkClicked(Variant meta)
+    {
+        var link = meta.AsString();
+        if (PluginManagerViewModel.IsWebUrl(link)) OS.ShellOpen(link);
+        else if (link == PluginManagerViewModel.LicenseMeta && _selectedSlug is not null && _model.Find(_selectedSlug) is { } row &&
+                 LicenseOf(row) is { Entry.Problem: null } license)
+            LicenseDialog.CreateViewer(license).Open();
     }
 
     /// <summary>
@@ -383,6 +437,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _trust.Visible = NeedsTrust;
         _check.Disabled = _working || _staged is not null;
         _retry.Disabled = _working || _staged is not null || !_model.CanRetry;
+        LicenseButtons();
         VersionButtons();
     }
 
@@ -415,8 +470,45 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             // inside the Tree's own edit signal.
             _working = true; Buttons();
             _status.Text = (enable ? "Enabling " : "Disabling ") + row.Plugin.Name + "...";
-            Callable.From(() => SetPluginEnabled(row.Plugin.Slug, enable)).CallDeferred();
+            if (enable) Callable.From(() => EnableAfterLicenses(row.Plugin.Slug, row.Plugin.Name)).CallDeferred();
+            else Callable.From(() => SetPluginEnabled(row.Plugin.Slug, false)).CallDeferred();
         }
+    }
+
+    /// <summary>
+    /// Asks for the licenses of the plugin and of the dependencies enabled with it first; a declined license leaves the
+    /// plugin disabled.
+    /// </summary>
+    private void EnableAfterLicenses(string slug, string name)
+    {
+        LicenseReview? review;
+        try { review = _global.ReviewActivationLicenses(slug, name); }
+        catch (Exception ex)
+        {
+            GD.PushError($"Cannot read the licenses of {slug}: {ex.Message}");
+            _working = false;
+            if (GodotObject.IsInstanceValid(this) && IsInsideTree()) Refresh();
+            return;
+        }
+        if (review is null) { SetPluginEnabled(slug, true); return; }
+        _status.Text = $"Review the license to enable {name}.";
+        LicenseDialog.Create(review, decided =>
+        {
+            _global.RecordLicenses(decided);
+            if (decided.Approved.Any()) { Callable.From(() => SetPluginEnabled(slug, true)).CallDeferred(); return; }
+            _working = false;
+            if (!GodotObject.IsInstanceValid(this) || !IsInsideTree()) return;
+            Refresh();
+            _status.Text = $"{name} was not enabled: a license it needs was declined.";
+        }).Open();
+    }
+
+    private static Task<LicenseReview> ReviewLicenses(LicenseReview review)
+    {
+        // continue the installation after the dialog's signal, not inside it
+        var decided = new TaskCompletionSource<LicenseReview>(TaskCreationOptions.RunContinuationsAsynchronously);
+        LicenseDialog.Create(review, decided.SetResult).Open();
+        return decided.Task;
     }
 
     private void SetPluginEnabled(string slug, bool enable)
@@ -500,6 +592,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _working = true; _cancel?.Dispose(); _cancel = CancellationTokenSource.CreateLinkedTokenSource(_lifetime);
         Render();
         var refresh = false;
+        string? notice = null;
         try
         {
             if (_staged is null)
@@ -518,8 +611,25 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             }
             _cancel.Token.ThrowIfCancellationRequested();
             if (!CanProceed) return;
-            _swapping = true; Buttons(); _status.Text = versionInstall ? "Installing the selected version..." : "Installing selected addons...";
             var selected = _staged.Where(p => batch.Any(c => c.Slug == p.Candidate.Slug)).ToArray();
+            // An update that keeps the accepted license file is not asked about again; a changed or new one is.
+            if (_global.ReviewUpdateLicenses(selected) is { } licenses)
+            {
+                _status.Text = "Review the licenses of the updates.";
+                var decided = await ReviewLicenses(licenses);
+                _global.RecordLicenses(decided);
+                var declined = decided.Canceled.Select(a => a.Slug).ToHashSet(StringComparer.Ordinal);
+                selected = selected.Where(p => !declined.Contains(p.Candidate.Slug)).ToArray();
+                if (_lifetime.IsCancellationRequested || !GodotObject.IsInstanceValid(this) || !IsInsideTree()) { ClearStaging(); return; }
+                if (selected.Length == 0)
+                {
+                    notice = "Update canceled: its license was declined. Addon files were not changed.";
+                    ClearStaging();
+                    return;
+                }
+                _cancel.Token.ThrowIfCancellationRequested();
+            }
+            _swapping = true; Buttons(); _status.Text = versionInstall ? "Installing the selected version..." : "Installing selected addons...";
             var outcome = await _global.ApplyUpdatesAsync(selected, _directory!, _model.TrustChangedSource);
             _directory = null; _staged = null; Hide();
             // Installed versions changed, so the list is read again rather than only redrawn.
@@ -530,7 +640,11 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         finally
         {
             _working = false; _swapping = false;
-            if (GodotObject.IsInstanceValid(this) && IsInsideTree()) { _progress.Visible = false; if (refresh) Refresh(); else Render(); }
+            if (GodotObject.IsInstanceValid(this) && IsInsideTree())
+            {
+                _progress.Visible = false; if (refresh) Refresh(); else Render();
+                if (notice is not null) _status.Text = notice;
+            }
         }
     }
 
@@ -554,6 +668,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         return theme is not null && theme.HasColor(name, type) ? theme.GetColor(name, type) : fallback;
     }
     private static Color UpdateColor() => ThemeColor("success_color", "Editor", new Color(0.45f, 0.95f, 0.5f));
+    private static Color WarningColor() => ThemeColor("warning_color", "Editor", new Color(1f, 0.87f, 0.4f));
     private static Color ErrorColor() => ThemeColor("error_color", "Editor", new Color(1f, 0.47f, 0.42f));
     private static Color DisabledColor() => ThemeColor("font_disabled_color", "Button", new Color(0.5f, 0.5f, 0.5f));
 

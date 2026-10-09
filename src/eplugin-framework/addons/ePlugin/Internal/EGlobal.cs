@@ -107,6 +107,7 @@ internal sealed partial class EGlobal
         }
 
         ResumeUpdates();
+        ReviewEnabledLicenses();
         InitializeUpdates(plugin);
     }
 
@@ -610,6 +611,13 @@ internal sealed partial class EGlobal
         {
             context.State = EEditorPluginState.Created;
             context.ErrorDetail = null;
+        }
+
+        // before anything is recorded or installed. A manual retry or an update continues work whose licenses were
+        // already accepted; updates review changed licenses before they are installed.
+        if (!manualRetry && _recipeUpdateJournal is null && !PassesLicenseGate(context))
+        {
+            return;
         }
 
         if (!JoinTransition(context, PersistedPluginState.Activated, manualRetry))

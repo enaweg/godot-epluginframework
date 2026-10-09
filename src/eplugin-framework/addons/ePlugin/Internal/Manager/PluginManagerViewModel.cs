@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Enaweg.Plugin.Internal.Licenses;
 using Enaweg.Plugin.Internal.Update;
 
 namespace Enaweg.Plugin.Internal.Manager;
@@ -135,7 +136,29 @@ internal sealed class PluginManagerViewModel
 
     /// <summary>The details pane as BBCode. All plugin supplied text is escaped.</summary>
     /// <param name="reviewed">Findings of a staged package for an explicitly chosen version, awaiting confirmation.</param>
-    public static string Describe(PluginRow row, IReadOnlyList<Finding>? reviewed = null)
+    /// <summary>The meta of the license link in <see cref="Describe"/>, which opens the license dialog.</summary>
+    public const string LicenseMeta = "eplugin-license";
+
+    /// <summary>
+    /// The license line of the details: a link that shows the license, with whether it was accepted when the plugin asks
+    /// for it. A plugin without a license of its own falls back to its LICENSE file and shows it as missing without it.
+    /// </summary>
+    public static string LicenseLine(LicenseInfo? license)
+    {
+        if (license is null) return "";
+        var entry = license.Entry;
+        if (entry.Problem is not null)
+            return !license.Required && entry.Source == PluginLicense.DefaultFile
+                ? $"[b]License:[/b] missing (no {PluginLicense.DefaultFile} file in the plugin directory)\n"
+                : $"[b]License:[/b] [color=#ff7070]{Escape(entry.Problem)}[/color]\n";
+        var state = !license.Required ? ""
+            : license.IsAccepted ? $" (accepted {license.Accepted!.AcceptedUtc.ToLocalTime():d}{(license.Accepted.Automatic ? " automatically" : "")})"
+            : license.Accepted is not null ? " (not accepted yet, an earlier license was)"
+            : " (not accepted yet)";
+        return $"[b]License:[/b] [url={LicenseMeta}]{Escape(PluginLicense.Display(entry.Slug, entry.Source))}[/url]{state}\n";
+    }
+
+    public static string Describe(PluginRow row, IReadOnlyList<Finding>? reviewed = null, LicenseInfo? license = null)
     {
         var plugin = row.Plugin; var text = new StringBuilder();
         void Line(string label, string? value) { if (!string.IsNullOrWhiteSpace(value)) text.Append($"[b]{label}:[/b] {Escape(value)}\n"); }
@@ -148,6 +171,7 @@ internal sealed class PluginManagerViewModel
         Line("Status", StatusText(plugin));
         Line("Version", plugin.Version);
         Line("Author", plugin.Author);
+        text.Append(LicenseLine(license));
         if (!string.IsNullOrWhiteSpace(plugin.Description)) text.Append('\n').Append(Escape(plugin.Description)).Append('\n');
         if (plugin.Error is not null) text.Append($"\n[color=#ff7070]{Escape(plugin.Error)}[/color]\n");
 
