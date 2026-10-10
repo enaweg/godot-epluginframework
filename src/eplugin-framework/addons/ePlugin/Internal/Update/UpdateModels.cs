@@ -19,15 +19,16 @@ internal sealed record GitPackageRef(string Repository, string Path, string Comm
 internal sealed record LocalZipPackageRef(string Path) : UpdatePackageRef;
 /// <param name="UpdateUrl">The plugin.cfg update_url; null when only local plugin directories can update the plugin.</param>
 /// <param name="OverrideUrl">The update site the project sets for the plugin, which is tried before the plugin.cfg one.</param>
+/// <param name="KnownUrl">The update site of ePlugin's built-in list, the last one tried.</param>
 internal sealed record PluginUpdateTarget(string Slug, string Name, string InstalledVersion, string? UpdateUrl,
     string Directory, bool IsBlocked = false, bool StoreReadOnly = false, string? RecordedVersion = null,
-    string? OverrideUrl = null)
+    string? OverrideUrl = null, string? KnownUrl = null)
 {
     /// <summary>
-    /// The update sites to try, in order: the project's, then the plugin.cfg update_url. A candidate found at either
-    /// belongs to the plugin. Empty when only local plugin directories can update the plugin.
+    /// The update sites to try, in order: the project's, the plugin.cfg update_url, then the built-in one. A candidate
+    /// found at any of them belongs to the plugin. Empty when only local plugin directories can update the plugin.
     /// </summary>
-    public IReadOnlyList<string> UpdateUrls => new[] { OverrideUrl, UpdateUrl }
+    public IReadOnlyList<string> UpdateUrls => new[] { OverrideUrl, UpdateUrl, KnownUrl }
         .Where(url => !string.IsNullOrWhiteSpace(url)).Select(url => url!).Distinct(StringComparer.Ordinal).ToArray();
 }
 /// <param name="SourceUrl">The update_url the candidate was found at; null for a package of a local plugin directory.</param>

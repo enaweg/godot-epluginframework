@@ -21,7 +21,7 @@ theme_override_constants/separation = 8
 [node name="SitesHelp" type="Label" parent="SitesBox"]
 custom_minimum_size = Vector2(540, 0)
 layout_mode = 2
-text = "An update site set here replaces a plugin's plugin.cfg update_url, for example for a plugin without one or with one that stopped working. When it is unsupported or does not respond, the plugin.cfg update_url is used instead. The sites are saved in addons/eplugin-update-sites.json; commit it so everyone working on the project uses them."
+text = "An update site set here replaces a plugin's plugin.cfg update_url, for example for a plugin without one or with one that stopped working. When it is unsupported or does not respond, the plugin.cfg update_url is used instead, and then ePlugin's built-in list below. The sites are saved in addons/eplugin-update-sites.json; commit it so everyone working on the project uses them."
 autowrap_mode = 3
 
 [node name="SiteTree" type="Tree" parent="SitesBox"]

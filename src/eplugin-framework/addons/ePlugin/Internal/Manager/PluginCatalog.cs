@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using Enaweg.Plugin.Internal.Update;
 using Godot;
 
 namespace Enaweg.Plugin.Internal.Manager;
@@ -18,6 +19,8 @@ internal sealed record PluginInfo(string Slug, string Name, PluginKind Kind, boo
     public string? UpdateUrl { get; init; }
     /// <summary>The update site the project sets for the plugin, which replaces <see cref="UpdateUrl"/>.</summary>
     public string? UpdateSite { get; init; }
+    /// <summary>The plugin's entry in ePlugin's built-in list, while that list is used.</summary>
+    public KnownPlugin? Known { get; init; }
     /// <summary>The <c>documentation_url</c> of plugin.cfg, linked in the details.</summary>
     public string? DocumentationUrl { get; init; }
     /// <summary>The <c>source_url</c> of plugin.cfg, linked in the details.</summary>

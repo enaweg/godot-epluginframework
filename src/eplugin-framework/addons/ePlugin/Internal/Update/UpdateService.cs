@@ -11,8 +11,8 @@ namespace Enaweg.Plugin.Internal.Update;
 internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, IUpdateStateStore store)
 {
     /// <summary>
-    /// Checks the update site of every target that has one and caches the result. A project update site is tried first;
-    /// when it is unsupported or fails, the plugin.cfg update_url is checked instead.
+    /// Checks the update site of every target that has one and caches the result. A project update site is tried first,
+    /// then the plugin.cfg update_url, then the built-in one, each when the ones before are unsupported or fail.
     /// </summary>
     public async Task<UpdateCheckResult> CheckAsync(IReadOnlyList<PluginUpdateTarget> targets, UpdateCheckOptions options,
         CancellationToken ct)
@@ -88,7 +88,8 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
 
     /// <summary>
     /// Runs <paramref name="run"/> against the target's update sites in order, each with its own timeout: the project's
-    /// update site, then the plugin.cfg update_url when the first is unsupported or fails. Returns the first result, the
+    /// update site, the plugin.cfg update_url, then the built-in one, each when the ones before are missing, unsupported
+    /// or fail. Returns the first result, the
     /// site it came from, and why the sites before it were skipped. The source sees a target whose UpdateUrl is the site
     /// it reads, so its candidates name that site as their SourceUrl.
     /// </summary>
@@ -107,7 +108,7 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
             timeout.CancelAfter(timeoutAfter);
             try
             {
-                var site = target with { UpdateUrl = url, OverrideUrl = null };
+                var site = target with { UpdateUrl = url, OverrideUrl = null, KnownUrl = null };
                 var result = await run(factory.Create(url), site, timeout.Token).WaitAsync(timeout.Token).ConfigureAwait(false);
                 return (result, url, errors.Count == 0 ? null : $"{string.Join("; ", errors)}; used {url} instead");
             }

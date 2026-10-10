@@ -50,7 +50,7 @@ text = "Local directories..."
 [node name="UpdateSitesButton" type="Button" parent="Content/Header"]
 unique_name_in_owner = true
 layout_mode = 2
-tooltip_text = "Set update sites for plugins in this project. They replace a plugin's plugin.cfg update_url, which stays the fallback."
+tooltip_text = "Set update sites for plugins in this project, and review ePlugin's built-in list of add-on update sites. A project's site replaces a plugin's plugin.cfg update_url, which stays the fallback."
 text = "Update sites..."
 
 [node name="CheckButton" type="Button" parent="Content/Header"]

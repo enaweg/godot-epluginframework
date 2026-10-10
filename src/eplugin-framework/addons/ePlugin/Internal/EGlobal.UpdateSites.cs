@@ -27,6 +27,12 @@ internal sealed partial class EGlobal
         if (_updateSites.Problem is { } problem) _ePluginContext?.Logger.Warn($"Update sites: {problem}");
     }
 
+    /// <summary>Whether ePlugin's built-in list of add-on update sites is used, see <see cref="KnownPlugins"/>.</summary>
+    internal static bool UseKnownPlugins => ProjectSettings.GetSetting(KnownPlugins.SettingKey, true).AsBool();
+
+    /// <summary>The built-in entry of a plugin; null when it has none or the list is turned off.</summary>
+    internal static KnownPlugin? KnownPluginOf(string slug) => UseKnownPlugins ? KnownPlugins.Find(slug) : null;
+
     /// <summary>Reads the file again, as a pull may have changed it since.</summary>
     internal void ReloadUpdateSites() => _updateSites?.Load();
 

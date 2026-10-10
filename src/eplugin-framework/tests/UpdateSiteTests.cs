@@ -163,6 +163,64 @@ public class UpdateSiteTests
     }
 
     [TestCase]
+    public async Task TheBuiltInSiteIsTheLastFallback()
+    {
+        const string known = "https://github.com/known/plugin/releases";
+        var target = Target(site: null) with { KnownUrl = known };
+        Assertions.AssertArray(target.UpdateUrls.ToArray()).IsEqual(new[] { Config, known });
+        Assertions.AssertArray((target with { OverrideUrl = Site }).UpdateUrls.ToArray()).IsEqual(new[] { Site, Config, known });
+
+        var service = new UpdateService(new Factory(), new SystemClock(), new MemoryStore());
+        // used only when nothing before it works
+        Assertions.AssertString((await service.CheckAsync([target], new(), CancellationToken.None)).Updates.Single().SourceUrl).IsEqual(Config);
+        var result = await service.CheckAsync([target with { UpdateUrl = Offline }], new(), CancellationToken.None);
+        Assertions.AssertString(result.Updates.Single().SourceUrl).IsEqual(known);
+        Assertions.AssertInt(result.Fallbacks!.Count).IsEqual(1);
+        // a plugin without any other site is checked at the built-in one alone
+        var builtInOnly = await service.CheckAsync([Target(config: null, site: null) with { KnownUrl = known }], new(), CancellationToken.None);
+        Assertions.AssertString(builtInOnly.Updates.Single().SourceUrl).IsEqual(known);
+        var cache = new UpdateCache { Results = [Candidate(known)] };
+        Assertions.AssertInt(UpdateScheduler.CurrentCached(cache, [target], false).Count).IsEqual(1);
+        Assertions.AssertInt(UpdateScheduler.CurrentCached(cache, [target with { KnownUrl = null }], false).Count).IsEqual(0);
+    }
+
+    [TestCase]
+    public void TheManagerUsesTheBuiltInEntryForWhatPluginCfgDoesNotSet()
+    {
+        var known = new KnownPlugin("plugin", "Known Plugin", "https://github.com/known/plugin/releases", "https://known.example/docs",
+            "https://known.example", "https://github.com/known/plugin");
+        var plugin = new PluginInfo("plugin", "Plugin", PluginKind.GDScript, true) { Version = "1.0.0", Known = known };
+        var row = new PluginRow(plugin, null);
+        Assertions.AssertBool(row.IsUpdatable).IsTrue();
+        var details = PluginManagerViewModel.Describe(row);
+        Assertions.AssertString(details).Contains("[b]Update site:[/b] [url=https://github.com/known/plugin/releases]");
+        Assertions.AssertString(details).Contains("comes from ePlugin's built-in list");
+        Assertions.AssertString(details).Contains("[b]Documentation:[/b] [url=https://known.example/docs]");
+        Assertions.AssertString(details).Contains("[b]Source:[/b] [url=https://github.com/known/plugin]");
+        Assertions.AssertString(details).Contains("[b]Website:[/b] [url=https://known.example]");
+        // plugin.cfg wins, and the built-in site is only named as the fallback it is
+        var configured = PluginManagerViewModel.Describe(new(plugin with { UpdateUrl = Config, DocumentationUrl = "https://own.example/docs" }, null));
+        Assertions.AssertString(configured).Contains($"[b]Update site:[/b] [url={Config}]");
+        Assertions.AssertString(configured).Contains("[b]Built-in update site:[/b] [url=https://github.com/known/plugin/releases]");
+        Assertions.AssertString(configured).Contains("[b]Documentation:[/b] [url=https://own.example/docs]");
+        Assertions.AssertString(configured).NotContains("comes from ePlugin's built-in list");
+    }
+
+    [TestCase]
+    public void BuiltInEntriesAreUniqueAndUsable()
+    {
+        Assertions.AssertInt(KnownPlugins.All.Count).IsGreater(0);
+        Assertions.AssertInt(KnownPlugins.All.Select(k => k.Slug).Distinct(StringComparer.Ordinal).Count()).IsEqual(KnownPlugins.All.Count);
+        foreach (var known in KnownPlugins.All)
+        {
+            Assertions.AssertBool(UpdateSourceFactory.IsSupported(known.UpdateUrl)).IsTrue();
+            Assertions.AssertObject(KnownPlugins.Find(known.Slug)).IsSame(known);
+            Assertions.AssertBool(known.Slug.IndexOfAny(['/', '\\']) < 0).IsTrue();
+        }
+        Assertions.AssertObject(KnownPlugins.Find("no-such-plugin")).IsNull();
+    }
+
+    [TestCase]
     [RequireGodotRuntime]
     public void DialogSceneHasTheNodesItsScriptBinds()
     {

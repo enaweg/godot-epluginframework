@@ -67,7 +67,7 @@ internal sealed partial class EGlobal
             return metadata is null ? null : new PluginUpdateTarget(slug, metadata.Name,
                 metadata.Version, metadata.UpdateUrl, ProjectSettings.GlobalizePath(directory),
                 _stateStore?.IsBlocked(slug) == true, _stateStore?.IsReadOnly != false, _stateStore?.GetShared(slug)?.Version,
-                UpdateSiteOf(slug));
+                UpdateSiteOf(slug), KnownPluginOf(slug)?.UpdateUrl);
         }).Where(t => t is not null).Cast<PluginUpdateTarget>().ToArray();
     }
 
@@ -144,7 +144,7 @@ internal sealed partial class EGlobal
     {
         foreach (var failure in result.Failures) _ePluginContext?.Logger.Warn($"Update check for '{failure.Slug}' failed: {failure.Message}");
         foreach (var fallback in result.Fallbacks ?? [])
-            _ePluginContext?.Logger.Warn($"The project's update site for '{fallback.Slug}' did not work, so its plugin.cfg update_url was checked: {fallback.Message}");
+            _ePluginContext?.Logger.Warn($"An update site of '{fallback.Slug}' did not work, so the next one was checked: {fallback.Message}");
         if (result.Updates.Count == 0)
         {
             if (manual && result.Failures.Count == 0) _ePluginContext?.Logger.Log("All plugins are up to date.");

@@ -81,9 +81,10 @@ internal sealed partial class UpdateSitesDialog : AcceptDialog, ISerializationLi
         var plugins = _global.CollectPlugins().ToDictionary(p => p.Slug, StringComparer.Ordinal);
         _tree.Clear();
         var root = _tree.CreateItem();
+        var project = Group(root, "Set by this project", _global.UpdateSites.Count == 0 ? "No update sites set yet. Use Add... to set one." : null);
         foreach (var site in _global.UpdateSites)
         {
-            var item = _tree.CreateItem(root);
+            var item = _tree.CreateItem(project);
             item.SetMetadata(PluginColumn, site.Slug);
             var plugin = plugins.GetValueOrDefault(site.Slug);
             item.SetText(PluginColumn, plugin?.Name ?? site.Slug);
@@ -98,12 +99,56 @@ internal sealed partial class UpdateSitesDialog : AcceptDialog, ISerializationLi
             if (plugin?.UpdateUrl is null) item.SetCustomColor(ConfigColumn, DisabledColor());
             if (site.Slug == selected) item.Select(PluginColumn);
         }
+        RenderKnownPlugins(root, plugins);
         var problem = _global.UpdateSitesProblem;
         _status.TooltipText = problem ?? "";
         _status.Text = _error ?? problem ?? (_global.UpdateSites.Count == 0
             ? "No update sites set. Plugins use their plugin.cfg update_url."
             : $"{_global.UpdateSites.Count} update site{(_global.UpdateSites.Count == 1 ? "" : "s")} set for this project.");
         Buttons();
+    }
+
+    /// <summary>
+    /// ePlugin's built-in list, read-only: the installed add-ons first, as only those use it. It stays visible while it is
+    /// turned off, so it can be reviewed before turning it on.
+    /// </summary>
+    private void RenderKnownPlugins(TreeItem root, IReadOnlyDictionary<string, PluginInfo> plugins)
+    {
+        var enabled = EGlobal.UseKnownPlugins;
+        var group = Group(root, enabled ? $"Built-in list ({KnownPlugins.All.Count} add-ons, read-only)"
+            : $"Built-in list ({KnownPlugins.All.Count} add-ons, read-only, turned off in {KnownPlugins.SettingKey})", null);
+        group.SetTooltipText(PluginColumn, "Update sites ePlugin knows for popular add-ons. They are used after the project's update site " +
+                                           "and the plugin.cfg update_url, for plugins that name no working update site.");
+        group.Collapsed = true;
+        foreach (var known in KnownPlugins.All.OrderBy(k => !plugins.ContainsKey(k.Slug)))
+        {
+            var item = _tree.CreateItem(group);
+            var plugin = plugins.GetValueOrDefault(known.Slug);
+            item.SetText(PluginColumn, $"{known.Name} ({known.Slug})");
+            item.SetTooltipText(PluginColumn, plugin is null ? $"Not installed: no res://addons/{known.Slug}." : $"Installed: {plugin.Name} (res://addons/{known.Slug})");
+            item.SetText(SiteColumn, known.UpdateUrl);
+            item.SetTooltipText(SiteColumn, string.Join("\n", new[] { known.UpdateUrl, known.DocumentationUrl, known.WebsiteUrl, known.SourceUrl }
+                .Where(u => u is not null).Distinct()));
+            item.SetText(ConfigColumn, plugin is null ? "" : plugin.UpdateUrl ?? "(none)");
+            if (plugin is not null)
+                item.SetTooltipText(ConfigColumn, plugin.UpdateUrl is null ? "plugin.cfg sets no update_url, so the built-in update site is used."
+                    : $"plugin.cfg's update_url is tried before the built-in update site: {plugin.UpdateUrl}");
+            for (var column = 0; column < _tree.Columns; column++)
+            {
+                item.SetSelectable(column, false);
+                if (!enabled || plugin is null) item.SetCustomColor(column, DisabledColor());
+            }
+        }
+    }
+
+    /// <summary>A heading row of the tree, which cannot be selected.</summary>
+    private TreeItem Group(TreeItem root, string title, string? empty)
+    {
+        var group = _tree.CreateItem(root);
+        group.SetText(PluginColumn, title);
+        if (empty is not null) group.SetText(SiteColumn, empty);
+        for (var column = 0; column < _tree.Columns; column++) group.SetSelectable(column, false);
+        return group;
     }
 
     private void Buttons()
