@@ -17,7 +17,7 @@ public abstract class ExecuteCliBase(ILogger? logger, bool enableDebugLogging)
         try
         {
             // OS.Execute accepts one argument per array element. Splitting on spaces corrupts
-            // solution and project paths such as "EPlugin Framework.sln".
+            // solution and project paths such as "My Game.sln".
             var finalArgs = System.Array.ConvertAll(args, a =>
                 a.Length >= 2 && a[0] == '"' && a[^1] == '"' ? a[1..^1] : a);
             var result = new Array();

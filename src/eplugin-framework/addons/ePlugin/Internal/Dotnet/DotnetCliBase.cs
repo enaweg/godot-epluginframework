@@ -17,7 +17,7 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
 
         var expectedSolutionPath = Path.GetFullPath(Path.Combine(pathToSolution, solutionName));
         // Godot's assembly name need not match the solution name (the sample project uses
-        // EPluginFramework and "EPlugin Framework.sln", for example).
+        // "MyGame" and "My Game.sln", for example).
         var solutions = Directory.GetFiles(pathToSolution, "*.sln");
         if (solutions.Length == 0)
         {
