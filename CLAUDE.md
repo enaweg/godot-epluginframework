@@ -179,7 +179,8 @@ source and website links. `eplugin/updates/builtin_update_sites` (default on, `E
 Regenerate the data with `tools/generate_known_plugins.cs` from `tools/build_godot_addons.cs`'s output (run both in
 `tools/`); it takes each slug from the plugin folder in the add-on's repository at its latest release or version tag,
 keeps the slugs already in the list, and gives a slug claimed by several repositories to the one with the most stars.
-Entries are not installed or validated in advance.
+Entries are not installed or validated in advance. Add-ons the ranking misses go in `tools/extra_addons.txt` (one git
+URL per line, any host), which `build_godot_addons.cs` always lists regardless of stars and activity.
 Checks use installed metadata and a 20-hour local cache, never the shared working-version index. Every apply
 requires dialog confirmation. Stage and validate the whole batch before touching addons, then save and close all
 open scenes (`IUpdateHost.CloseScenes`; `close_scene` exists only from Godot 4.5) before the swap. Managed plugins are

@@ -1,0 +1,6 @@
+# Add-ons that build_godot_addons.cs always lists, in addition to the ones it finds, whatever their stars or activity.
+# One git repository URL per line: GitHub, GitLab (also self-hosted) or any other git host. A repository's tag or
+# release page works too. Outside GitHub and GitLab, give the URL ending in .git that the updater can read.
+# The add-on still needs a stable release or version tag (an optional "v", then 1.2 or 1.2.3), or it is left out.
+
+https://github.com/sn1ks0h/Global-Asset-Manager

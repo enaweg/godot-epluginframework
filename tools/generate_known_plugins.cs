@@ -31,7 +31,7 @@ if (input is null || !File.Exists(input))
 var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
 var addons = JsonSerializer.Deserialize<Addon[]>(await File.ReadAllTextAsync(input), options)!
     // Several candidates can name one repository, e.g. an old name that GitHub redirects to the renamed one.
-    .DistinctBy(a => a.GithubUrl, StringComparer.OrdinalIgnoreCase).ToArray();
+    .DistinctBy(a => a.Repository, StringComparer.OrdinalIgnoreCase).ToArray();
 if (addons.Any(a => a.UpdateUrl is null || a.LatestVersion is null))
 {
     Console.Error.WriteLine($"{input} has no update_url/latest_version; regenerate it with the current build_godot_addons.cs.");
@@ -42,7 +42,7 @@ if (addons.Any(a => a.UpdateUrl is null || a.LatestVersion is null))
 // Slugs of the current list, by repository.
 var existing = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 if (File.Exists(output))
-    foreach (Match match in Regex.Matches(await File.ReadAllTextAsync(output), @"// (https://github\.com/\S+?),[^\n]*\n\s+new\(""([^""]+)"""))
+    foreach (Match match in Regex.Matches(await File.ReadAllTextAsync(output), @"// (\S+?), (?:latest|verified)[^\n]*\n\s+new\(""([^""]+)"""))
         existing.TryAdd(match.Groups[1].Value, match.Groups[2].Value);
 
 // The plugin folders of each repository at its latest version; read in parallel, git does the waiting.
@@ -62,21 +62,21 @@ var leftOut = new List<string>();
 foreach (var addon in addons)
 {
     var tree = trees[addon];
-    if (tree.Error is not null) { leftOut.Add($"{addon.GithubUrl}: {tree.Error}"); continue; }
-    if (tree.Plugins.Length == 0) { leftOut.Add($"{addon.GithubUrl}: no plugin.cfg"); continue; }
+    if (tree.Error is not null) { leftOut.Add($"{addon.Repository}: {tree.Error}"); continue; }
+    if (tree.Plugins.Length == 0) { leftOut.Add($"{addon.Repository}: no plugin.cfg"); continue; }
     var (folder, note) = Choose(addon, tree);
     var slug = folder is null || folder.Length == 0 ? null : Name(folder);
     // The current list's slug names the plugin where the repository does not, e.g. a plugin at its root.
-    if (existing.TryGetValue(addon.GithubUrl, out var kept) && slug != kept)
+    if (existing.TryGetValue(addon.Repository, out var kept) && slug != kept)
     {
         note = $"kept {kept} from the current list" + (slug is null ? "" : $", the repository names {slug}");
         slug = kept;
         folder = tree.Plugins.FirstOrDefault(p => Name(p) == kept) ?? (tree.Plugins.Contains("") ? "" : folder);
     }
-    if (slug is null) { leftOut.Add($"{addon.GithubUrl}: {note}"); continue; }
+    if (slug is null) { leftOut.Add($"{addon.Repository}: {note}"); continue; }
     if (folder is not null && tree.Files.Any(f => f.StartsWith(folder, StringComparison.Ordinal) && f.EndsWith(".gdextension", StringComparison.OrdinalIgnoreCase)))
     {
-        leftOut.Add($"{addon.GithubUrl}: GDExtension plugin (ePlugin cannot update it)");
+        leftOut.Add($"{addon.Repository}: GDExtension plugin (ePlugin cannot update it)");
         continue;
     }
     chosen.Add((slug, addon, note));
@@ -89,7 +89,7 @@ foreach (var group in chosen.GroupBy(c => c.Slug, StringComparer.Ordinal))
 {
     var ranked = group.OrderByDescending(c => c.Addon.Stars).ToArray();
     entries.Add(ranked[0]);
-    duplicates.AddRange(ranked.Skip(1).Select(c => $"{c.Slug}: {c.Addon.GithubUrl} ({c.Addon.Stars}) loses to {ranked[0].Addon.GithubUrl} ({ranked[0].Addon.Stars})"));
+    duplicates.AddRange(ranked.Skip(1).Select(c => $"{c.Slug}: {c.Addon.Repository} ({c.Addon.Stars}) loses to {ranked[0].Addon.Repository} ({ranked[0].Addon.Stars})"));
 }
 
 var stars = Regex.Match(Path.GetFileName(input), @"_(\d+)_stars") is { Success: true } count ? count.Groups[1].Value : "?";
@@ -110,15 +110,15 @@ var text = new StringBuilder($$"""
     """);
 foreach (var (slug, addon, _) in entries.OrderBy(e => e.Slug, StringComparer.OrdinalIgnoreCase).ThenBy(e => e.Slug, StringComparer.Ordinal))
 {
-    text.Append($"        // {addon.GithubUrl}, latest {(addon.UpdateSource == "tags" ? "tag" : "release")} {addon.LatestVersion}\n");
+    text.Append($"        // {addon.Repository}, latest {(addon.UpdateSource == "tags" ? "tag" : "release")} {addon.LatestVersion}\n");
     text.Append($"        new({Cs(slug)}, {Cs(addon.Name)}, {Cs(addon.UpdateUrl!)},\n");
-    text.Append($"            {Cs(addon.DocumentationUrl)}, {Cs(addon.WebsiteUrl)}, {Cs(addon.GithubUrl)}),\n");
+    text.Append($"            {Cs(addon.DocumentationUrl)}, {Cs(addon.WebsiteUrl)}, {Cs(addon.Repository)}),\n");
 }
 text.Append("    ];\n}\n#endif\n");
 await File.WriteAllTextAsync(output, text.ToString().ReplaceLineEndings("\n"), new UTF8Encoding(false));
 
 Console.WriteLine($"Wrote {entries.Count} add-ons ({entries.Count(e => e.Addon.UpdateSource == "tags")} from tags) to {output}");
-Report("Chosen or kept slugs", entries.Where(e => e.Note.Length > 0).Select(e => $"{e.Addon.GithubUrl}: {e.Slug}, {e.Note}"));
+Report("Chosen or kept slugs", entries.Where(e => e.Note.Length > 0).Select(e => $"{e.Addon.Repository}: {e.Slug}, {e.Note}"));
 Report("Same slug as a more popular repository", duplicates);
 Report("Left out", leftOut);
 
@@ -131,7 +131,7 @@ Report("Left out", leftOut);
     {
         // Leave out bundled plugins, then take the one named like the repository: exactly ("netfox" of netfox.extras and
         // netfox.noray), otherwise as part of the name ("clyde" of godot-clyde-dialogue).
-        var repository = Plain(addon.GithubUrl.TrimEnd('/').Split('/')[^1]);
+        var repository = Plain(Regex.Replace(addon.Repository.TrimEnd('/').Split('/', ':')[^1], @"\.git$", ""));
         var own = tree.Plugins.Where(p => !unambiguous.Contains(Name(p)) && Plain(Name(p)).Length > 0).ToArray();
         var named = own.Where(p => Plain(Name(p)) == repository).ToArray();
         if (named.Length == 0)
@@ -150,7 +150,7 @@ async Task<Tree> ReadTree(Addon addon, CancellationToken ct)
     Directory.CreateDirectory(work);
     try
     {
-        foreach (var arguments in new[] { new[] { "init", "-q" }, ["remote", "add", "origin", addon.GithubUrl + ".git"],
+        foreach (var arguments in new[] { new[] { "init", "-q" }, ["remote", "add", "origin", addon.CloneUrl],
                      ["fetch", "-q", "--depth", "1", "--filter=blob:none", "origin", "refs/tags/" + addon.LatestVersion] })
         {
             var (code, _, error) = await Git(work, arguments, ct);
@@ -205,6 +205,11 @@ static void Report(string title, IEnumerable<string> lines)
     foreach (var line in items) Console.WriteLine("  " + line);
 }
 
+/// <param name="GithubUrl">The repository in JSON written before build_godot_addons.cs read other hosts.</param>
 record Addon(string Name, int Stars, string? UpdateUrl, string? UpdateSource, string? LatestVersion, string WebsiteUrl,
-    string DocumentationUrl, string GithubUrl);
+    string DocumentationUrl, string? RepositoryUrl = null, string? GitUrl = null, string? GithubUrl = null)
+{
+    public string Repository => RepositoryUrl ?? GithubUrl ?? "";
+    public string CloneUrl => GitUrl ?? Repository + ".git";
+}
 record Tree(string[] Plugins, string[] Files, string? Error);

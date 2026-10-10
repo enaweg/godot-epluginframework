@@ -5,6 +5,7 @@
 // Requires .NET 10 SDK and GITHUB_TOKEN. Only public repositories are read, but GitHub's GraphQL API answers no
 // unauthenticated requests and its REST API allows 60 per hour, too few for several hundred repositories. A token
 // without any scopes (classic) or with read-only access to public repositories (fine-grained) is enough.
+using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
@@ -109,8 +110,8 @@ catch (UnauthorizedAccessException ex)
     return;
 }
 
-// One candidate per GitHub slug, with the title shown in the Godot Asset Library ranking.
-var candidates = new Dictionary<string, (string Slug, string Name)>(StringComparer.OrdinalIgnoreCase);
+// One candidate per GitHub slug, with the title shown in the Godot Asset Library ranking. Extra add-ons skip the filters.
+var candidates = new Dictionary<string, (string Slug, string Name, bool Extra)>(StringComparer.OrdinalIgnoreCase);
 var markdown = await RequestAsync(source);
 string? category = null;
 var listingPattern = new Regex(@"^\|\s*\[([^]]+)\]\((https://github\.com/[^)/]+/[^)/]+)\)\s*\|\s*([\d,]+)\s*\|", RegexOptions.Compiled);
@@ -125,12 +126,36 @@ foreach (var line in markdown.Split('\n'))
     if (!match.Success || !int.TryParse(match.Groups[3].Value.Replace(",", ""), out var oldStars) || oldStars < minStars / 2)
         continue;
     var slug = match.Groups[2].Value["https://github.com/".Length..].TrimEnd('/');
-    candidates[slug] = (slug, match.Groups[1].Value);
+    candidates[slug] = (slug, match.Groups[1].Value, false);
+}
+
+// A file-based app runs from a temporary build folder, so the script's own folder comes from AppContext.
+var scriptDirectory = AppContext.GetData("EntryPointFileDirectoryPath") as string;
+
+// Add-ons that are always listed, whatever their stars or activity: extra_addons.txt beside this file, one git
+// repository URL per line (GitHub, GitLab or any other git host; a tag or release page works too), # starts a comment.
+// GitHub repositories are read with the others below; the rest by GitLab's API when the host has one, and by git.
+var others = new List<string>();
+var extrasPath = Path.Combine(scriptDirectory ?? Environment.CurrentDirectory, "extra_addons.txt");
+if (File.Exists(extrasPath))
+{
+    foreach (var raw in await File.ReadAllLinesAsync(extrasPath))
+    {
+        var line = raw.Split('#', 2)[0].Trim();
+        if (line.Length == 0) continue;
+        var repository = Regex.Replace(line.TrimEnd('/'), @"(/-)?/(tags|releases)$", "");
+        var github = Regex.Match(repository, @"^https://github\.com/([^/]+)/([^/]+?)(\.git)?$", RegexOptions.IgnoreCase);
+        if (github.Success)
+        {
+            var slug = github.Groups[1].Value + "/" + github.Groups[2].Value;
+            candidates[slug] = (slug, candidates.TryGetValue(slug, out var known) ? known.Name : github.Groups[2].Value, true);
+        }
+        else others.Add(repository);
+    }
 }
 
 // Optional local seed of further add-ons, in the format of the output. Place it beside this file or in the working
-// directory. A file-based app runs from a temporary build folder, so the script's own folder comes from AppContext.
-var scriptDirectory = AppContext.GetData("EntryPointFileDirectoryPath") as string;
+// directory.
 var seedPath = new[] { scriptDirectory, Environment.CurrentDirectory }
     .Where(directory => !string.IsNullOrEmpty(directory))
     .Select(directory => Path.Combine(directory!, "godot_addons_100.json"))
@@ -146,7 +171,7 @@ if (seedPath is not null)
         var slug = match.Groups[1].Value;
         if (!candidates.ContainsKey(slug))
             candidates[slug] = (slug, item.TryGetProperty("name", out var name) && name.ValueKind == JsonValueKind.String
-                ? name.GetString()! : slug);
+                ? name.GetString()! : slug, false);
     }
 }
 
@@ -162,6 +187,82 @@ string? Newest(IEnumerable<string?> tags) => tags
     .Select(t => (t.Tag, Version: (Number(t.Match.Groups[1]), Number(t.Match.Groups[2]), Number(t.Match.Groups[3]))))
     .OrderByDescending(t => t.Version).Select(t => t.Tag).FirstOrDefault();
 static long Number(Group group) => group.Success && long.TryParse(group.Value, out var value) ? value : 0;
+static string? Utc(DateTimeOffset? time) => time?.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+
+// An extra add-on outside GitHub. GitLab's API (gitlab.com or self-hosted) gives its stars, activity and releases; any
+// other host only its version tags, read with git. Null when it has no stable release or version tag.
+async Task<Addon?> OtherAddon(string repository)
+{
+    var https = Uri.TryCreate(repository, UriKind.Absolute, out var uri) && uri.Scheme == "https";
+    var web = https ? Regex.Replace(repository, @"\.git$", "") : repository;
+    var git = https ? web + ".git" : repository;
+    var name = Regex.Replace(web.Split('/', ':')[^1], @"\.git$", "");
+    var stars = 0;
+    DateTimeOffset? activity = null;
+    string? release = null;
+    var gitlab = false;
+    if (https)
+    {
+        var api = $"https://{uri!.Authority}/api/v4/projects/{Uri.EscapeDataString(new Uri(web).AbsolutePath.Trim('/'))}";
+        using var project = await TryJson(api);
+        if (project?.RootElement is { ValueKind: JsonValueKind.Object } info && info.TryGetProperty("id", out _))
+        {
+            gitlab = true;
+            if (info.TryGetProperty("star_count", out var count) && count.TryGetInt32(out var starCount)) stars = starCount;
+            if (info.TryGetProperty("last_activity_at", out var last) && last.TryGetDateTimeOffset(out var lastActivity)) activity = lastActivity;
+            if (info.TryGetProperty("name", out var title) && title.GetString() is { Length: > 0 } text) name = text;
+            // Upcoming releases are not published yet; the updater skips them too.
+            using var releases = await TryJson(api + "/releases?per_page=30");
+            if (releases?.RootElement is { ValueKind: JsonValueKind.Array } list)
+                release = Newest(list.EnumerateArray()
+                    .Where(r => !(r.TryGetProperty("upcoming_release", out var upcoming) && upcoming.ValueKind == JsonValueKind.True))
+                    .Select(r => r.TryGetProperty("tag_name", out var tagName) ? tagName.GetString() : null));
+        }
+    }
+    var tag = release is null ? Newest(await RemoteTags(git)) : null;
+    if (release is null && tag is null) return null;
+    // The updater reads GitLab's release and tag pages; another host by its .git URL, whose tags are the versions.
+    if (!gitlab && !git.EndsWith(".git", StringComparison.Ordinal))
+    {
+        Console.Error.WriteLine($"Extra add-on {repository}: the updater reads git repositories by a URL ending in .git; give that URL.");
+        return null;
+    }
+    var updateUrl = release is not null ? web + "/-/releases" : gitlab ? web + "/-/tags" : git;
+    return new Addon(name, stars, Utc(activity), updateUrl, release is not null ? "releases" : "tags", (release ?? tag)!,
+        web, web, web, git, true);
+}
+
+async Task<JsonDocument?> TryJson(string url)
+{
+    try
+    {
+        using var response = await http.GetAsync(url);
+        return response.IsSuccessStatusCode ? JsonDocument.Parse(await response.Content.ReadAsStringAsync()) : null;
+    }
+    catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException) { return null; }
+}
+
+// The tag names of a git repository; none when it cannot be read.
+static async Task<IEnumerable<string>> RemoteTags(string repository)
+{
+    using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+    var start = new ProcessStartInfo("git") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+    foreach (var argument in new[] { "ls-remote", "--tags", "--refs", "--", repository }) start.ArgumentList.Add(argument);
+    start.Environment["GIT_TERMINAL_PROMPT"] = "0";
+    using var process = Process.Start(start)!;
+    var output = process.StandardOutput.ReadToEndAsync(timeout.Token);
+    var error = process.StandardError.ReadToEndAsync(timeout.Token);
+    try { await process.WaitForExitAsync(timeout.Token); }
+    catch (OperationCanceledException) { if (!process.HasExited) process.Kill(true); return []; }
+    if (process.ExitCode != 0)
+    {
+        Console.Error.WriteLine($"git ls-remote {repository} failed: {(await error).Trim().Split('\n').Last()}");
+        return [];
+    }
+    return (await output).Split('\n', StringSplitOptions.RemoveEmptyEntries)
+        .Select(line => line.Split('\t').Last().Trim()).Where(r => r.StartsWith("refs/tags/", StringComparison.Ordinal))
+        .Select(r => r["refs/tags/".Length..]).ToArray();
+}
 
 var results = new List<Addon>();
 var unversioned = new List<string>();
@@ -191,17 +292,21 @@ for (var offset = 0; offset < values.Length; offset += 20)
 
     for (var i = 0; i < batch.Length; i++)
     {
-        if (!data.TryGetProperty($"r{i}", out var repo) || repo.ValueKind != JsonValueKind.Object) continue;
-        if (repo.GetProperty("isArchived").GetBoolean() || repo.GetProperty("isDisabled").GetBoolean()
-            || repo.GetProperty("isFork").GetBoolean()) continue;
+        var extra = batch[i].Extra;
+        if (!data.TryGetProperty($"r{i}", out var repo) || repo.ValueKind != JsonValueKind.Object)
+        {
+            if (extra) Console.Error.WriteLine($"Extra add-on https://github.com/{batch[i].Slug} was not found on GitHub.");
+            continue;
+        }
+        if (!extra && (repo.GetProperty("isArchived").GetBoolean() || repo.GetProperty("isDisabled").GetBoolean()
+            || repo.GetProperty("isFork").GetBoolean())) continue;
         var stars = repo.GetProperty("stargazerCount").GetInt32();
-        if (stars < minStars) continue;
-        if (!repo.TryGetProperty("defaultBranchRef", out var branch) || branch.ValueKind != JsonValueKind.Object
-            || !branch.TryGetProperty("target", out var target)
-            || !target.TryGetProperty("committedDate", out var dateValue)) continue;
+        if (!extra && stars < minStars) continue;
         // committedDate keeps the committer's time zone, so compare and store it in UTC.
-        if (!DateTimeOffset.TryParse(dateValue.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var committed)
-            || committed < cutoff) continue;
+        DateTimeOffset? committed = repo.TryGetProperty("defaultBranchRef", out var branch) && branch.ValueKind == JsonValueKind.Object
+            && branch.TryGetProperty("target", out var target) && target.TryGetProperty("committedDate", out var dateValue)
+            && DateTimeOffset.TryParse(dateValue.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date : null;
+        if (!extra && (committed is null || committed < cutoff)) continue;
         var url = repo.GetProperty("url").GetString()!.TrimEnd('/');
         // A published stable release (whose ZIP the updater downloads) wins; otherwise the repository's version tags,
         // which the updater installs from git through the tag page URL. Without either there is nothing to update to.
@@ -216,17 +321,26 @@ for (var offset = 0; offset < values.Length; offset += 20)
         }
         var homepage = repo.TryGetProperty("homepageUrl", out var hp) && hp.ValueKind == JsonValueKind.String
             ? hp.GetString() : null;
-        results.Add(new Addon(batch[i].Name, stars, committed.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture),
+        results.Add(new Addon(batch[i].Name, stars, Utc(committed),
             release is not null ? url + "/releases" : url + "/tags", release is not null ? "releases" : "tags", (release ?? tag)!,
-            string.IsNullOrWhiteSpace(homepage) ? url : homepage, url + "#readme", url));
+            string.IsNullOrWhiteSpace(homepage) ? url : homepage, url + "#readme", url, url + ".git", extra));
     }
     Console.Error.WriteLine($"Checked {Math.Min(offset + 20, values.Length)}/{values.Length} candidates");
 }
 
-// Several candidates can name one repository, e.g. an old name that GitHub redirects to the renamed one.
-var output = results.DistinctBy(x => x.GithubUrl, StringComparer.OrdinalIgnoreCase)
-    .OrderByDescending(x => x.Stars).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
-    .Take(maxItems).ToArray();
+// Extra add-ons on other hosts.
+foreach (var repository in others)
+{
+    if (await OtherAddon(repository) is { } addon) results.Add(addon);
+    else unversioned.Add(repository);
+}
+
+// Several candidates can name one repository, e.g. an old name that GitHub redirects to the renamed one. The extra
+// add-ons are always listed, also beyond the maximum.
+var unique = results.DistinctBy(x => x.RepositoryUrl, StringComparer.OrdinalIgnoreCase).ToArray();
+var output = unique.Where(x => !x.Extra).OrderByDescending(x => x.Stars).Take(maxItems).Concat(unique.Where(x => x.Extra))
+    .DistinctBy(x => x.RepositoryUrl, StringComparer.OrdinalIgnoreCase)
+    .OrderByDescending(x => x.Stars).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToArray();
 var dest = Path.Combine(Environment.CurrentDirectory, $"godot_addons_active_{minStars}_stars.json");
 await File.WriteAllTextAsync(dest, JsonSerializer.Serialize(output, new JsonSerializerOptions
 {
@@ -238,10 +352,15 @@ Console.WriteLine($"Saved {output.Length} qualifying add-ons to {dest} " +
     $"({output.Count(a => a.UpdateSource == "releases")} with releases, {output.Count(a => a.UpdateSource == "tags")} with version tags only)");
 if (unversioned.Count > 0)
     Console.WriteLine($"Left out {unversioned.Count} add-ons without a stable release or version tag: {string.Join(", ", unversioned)}");
-Console.WriteLine("Candidate discovery uses an older ranking; the result may omit recently published add-ons.");
+Console.WriteLine("Candidate discovery uses an older ranking; the result may omit recently published add-ons. " +
+    "List those in extra_addons.txt.");
 
-/// <param name="UpdateUrl">The releases page, or the tag page when the add-on publishes no release.</param>
+/// <param name="LastCommitAt">The last commit on the default branch, or GitLab's last activity; null when unknown.</param>
+/// <param name="UpdateUrl">The releases page, or the tag page (a .git URL off GitHub and GitLab) without a release.</param>
 /// <param name="UpdateSource">"releases" or "tags": where <paramref name="LatestVersion"/> was found.</param>
 /// <param name="LatestVersion">The tag name of the newest stable release or version tag.</param>
-record Addon(string Name, int Stars, string LastCommitAt, string UpdateUrl, string UpdateSource, string LatestVersion,
-    string WebsiteUrl, string DocumentationUrl, string GithubUrl);
+/// <param name="RepositoryUrl">The repository's web page, or its git URL when it has none.</param>
+/// <param name="GitUrl">The URL to clone the repository from.</param>
+/// <param name="Extra">Listed in extra_addons.txt, so it skips the star and activity filters.</param>
+record Addon(string Name, int Stars, string? LastCommitAt, string UpdateUrl, string UpdateSource, string LatestVersion,
+    string WebsiteUrl, string DocumentationUrl, string RepositoryUrl, string GitUrl, bool Extra);
