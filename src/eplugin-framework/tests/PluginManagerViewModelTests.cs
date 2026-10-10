@@ -108,6 +108,21 @@ public class PluginManagerViewModelTests
         Assertions.AssertString(PluginManagerViewModel.Describe(new(Plugin("plain", PluginKind.GDScript), null))).Contains("no update_url");
     }
     [TestCase]
+    public void DetailsLinkDocumentationAndSource()
+    {
+        var plugin = Plugin("docs", PluginKind.EPlugin) with
+        {
+            DocumentationUrl = "https://example.org/docs", SourceUrl = "git@host:owner/repo.git"
+        };
+        var details = PluginManagerViewModel.Describe(new(plugin, null));
+        Assertions.AssertString(details).Contains("[b]Documentation:[/b] [url=https://example.org/docs]https://example.org/docs[/url]");
+        // only http(s) links are opened in the browser; anything else is shown as text
+        Assertions.AssertString(details).Contains("[b]Source:[/b] git@host:owner/repo.git");
+        var none = PluginManagerViewModel.Describe(new(Plugin("plain", PluginKind.GDScript), null));
+        Assertions.AssertString(none).NotContains("Documentation:");
+        Assertions.AssertString(none).NotContains("Source:");
+    }
+    [TestCase]
     public void ClassifiesPluginScripts()
     {
         var types = typeof(PluginCatalog).Assembly.GetTypes();

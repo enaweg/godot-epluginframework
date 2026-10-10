@@ -16,6 +16,10 @@ internal sealed record PluginInfo(string Slug, string Name, PluginKind Kind, boo
     public string Author { get; init; } = "";
     public string Description { get; init; } = "";
     public string? UpdateUrl { get; init; }
+    /// <summary>The <c>documentation_url</c> of plugin.cfg, linked in the details.</summary>
+    public string? DocumentationUrl { get; init; }
+    /// <summary>The <c>source_url</c> of plugin.cfg, linked in the details.</summary>
+    public string? SourceUrl { get; init; }
     /// <summary>How many packages of this plugin the local plugin directories hold, of any version.</summary>
     public int LocalPackages { get; init; }
     public string? Script { get; init; }

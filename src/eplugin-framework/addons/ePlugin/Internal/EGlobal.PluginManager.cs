@@ -36,6 +36,8 @@ internal sealed partial class EGlobal
             {
                 Version = Value("version"), Author = Value("author"), Description = Value("description"),
                 UpdateUrl = Value("update_url") is { Length: > 0 } url ? url : null, Script = script,
+                DocumentationUrl = Value("documentation_url") is { Length: > 0 } documentation ? documentation : null,
+                SourceUrl = Value("source_url") is { Length: > 0 } source ? source : null,
                 State = context?.State, Error = context?.ErrorDetail?.Message,
                 FailedAttempt = _stateStore?.GetLocal(slug),
                 Recipe = context is { IsRecipeCreated: true } ? context.Builder.PluginRecipe : null,

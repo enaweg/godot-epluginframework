@@ -122,6 +122,8 @@ public static class EditorPluginExtensions
                 Version = cfg.GetValue("plugin", "version", "").AsString(),
                 UpdateUrl = NullIfWhiteSpace(cfg.GetValue("plugin", "update_url", "").AsString()),
                 Author = cfg.GetValue("plugin", "author", "").AsString(),
+                DocumentationUrl = NullIfWhiteSpace(cfg.GetValue("plugin", "documentation_url", "").AsString()),
+                SourceUrl = NullIfWhiteSpace(cfg.GetValue("plugin", "source_url", "").AsString()),
             };
         }
         catch (Exception ex)

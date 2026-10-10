@@ -182,6 +182,8 @@ internal sealed class PluginManagerViewModel
         Line("Status", StatusText(plugin));
         Line("Version", plugin.Version);
         Line("Author", plugin.Author);
+        Link("Documentation", plugin.DocumentationUrl);
+        Link("Source", plugin.SourceUrl);
         text.Append(LicenseLine(license));
         text.Append(WelcomeLine(welcome));
         if (!string.IsNullOrWhiteSpace(plugin.Description)) text.Append('\n').Append(Escape(plugin.Description)).Append('\n');
