@@ -234,11 +234,20 @@ public class UpdateSourceTests
             await top.FetchAsync(package, "plugin", Path.Combine(root, "top"), CancellationToken.None);
             Assertions.AssertBool(File.Exists(Path.Combine(root, "top/plugin.cfg"))).IsTrue();
 
-            // another plugin's folder, or several plugins, need ?path=
+            // of several plugins, such as a project with samples, only the one named like the slug is installed
+            var several = new FakeGit("src/project/addons/plugin",
+                tree: "project.godot\0src/project/addons/other/plugin.cfg\0src/project/addons/plugin/plugin.cfg\0src/project/addons/plugin/sub/plugin.cfg\0samples/plugin/x/plugin.cfg\0");
+            await new GitSource(new(), several, new("https://github.com/owner/repo.git", "", null))
+                .FetchAsync(package, "plugin", Path.Combine(root, "several"), CancellationToken.None);
+            Assertions.AssertBool(several.Calls.Any(c => c.Contains("--no-cone") && c.Contains("/src/project/addons/plugin/"))).IsTrue();
+            Assertions.AssertBool(File.Exists(Path.Combine(root, "several/plugin.cfg"))).IsTrue();
+
+            // no folder named like the slug, or several equally deep ones, need ?path=
             foreach (var (fake, slug) in new[]
                      {
                          (new FakeGit("addons/other"), "plugin"),
-                         (new FakeGit("addons/plugin", tree: "addons/plugin/plugin.cfg\0addons/other/plugin.cfg\0"), "plugin"),
+                         (new FakeGit("addons/plugin", tree: "addons/other/plugin.cfg\0addons/third/plugin.cfg\0"), "plugin"),
+                         (new FakeGit("addons/plugin", tree: "a/plugin/plugin.cfg\0b/plugin/plugin.cfg\0"), "plugin"),
                      })
             {
                 var refused = new GitSource(new(), fake, new("https://github.com/owner/repo.git", "", null));

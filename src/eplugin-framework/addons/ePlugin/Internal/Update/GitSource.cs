@@ -191,18 +191,29 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
     /// <summary>
     /// The folder of the plugin in the fetched commit, with a trailing slash ("" at the repository root): the URL's
     /// path, otherwise found like the plugin root of a ZIP package. A plugin below the root (such as addons/my_plugin/
-    /// next to a project.godot) must be in a folder named like its slug, so an unrelated plugin is never installed.
+    /// next to a project.godot) must be in a folder named like its slug, so an unrelated plugin is never installed. A
+    /// repository with several plugins, such as a project with sample plugins, installs the shallowest folder named
+    /// like the slug and ignores the others.
     /// </summary>
     private async Task<string> PluginFolder(string work, string slug, CancellationToken ct)
     {
         if (url.Path.Length > 0) return url.Path + "/";
         var tree = await Checked(git, work, ["ls-tree", "-r", "-z", "--name-only", "FETCH_HEAD"], ct).ConfigureAwait(false);
-        string root;
-        try { root = SafeZipExtractor.PluginRoot(tree.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries)); }
-        catch (InvalidDataException ex) { throw new InvalidDataException(ex.Message + " Name the plugin folder with ?path= in the update URL."); }
+        var files = tree.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries);
+        string? root;
+        try { root = SafeZipExtractor.PluginRoot(files); }
+        catch (InvalidDataException) { root = null; }
+        if (root is null || SafeZipExtractor.RootSlug(root) != slug && root.Count(c => c == '/') > 1)
+        {
+            var named = files.Where(SafeZipExtractor.IsPluginConfig).Select(f => f[..^"plugin.cfg".Length])
+                .Where(f => SafeZipExtractor.RootSlug(f) == slug).GroupBy(f => f.Count(c => c == '/')).MinBy(g => g.Key)?.ToArray() ?? [];
+            if (named.Length != 1)
+                throw new InvalidDataException((named.Length == 0 ? $"The repository has no plugin folder named '{slug}'."
+                    : "The repository has several plugin folders named '" + slug + "': " + string.Join(", ", named) + ".") +
+                    " Name the plugin folder with ?path= in the update URL.");
+            root = named[0];
+        }
         if (root.Length > 0) PackageFiles.Normalize(root);
-        if (SafeZipExtractor.RootSlug(root) != slug && root.Count(c => c == '/') > 1)
-            throw new InvalidDataException($"The plugin folder '{root}' of the repository is not named '{slug}'. Name it with ?path= in the update URL.");
         return root;
     }
 
