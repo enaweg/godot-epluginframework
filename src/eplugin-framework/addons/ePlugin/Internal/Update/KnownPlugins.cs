@@ -20,9 +20,9 @@ internal sealed record KnownPlugin(string Slug, string Name, string UpdateUrl, s
 /// </summary>
 /// <remarks>
 /// The entries live in KnownPlugins.Data.cs, written by tools/generate_known_plugins.cs from the add-ons that
-/// tools/build_godot_addons.cs lists. Each slug is the plugin folder
-/// in the add-on's repository at its latest release or version tag; the packages are not installed or validated, so an
-/// update from the list can still be refused like any other.
+/// tools/build_godot_addons.cs lists. Each slug is the plugin folder in the add-on's latest release ZIP or, without one,
+/// in its repository at its latest release or version tag; tools/extra_addons.txt can name it. The packages are not
+/// installed or validated, so an update from the list can still be refused like any other.
 /// </remarks>
 internal static partial class KnownPlugins
 {

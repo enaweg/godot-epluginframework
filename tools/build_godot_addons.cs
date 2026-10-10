@@ -111,7 +111,7 @@ catch (UnauthorizedAccessException ex)
 }
 
 // One candidate per GitHub slug, with the title shown in the Godot Asset Library ranking. Extra add-ons skip the filters.
-var candidates = new Dictionary<string, (string Slug, string Name, bool Extra)>(StringComparer.OrdinalIgnoreCase);
+var candidates = new Dictionary<string, (string Slug, string Name, bool Extra, string? PluginSlug)>(StringComparer.OrdinalIgnoreCase);
 var markdown = await RequestAsync(source);
 string? category = null;
 var listingPattern = new Regex(@"^\|\s*\[([^]]+)\]\((https://github\.com/[^)/]+/[^)/]+)\)\s*\|\s*([\d,]+)\s*\|", RegexOptions.Compiled);
@@ -126,16 +126,17 @@ foreach (var line in markdown.Split('\n'))
     if (!match.Success || !int.TryParse(match.Groups[3].Value.Replace(",", ""), out var oldStars) || oldStars < minStars / 2)
         continue;
     var slug = match.Groups[2].Value["https://github.com/".Length..].TrimEnd('/');
-    candidates[slug] = (slug, match.Groups[1].Value, false);
+    candidates[slug] = (slug, match.Groups[1].Value, false, null);
 }
 
 // A file-based app runs from a temporary build folder, so the script's own folder comes from AppContext.
 var scriptDirectory = AppContext.GetData("EntryPointFileDirectoryPath") as string;
 
-// Add-ons that are always listed, whatever their stars or activity: extra_addons.txt beside this file, one git
-// repository URL per line (GitHub, GitLab or any other git host; a tag or release page works too), # starts a comment.
+// Add-ons that are always listed, whatever their stars or activity: extra_addons.txt beside this file, one per line as
+// "slug;url" or "url": the git repository URL (GitHub, GitLab or any other git host; a tag or release page works too)
+// and optionally the add-on's folder in res://addons, which generate_known_plugins.cs then uses. # starts a comment.
 // GitHub repositories are read with the others below; the rest by GitLab's API when the host has one, and by git.
-var others = new List<string>();
+var others = new List<(string Repository, string? PluginSlug)>();
 var extrasPath = Path.Combine(scriptDirectory ?? Environment.CurrentDirectory, "extra_addons.txt");
 if (File.Exists(extrasPath))
 {
@@ -143,14 +144,21 @@ if (File.Exists(extrasPath))
     {
         var line = raw.Split('#', 2)[0].Trim();
         if (line.Length == 0) continue;
-        var repository = Regex.Replace(line.TrimEnd('/'), @"(/-)?/(tags|releases)$", "");
+        var parts = line.Split(';', 2);
+        var pluginSlug = parts.Length == 2 && parts[0].Trim() is { Length: > 0 } named ? named : null;
+        if (pluginSlug is not null && (pluginSlug.IndexOfAny(['/', '\\', ':']) >= 0 || pluginSlug.Any(char.IsWhiteSpace) || pluginSlug is "." or ".."))
+        {
+            Console.Error.WriteLine($"extra_addons.txt: '{pluginSlug}' is not a folder name; ignoring line '{line}'.");
+            continue;
+        }
+        var repository = Regex.Replace(parts[^1].Trim().TrimEnd('/'), @"(/-)?/(tags|releases)$", "");
         var github = Regex.Match(repository, @"^https://github\.com/([^/]+)/([^/]+?)(\.git)?$", RegexOptions.IgnoreCase);
         if (github.Success)
         {
             var slug = github.Groups[1].Value + "/" + github.Groups[2].Value;
-            candidates[slug] = (slug, candidates.TryGetValue(slug, out var known) ? known.Name : github.Groups[2].Value, true);
+            candidates[slug] = (slug, candidates.TryGetValue(slug, out var known) ? known.Name : github.Groups[2].Value, true, pluginSlug);
         }
-        else others.Add(repository);
+        else others.Add((repository, pluginSlug));
     }
 }
 
@@ -171,7 +179,7 @@ if (seedPath is not null)
         var slug = match.Groups[1].Value;
         if (!candidates.ContainsKey(slug))
             candidates[slug] = (slug, item.TryGetProperty("name", out var name) && name.ValueKind == JsonValueKind.String
-                ? name.GetString()! : slug, false);
+                ? name.GetString()! : slug, false, null);
     }
 }
 
@@ -187,11 +195,15 @@ string? Newest(IEnumerable<string?> tags) => tags
     .Select(t => (t.Tag, Version: (Number(t.Match.Groups[1]), Number(t.Match.Groups[2]), Number(t.Match.Groups[3]))))
     .OrderByDescending(t => t.Version).Select(t => t.Tag).FirstOrDefault();
 static long Number(Group group) => group.Success && long.TryParse(group.Value, out var value) ? value : 0;
+// The ZIP assets, as the updater recognizes them: by name or by the URL's path.
+static ReleaseAsset[] Zips(IEnumerable<ReleaseAsset> assets) => assets.Where(a => a.Url.Length > 0 &&
+    (a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
+     Uri.TryCreate(a.Url, UriKind.Absolute, out var uri) && uri.AbsolutePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))).ToArray();
 static string? Utc(DateTimeOffset? time) => time?.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
 
 // An extra add-on outside GitHub. GitLab's API (gitlab.com or self-hosted) gives its stars, activity and releases; any
 // other host only its version tags, read with git. Null when it has no stable release or version tag.
-async Task<Addon?> OtherAddon(string repository)
+async Task<Addon?> OtherAddon(string repository, string? pluginSlug)
 {
     var https = Uri.TryCreate(repository, UriKind.Absolute, out var uri) && uri.Scheme == "https";
     var web = https ? Regex.Replace(repository, @"\.git$", "") : repository;
@@ -200,6 +212,7 @@ async Task<Addon?> OtherAddon(string repository)
     var stars = 0;
     DateTimeOffset? activity = null;
     string? release = null;
+    ReleaseAsset[]? assets = null;
     var gitlab = false;
     if (https)
     {
@@ -214,9 +227,18 @@ async Task<Addon?> OtherAddon(string repository)
             // Upcoming releases are not published yet; the updater skips them too.
             using var releases = await TryJson(api + "/releases?per_page=30");
             if (releases?.RootElement is { ValueKind: JsonValueKind.Array } list)
-                release = Newest(list.EnumerateArray()
-                    .Where(r => !(r.TryGetProperty("upcoming_release", out var upcoming) && upcoming.ValueKind == JsonValueKind.True))
-                    .Select(r => r.TryGetProperty("tag_name", out var tagName) ? tagName.GetString() : null));
+            {
+                var published = list.EnumerateArray()
+                    .Where(r => !(r.TryGetProperty("upcoming_release", out var upcoming) && upcoming.ValueKind == JsonValueKind.True)).ToArray();
+                release = Newest(published.Select(r => r.TryGetProperty("tag_name", out var tagName) ? tagName.GetString() : null));
+                // The release's links; the updater falls back to the source archive, which the repository stands for.
+                assets = Zips(published.Where(r => r.TryGetProperty("tag_name", out var tagName) && tagName.GetString() == release)
+                    .SelectMany(r => r.TryGetProperty("assets", out var all) && all.TryGetProperty("links", out var links) &&
+                                     links.ValueKind == JsonValueKind.Array ? links.EnumerateArray() : Enumerable.Empty<JsonElement>())
+                    .Select(l => new ReleaseAsset(l.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "",
+                        (l.TryGetProperty("direct_asset_url", out var direct) ? direct.GetString() : null) ??
+                        (l.TryGetProperty("url", out var link) ? link.GetString() : null) ?? "")));
+            }
         }
     }
     var tag = release is null ? Newest(await RemoteTags(git)) : null;
@@ -229,7 +251,7 @@ async Task<Addon?> OtherAddon(string repository)
     }
     var updateUrl = release is not null ? web + "/-/releases" : gitlab ? web + "/-/tags" : git;
     return new Addon(name, stars, Utc(activity), updateUrl, release is not null ? "releases" : "tags", (release ?? tag)!,
-        web, web, web, git, true);
+        web, web, web, git, true, pluginSlug, release is null ? null : assets ?? []);
 }
 
 async Task<JsonDocument?> TryJson(string url)
@@ -278,7 +300,9 @@ for (var offset = 0; offset < values.Length; offset += 20)
         fields.Append("nameWithOwner isArchived isDisabled isFork stargazerCount url homepageUrl description ");
         fields.Append("defaultBranchRef { target { ... on Commit { committedDate } } } ");
         // As many releases as the updater's check reads, and the newest tags for repositories without a release.
-        fields.Append("releases(first: 30, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { tagName isDraft isPrerelease } } ");
+        // Each release's assets, so generate_known_plugins.cs can read the ZIP the updater downloads.
+        fields.Append("releases(first: 30, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { tagName isDraft isPrerelease ");
+        fields.Append("releaseAssets(first: 20) { nodes { name downloadUrl } } } } ");
         fields.Append("refs(refPrefix: \"refs/tags/\", first: 100, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) { nodes { name } } } ");
     }
     fields.Append('}');
@@ -321,17 +345,20 @@ for (var offset = 0; offset < values.Length; offset += 20)
         }
         var homepage = repo.TryGetProperty("homepageUrl", out var hp) && hp.ValueKind == JsonValueKind.String
             ? hp.GetString() : null;
+        var assets = release is null ? null : Zips(Nodes(repo, "releases").Where(r => r.GetProperty("tagName").GetString() == release)
+            .SelectMany(r => Nodes(r, "releaseAssets"))
+            .Select(a => new ReleaseAsset(a.GetProperty("name").GetString() ?? "", a.GetProperty("downloadUrl").GetString() ?? "")));
         results.Add(new Addon(batch[i].Name, stars, Utc(committed),
             release is not null ? url + "/releases" : url + "/tags", release is not null ? "releases" : "tags", (release ?? tag)!,
-            string.IsNullOrWhiteSpace(homepage) ? url : homepage, url + "#readme", url, url + ".git", extra));
+            string.IsNullOrWhiteSpace(homepage) ? url : homepage, url + "#readme", url, url + ".git", extra, batch[i].PluginSlug, assets));
     }
     Console.Error.WriteLine($"Checked {Math.Min(offset + 20, values.Length)}/{values.Length} candidates");
 }
 
 // Extra add-ons on other hosts.
-foreach (var repository in others)
+foreach (var (repository, pluginSlug) in others)
 {
-    if (await OtherAddon(repository) is { } addon) results.Add(addon);
+    if (await OtherAddon(repository, pluginSlug) is { } addon) results.Add(addon);
     else unversioned.Add(repository);
 }
 
@@ -362,5 +389,9 @@ Console.WriteLine("Candidate discovery uses an older ranking; the result may omi
 /// <param name="RepositoryUrl">The repository's web page, or its git URL when it has none.</param>
 /// <param name="GitUrl">The URL to clone the repository from.</param>
 /// <param name="Extra">Listed in extra_addons.txt, so it skips the star and activity filters.</param>
+/// <param name="Slug">The add-on's folder in res://addons as extra_addons.txt gives it; null to let the generator find it.</param>
+/// <param name="ReleaseAssets">The ZIP assets of the latest release; null without a release.</param>
 record Addon(string Name, int Stars, string? LastCommitAt, string UpdateUrl, string UpdateSource, string LatestVersion,
-    string WebsiteUrl, string DocumentationUrl, string RepositoryUrl, string GitUrl, bool Extra);
+    string WebsiteUrl, string DocumentationUrl, string RepositoryUrl, string GitUrl, bool Extra, string? Slug = null,
+    ReleaseAsset[]? ReleaseAssets = null);
+record ReleaseAsset(string Name, string Url);
