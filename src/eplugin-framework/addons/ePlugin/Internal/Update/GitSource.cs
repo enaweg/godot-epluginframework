@@ -96,7 +96,14 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
             }
             return [await Candidate(work, target, await Commit(work, refs, options, ct).ConfigureAwait(false), ct).ConfigureAwait(false)];
         }
-        finally { Directory.Delete(work, true); }
+        finally { DeleteWork(work); }
+    }
+    /// <summary>Deletes a git working folder. git writes its object files read-only, which Windows refuses to delete.</summary>
+    private static void DeleteWork(string work)
+    {
+        if (!Directory.Exists(work)) return;
+        foreach (var file in Directory.EnumerateFiles(work, "*", SearchOption.AllDirectories)) File.SetAttributes(file, FileAttributes.Normal);
+        Directory.Delete(work, true);
     }
     private static async Task<GitOutcome> Checked(IGitRunner runner, string directory, string[] args, CancellationToken ct, bool trace = false)
     {
@@ -163,7 +170,7 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
             if (url.Ref is { } reference && Tagged(refs, reference) is not null) return null;
             return await Candidate(work, target, await Commit(work, refs, options, ct).ConfigureAwait(false), ct).ConfigureAwait(false);
         }
-        finally { Directory.Delete(work, true); }
+        finally { DeleteWork(work); }
     }
 
     /// <summary>The candidate of <paramref name="commit"/>, announcing the version in its plugin.cfg.</summary>
@@ -220,7 +227,7 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
             await Checked(git, work, ["checkout", "--detach", "FETCH_HEAD"], ct).ConfigureAwait(false);
             PackageFiles.Copy(System.IO.Path.Combine(work, package.Path), destination, ct);
         }
-        finally { Directory.Delete(work, true); }
+        finally { DeleteWork(work); }
     }
 }
 #endif
