@@ -135,6 +135,19 @@ public class PluginManagerViewModelTests
         Assertions.AssertString(PluginCatalog.ResolveScript("res://addons/x", "res://other/Plugin.cs")).IsEqual("res://other/Plugin.cs");
     }
     [TestCase]
+    public void ClassifiesDerivedScriptTypes()
+    {
+        // a script class deriving from another one inherits its base's ScriptPath next to its own
+        var types = new[] { typeof(BaseScript), typeof(DerivedScript) };
+        Assertions.AssertArray(PluginCatalog.ScriptPaths(typeof(DerivedScript)).ToArray()).ContainsExactly("res://addons/x/Derived.cs");
+        Assertions.AssertObject(PluginCatalog.Classify("res://addons/x/Derived.cs", false, types)).IsEqual(PluginKind.CSharp);
+        Assertions.AssertObject(PluginCatalog.Classify("res://addons/x/Base.cs", false, types)).IsEqual(PluginKind.CSharp);
+    }
+    [Godot.ScriptPath("res://addons/x/Base.cs")]
+    private class BaseScript;
+    [Godot.ScriptPath("res://addons/x/Derived.cs")]
+    private class DerivedScript : BaseScript;
+    [TestCase]
     public void VersionOptionsMarkInstalledAndDowngrades()
     {
         var options = PluginManagerViewModel.VersionOptions("1.5.0", [Version("1.0.0"), Version("2.0.0"), Version("1.5.0")]);

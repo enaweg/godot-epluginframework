@@ -166,7 +166,7 @@ internal sealed partial class EGlobal
         var type = script is null || !script.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) ? null
             : typeof(EGlobal).Assembly.GetTypes().FirstOrDefault(t =>
                 typeof(EditorPlugin).IsAssignableFrom(t) && typeof(IEEditorPlugin).IsAssignableFrom(t) &&
-                t.GetCustomAttribute<ScriptPathAttribute>()?.Path == script);
+                PluginCatalog.ScriptPaths(t).Contains(script));
         if (type is null)
         {
             return null;
