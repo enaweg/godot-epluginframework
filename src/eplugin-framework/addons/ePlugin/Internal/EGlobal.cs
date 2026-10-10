@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using Enaweg.Plugin.Internal.Dotnet;
+using Enaweg.Plugin.Internal.Manager;
 using Enaweg.Plugin.Internal.Update;
 using Enaweg.Plugin.Logging;
 using Godot;
@@ -238,7 +239,7 @@ internal sealed partial class EGlobal
         // Disabled C# plugins have no editor instance after a reload. Their script types are still compiled.
         var prefix = $"res://addons/{slug}/";
         return typeof(EGlobal).Assembly.GetTypes().Any(type => typeof(IEEditorPlugin).IsAssignableFrom(type) &&
-            type.GetCustomAttribute<ScriptPathAttribute>()?.Path.StartsWith(prefix, StringComparison.Ordinal) == true);
+            PluginCatalog.ScriptPaths(type).Any(path => path.StartsWith(prefix, StringComparison.Ordinal)));
     }
 
     private static IReadOnlySet<string> GetEnabledPluginSlugs()

@@ -66,8 +66,15 @@ internal static class PluginCatalog
         if (script is null) return PluginKind.Unknown;
         if (script.EndsWith(".gd", StringComparison.OrdinalIgnoreCase)) return PluginKind.GDScript;
         if (!script.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)) return PluginKind.Unknown;
-        var type = types.FirstOrDefault(t => t.GetCustomAttribute<ScriptPathAttribute>()?.Path == script);
+        var type = types.FirstOrDefault(t => ScriptPaths(t).Contains(script));
         return type is not null && typeof(IEEditorPlugin).IsAssignableFrom(type) ? PluginKind.EPlugin : PluginKind.CSharp;
     }
+
+    /// <summary>
+    /// The script paths Godot generated for <paramref name="type"/> itself. The attribute allows multiple instances
+    /// and is inherited, so a script class deriving from another script class would also report its base's path.
+    /// </summary>
+    public static IEnumerable<string> ScriptPaths(Type type) =>
+        type.GetCustomAttributes<ScriptPathAttribute>(inherit: false).Select(a => a.Path);
 }
 #endif
