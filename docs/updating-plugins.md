@@ -14,7 +14,7 @@ script="MyPlugin.cs"
 update_url="https://github.com/owner/repository/releases"
 ```
 
-This works for enabled ePlugins, plain Godot GDScript or C# plugins, and ePlugin Framework itself. Checks compare the source version with the version in the installed `plugin.cfg`, independently of the last working version in `addons/eplugin-state.json`. A manual version edit does not block checks; an unfinished local attempt does.
+This works for enabled ePlugins, plain Godot GDScript or C# plugins, and ePlugin Framework itself. Checks compare the source version with the version in the installed `plugin.cfg`, independently of the last working version in `addons/eplugin-state.json`. A manual version edit does not block checks; an unfinished local attempt does. The `update_url` is read from the installed `plugin.cfg`, so each release must declare it again; see [Review before installation](#review-before-installation) for an `update_url` added to someone else's plugin.
 
 Supported source examples:
 
@@ -74,6 +74,32 @@ By default, the framework checks once per editor session when the last successfu
 The manager shows installed and candidate versions, sources, warnings, and earlier failures. Select a batch and choose **Update** to download and validate it. Package warnings require another confirmation before installation; a changed source host requires the explicit trust checkbox. Canceling the download leaves installed addons untouched. An update that comes with a license file not accepted yet shows it before installation; an update that keeps the accepted license file does not ask again (see [Plugin licenses](plugin-licenses.md#updates)). Previously failed versions are shown but are not selected automatically. The **Version** selector also supports installing an earlier published version as a downgrade, with the same validation, backup, and rollback flow.
 
 Versions are listed from GitHub/GitLab releases (up to 100) or semantic tags of a Git source. A Git `update_url` pinned to a branch, tag, or commit has no version list. When the list loaded for the selected plugin contains a version newer than the installed one, the plugin shows that update right away, as if **Check for updates** had found it. Configure **Update** and **Downgrade** from [ePlugin Manager](eplugin-manager.md).
+
+### Review before installation
+
+**Update** first downloads and validates every package of the batch. Addon files are only changed afterwards. Installation stops for a review when a package has a warning or when its update source moves to another host. The warnings are listed in the plugin's details under **Update** (or **Reviewed package** for a version chosen in the **Version** selector). Confirm again to install. A changed host also requires the trust checkbox.
+
+| Warning | Reason |
+|---|---|
+| Package version differs from the announced version | The `version` in the package's `plugin.cfg` is not the version of the release or tag that offered it. |
+| Plugin name changed | The package's `plugin.cfg` has a different `name`. |
+| Update source changed | The package's `plugin.cfg` has a different `update_url`, or none. A different host requires the trust checkbox. |
+| Plugin entry-point language changed | The `script` changed language, for example from `.gd` to `.cs`. |
+| Major version change | The major version differs, so project code that uses the plugin may need changes. |
+
+An update with an error cannot be selected or installed. These are refused:
+
+- a package without a readable `plugin.cfg`, without `name`, `version` or `script`, or whose script is missing or outside the addon
+- a package for a different addon slug
+- a version that is not newer than the installed one. The **Version** selector can downgrade, except ePlugin Framework.
+- a package or installed plugin with `.gdextension` files, a forbidden file, or a package over the size limits (see [Publish an updatable release](#publish-an-updatable-release))
+- a version rejected by a hard dependency constraint of another enabled plugin
+- a plugin whose update is changed or blocked: its `update_url` changed since the check, it is no longer enabled, or an earlier attempt needs **Retry failed** first
+
+Shown without stopping: an optional recipe of another plugin that no longer matches the new version (it stays installed until that plugin is toggled), and the last working version recorded in `addons/eplugin-state.json` when it differs from the installed one.
+
+> [!NOTE]
+> An update replaces the whole addon folder, `plugin.cfg` included. If you added `update_url` to a third-party plugin yourself, its next release usually does not contain it: the review reports **Update source changed: removed**, and after installing, the plugin has no `update_url` until you add it again. Use a [local plugin directory](#local-plugin-directories) for plugins whose releases do not declare an `update_url`.
 
 ## Builds, restart, and recovery
 
