@@ -176,7 +176,10 @@ like `LocalSourceSettings` it is never overwritten when unreadable or newer, and
 `KnownPlugins` (`KnownPlugins.Data.cs` is generated, see its header) is the built-in list of add-on update sites, keyed by
 slug: `PluginUpdateTarget.KnownUrl` is the last entry of `UpdateUrls`, and `PluginInfo.Known` fills in documentation,
 source and website links. `eplugin/updates/builtin_update_sites` (default on, `EGlobal.UseKnownPlugins`) turns it off.
-Regenerate the data only with slugs taken from each add-on's latest release and validated like an update.
+Regenerate the data with `tools/generate_known_plugins.cs` from `tools/build_godot_addons.cs`'s output (run both in
+`tools/`); it takes each slug from the plugin folder in the add-on's repository at its latest release or version tag,
+keeps the slugs already in the list, and gives a slug claimed by several repositories to the one with the most stars.
+Entries are not installed or validated in advance.
 Checks use installed metadata and a 20-hour local cache, never the shared working-version index. Every apply
 requires dialog confirmation. Stage and validate the whole batch before touching addons, then save and close all
 open scenes (`IUpdateHost.CloseScenes`; `close_scene` exists only from Godot 4.5) before the swap. Managed plugins are
