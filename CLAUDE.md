@@ -166,6 +166,13 @@ The index is rebuilt on every start and assembly reload by `EGlobal.LocalSources
 `LocalIndexCache` (per-user `local-index.json`, keyed by path/size/mtime) keeps unchanged ZIPs from being opened again
 and must be bumped via `IndexerVersion` whenever `LocalPackageIndexer.Read` changes what it extracts. Missing
 directories are skipped but kept in the list. `PendingUpdates` merges remote and local candidates.
+Project update sites (`UpdateSiteSettings`, the committed `res://addons/eplugin-update-sites.json`,
+`EGlobal.UpdateSites.cs`, `UpdateSitesDialog`) replace a plugin's `update_url`. `PluginUpdateTarget.UpdateUrl` stays
+the plugin.cfg value (the validator's R9 compares new packages against it) and `OverrideUrl` holds the project's site;
+`UpdateUrls` lists the override first. `UpdateService.FirstWorkingSiteAsync` tries them in order, so an unsupported
+or failing site falls back to plugin.cfg (reported in `UpdateCheckResult.Fallbacks`), and a candidate from either URL
+belongs to the plugin (`CurrentCached`, `source_changed`). `CollectUpdateTargets`/`CollectPlugins` reload the file;
+like `LocalSourceSettings` it is never overwritten when unreadable or newer, and it is deleted with its last entry.
 Checks use installed metadata and a 20-hour local cache, never the shared working-version index. Every apply
 requires dialog confirmation. Stage and validate the whole batch before touching addons, then save and close all
 open scenes (`IUpdateHost.CloseScenes`; `close_scene` exists only from Godot 4.5) before the swap. Managed plugins are

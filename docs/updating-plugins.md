@@ -14,7 +14,7 @@ script="MyPlugin.cs"
 update_url="https://github.com/owner/repository/releases"
 ```
 
-This works for enabled ePlugins, plain Godot GDScript or C# plugins, and ePlugin Framework itself. Checks compare the source version with the version in the installed `plugin.cfg`, independently of the last working version in `addons/eplugin-state.json`. A manual version edit does not block checks; an unfinished local attempt does. The `update_url` is read from the installed `plugin.cfg`, so each release must declare it again; see [Review before installation](#review-before-installation) for an `update_url` added to someone else's plugin.
+This works for enabled ePlugins, plain Godot GDScript or C# plugins, and ePlugin Framework itself. Checks compare the source version with the version in the installed `plugin.cfg`, independently of the last working version in `addons/eplugin-state.json`. A manual version edit does not block checks; an unfinished local attempt does. The `update_url` is read from the installed `plugin.cfg`, so each release must declare it again. To use a different update site for a plugin, for example one without an `update_url` or someone else's plugin, set it for the project instead; see [Project update sites](#project-update-sites).
 
 Supported source examples:
 
@@ -25,12 +25,38 @@ Supported source examples:
 | Git subtree tracking a branch | `https://host/owner/repository.git?path=addons/my_plugin#main` |
 | Git over SSH | `git@host:owner/repository.git?path=addons/my_plugin#main` |
 | Local plugin directories | ZIP files in folders you choose; no `update_url` required |
+| Project update sites | Any of the above, set by the project for a plugin; replaces its `update_url` |
 
 Release sources select the highest semantic version and a ZIP asset. If there are several assets, the updater prefers a slug-, addon-, or plugin-named ZIP; if none is suitable, it uses the release source archive. Ambiguous asset lists are refused. Git sources without a `#ref` choose the newest semantic tag, falling back to the default branch. A branch follows its tip; a tag or full commit SHA pins the source and opts out of update checks. Checks are version-based, so changing a commit without increasing `plugin.cfg`'s version does not offer an update.
 
 Git sources require **git 2.25 or newer** on PATH. Fetches use shallow, partial, sparse checkout of the requested subtree. Servers that do not advertise partial-clone filtering are refused. Git release checks can read remote metadata directly; other Git checks fetch only the metadata blob. Release ZIP sources do not require git.
 
 For private release APIs, set `EPLUGIN_GITHUB_TOKEN` (fallback `GITHUB_TOKEN`) or `EPLUGIN_GITLAB_TOKEN` (fallback `GITLAB_TOKEN`) in the editor environment. Tokens are not written to project files or caches. HTTP credentials are scoped to the source host and stripped on redirects to another host. Git authentication uses normal Git or SSH credentials and runs without interactive prompts.
+
+## Project update sites
+
+A project can set the update site of a plugin itself, in **Update sites...** of the [ePlugin Manager](eplugin-manager.md). Use it for a plugin whose `plugin.cfg` has no `update_url`, or whose `update_url` changed and no longer finds updates. The project's update site replaces the plugin's `update_url` for checks, versions and downloads.
+
+- **Add...** chooses a plugin in `res://addons` from a list and asks for the update site URL.
+- **Edit...** (or double-clicking an entry) changes the URL of the selected plugin.
+- **Remove** deletes the entry; the plugin uses its `update_url` again.
+
+The URL can be any [supported source](#configure-an-update-source): GitHub or GitLab releases, or a Git repository. Other URLs are refused when you save them. The dialog shows each plugin's `plugin.cfg` `update_url` next to the site that replaces it.
+
+The project's update site is always tried first. When it does not work, the plugin's `update_url` is checked instead: for example when the site does not respond, returns an error, or is not a supported URL because the file was edited by hand. The output log and the manager's status line say when this happened. A plugin without an `update_url` reports the failed check.
+
+The update sites are saved in `res://addons/eplugin-update-sites.json`. Commit the file, so everyone working on the project uses the same sites. The file is removed again with its last entry. A file that cannot be read, or that a newer ePlugin version wrote, is never overwritten: the sites can only be changed again once it is repaired or deleted.
+
+```json
+{
+  "schema": 1,
+  "sites": [
+    { "slug": "gdUnit4", "url": "https://github.com/MikeSchulze/gdUnit4/releases" }
+  ]
+}
+```
+
+An update replaces the plugin's `plugin.cfg`, but not the project's update site, which stays in use. A new release that changes its own `update_url` is still shown for [review](#review-before-installation), but does not need the trust checkbox, because checks keep using the project's site. The plugin details in the manager show the project's update site and the `update_url` it replaces.
 
 ## Local plugin directories
 
@@ -99,7 +125,7 @@ An update with an error cannot be selected or installed. These are refused:
 Shown without stopping: an optional recipe of another plugin that no longer matches the new version (it stays installed until that plugin is toggled), and the last working version recorded in `addons/eplugin-state.json` when it differs from the installed one.
 
 > [!NOTE]
-> An update replaces the whole addon folder, `plugin.cfg` included. If you added `update_url` to a third-party plugin yourself, its next release usually does not contain it: the review reports **Update source changed: removed**, and after installing, the plugin has no `update_url` until you add it again. Use a [local plugin directory](#local-plugin-directories) for plugins whose releases do not declare an `update_url`.
+> An update replaces the whole addon folder, `plugin.cfg` included. If you added `update_url` to a third-party plugin yourself, its next release usually does not contain it: the review reports **Update source changed: removed**, and after installing, the plugin has no `update_url` until you add it again. Set a [project update site](#project-update-sites) for plugins whose releases do not declare an `update_url`; it stays in use across updates.
 
 ## Builds, restart, and recovery
 
