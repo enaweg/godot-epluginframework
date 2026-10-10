@@ -51,6 +51,7 @@ Screenshots show the repository's sample plugins and example update packages.
 - [Updating plugins](docs/updating-plugins.md): configure update sources, publish packages, and understand validation, builds, and recovery.
 - [Plugin state files](docs/plugin-state.md): checked-in state, per-user recovery state, and manual retry.
 - [Plugin licenses](docs/plugin-licenses.md): ask users to accept a plugin's license before it is enabled or updated.
+- [Plugin welcome pages](docs/plugin-welcome.md): greet users once after a plugin is installed, by default with its README.
 
 The repository includes a sample project under `src/eplugin-framework` with examples for required and optional dependencies.
 

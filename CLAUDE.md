@@ -226,6 +226,22 @@ before `SetPluginEnabled` and before installing staged updates (skipping recipe-
 the license to `LicenseDialog.CreateViewer`. The `eplugin/licenses/auto_accept` project setting (no manager UI, logged)
 skips the dialog.
 
+### Plugin welcome pages
+
+A plugin's welcome page comes from the recipe's `SetWelcome` (text, or a `res://` path), else `welcome_file` in
+`plugin.cfg`, else its root README (`README.md`, `README.txt`, `README`, case-insensitive); without any of these it has
+none. `Internal/Welcomes/PluginWelcome.cs` is pure and unit-tested and reuses `PluginLicense`'s path rules and display.
+Shown pages live in the optional `welcomes` list of the shared `eplugin-state.json` (`PluginStateStore.TryRecordWelcomes`),
+recorded by slug only, so a page is shown once per project and omitted while empty like `licenses`.
+`EGlobal.Welcomes.cs` has no lifecycle hook: `EPluginPlugin._Process` calls `TakeWelcomes` every frame, which every 30
+frames collects enabled, unrecorded plugins (ePlugins only once `Activated`) while no transition, recipe update, update
+journal or license review is pending. That one path covers activations, plain plugins enabled in Project Settings,
+assembly reloads and restarts. A session set keeps plugins without a page from being read again. `WelcomeDialog`
+(scene + script, like `LicenseDialog`) lists several pages; closing it in any way records all of them, but an assembly
+reload drops it unrecorded. It opens only while no license or update-failure dialog is open. `UpdateApplier.Commit` records
+the updated plugins as shown, so updates never show a page. The ePlugin Manager links the page in the details
+(`PluginManagerViewModel.WelcomeLine`).
+
 ### Logging
 
 `ILogger`/`ILoggerFactory` are pluggable (`GodotConsoleLogger`, `NullLogger`, `GenericLoggerFactory`).
