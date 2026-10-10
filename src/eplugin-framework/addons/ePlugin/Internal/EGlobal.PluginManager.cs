@@ -16,6 +16,7 @@ internal sealed partial class EGlobal
     internal IReadOnlyList<PluginInfo> CollectPlugins()
     {
         RefreshPlainPlugins();
+        ReloadUpdateSites();
         var enabled = GetEnabledPluginSlugs();
         var types = typeof(EGlobal).Assembly.GetTypes();
         var framework = _ePluginContext?.GetPluginSlug() ?? "ePlugin";
@@ -35,7 +36,7 @@ internal sealed partial class EGlobal
                 PluginCatalog.Classify(script, slug == framework, types), enabled.Contains(slug))
             {
                 Version = Value("version"), Author = Value("author"), Description = Value("description"),
-                UpdateUrl = Value("update_url") is { Length: > 0 } url ? url : null, Script = script,
+                UpdateUrl = Value("update_url") is { Length: > 0 } url ? url : null, UpdateSite = UpdateSiteOf(slug), Script = script,
                 DocumentationUrl = Value("documentation_url") is { Length: > 0 } documentation ? documentation : null,
                 SourceUrl = Value("source_url") is { Length: > 0 } source ? source : null,
                 State = context?.State, Error = context?.ErrorDetail?.Message,

@@ -16,6 +16,8 @@ internal sealed record PluginInfo(string Slug, string Name, PluginKind Kind, boo
     public string Author { get; init; } = "";
     public string Description { get; init; } = "";
     public string? UpdateUrl { get; init; }
+    /// <summary>The update site the project sets for the plugin, which replaces <see cref="UpdateUrl"/>.</summary>
+    public string? UpdateSite { get; init; }
     /// <summary>The <c>documentation_url</c> of plugin.cfg, linked in the details.</summary>
     public string? DocumentationUrl { get; init; }
     /// <summary>The <c>source_url</c> of plugin.cfg, linked in the details.</summary>

@@ -1,0 +1,109 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/ePlugin/Internal/Manager/UpdateSitesDialog.cs" id="1_script"]
+
+[node name="UpdateSitesDialog" type="AcceptDialog"]
+auto_translate_mode = 2
+title = "Update sites"
+initial_position = 2
+size = Vector2i(820, 380)
+min_size = Vector2i(560, 280)
+ok_button_text = "Close"
+script = ExtResource("1_script")
+
+[node name="SitesBox" type="VBoxContainer" parent="."]
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 812.0
+offset_bottom = 331.0
+theme_override_constants/separation = 8
+
+[node name="SitesHelp" type="Label" parent="SitesBox"]
+custom_minimum_size = Vector2(540, 0)
+layout_mode = 2
+text = "An update site set here replaces a plugin's plugin.cfg update_url, for example for a plugin without one or with one that stopped working. When it is unsupported or does not respond, the plugin.cfg update_url is used instead. The sites are saved in addons/eplugin-update-sites.json; commit it so everyone working on the project uses them."
+autowrap_mode = 3
+
+[node name="SiteTree" type="Tree" parent="SitesBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+columns = 3
+column_titles_visible = true
+hide_root = true
+select_mode = 1
+
+[node name="SiteButtons" type="HBoxContainer" parent="SitesBox"]
+layout_mode = 2
+
+[node name="SiteStatus" type="Label" parent="SitesBox/SiteButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 1
+text_overrun_behavior = 3
+
+[node name="AddSiteButton" type="Button" parent="SitesBox/SiteButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Set the update site of a plugin."
+text = "Add..."
+
+[node name="EditSiteButton" type="Button" parent="SitesBox/SiteButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+tooltip_text = "Change the selected update site."
+text = "Edit..."
+
+[node name="RemoveSiteButton" type="Button" parent="SitesBox/SiteButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+tooltip_text = "Remove the selected update site. The plugin uses its plugin.cfg update_url again."
+text = "Remove"
+
+[node name="SiteEditor" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+auto_translate_mode = 2
+title = "Update site"
+initial_position = 2
+size = Vector2i(560, 220)
+min_size = Vector2i(460, 200)
+ok_button_text = "Save"
+dialog_hide_on_ok = false
+
+[node name="EditorBox" type="VBoxContainer" parent="SiteEditor"]
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 552.0
+offset_bottom = 171.0
+theme_override_constants/separation = 6
+
+[node name="SlugLabel" type="Label" parent="SiteEditor/EditorBox"]
+layout_mode = 2
+text = "Plugin"
+
+[node name="SiteSlug" type="OptionButton" parent="SiteEditor/EditorBox"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "The plugin in res://addons whose update site to set."
+fit_to_longest_item = false
+
+[node name="UrlLabel" type="Label" parent="SiteEditor/EditorBox"]
+layout_mode = 2
+text = "Update site URL"
+
+[node name="SiteUrl" type="LineEdit" parent="SiteEditor/EditorBox"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "https://github.com/owner/repository/releases"
+clear_button_enabled = true
+
+[node name="SiteHint" type="Label" parent="SiteEditor/EditorBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(440, 0)
+modulate = Color(1, 1, 1, 0.7)
+layout_mode = 2
+text = "GitHub or GitLab releases, or a Git repository (.git, optionally with ?path=addons/<slug> and #branch)."
+autowrap_mode = 3

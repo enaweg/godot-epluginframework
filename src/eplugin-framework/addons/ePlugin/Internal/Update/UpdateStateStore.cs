@@ -66,7 +66,7 @@ internal static class UpdateScheduler
 
     public static IReadOnlyList<UpdateCandidate> CurrentCached(UpdateCache cache, IReadOnlyList<PluginUpdateTarget> targets,
         bool allowPrerelease) => cache.Results.Where(candidate => targets.Any(t => t.Slug == candidate.Slug &&
-            t.UpdateUrl == candidate.SourceUrl && SemVer.TryParse(t.InstalledVersion, out var installed) &&
+            candidate.SourceUrl is { } source && t.UpdateUrls.Contains(source) && SemVer.TryParse(t.InstalledVersion, out var installed) &&
             SemVer.TryParse(candidate.NewVersion, out var remote) && remote.CompareTo(installed) > 0 &&
             (allowPrerelease || remote.Prerelease is null)))
         .Select(c => c with { InstalledVersion = targets.First(t => t.Slug == c.Slug).InstalledVersion }).ToArray();

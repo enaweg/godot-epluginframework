@@ -27,6 +27,7 @@ internal sealed partial class EGlobal
         _updateCache ??= new UpdateStateStore(Path.Combine(ProjectSettings.GlobalizePath("res://.godot/eplugin"), "update-state.json"));
         _updateCache.Load();
         _updateService = new UpdateService(new UpdateSourceFactory(), new SystemClock(), _updateCache);
+        InitializeUpdateSites();
         InitializeLocalSources();
         _remoteUpdates = UpdateScheduler.CurrentCached(_updateCache.State, CollectUpdateTargets(), AllowPrerelease);
         var check = _updateJournals?.Read().Any(j => j.IsActive) != true;
@@ -52,19 +53,21 @@ internal sealed partial class EGlobal
     }
 
     /// <summary>
-    /// Every enabled plugin with a readable plugin.cfg. Plugins without an update_url can still be updated from the
-    /// local plugin directories; remote checks skip them.
+    /// Every enabled plugin with a readable plugin.cfg, with the update site the project sets for it. Plugins without
+    /// an update site can still be updated from the local plugin directories; remote checks skip them.
     /// </summary>
     internal IReadOnlyList<PluginUpdateTarget> CollectUpdateTargets()
     {
         RefreshPlainPlugins();
+        ReloadUpdateSites();
         return GetEnabledPluginSlugs().Select(slug =>
         {
             var directory = $"res://addons/{slug}";
             var metadata = EditorPluginExtensions.ReadMetadata(directory + "/plugin.cfg");
             return metadata is null ? null : new PluginUpdateTarget(slug, metadata.Name,
                 metadata.Version, metadata.UpdateUrl, ProjectSettings.GlobalizePath(directory),
-                _stateStore?.IsBlocked(slug) == true, _stateStore?.IsReadOnly != false, _stateStore?.GetShared(slug)?.Version);
+                _stateStore?.IsBlocked(slug) == true, _stateStore?.IsReadOnly != false, _stateStore?.GetShared(slug)?.Version,
+                UpdateSiteOf(slug));
         }).Where(t => t is not null).Cast<PluginUpdateTarget>().ToArray();
     }
 
@@ -140,6 +143,8 @@ internal sealed partial class EGlobal
     private void PrintUpdates(UpdateCheckResult result, bool manual)
     {
         foreach (var failure in result.Failures) _ePluginContext?.Logger.Warn($"Update check for '{failure.Slug}' failed: {failure.Message}");
+        foreach (var fallback in result.Fallbacks ?? [])
+            _ePluginContext?.Logger.Warn($"The project's update site for '{fallback.Slug}' did not work, so its plugin.cfg update_url was checked: {fallback.Message}");
         if (result.Updates.Count == 0)
         {
             if (manual && result.Failures.Count == 0) _ePluginContext?.Logger.Log("All plugins are up to date.");
