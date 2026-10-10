@@ -664,7 +664,12 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
                                    (failure ?? "Use Retry failed in the ePlugin Manager.") + ". Logs: " + directory;
                 GD.PushError(_operationNotice);
             }
-            else Hide();
+            // The build-failure dialog takes over the decision.
+            else if (outcome == UpdateOutcome.AwaitingDecision) Hide();
+            // Stays open: an update that needs no restart is finished here, and a restart reopens the manager.
+            else _operationNotice = outcome == UpdateOutcome.AwaitingReload ? "Restarting the editor to load the update..."
+                : selected.Length == 1 ? $"Installed {selected[0].Candidate.PluginName} {selected[0].NewVersion}."
+                : $"Installed {selected.Length} updates.";
             // Installed versions changed, so the list is read again rather than only redrawn.
             refresh = outcome is UpdateOutcome.Completed or UpdateOutcome.RolledBack or UpdateOutcome.KeptWithErrors;
         }
