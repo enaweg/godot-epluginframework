@@ -113,6 +113,32 @@ public class UpdatePackageTests
     }
 
     [TestCase]
+    public void SameVersionNeedsExplicitReinstall()
+    {
+        var installed = Path.Combine(_root, "installed");
+        Directory.CreateDirectory(installed);
+        File.WriteAllText(Path.Combine(installed, "plugin.cfg"), Config("2.0.0"));
+        foreach (var slug in new[] { "plugin", "ePlugin" })
+        {
+            var stage = Path.Combine(_root, slug);
+            Directory.CreateDirectory(stage);
+            File.WriteAllText(Path.Combine(stage, "plugin.cfg"), Config("2.0.0"));
+            File.WriteAllText(Path.Combine(stage, "plugin.gd"), "extends EditorPlugin");
+            var candidate = new UpdateCandidate(slug, "Plugin", "2.0.0", "2.0.0", "https://example.org/releases", null, null, new ZipPackageRef("https://example.org/plugin.zip", slug));
+            var target = new PluginUpdateTarget(slug, "Plugin", "2.0.0", candidate.SourceUrl, installed);
+            var validator = new AddonPackageValidator();
+            Assertions.AssertBool(validator.Validate(new(target, candidate, stage)).IsValid).IsFalse();
+            Assertions.AssertBool(validator.Validate(new(target, candidate, stage, AllowDowngrade: true)).IsValid).IsFalse();
+            var reinstall = validator.Validate(new(target, candidate, stage, AllowReinstall: true));
+            Assertions.AssertBool(reinstall.IsValid).IsTrue();
+            Assertions.AssertBool(reinstall.Findings.Any(f => f.Code == "R6" && f.Severity == FindingSeverity.Info)).IsTrue();
+            // a reinstall never permits a downgrade
+            File.WriteAllText(Path.Combine(stage, "plugin.cfg"), Config("1.0.0"));
+            Assertions.AssertBool(validator.Validate(new(target, candidate, stage, AllowReinstall: true)).IsValid).IsFalse();
+        }
+    }
+
+    [TestCase]
     public void HostChangeRequiresTrustAndNewProjectFilesAreRefused()
     {
         var installed = Path.Combine(_root, "installed"); var stage = Path.Combine(_root, "plugin");

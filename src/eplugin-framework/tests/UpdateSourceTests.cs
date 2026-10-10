@@ -143,7 +143,23 @@ public class UpdateSourceTests
         var tags = await new GitSource(new(), new FakeGit(), new("https://host/repo.git", "addon", null)).ListAsync(Target(), new(), CancellationToken.None);
         Assertions.AssertString(tags.Single().NewVersion).IsEqual("2.0.0");
         Assertions.AssertString(((GitPackageRef)tags[0].Package).Commit).IsEqual(FakeGit.Commit);
-        Assertions.AssertInt((await new GitSource(new(), new FakeGit(), new("https://host/repo.git", "addon", "main")).ListAsync(Target(), new(), CancellationToken.None)).Count).IsEqual(0);
+    }
+
+    [TestCase]
+    public async Task PinnedGitSourcesListTheCommitTheyPointToNow()
+    {
+        using var client = new HttpClient(new Handler(_ => Json("[plugin]\nversion=\"1.0.0\"\n")));
+        // A branch, tag or commit is listed even when its plugin.cfg version is the installed one, so it can be reinstalled.
+        foreach (var reference in new[] { "main", "v2.0.0", FakeGit.Commit })
+        {
+            var listed = await new GitSource(new(client), new FakeGit(), new("https://github.com/owner/repo.git", "addon", reference))
+                .ListAsync(Target(), new(), CancellationToken.None);
+            Assertions.AssertString(listed.Single().NewVersion).IsEqual("1.0.0");
+            Assertions.AssertString(((GitPackageRef)listed[0].Package).Commit).IsEqual(FakeGit.Commit);
+        }
+        var unknown = new GitSource(new(client), new FakeGit(), new("https://github.com/owner/repo.git", "addon", "missing"));
+        try { await unknown.ListAsync(Target(), new(), CancellationToken.None); throw new InvalidOperationException("Listing an unknown ref succeeded."); }
+        catch (IOException) { }
     }
 
     private static PluginUpdateTarget Target() => new("plugin", "Plugin", "1.0.0", "https://github.com/owner/repo/releases", "/unused");

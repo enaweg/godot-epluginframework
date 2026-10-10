@@ -62,6 +62,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private readonly Dictionary<string, WelcomeEntry?> _welcomes = [];
     private UpdateCandidate? _pendingVersion;
     private bool _pendingDowngrade;
+    private bool _pendingReinstall;
     private Texture2D? _ePluginIcon;
     private Texture2D? _logo;
     private Texture2D? _updateIcon;
@@ -71,6 +72,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private IReadOnlyList<UpdateCandidate> _batch = [];
     private bool _versionInstall;
     private bool _allowDowngrade;
+    private bool _allowReinstall;
     private string? _directory;
     private string? _selectedSlug;
     private bool _working;
@@ -125,7 +127,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _signals.Connect(_disableFrameworkConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(DisableFramework));
         _signals.Connect(_versionSelect, OptionButton.SignalName.ItemSelected, Callable.From<long>(_ => VersionButtons()));
         _signals.Connect(_installVersion, BaseButton.SignalName.Pressed, Callable.From(ConfirmVersion));
-        _signals.Connect(_versionConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(() => { if (_pendingVersion is { } version) Install([version], true, _pendingDowngrade); }));
+        _signals.Connect(_versionConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(() => { if (_pendingVersion is { } version) Install([version], true, _pendingDowngrade, _pendingReinstall); }));
         _signals.Connect(_tree, Tree.SignalName.ItemSelected, Callable.From(() => ShowDetails(SlugOf(_tree.GetSelected()))));
         _signals.Connect(_tree, Tree.SignalName.ItemActivated, Callable.From(OpenRelease));
         _signals.Connect(_tree, Tree.SignalName.ButtonClicked, Callable.From<TreeItem, long, long, long>((item, _, _, _) => item.Select(NameColumn)));
@@ -393,9 +395,11 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         var option = _versionOptions.Count == 0 ? null : SelectedVersion();
         if (row is null || option is null) { _installVersion.Disabled = true; _installVersion.Text = "Update"; ShowVersionHint(_versionNote); return; }
         var blocked = PluginManagerViewModel.VersionChangeBlocked(row, option);
-        _installVersion.Text = option.IsDowngrade ? "Downgrade" : "Update";
+        _installVersion.Text = option.Action;
         _installVersion.Disabled = blocked is not null || _working || _staged is not null;
-        _installVersion.TooltipText = blocked ?? $"Install version {option.Version} of {row.Plugin.Name}.";
+        _installVersion.TooltipText = blocked ?? (option.IsReinstall
+            ? $"Install version {option.Version} of {row.Plugin.Name} again, replacing its files."
+            : $"Install version {option.Version} of {row.Plugin.Name}.");
         ShowVersionHint((option.Installed ? null : blocked) ?? _versionNote);
     }
 
@@ -408,9 +412,12 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         if (row is null || option?.Candidate is null || PluginManagerViewModel.VersionChangeBlocked(row, option) is not null || _working) return;
         // The listed candidate was built when the list was loaded; the installed version may have changed since.
         _pendingVersion = option.Candidate with { InstalledVersion = row.Plugin.Version };
-        _pendingDowngrade = option.IsDowngrade;
-        _versionConfirm.OkButtonText = option.IsDowngrade ? "Downgrade" : "Update";
-        _versionConfirm.DialogText = $"Replace {row.Plugin.Name} {row.Plugin.Version} with version {option.Version}?\n\n" +
+        _pendingDowngrade = option.IsDowngrade; _pendingReinstall = option.IsReinstall;
+        _versionConfirm.OkButtonText = option.Action;
+        _versionConfirm.DialogText = (option.IsReinstall
+                ? $"Reinstall {row.Plugin.Name} {row.Plugin.Version}?\n\n{PluginManagerViewModel.VersionSource(option)}. Its files replace the installed ones: " +
+                  "this brings in new commits of a git branch and undoes changes made to the plugin's folder in the project.\n\n"
+                : $"Replace {row.Plugin.Name} {row.Plugin.Version} with version {option.Version}?\n\n") +
             (option.IsDowngrade
                 ? "Use this to undo an update that broke the project. Project code or saved data that already relies on the newer version may stop working. "
                 : "") +
@@ -585,18 +592,18 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
 
     private void Confirm()
     {
-        if (_staged is not null) Install(_batch, _versionInstall, _allowDowngrade);
-        else if (_model.CanApply) Install(_model.Selected, false, false);
+        if (_staged is not null) Install(_batch, _versionInstall, _allowDowngrade, _allowReinstall);
+        else if (_model.CanApply) Install(_model.Selected, false, false, false);
     }
 
     /// <summary>
     /// Stages and validates the batch, stops for review when the packages carry warnings, then installs. A second call
     /// with the batch already staged continues with the installation.
     /// </summary>
-    private async void Install(IReadOnlyList<UpdateCandidate> batch, bool versionInstall, bool allowDowngrade)
+    private async void Install(IReadOnlyList<UpdateCandidate> batch, bool versionInstall, bool allowDowngrade, bool allowReinstall)
     {
         if (_working || batch.Count == 0) return;
-        _batch = batch; _versionInstall = versionInstall; _allowDowngrade = allowDowngrade;
+        _batch = batch; _versionInstall = versionInstall; _allowDowngrade = allowDowngrade; _allowReinstall = allowReinstall;
         _working = true; _cancel?.Dispose(); _cancel = CancellationTokenSource.CreateLinkedTokenSource(_lifetime);
         Render();
         var refresh = false;
@@ -607,7 +614,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             {
                 _progress.Visible = true; _status.Text = versionInstall ? $"Downloading and validating {batch[0].PluginName} {batch[0].NewVersion}..." : "Downloading and validating selected addons...";
                 var relay = new InlineProgress(value => Callable.From(() => { if (GodotObject.IsInstanceValid(this)) _progress.Value = value * 100; }).CallDeferred());
-                var staged = await _global.StageUpdatesAsync(batch, relay, _cancel.Token, allowDowngrade);
+                var staged = await _global.StageUpdatesAsync(batch, relay, _cancel.Token, allowDowngrade, allowReinstall);
                 _staged = staged.Packages; _directory = staged.Directory;
                 if (_lifetime.IsCancellationRequested || !GodotObject.IsInstanceValid(this) || !IsInsideTree()) { ClearStaging(); return; }
                 if (!versionInstall)
@@ -667,7 +674,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private void ClearStaging()
     {
         if (_directory is not null && !File.Exists(Path.Combine(_directory, "journal.json")) && Directory.Exists(_directory)) Directory.Delete(_directory, true);
-        _directory = null; _staged = null; _batch = []; _versionInstall = false; _allowDowngrade = false;
+        _directory = null; _staged = null; _batch = []; _versionInstall = false; _allowDowngrade = false; _allowReinstall = false;
     }
 
     private static Color ThemeColor(string name, string type, Color fallback)
