@@ -1,0 +1,18 @@
+[font_size=20][b]Thanks for installing SamplePlugin![/b][/font_size]
+
+This page is the plugin's [code]README[/code] file. ePlugin shows it once per project after the plugin is installed, as its [i]welcome page[/i].
+
+[b]What just happened[/b]
+SamplePlugin's recipe adds the NuGet package [color=#70c0ff][b]ZLogger[/b][/color]. ePlugin added it to the project when you enabled the plugin, and removes it again when you disable it.
+
+[b]Try it[/b]
+[ol]
+Open the [b]ePlugin Manager[/b] and select [i]SamplePlugin[/i]. Its details link this page under [b]Welcome page[/b].
+Disable and enable the plugin again. The page is [u]not[/u] shown a second time.
+Enable [i]Sample Dependant Plugin[/i] while SamplePlugin is disabled. Both plugins are installed together, so both welcome pages appear in one dialog.
+[/ol]
+
+[b]Formatting[/b]
+Welcome pages are [url=https://docs.godotengine.org/en/stable/tutorials/ui/bbcode_in_richtextlabel.html]BBCode[/url]: [b]bold[/b], [i]italic[/i], [u]underline[/u], [s]strikethrough[/s], [color=#ffd070]colors[/color] and [code]code[/code].
+
+[color=#a0a0a0]To show this page again, remove [code]sample_plugin[/code] from the [code]welcomes[/code] list in [code]addons/eplugin-state.json[/code] and restart the editor.[/color]

@@ -1,0 +1,21 @@
+[font_size=20][b]Sample Dependant Plugin is ready[/b][/font_size]
+
+This plugin shows how an ePlugin depends on another plugin. Its recipe declares one dependency:
+
+[code]builder.AddPluginDependency("sample_plugin");[/code]
+
+[b]How the dependency works[/b]
+[ul]
+Enabling this plugin enables [i]SamplePlugin[/i] first, if it is not enabled yet.
+Disabling [i]SamplePlugin[/i] also disables this plugin, because it cannot work without it.
+[/ul]
+
+[table=2]
+[cell][b]Plugin[/b]   [/cell][cell][b]Role[/b][/cell]
+[cell]SamplePlugin   [/cell][cell]Dependency, adds the ZLogger NuGet package[/cell]
+[cell]Sample Dependant Plugin   [/cell][cell]Depends on SamplePlugin[/cell]
+[/table]
+
+If SamplePlugin was installed together with this plugin, its welcome page is in the list on the left. Closing this dialog counts both pages as read.
+
+[color=#a0a0a0]To show this page again, remove [code]sample_dependant_plugin[/code] from the [code]welcomes[/code] list in [code]addons/eplugin-state.json[/code] and restart the editor.[/color]
