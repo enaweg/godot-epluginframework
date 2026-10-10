@@ -17,7 +17,7 @@ const string source = "https://raw.githubusercontent.com/sci-comp/godot-stars/ma
 const int minStars = 20;
 const int maxItems = 500;
 const int maxRetries = 3;
-// Only add-ons with a commit on their default branch within the last year count as active.
+// Only add-ons with a commit on their default branch within the last two years count as active.
 var cutoff = DateTimeOffset.UtcNow.AddYears(-2);
 // A version tag as ePlugin's updater reads it: an optional "v", then "1.2" or "1.2.3" with optional semantic
 // prerelease/build suffixes (see SemVer.TryParse). Only versions without a prerelease are offered by default.

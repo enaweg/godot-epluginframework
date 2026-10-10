@@ -146,7 +146,7 @@ var text = new StringBuilder($$"""
     namespace Enaweg.Plugin.Internal.Update;
 
     // Generated on {{DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}} by tools/generate_known_plugins.cs from {{Path.GetFileName(input)}} (built by
-    // tools/build_godot_addons.cs): popular add-ons with at least {{stars}} stars and a commit within the last year, plus those
+    // tools/build_godot_addons.cs): popular add-ons with at least {{stars}} stars and a commit within the last two years, plus those
     // in tools/extra_addons.txt, with a stable release or version tag. Each slug is the one extra_addons.txt gives, else
     // the plugin folder in the latest release's ZIP, else the add-on's slug in the previous list, else the plugin folder in
     // the repository at that release or tag. Add-ons without a plugin folder, with a GDExtension or with a release ZIP the
