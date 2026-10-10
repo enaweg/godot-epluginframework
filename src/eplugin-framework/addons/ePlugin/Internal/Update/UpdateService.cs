@@ -66,8 +66,9 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
             .OrderBy(c => c.Slug, StringComparer.Ordinal).ToArray();
 
     /// <summary>
-    /// Every version published at a plugin's update_url, newest first, so a specific one can be installed. Unlike
-    /// checks this does not touch the cache: the list is only shown, and installing re-validates the chosen package.
+    /// Every version published at a plugin's update_url, newest first, so a specific one can be installed. Installing
+    /// re-validates the chosen package. A listed version newer than the installed one and than the cached update is
+    /// cached like a check found it, so the plugin shows the update without another check.
     /// Combine it with the local plugin directories' versions using <see cref="MergeVersions"/>.
     /// </summary>
     public async Task<IReadOnlyList<UpdateCandidate>> ListVersionsAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct)
@@ -76,8 +77,30 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
             throw new NotSupportedException("This update source cannot list versions.");
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(options.TimeoutSeconds * 2));
-        try { return MergeVersions([], await source.ListAsync(target, options, timeout.Token).WaitAsync(timeout.Token).ConfigureAwait(false)); }
+        IReadOnlyList<UpdateCandidate> versions;
+        try { versions = MergeVersions([], await source.ListAsync(target, options, timeout.Token).WaitAsync(timeout.Token).ConfigureAwait(false)); }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested) { throw new TimeoutException("Request timed out."); }
+        RecordListedUpdate(target, versions, options);
+        return versions;
+    }
+
+    /// <summary>
+    /// Caches the newest listed version as the plugin's update. A cached update that is at least as new stays, e.g. the
+    /// branch head of a pinned git source, which has no versions to list. The last check time is not changed, since
+    /// the other plugins were not checked.
+    /// </summary>
+    private void RecordListedUpdate(PluginUpdateTarget target, IReadOnlyList<UpdateCandidate> versions, UpdateCheckOptions options)
+    {
+        if (!SemVer.TryParse(target.InstalledVersion, out var installed)) return;
+        var newest = versions.FirstOrDefault();
+        if (newest is null || !SemVer.TryParse(newest.NewVersion, out var listed) || listed.CompareTo(installed) <= 0 ||
+            !options.AllowPrerelease && listed.Prerelease is not null) return;
+        var cached = store.State.Results.FirstOrDefault(c => c.Slug == target.Slug && c.SourceUrl == target.UpdateUrl);
+        if (cached is not null && SemVer.TryParse(cached.NewVersion, out var known) && known.CompareTo(listed) >= 0) return;
+        // The list was read from the target's update_url, which is what the cache entry is matched against.
+        var update = newest with { InstalledVersion = target.InstalledVersion, SourceUrl = target.UpdateUrl };
+        store.State.Results = store.State.Results.Where(c => c.Slug != target.Slug).Append(update).ToList();
+        store.Save();
     }
 
     /// <summary>One candidate per version, newest first; a local package wins over a download of the same version.</summary>

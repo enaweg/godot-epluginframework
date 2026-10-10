@@ -92,6 +92,32 @@ public class UpdateCoreTests
         Assertions.AssertBool(refused).IsTrue();
     }
 
+    [TestCase]
+    public async Task NewerListedVersionIsCachedAsTheUpdate()
+    {
+        var store = new MemoryStore();
+        var service = new UpdateService(new Factory(), new SystemClock(), store);
+        var target = Target("listed", "1.5.0") with { UpdateUrl = "https://example.org/listed/releases" };
+        await service.ListVersionsAsync(target, new(), CancellationToken.None);
+        var cached = UpdateScheduler.CurrentCached(store.State, [target], false).Single();
+        Assertions.AssertString(cached.NewVersion).IsEqual("2.0.0");
+        Assertions.AssertString(cached.InstalledVersion).IsEqual("1.5.0");
+        Assertions.AssertObject(store.State.LastCheckUtc).IsNull();
+
+        // A cached update at least as new stays, e.g. a pinned branch head; one of an older update_url is replaced.
+        store.State.Results = [Candidate("listed", "3.0.0") with { SourceUrl = target.UpdateUrl }];
+        await service.ListVersionsAsync(target, new(), CancellationToken.None);
+        Assertions.AssertString(store.State.Results.Single().NewVersion).IsEqual("3.0.0");
+        store.State.Results = [Candidate("listed", "3.0.0") with { SourceUrl = "https://example.org/old" }];
+        await service.ListVersionsAsync(target, new(), CancellationToken.None);
+        Assertions.AssertString(store.State.Results.Single().NewVersion).IsEqual("2.0.0");
+
+        // Nothing newer than the installed version: the cache is left alone.
+        store.State.Results = [];
+        await service.ListVersionsAsync(target with { InstalledVersion = "2.0.0" }, new(), CancellationToken.None);
+        Assertions.AssertInt(store.State.Results.Count).IsEqual(0);
+    }
+
     private static PluginUpdateTarget Target(string slug, string installed = "1.0.0") => new(slug, slug, installed, "https://example.org/releases", "/unused");
     private static UpdateCandidate Candidate(string slug, string version) => new(slug, slug, "1.0.0", version,
         "https://example.org/releases", null, null, new ZipPackageRef("https://example.org/package.zip", "plugin"));

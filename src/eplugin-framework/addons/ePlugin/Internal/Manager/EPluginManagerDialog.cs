@@ -355,7 +355,12 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { return; }
         catch (Exception ex) { _remoteVersionErrors[slug] = ex.Message; }
         finally { _loadingVersions.Remove(slug); }
-        if (GodotObject.IsInstanceValid(this) && IsInsideTree() && _selectedSlug == slug) RenderVersions(_model.Find(slug));
+        if (!GodotObject.IsInstanceValid(this) || !IsInsideTree()) return;
+        // A newer listed version is now a pending update; read the list again so the plugin shows it. Never discard a
+        // staged batch awaiting review or interrupt work.
+        var pending = _global.PendingUpdates.FirstOrDefault(c => c.Slug == slug);
+        if (!_working && _staged is null && pending?.NewVersion != _model.Find(slug)?.Update?.Candidate.NewVersion) Refresh();
+        else if (_selectedSlug == slug) RenderVersions(_model.Find(slug));
     }
 
     private VersionOption? SelectedVersion()

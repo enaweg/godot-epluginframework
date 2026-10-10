@@ -111,12 +111,17 @@ internal sealed partial class EGlobal
     internal IReadOnlyList<UpdateCandidate> ListLocalVersions(PluginUpdateTarget target) =>
         LocalDirectorySource.Versions(LocalIndex, target, new(AllowPrerelease));
 
-    /// <summary>All versions published at an enabled plugin's update_url, newest first.</summary>
+    /// <summary>
+    /// All versions published at an enabled plugin's update_url, newest first. A newer version found this way becomes
+    /// a pending update, as if a check had found it.
+    /// </summary>
     internal async Task<IReadOnlyList<UpdateCandidate>> ListRemoteVersionsAsync(PluginUpdateTarget target, CancellationToken ct)
     {
         var service = _updateService ?? throw new InvalidOperationException("Update system is not initialized.");
         var allow = AllowPrerelease;
-        return await Task.Run(() => service.ListVersionsAsync(target, new(allow), ct), ct);
+        var versions = await Task.Run(() => service.ListVersionsAsync(target, new(allow), ct), ct);
+        await OnEditorThread(() => { if (_updateCache is not null) _remoteUpdates = UpdateScheduler.CurrentCached(_updateCache.State, CollectUpdateTargets(), allow); }, ct);
+        return versions;
     }
 
     internal static Task OnEditorThread(Action action, CancellationToken ct)
