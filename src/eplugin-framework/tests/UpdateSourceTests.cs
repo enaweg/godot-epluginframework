@@ -110,7 +110,7 @@ public class UpdateSourceTests
         {
             var git = new FakeGit();
             var source = new GitSource(new(), git, new("https://host/repo.git", "addon", null));
-            await source.FetchAsync(new("https://host/repo.git", "addon", FakeGit.Commit), Path.Combine(root, "staged"), CancellationToken.None);
+            await source.FetchAsync(new("https://host/repo.git", "addon", FakeGit.Commit), "plugin", Path.Combine(root, "staged"), CancellationToken.None);
             Assertions.AssertBool(git.Calls.Any(c => c.Contains("--filter=blob:none") && c.Contains("--depth"))).IsTrue();
             Assertions.AssertBool(git.Calls.Any(c => c.Contains("--no-cone") && c.Contains("/addon/"))).IsTrue();
             Assertions.AssertBool(File.Exists(Path.Combine(root, "staged/plugin.cfg"))).IsTrue();
@@ -162,6 +162,103 @@ public class UpdateSourceTests
         catch (IOException) { }
     }
 
+    [TestCase]
+    public void TagPagesNameTheirRepository()
+    {
+        foreach (var (page, repository, path) in new[]
+                 {
+                     ("https://github.com/sn1ks0h/Global-Asset-Manager/tags", "https://github.com/sn1ks0h/Global-Asset-Manager.git", ""),
+                     ("https://gitlab.example/group/sub/project/-/tags/", "https://gitlab.example/group/sub/project.git", ""),
+                     ("https://codeberg.org/owner/repo/tags?path=addons/my_plugin", "https://codeberg.org/owner/repo.git", "addons/my_plugin"),
+                 })
+        {
+            Assertions.AssertBool(GitUrl.TryParse(page, out var url)).IsTrue();
+            Assertions.AssertString(url!.Repository).IsEqual(repository);
+            Assertions.AssertString(url.Path).IsEqual(path);
+            Assertions.AssertObject(url.Ref).IsNull();
+            Assertions.AssertBool(new UpdateSourceFactory().Create(page) is GitSource).IsTrue();
+        }
+        foreach (var url in new[] { "http://github.com/owner/repo/tags", "https://host/owner/tags", "https://host/-/tags", "https://host/owner/repo/-/-/tags" })
+            Assertions.AssertBool(UpdateSourceFactory.IsSupported(url)).IsFalse();
+        // releases stay release sources
+        Assertions.AssertBool(new UpdateSourceFactory().Create("https://github.com/owner/repo/releases") is GitHubReleaseSource).IsTrue();
+    }
+
+    [TestCase]
+    public async Task VersionTagsAreTheVersionsOfARepository()
+    {
+        string Commit(char c) => new(c, 40);
+        var refs = string.Join('\n',
+            $"{Commit('1')}\trefs/heads/main",
+            $"{Commit('2')}\trefs/tags/1.2",
+            $"{Commit('3')}\trefs/tags/1.3.0",
+            $"{Commit('4')}\trefs/tags/release-2",
+            $"{Commit('5')}\trefs/tags/v1.2.3",
+            $"{Commit('6')}\trefs/tags/v1.3",
+            $"{Commit('7')}\trefs/tags/v1.4",
+            $"{Commit('8')}\trefs/tags/v1.4^{{}}",
+            $"{Commit('9')}\trefs/tags/v2.0.0-beta.1");
+        var git = new FakeGit("addons/plugin", refs);
+        var source = (GitSource)new UpdateSourceFactory(new(), git).Create("https://github.com/owner/repo/tags");
+        var listed = await source.ListAsync(Target(), new(), CancellationToken.None);
+        Assertions.AssertArray(listed.Select(c => c.NewVersion).ToArray()).IsEqual(new[] { "1.4.0", "1.3.0", "1.2.3", "1.2.0" });
+        // an annotated tag installs the commit it points to, not the tag object
+        Assertions.AssertString(((GitPackageRef)listed[0].Package).Commit).IsEqual(Commit('8'));
+        Assertions.AssertString(((GitPackageRef)listed[0].Package).Repository).IsEqual("https://github.com/owner/repo.git");
+        Assertions.AssertString(((GitPackageRef)listed[^1].Package).Commit).IsEqual(Commit('2'));
+        Assertions.AssertInt((await source.ListAsync(Target(), new(AllowPrerelease: true), CancellationToken.None)).Count).IsEqual(5);
+
+        // the newest tag is the update; the tag name announces it, so nothing is fetched
+        var update = await source.CheckAsync(Target(), new(), CancellationToken.None);
+        Assertions.AssertString(update!.NewVersion).IsEqual("1.4.0");
+        Assertions.AssertBool(git.Calls.Any(c => c.Contains("fetch") || c.Contains("show"))).IsFalse();
+    }
+
+    [TestCase]
+    public async Task RepositoryWithoutPathFindsThePluginFolder()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "git-folder-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var package = new GitPackageRef("https://github.com/owner/repo.git", "", FakeGit.Commit);
+            var git = new FakeGit("addons/plugin");
+            var source = new GitSource(new(), git, new("https://github.com/owner/repo.git", "", null));
+            await source.FetchAsync(package, "plugin", Path.Combine(root, "plugin"), CancellationToken.None);
+            Assertions.AssertBool(git.Calls.Any(c => c.Contains("--no-cone") && c.Contains("/addons/plugin/"))).IsTrue();
+            Assertions.AssertBool(File.Exists(Path.Combine(root, "plugin/plugin.cfg"))).IsTrue();
+            Assertions.AssertBool(File.Exists(Path.Combine(root, "plugin/project.godot"))).IsFalse();
+
+            // a plugin at the repository root is still copied from there
+            var top = new GitSource(new(), new FakeGit(""), new("https://github.com/owner/repo.git", "", null));
+            await top.FetchAsync(package, "plugin", Path.Combine(root, "top"), CancellationToken.None);
+            Assertions.AssertBool(File.Exists(Path.Combine(root, "top/plugin.cfg"))).IsTrue();
+
+            // another plugin's folder, or several plugins, need ?path=
+            foreach (var (fake, slug) in new[]
+                     {
+                         (new FakeGit("addons/other"), "plugin"),
+                         (new FakeGit("addons/plugin", tree: "addons/plugin/plugin.cfg\0addons/other/plugin.cfg\0"), "plugin"),
+                     })
+            {
+                var refused = new GitSource(new(), fake, new("https://github.com/owner/repo.git", "", null));
+                try
+                {
+                    await refused.FetchAsync(package, slug, Path.Combine(root, "refused"), CancellationToken.None);
+                    throw new InvalidOperationException("An ambiguous repository was installed.");
+                }
+                catch (InvalidDataException ex) { Assertions.AssertString(ex.Message).Contains("?path="); }
+            }
+
+            // without a version tag, the branch's plugin.cfg is read from the plugin folder
+            var branch = new FakeGit("addons/plugin", $"{FakeGit.Commit}\trefs/heads/main\n", version: "1.0.0");
+            var head = await new GitSource(new(), branch, new("https://github.com/owner/repo.git", "", "main")).ListAsync(Target(), new(), CancellationToken.None);
+            Assertions.AssertString(head.Single().NewVersion).IsEqual("1.0.0");
+            Assertions.AssertBool(branch.Calls.Any(c => c.Contains("FETCH_HEAD:addons/plugin/plugin.cfg"))).IsTrue();
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
     private static PluginUpdateTarget Target() => new("plugin", "Plugin", "1.0.0", "https://github.com/owner/repo/releases", "/unused");
     private static HttpResponseMessage Json(string text) => new(HttpStatusCode.OK) { Content = new StringContent(text) };
     private static HttpResponseMessage Redirect(string url)
@@ -174,19 +271,28 @@ public class UpdateSourceTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) => Task.FromResult(handle(request));
     }
-    private sealed class FakeGit : IGitRunner
+    /// <summary>A repository with one plugin in <paramref name="folder"/> ("" at its root) next to a project.godot.</summary>
+    private sealed class FakeGit(string folder = "addon", string? refs = null, string? tree = null, string version = "2.0.0") : IGitRunner
     {
         public const string Commit = "0123456789012345678901234567890123456789";
         public List<IReadOnlyList<string>> Calls { get; } = [];
         public Task<GitOutcome> RunAsync(string directory, IReadOnlyList<string> args, CancellationToken ct, bool trace = false)
         {
             Calls.Add(args);
+            var config = $"[plugin]\nversion=\"{version}\"\n";
+            var prefix = folder.Length == 0 ? "" : folder + "/";
             if (args.Contains("checkout"))
             {
-                Directory.CreateDirectory(Path.Combine(directory, "addon"));
-                File.WriteAllText(Path.Combine(directory, "addon/plugin.cfg"), "[plugin]\nversion=\"2.0.0\"\n");
+                // the sparse checkout leaves out what is outside the plugin folder; a copy of the root would still see this
+                if (folder.Length > 0) File.WriteAllText(Path.Combine(directory, "project.godot"), "");
+                Directory.CreateDirectory(Path.Combine(directory, folder));
+                File.WriteAllText(Path.Combine(directory, prefix + "plugin.cfg"), config);
             }
-            return Task.FromResult(new GitOutcome(0, args.Contains("--version") ? "git version 2.56.0" : args.Contains("ls-remote") ? $"{Commit}\trefs/heads/main\n{Commit}\trefs/tags/v2.0.0\n" : "", trace ? "fetch=shallow filter" : ""));
+            var output = args.Contains("--version") ? "git version 2.56.0"
+                : args.Contains("ls-remote") ? refs ?? $"{Commit}\trefs/heads/main\n{Commit}\trefs/tags/v2.0.0\n"
+                : args.Contains("ls-tree") ? tree ?? $"project.godot\0{prefix}plugin.cfg\0{prefix}plugin.gd\0"
+                : args.Contains("show") ? config : "";
+            return Task.FromResult(new GitOutcome(0, output, trace ? "fetch=shallow filter" : ""));
         }
     }
 }

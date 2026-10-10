@@ -73,7 +73,7 @@ internal sealed class UpdateSiteSettings(string path)
         url = url.Trim();
         if (!UpdateSourceFactory.IsSupported(url))
             throw new ArgumentException(
-                "Enter a GitHub or GitLab releases URL, or a Git repository URL ending in .git or with ?path=.", nameof(url));
+                "Enter a GitHub or GitLab releases URL, a repository's tag page ending in /tags, or a Git repository URL ending in .git or with ?path=.", nameof(url));
         return Change(sites => sites.Any(s => s.Slug == slug && s.Url == url) ? null
             : [.. sites.Where(s => s.Slug != slug), new UpdateSiteEntry { Slug = slug, Url = url }]);
     }

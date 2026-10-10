@@ -46,7 +46,7 @@ internal sealed class PackageFetcher(UpdateHttp http, IGitRunner git)
                 {
                     if (candidate.SourceUrl is null || !GitUrl.TryParse(candidate.SourceUrl, out var url) || url!.Repository != package.Repository || url.Path != package.Path)
                         throw new InvalidDataException("Git package does not match its declared source.");
-                    await new GitSource(http, git, url).FetchAsync(package, stage, ct).ConfigureAwait(false);
+                    await new GitSource(http, git, url).FetchAsync(package, candidate.Slug, stage, ct).ConfigureAwait(false);
                 }
                 else throw new InvalidDataException("Unsupported package reference.");
                 var validated = new AddonPackageValidator().Validate(new(target, candidate, stage, allowDowngrade, allowReinstall));

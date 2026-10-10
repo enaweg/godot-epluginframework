@@ -16,7 +16,7 @@ namespace Enaweg.Plugin.Internal.Manager;
 internal sealed partial class UpdateSitesDialog : AcceptDialog, ISerializationListener
 {
     private const int PluginColumn = 0, SiteColumn = 1, ConfigColumn = 2;
-    private const string DefaultHint = "GitHub or GitLab releases, or a Git repository (.git, optionally with ?path=addons/<slug> and #branch).";
+    private const string DefaultHint = "GitHub or GitLab releases, a repository's tag page (.../tags), or a Git repository (.git, optionally with ?path=addons/<slug> and #branch).";
     private readonly EditorSignalConnections _signals = new();
     private EGlobal _global = null!;
     private Tree _tree = null!;

@@ -105,5 +105,5 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(440, 0)
 modulate = Color(1, 1, 1, 0.7)
 layout_mode = 2
-text = "GitHub or GitLab releases, or a Git repository (.git, optionally with ?path=addons/<slug> and #branch)."
+text = "GitHub or GitLab releases, a repository's tag page (.../tags), or a Git repository (.git, optionally with ?path=addons/<slug> and #branch)."
 autowrap_mode = 3
