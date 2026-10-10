@@ -1,9 +1,10 @@
 #if TOOLS
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 
@@ -15,26 +16,77 @@ internal static class PluginIni
     {
         var values = new Dictionary<string, string>(StringComparer.Ordinal);
         var section = "";
-        foreach (var line in text.Split('\n'))
+        var position = 0;
+        while (position < text.Length)
         {
-            var trimmed = line.Trim();
+            var start = position;
+            var end = LineEnd(text, start);
+            position = end + 1;
+            var trimmed = text[start..end].Trim();
             if (trimmed.Length == 0 || trimmed.StartsWith(';') || trimmed.StartsWith('#')) continue;
             if (trimmed.StartsWith('[') && trimmed.EndsWith(']')) { section = trimmed[1..^1]; continue; }
-            if (section != "plugin") continue;
             var equals = trimmed.IndexOf('=');
-            if (equals <= 0) throw new InvalidDataException("Invalid plugin.cfg assignment.");
+            if (equals <= 0)
+            {
+                if (section != "plugin") continue;
+                throw new InvalidDataException("Invalid plugin.cfg assignment.");
+            }
             var key = trimmed[..equals].Trim();
             var raw = trimmed[(equals + 1)..].Trim();
             string value;
             if (raw.StartsWith('"'))
             {
-                // Godot INI strings use JSON-compatible escapes; reject trailing executable expressions.
-                value = JsonSerializer.Deserialize<string>(raw) ?? "";
+                // A string may continue over the following lines (e.g. a long description). Only a comment may follow
+                // it; reject trailing executable expressions.
+                var after = text.IndexOf('"', text.IndexOf('=', start));
+                value = ReadString(text, ref after);
+                end = LineEnd(text, after);
+                var rest = text[after..end].Trim();
+                if (rest.Length > 0 && !rest.StartsWith(';')) throw new InvalidDataException("Unexpected text after plugin.cfg string: " + key);
+                position = end + 1;
             }
             else value = raw.Split(';')[0].Trim();
+            if (section != "plugin") continue;
             if (!values.TryAdd(key, value)) throw new InvalidDataException("Duplicate plugin.cfg key: " + key);
         }
         return values;
+    }
+
+    private static int LineEnd(string text, int start) => text.IndexOf('\n', start) is var end and >= 0 ? end : text.Length;
+
+    /// <summary>
+    /// Reads the quoted string at <paramref name="position"/> like Godot's VariantParser: it may span lines, knows the
+    /// escapes \b \t \n \f \r \uXXXX and \UXXXXXX, and any other escaped character stands for itself.
+    /// </summary>
+    private static string ReadString(string text, ref int position)
+    {
+        var value = new StringBuilder();
+        for (position++; position < text.Length; position++)
+        {
+            var c = text[position];
+            if (c == '"') { position++; return value.ToString(); }
+            if (c != '\\') { value.Append(c); continue; }
+            if (++position == text.Length) break;
+            switch (text[position])
+            {
+                case 'b': value.Append('\b'); break;
+                case 't': value.Append('\t'); break;
+                case 'n': value.Append('\n'); break;
+                case 'f': value.Append('\f'); break;
+                case 'r': value.Append('\r'); break;
+                case 'u' or 'U':
+                    var digits = text[position] == 'u' ? 4 : 6;
+                    if (position + digits >= text.Length || !int.TryParse(text.AsSpan(position + 1, digits), NumberStyles.AllowHexSpecifier,
+                            CultureInfo.InvariantCulture, out var code) || code > 0x10FFFF)
+                        throw new InvalidDataException("Invalid unicode escape in plugin.cfg string.");
+                    // Godot writes characters outside the BMP as two \u surrogates; each is appended as it is.
+                    value.Append(code <= 0xFFFF ? ((char)code).ToString() : char.ConvertFromUtf32(code));
+                    position += digits;
+                    break;
+                default: value.Append(text[position]); break;
+            }
+        }
+        throw new InvalidDataException("Unterminated plugin.cfg string.");
     }
 }
 internal static class PackageFiles

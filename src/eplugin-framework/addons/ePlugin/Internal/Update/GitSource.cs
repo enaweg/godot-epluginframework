@@ -115,7 +115,7 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
             })
             .Where(c => IsCommit(c.Commit))
             // "v1.2" and "1.2.0" name the same version; the highest tag order keeps one of them.
-            .OrderByDescending(c => c.Version).DistinctBy(c => c.Version.ToString())
+            .OrderByDescending(c => c.Version).DistinctBy(c => c.Version.Key)
             .Select(c => new UpdateCandidate(target.Slug, target.Name, target.InstalledVersion, c.Version.ToString(),
                 target.UpdateUrl, null, c.Commit, new GitPackageRef(url.Repository, url.Path, c.Commit!))).ToArray();
     /// <summary>Deletes a git working folder. git writes its object files read-only, which Windows refuses to delete.</summary>

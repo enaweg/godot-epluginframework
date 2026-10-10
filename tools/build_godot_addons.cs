@@ -19,9 +19,10 @@ const int maxItems = 500;
 const int maxRetries = 3;
 // Only add-ons with a commit on their default branch within the last two years count as active.
 var cutoff = DateTimeOffset.UtcNow.AddYears(-2);
-// A version tag as ePlugin's updater reads it: an optional "v", then "1.2" or "1.2.3" with optional semantic
-// prerelease/build suffixes (see SemVer.TryParse). Only versions without a prerelease are offered by default.
-var versionTag = new Regex(@"^[vV]?(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$",
+// A version tag as ePlugin's updater reads it: an optional "v", then "1.2", "1.2.3" or "1.2.3.4", optionally followed by any
+// prerelease suffix after a '-' and build metadata after a '+' (see SemVer.TryParse). Only versions without a prerelease
+// are offered by default.
+var versionTag = new Regex(@"^[vV]?(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\.(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?)?(?:-([^\s\p{Cc}+]+))?(?:\+[^\s\p{Cc}]+)?$",
     RegexOptions.Compiled | RegexOptions.CultureInvariant);
 // godot-stars categories that hold games, project templates or assets rather than add-ons.
 var skippedCategories = new HashSet<string>(["Demos", "Shader", "Shaders", "Templates", "Projects", "Materials"],
@@ -191,8 +192,8 @@ static IEnumerable<JsonElement> Nodes(JsonElement repo, string connection) =>
 // The highest stable version among the tag names, as it is written (e.g. "v1.2"), or null without one.
 string? Newest(IEnumerable<string?> tags) => tags
     .Select(t => (Tag: t, Match: versionTag.Match(t ?? "")))
-    .Where(t => t.Match.Success && !t.Match.Groups[4].Success)
-    .Select(t => (t.Tag, Version: (Number(t.Match.Groups[1]), Number(t.Match.Groups[2]), Number(t.Match.Groups[3]))))
+    .Where(t => t.Match.Success && !t.Match.Groups[5].Success)
+    .Select(t => (t.Tag, Version: (Number(t.Match.Groups[1]), Number(t.Match.Groups[2]), Number(t.Match.Groups[3]), Number(t.Match.Groups[4]))))
     .OrderByDescending(t => t.Version).Select(t => t.Tag).FirstOrDefault();
 static long Number(Group group) => group.Success && long.TryParse(group.Value, out var value) ? value : 0;
 // The ZIP assets, as the updater recognizes them: by name or by the URL's path.

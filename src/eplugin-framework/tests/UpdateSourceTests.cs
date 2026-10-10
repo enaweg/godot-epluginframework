@@ -33,7 +33,7 @@ public class UpdateSourceTests
             """)));
         var source = new GitHubReleaseSource(new(client), "owner", "repo");
         var result = await source.CheckAsync(Target(), new(), CancellationToken.None);
-        Assertions.AssertString(result!.NewVersion).IsEqual("1.2.0");
+        Assertions.AssertString(result!.NewVersion).IsEqual("v1.2.0");
         Assertions.AssertString(((ZipPackageRef)result.Package).Url).IsEqual("https://example.org/plugin.zip");
         Assertions.AssertObject(await new GitHubReleaseSource(new(client), "owner", "repo", true).CheckAsync(Target(), new(), CancellationToken.None)).IsNull();
     }
@@ -85,7 +85,7 @@ public class UpdateSourceTests
                 ? Redirect("https://github.com/owner/repo/releases/tag/v1.4.0") : Json("{}");
         }));
         var candidate = await new GitHubReleaseSource(new(client), "owner", "repo").CheckAsync(Target(), new(), CancellationToken.None);
-        Assertions.AssertString(candidate!.NewVersion).IsEqual("1.4.0");
+        Assertions.AssertString(candidate!.NewVersion).IsEqual("v1.4.0");
     }
 
     [TestCase]
@@ -129,7 +129,7 @@ public class UpdateSourceTests
              {"tag_name":"3.0.0","draft":true,"assets":[]}]
             """)));
         var listed = await new GitHubReleaseSource(new(github), "owner", "repo").ListAsync(Target(), new(), CancellationToken.None);
-        Assertions.AssertArray(listed.Select(c => c.NewVersion).ToArray()).IsEqual(new[] { "1.2.0", "1.1.0" });
+        Assertions.AssertArray(listed.Select(c => c.NewVersion).ToArray()).IsEqual(new[] { "v1.2.0", "v1.1.0" });
         Assertions.AssertString(((ZipPackageRef)listed[1].Package).Url).IsEqual("https://github.com/owner/repo/archive/refs/tags/v1.1.0.zip");
         Assertions.AssertInt((await new GitHubReleaseSource(new(github), "owner", "repo").ListAsync(Target(), new(AllowPrerelease: true), CancellationToken.None)).Count).IsEqual(3);
 
@@ -141,7 +141,7 @@ public class UpdateSourceTests
         Assertions.AssertArray(gitlabVersions.Select(c => c.NewVersion).ToArray()).IsEqual(new[] { "1.3.0" });
 
         var tags = await new GitSource(new(), new FakeGit(), new("https://host/repo.git", "addon", null)).ListAsync(Target(), new(), CancellationToken.None);
-        Assertions.AssertString(tags.Single().NewVersion).IsEqual("2.0.0");
+        Assertions.AssertString(tags.Single().NewVersion).IsEqual("v2.0.0");
         Assertions.AssertString(((GitPackageRef)tags[0].Package).Commit).IsEqual(FakeGit.Commit);
     }
 
@@ -201,7 +201,7 @@ public class UpdateSourceTests
         var git = new FakeGit("addons/plugin", refs);
         var source = (GitSource)new UpdateSourceFactory(new(), git).Create("https://github.com/owner/repo/tags");
         var listed = await source.ListAsync(Target(), new(), CancellationToken.None);
-        Assertions.AssertArray(listed.Select(c => c.NewVersion).ToArray()).IsEqual(new[] { "1.4.0", "1.3.0", "1.2.3", "1.2.0" });
+        Assertions.AssertArray(listed.Select(c => c.NewVersion).ToArray()).IsEqual(new[] { "v1.4", "1.3.0", "v1.2.3", "1.2" });
         // an annotated tag installs the commit it points to, not the tag object
         Assertions.AssertString(((GitPackageRef)listed[0].Package).Commit).IsEqual(Commit('8'));
         Assertions.AssertString(((GitPackageRef)listed[0].Package).Repository).IsEqual("https://github.com/owner/repo.git");
@@ -210,7 +210,7 @@ public class UpdateSourceTests
 
         // the newest tag is the update; the tag name announces it, so nothing is fetched
         var update = await source.CheckAsync(Target(), new(), CancellationToken.None);
-        Assertions.AssertString(update!.NewVersion).IsEqual("1.4.0");
+        Assertions.AssertString(update!.NewVersion).IsEqual("v1.4");
         Assertions.AssertBool(git.Calls.Any(c => c.Contains("fetch") || c.Contains("show"))).IsFalse();
     }
 
