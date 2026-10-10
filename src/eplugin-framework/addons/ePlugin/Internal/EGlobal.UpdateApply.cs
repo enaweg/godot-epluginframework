@@ -17,6 +17,10 @@ internal sealed partial class EGlobal
     private bool _fetchingUpdate;
     private UpdateApplier? _updateApplier;
     internal event Action<UpdateJournal>? UpdateDecisionNeeded;
+    /// <summary>Raised when an update schedules an editor restart, before the restart runs.</summary>
+    internal event Action? RestartRequested;
+    /// <summary>True once an editor restart was scheduled in this session.</summary>
+    internal bool IsRestartPending { get; private set; }
     private string UpdateProjectRoot => ProjectSettings.GlobalizePath("res://");
     private void InitializeUpdateJournals() => _updateJournals = new(Path.Combine(UpdateProjectRoot, ".godot/eplugin/updates"), message => _ePluginContext?.Logger.Error(message));
     private UpdateApplier Applier()
@@ -233,6 +237,9 @@ internal sealed partial class EGlobal
             // Auto therefore uses the journal-backed restart path rather than a callback that pins old code.
             if (journal.IsActive) { journal.RestartRequired = true; journal.Save(); }
             Log("Restarting editor to load the updated assembly. If automatic launch fails, reopen the project to resume.");
+            global.IsRestartPending = true;
+            try { global.RestartRequested?.Invoke(); }
+            catch (Exception ex) { Log("Cannot prepare the editor restart: " + ex.Message); }
             EditorInterface.Singleton.CallDeferred(EditorInterface.MethodName.RestartEditor, true);
         }
         public bool Verify(UpdatePluginJournal plugin)

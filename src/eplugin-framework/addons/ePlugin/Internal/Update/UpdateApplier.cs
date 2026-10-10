@@ -121,8 +121,12 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             foreach (var plugin in journal.Plugins.Where(p => !p.IsEPlugin))
                 if (!host.IsEnabled(plugin.Slug)) host.SetPlainEnabled(plugin.Slug, true);
             host.Scan();
-            // A plain C# batch already passed its single build gate. Managed recipes need a final build.
-            if (journal.Plugins.Any(p => p.IsEPlugin && p.ContainsCSharp) && Build(journal, "final").ExitCode != 0)
+            // A plain C# batch already passed its single build gate. Managed recipes need a final build, unless reconciling
+            // left the build inputs of the interim build the editor runs unchanged.
+            var managedCSharp = journal.Plugins.Any(p => p.IsEPlugin && p.ContainsCSharp);
+            var finalBuild = managedCSharp && (host.RestartAlways || !RunsInterimBuild(journal) || ChangedSinceInterimBuild(journal));
+            if (managedCSharp && !finalBuild) host.Log("The updated recipes do not change the build; the editor keeps the interim build without another restart.");
+            if (finalBuild && Build(journal, "final").ExitCode != 0)
             {
                 var decision = UpdateFailureDecision.Choose(true, journal.Plugins.Any(p => p.Slug == "ePlugin"), host.BuildFailurePolicy, host.UiAvailable);
                 if (decision == "ask") { journal.Failure = "Final build failed."; journal.Save(UpdatePhase.AwaitingDecision); return UpdateOutcome.AwaitingDecision; }
@@ -166,7 +170,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             System.IO.Directory.Delete(journal.Directory, true);
         }
         catch (Exception ex) { host.Log("Update was committed; cleanup will be retried at startup: " + ex.Message); }
-        if (journal.Plugins.Any(p => p.IsEPlugin && p.ContainsCSharp))
+        if (journal.Plugins.Any(p => p.IsEPlugin && p.ContainsCSharp) && !RunsInterimBuild(journal))
         {
             // Committed journals must never be written again after their folder was deleted.
             journal.State = UpdatePhase.Committed;
@@ -249,6 +253,20 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         }
         return Rollback(journal, "Manual update recovery.");
     }
+
+    /// <summary>
+    /// The interim build is followed by a restart, so the editor runs it until a later build replaces it; a batch whose
+    /// last build is the interim one needs no restart to load its code.
+    /// </summary>
+    private static bool RunsInterimBuild(UpdateJournal journal) => journal.Builds.LastOrDefault()?.Name == "interim";
+
+    /// <summary>
+    /// Whether reconciling changed what the interim build compiled: the interim build already contains the new plugin
+    /// code, but also the old files the bridge kept, and none of the recipes' new NuGets, projects or directories.
+    /// </summary>
+    private static bool ChangedSinceInterimBuild(UpdateJournal journal) =>
+        journal.Plugins.Any(p => p.Preserved.Count > 0) ||
+        journal.Recipes.Values.Any(r => r.Target is null || RecipeReconciler.ChangesBuild(r.Old, r.Target));
 
     private BuildOutcome Build(UpdateJournal journal, string name)
     {

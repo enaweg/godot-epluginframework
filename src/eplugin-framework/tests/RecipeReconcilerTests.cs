@@ -27,6 +27,19 @@ public class RecipeReconcilerTests
         Assertions.AssertInt(RecipeReconciler.Plan(applied, old).Count).IsEqual(0);
     }
     [TestCase]
+    public void OnlyNugetProjectAndDirectoryChangesChangeTheBuild()
+    {
+        var old = new RecipeSnapshot { Nugets = [new("Shared", "1.0", null)], Projects = [new("lib.csproj", null, true)],
+            Directories = ["res://addons/plugin/.src"], Autoloads = [new("Global", "old.gd")] };
+        Assertions.AssertBool(RecipeReconciler.ChangesBuild(old, new RecipeSnapshot { Nugets = [new("Shared", "1.0", null)],
+            Projects = [new("lib.csproj", null, true)], Directories = ["res://addons/plugin/src"], Autoloads = [new("Global", "new.gd")],
+            PluginDependencies = [new("other", null)] })).IsFalse();
+        var nuget = old.Clone(); nuget.Nugets = [new("Shared", "2.0", null)];
+        var project = old.Clone(); project.Projects = [new("lib.csproj", null, false)];
+        var directory = old.Clone(); directory.Directories = ["res://addons/plugin/.tools"];
+        foreach (var next in new[] { nuget, project, directory }) Assertions.AssertBool(RecipeReconciler.ChangesBuild(old, next)).IsTrue();
+    }
+    [TestCase]
     public void EqualSnapshotsAreNoopAndCyclesAreRejected()
     {
         var same = new RecipeSnapshot { Directories = ["res://addons/plugin/.src"] };

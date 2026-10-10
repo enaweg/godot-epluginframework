@@ -35,6 +35,10 @@ internal static class RecipeReconciler
         foreach (var item in next.PluginDependencies.Where(p => !old.PluginDependencies.Contains(p))) operations.Add(new(RecipeOperationKind.EnsureDependency, Dependency: item));
         return operations;
     }
+    /// <summary>Whether going from one recipe to the other changes what the project compiles: NuGets, projects or visible directories.</summary>
+    public static bool ChangesBuild(RecipeSnapshot old, RecipeSnapshot next) =>
+        !old.Nugets.ToHashSet().SetEquals(next.Nugets) || !old.Projects.ToHashSet().SetEquals(next.Projects) ||
+        !old.Directories.Select(VisibleDirectory).ToHashSet(StringComparer.Ordinal).SetEquals(next.Directories.Select(VisibleDirectory));
     public static void Validate(RecipeSnapshot snapshot)
     {
         if (snapshot.SchemaVersion != 1 || snapshot.Nugets.GroupBy(n => n.Name).Any(g => g.Count() > 1) ||
