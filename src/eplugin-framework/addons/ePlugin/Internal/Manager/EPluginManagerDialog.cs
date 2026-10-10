@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Enaweg.Plugin.Internal.Licenses;
 using Enaweg.Plugin.Internal.Update;
+using Enaweg.Plugin.Internal.Welcomes;
 using Godot;
 
 namespace Enaweg.Plugin.Internal.Manager;
@@ -46,6 +47,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private Label _versionHint = null!;
     private ConfirmationDialog _versionConfirm = null!;
     private LocalSourcesDialog _localSources = null!;
+    private UpdateSitesDialog _updateSites = null!;
     // Versions published at each update_url, loaded on demand and kept until Check for updates. Local versions come from
     // the in-memory index on every render, so a new index never fetches these again.
     private readonly Dictionary<string, IReadOnlyList<UpdateCandidate>> _remoteVersions = [];
@@ -57,6 +59,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private string? _versionNote;
     // Read on selection rather than for every row: a disabled ePlugin's recipe needs a throw-away instance of its plugin.
     private readonly Dictionary<string, LicenseInfo?> _licenses = [];
+    private readonly Dictionary<string, WelcomeEntry?> _welcomes = [];
     private UpdateCandidate? _pendingVersion;
     private bool _pendingDowngrade;
     private Texture2D? _ePluginIcon;
@@ -95,6 +98,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _versionSelect = GetNode<OptionButton>("%VersionSelect"); _installVersion = GetNode<Button>("%InstallVersionButton");
         _versionHint = GetNode<Label>("%VersionHint"); _versionConfirm = GetNode<ConfirmationDialog>("%VersionConfirm");
         _localSources = GetNode<LocalSourcesDialog>("%LocalSourcesDialog"); _localSources.Initialize(global);
+        _updateSites = GetNode<UpdateSitesDialog>("%UpdateSitesDialog"); _updateSites.Initialize(global);
         _locationRow = GetNode<Control>("%LocationRow"); _locationLink = GetNode<LinkButton>("%LocationLink"); _openFolder = GetNode<Button>("%OpenFolderButton");
         RefreshTheme();
         _signals.Connect(this, Control.SignalName.ThemeChanged, Callable.From(() => CallDeferred(nameof(RefreshTheme))));
@@ -111,6 +115,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
 
         _signals.Connect(_check, BaseButton.SignalName.Pressed, Callable.From(CheckNow));
         _signals.Connect(GetNode<Button>("%LocalSourcesButton"), BaseButton.SignalName.Pressed, Callable.From(_localSources.Open));
+        _signals.Connect(GetNode<Button>("%UpdateSitesButton"), BaseButton.SignalName.Pressed, Callable.From(_updateSites.Open));
         _signals.Connect(_retry, BaseButton.SignalName.Pressed, Callable.From(RetryFailed));
         _signals.Connect(_release, BaseButton.SignalName.Pressed, Callable.From(OpenRelease));
         _signals.Connect(_locationLink, BaseButton.SignalName.Pressed, Callable.From(() => { if (_selectedSlug is not null) EditorInterface.Singleton.SelectFile(PluginDirectory(_selectedSlug)); }));
@@ -160,7 +165,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     {
         if (_working) return;
         ClearStaging();
-        _licenses.Clear();
+        _licenses.Clear(); _welcomes.Clear();
         var plugins = _global.CollectPlugins();
         _targets = _global.CollectUpdateTargets();
         _model = new(plugins, _global.PendingUpdates, _targets, _global.UpdateCache, candidate => _global.UpdatePreflightFindings([candidate]));
@@ -266,7 +271,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _detailsIcon.Texture = row?.IsEPlugin == true ? _logo : null;
         _detailsName.Text = row?.Plugin.Name ?? "No plugin selected";
         var reviewed = _versionInstall ? _staged?.FirstOrDefault(p => p.Candidate.Slug == slug)?.Findings : null;
-        _detailsText.Text = row is null ? "Select a plugin to see its details." : PluginManagerViewModel.Describe(row, reviewed, LicenseOf(row));
+        _detailsText.Text = row is null ? "Select a plugin to see its details." : PluginManagerViewModel.Describe(row, reviewed, LicenseOf(row), WelcomeOf(row));
         _release.Visible = IsSafeUrl(row?.Update?.Candidate.ReleaseUrl);
         _locationRow.Visible = row is not null;
         if (row is not null)
@@ -287,6 +292,15 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         return _licenses[row.Plugin.Slug] = license;
     }
 
+    private WelcomeEntry? WelcomeOf(PluginRow row)
+    {
+        if (row.Plugin.Missing) return null;
+        if (_welcomes.TryGetValue(row.Plugin.Slug, out var welcome)) return welcome;
+        try { welcome = _global.DescribeWelcome(row.Plugin.Slug); }
+        catch (Exception ex) { GD.PushError($"Cannot read the welcome page of {row.Plugin.Slug}: {ex.Message}"); welcome = null; }
+        return _welcomes[row.Plugin.Slug] = welcome;
+    }
+
     private void DetailsLinkClicked(Variant meta)
     {
         var link = meta.AsString();
@@ -294,6 +308,9 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         else if (link == PluginManagerViewModel.LicenseMeta && _selectedSlug is not null && _model.Find(_selectedSlug) is { } row &&
                  LicenseOf(row) is { Entry.Problem: null } license)
             LicenseDialog.CreateViewer(license).Open();
+        else if (link == PluginManagerViewModel.WelcomeMeta && _selectedSlug is not null && _model.Find(_selectedSlug) is { } shown &&
+                 WelcomeOf(shown) is { Problem: null } welcome)
+            WelcomeDialog.Create([welcome]).Open();
     }
 
     /// <summary>
@@ -313,7 +330,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             var local = _global.ListLocalVersions(target);
             var remote = _remoteVersions.GetValueOrDefault(target.Slug) ?? [];
             string? missing = null;
-            if (target.UpdateUrl is not null && !_remoteVersions.ContainsKey(target.Slug))
+            if (target.UpdateUrls.Count > 0 && !_remoteVersions.ContainsKey(target.Slug))
             {
                 if (_remoteVersionErrors.TryGetValue(target.Slug, out var error)) missing = "Versions from the update site are unavailable: " + error;
                 else { missing = "Loading versions from the update site..."; LoadVersions(target); }
@@ -355,7 +372,12 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { return; }
         catch (Exception ex) { _remoteVersionErrors[slug] = ex.Message; }
         finally { _loadingVersions.Remove(slug); }
-        if (GodotObject.IsInstanceValid(this) && IsInsideTree() && _selectedSlug == slug) RenderVersions(_model.Find(slug));
+        if (!GodotObject.IsInstanceValid(this) || !IsInsideTree()) return;
+        // A newer listed version is now a pending update; read the list again so the plugin shows it. Never discard a
+        // staged batch awaiting review or interrupt work.
+        var pending = _global.PendingUpdates.FirstOrDefault(c => c.Slug == slug);
+        if (!_working && _staged is null && pending?.NewVersion != _model.Find(slug)?.Update?.Candidate.NewVersion) Refresh();
+        else if (_selectedSlug == slug) RenderVersions(_model.Find(slug));
     }
 
     private VersionOption? SelectedVersion()
@@ -517,6 +539,17 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         else Refresh();
     }
 
+    /// <summary>
+    /// A plugin's update site changed: versions loaded from its old site are dropped, and the list is read again so
+    /// updates found there are no longer offered.
+    /// </summary>
+    private void UpdateSitesChanged()
+    {
+        _remoteVersions.Clear(); _remoteVersionErrors.Clear();
+        if (!GodotObject.IsInstanceValid(this) || !IsInsideTree() || _working || _staged is not null) return;
+        Refresh();
+    }
+
     private void RetryFailed()
     {
         if (_working || _staged is not null) return;
@@ -529,17 +562,24 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         if (_working) return;
         ClearStaging(); _remoteVersions.Clear(); _remoteVersionErrors.Clear();
         _working = true; Buttons(); _status.Text = "Checking for updates...";
-        string? failure = null;
+        string? failure = null, notice = null;
         try
         {
             var result = await _global.CheckForUpdatesAsync(true);
             if (result.Failures.Count > 0) failure = string.Join("; ", result.Failures.Select(f => $"{f.Slug}: {f.Message}"));
+            if (result.Fallbacks is { Count: > 0 } fallbacks)
+                notice = "The update site of " + string.Join(", ", fallbacks.Select(f => f.Slug)) + " did not work; plugin.cfg's update_url was used (see the output log).";
         }
         catch (Exception ex) { failure = ex.Message; }
         finally
         {
             _working = false;
-            if (GodotObject.IsInstanceValid(this) && IsInsideTree()) { Refresh(); if (failure is not null) _status.Text = "Update check failed: " + failure; }
+            if (GodotObject.IsInstanceValid(this) && IsInsideTree())
+            {
+                Refresh();
+                if (failure is not null) _status.Text = "Update check failed: " + failure;
+                else if (notice is not null) _status.Text = notice;
+            }
         }
     }
 
@@ -643,6 +683,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     {
         base._EnterTree();
         if (_global is not null) _global.LocalIndexChanged += LocalIndexChanged;
+        if (_updateSites is not null) _updateSites.Changed += UpdateSitesChanged;
     }
 
     private void ReleaseCallbacks()
@@ -650,6 +691,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _signals.Dispose();
         _cancel?.Cancel(); _cancel?.Dispose(); _cancel = null;
         if (_global is not null) _global.LocalIndexChanged -= LocalIndexChanged;
+        if (_updateSites is not null) _updateSites.Changed -= UpdateSitesChanged;
     }
 
     // Reload serializes every script before disposing any of them, so callback targets are still valid here.

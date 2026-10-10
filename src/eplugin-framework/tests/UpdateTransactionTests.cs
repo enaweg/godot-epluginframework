@@ -51,6 +51,8 @@ public class UpdateTransactionTests
         Assertions.AssertString(_store.GetShared("plugin")!.Version).IsEqual("2.0.0");
         Assertions.AssertInt(_store.LocalAttempts.Count).IsEqual(0);
         Assertions.AssertBool(Directory.Exists(package.Directory)).IsFalse();
+        // updates never show a welcome page, so the updated plugin's page counts as shown
+        Assertions.AssertString(_store.GetWelcome("plugin")!.Version).IsEqual("2.0.0");
     }
     [TestCase]
     public void ScenesAreClosedAfterMarkerAndBeforeAnyAddonIsSwapped()
@@ -78,6 +80,7 @@ public class UpdateTransactionTests
         Assertions.AssertObject(_applier.Apply([package.Package], package.Directory)).IsEqual(UpdateOutcome.RolledBack);
         Assertions.AssertBool(File.Exists(Path.Combine(_root, "addons/plugin/old.txt"))).IsTrue();
         Assertions.AssertString(File.ReadAllText(_shared)).IsEqual(shared);
+        Assertions.AssertBool(_store.IsWelcomeShown("plugin")).IsFalse();
         Assertions.AssertInt(_store.LocalAttempts.Count).IsEqual(0);
         Assertions.AssertInt(_host.Toggles).IsEqual(0);
     }

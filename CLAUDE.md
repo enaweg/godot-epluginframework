@@ -12,7 +12,7 @@ references, autoloads, managed asset directories, other plugin dependencies) and
 it automatically when the plugin is enabled/disabled in the Godot editor.
 
 The whole project lives under `src/eplugin-framework/` (Godot project root — `project.godot`,
-`EPlugin Framework.csproj/.sln`).
+`EPluginFramework.csproj/.sln`).
 
 ### Repository layout
 
@@ -36,17 +36,17 @@ exported games.
 
 Build:
 ```
-dotnet build "src/eplugin-framework/EPlugin Framework.sln"
+dotnet build "src/eplugin-framework/EPluginFramework.sln"
 ```
 
 Run tests (gdUnit4 via its VSTest adapter — requires the `GODOT_BIN` environment variable to point at a
 Godot .NET/Mono editor binary, since tests spin up a headless Godot runtime):
 ```
-dotnet test "src/eplugin-framework/EPlugin Framework.sln" --settings "src/eplugin-framework/.runsettings"
+dotnet test "src/eplugin-framework/EPluginFramework.sln" --settings "src/eplugin-framework/.runsettings"
 ```
 Run a single test:
 ```
-dotnet test "src/eplugin-framework/EPlugin Framework.sln" --filter "FullyQualifiedName~IDotnetCliTests.VersionTest"
+dotnet test "src/eplugin-framework/EPluginFramework.sln" --filter "FullyQualifiedName~IDotnetCliTests.VersionTest"
 ```
 Alternative: gdUnit4's own CLI runner (`src/eplugin-framework/addons/gdUnit4/runtest.cmd` /
 `runtest.sh`), which takes `--godot_binary <path>` or the same `GODOT_BIN` env var.
@@ -166,6 +166,17 @@ The index is rebuilt on every start and assembly reload by `EGlobal.LocalSources
 `LocalIndexCache` (per-user `local-index.json`, keyed by path/size/mtime) keeps unchanged ZIPs from being opened again
 and must be bumped via `IndexerVersion` whenever `LocalPackageIndexer.Read` changes what it extracts. Missing
 directories are skipped but kept in the list. `PendingUpdates` merges remote and local candidates.
+Project update sites (`UpdateSiteSettings`, the committed `res://addons/eplugin-update-sites.json`,
+`EGlobal.UpdateSites.cs`, `UpdateSitesDialog`) replace a plugin's `update_url`. `PluginUpdateTarget.UpdateUrl` stays
+the plugin.cfg value (the validator's R9 compares new packages against it) and `OverrideUrl` holds the project's site;
+`UpdateUrls` lists the override first. `UpdateService.FirstWorkingSiteAsync` tries them in order, so an unsupported
+or failing site falls back to plugin.cfg (reported in `UpdateCheckResult.Fallbacks`), and a candidate from either URL
+belongs to the plugin (`CurrentCached`, `source_changed`). `CollectUpdateTargets`/`CollectPlugins` reload the file;
+like `LocalSourceSettings` it is never overwritten when unreadable or newer, and it is deleted with its last entry.
+`KnownPlugins` (`KnownPlugins.Data.cs` is generated, see its header) is the built-in list of add-on update sites, keyed by
+slug: `PluginUpdateTarget.KnownUrl` is the last entry of `UpdateUrls`, and `PluginInfo.Known` fills in documentation,
+source and website links. `eplugin/updates/builtin_update_sites` (default on, `EGlobal.UseKnownPlugins`) turns it off.
+Regenerate the data only with slugs taken from each add-on's latest release and validated like an update.
 Checks use installed metadata and a 20-hour local cache, never the shared working-version index. Every apply
 requires dialog confirmation. Stage and validate the whole batch before touching addons, then save and close all
 open scenes (`IUpdateHost.CloseScenes`; `close_scene` exists only from Godot 4.5) before the swap. Managed plugins are
@@ -225,6 +236,22 @@ source is not accepted, e.g. a recipe license an update changed; declining disab
 before `SetPluginEnabled` and before installing staged updates (skipping recipe-licensed plugins), and its details link
 the license to `LicenseDialog.CreateViewer`. The `eplugin/licenses/auto_accept` project setting (no manager UI, logged)
 skips the dialog.
+
+### Plugin welcome pages
+
+A plugin's welcome page comes from the recipe's `SetWelcome` (text, or a `res://` path), else `welcome_file` in
+`plugin.cfg`, else its root README (`README.md`, `README.txt`, `README`, case-insensitive); without any of these it has
+none. `Internal/Welcomes/PluginWelcome.cs` is pure and unit-tested and reuses `PluginLicense`'s path rules and display.
+Shown pages live in the optional `welcomes` list of the shared `eplugin-state.json` (`PluginStateStore.TryRecordWelcomes`),
+recorded by slug only, so a page is shown once per project and omitted while empty like `licenses`.
+`EGlobal.Welcomes.cs` has no lifecycle hook: `EPluginPlugin._Process` calls `TakeWelcomes` every frame, which every 30
+frames collects enabled, unrecorded plugins (ePlugins only once `Activated`) while no transition, recipe update, update
+journal or license review is pending. That one path covers activations, plain plugins enabled in Project Settings,
+assembly reloads and restarts. A session set keeps plugins without a page from being read again. `WelcomeDialog`
+(scene + script, like `LicenseDialog`) lists several pages; closing it in any way records all of them, but an assembly
+reload drops it unrecorded. It opens only while no license or update-failure dialog is open. `UpdateApplier.Commit` records
+the updated plugins as shown, so updates never show a page. The ePlugin Manager links the page in the details
+(`PluginManagerViewModel.WelcomeLine`).
 
 ### Logging
 

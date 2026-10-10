@@ -26,7 +26,7 @@ public class IDotnetCliTests
     public void ProjectPathUsesResolvedSolutionName()
     {
         var projectRoot = ProjectSettings.GlobalizePath("res://");
-        var expectedPath = Path.Combine(projectRoot, "EPlugin Framework.csproj");
+        var expectedPath = Path.GetFullPath(Path.Combine(projectRoot, "EPluginFramework.csproj"));
         var projectPathField = typeof(DotnetCliBase).GetField("GodotProjectPath",
             BindingFlags.Instance | BindingFlags.NonPublic)!;
 

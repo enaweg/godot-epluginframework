@@ -14,7 +14,7 @@ script="MyPlugin.cs"
 update_url="https://github.com/owner/repository/releases"
 ```
 
-This works for enabled ePlugins, plain Godot GDScript or C# plugins, and ePlugin Framework itself. Checks compare the source version with the version in the installed `plugin.cfg`, independently of the last working version in `addons/eplugin-state.json`. A manual version edit does not block checks; an unfinished local attempt does.
+This works for enabled ePlugins, plain Godot GDScript or C# plugins, and ePlugin Framework itself. Checks compare the source version with the version in the installed `plugin.cfg`, independently of the last working version in `addons/eplugin-state.json`. A manual version edit does not block checks; an unfinished local attempt does. The `update_url` is read from the installed `plugin.cfg`, so each release must declare it again. To use a different update site for a plugin, for example one without an `update_url` or someone else's plugin, set it for the project instead; see [Project update sites](#project-update-sites).
 
 Supported source examples:
 
@@ -25,12 +25,47 @@ Supported source examples:
 | Git subtree tracking a branch | `https://host/owner/repository.git?path=addons/my_plugin#main` |
 | Git over SSH | `git@host:owner/repository.git?path=addons/my_plugin#main` |
 | Local plugin directories | ZIP files in folders you choose; no `update_url` required |
+| Project update sites | Any of the above, set by the project for a plugin; replaces its `update_url` |
+| Built-in update sites | ePlugin's list of popular add-ons, for plugins that name no working update site |
 
 Release sources select the highest semantic version and a ZIP asset. If there are several assets, the updater prefers a slug-, addon-, or plugin-named ZIP; if none is suitable, it uses the release source archive. Ambiguous asset lists are refused. Git sources without a `#ref` choose the newest semantic tag, falling back to the default branch. A branch follows its tip; a tag or full commit SHA pins the source and opts out of update checks. Checks are version-based, so changing a commit without increasing `plugin.cfg`'s version does not offer an update.
 
 Git sources require **git 2.25 or newer** on PATH. Fetches use shallow, partial, sparse checkout of the requested subtree. Servers that do not advertise partial-clone filtering are refused. Git release checks can read remote metadata directly; other Git checks fetch only the metadata blob. Release ZIP sources do not require git.
 
 For private release APIs, set `EPLUGIN_GITHUB_TOKEN` (fallback `GITHUB_TOKEN`) or `EPLUGIN_GITLAB_TOKEN` (fallback `GITLAB_TOKEN`) in the editor environment. Tokens are not written to project files or caches. HTTP credentials are scoped to the source host and stripped on redirects to another host. Git authentication uses normal Git or SSH credentials and runs without interactive prompts.
+
+## Project update sites
+
+A project can set the update site of a plugin itself, in **Update sites...** of the [ePlugin Manager](eplugin-manager.md). Use it for a plugin whose `plugin.cfg` has no `update_url`, or whose `update_url` changed and no longer finds updates. The project's update site replaces the plugin's `update_url` for checks, versions and downloads.
+
+- **Add...** chooses a plugin in `res://addons` from a list and asks for the update site URL.
+- **Edit...** (or double-clicking an entry) changes the URL of the selected plugin.
+- **Remove** deletes the entry; the plugin uses its `update_url` again.
+
+The URL can be any [supported source](#configure-an-update-source): GitHub or GitLab releases, or a Git repository. Other URLs are refused when you save them. The dialog shows each plugin's `plugin.cfg` `update_url` next to the site that replaces it.
+
+The project's update site is always tried first. When it does not work, the plugin's `update_url` is checked instead, and then its [built-in update site](#built-in-update-sites): for example when the site does not respond, returns an error, or is not a supported URL because the file was edited by hand. The output log and the manager's status line say when this happened. A plugin with no other site reports the failed check.
+
+The update sites are saved in `res://addons/eplugin-update-sites.json`. Commit the file, so everyone working on the project uses the same sites. The file is removed again with its last entry. A file that cannot be read, or that a newer ePlugin version wrote, is never overwritten: the sites can only be changed again once it is repaired or deleted.
+
+```json
+{
+  "schema": 1,
+  "sites": [
+    { "slug": "gdUnit4", "url": "https://github.com/MikeSchulze/gdUnit4/releases" }
+  ]
+}
+```
+
+An update replaces the plugin's `plugin.cfg`, but not the project's update site, which stays in use. A new release that changes its own `update_url` is still shown for [review](#review-before-installation), but does not need the trust checkbox, because checks keep using the project's site. The plugin details in the manager show the project's update site and the `update_url` it replaces.
+
+## Built-in update sites
+
+ePlugin ships a list of update sites for popular Godot add-ons. It is the last fallback: a plugin uses its built-in update site only when the project sets no update site for it and its `plugin.cfg` names no `update_url`, or when those do not work. So the add-ons in the list get updates even when they do not declare an `update_url` themselves. The list also fills in the documentation, source and website links of the plugin details when `plugin.cfg` does not set them.
+
+The list matches add-ons by their folder name in `res://addons`. It holds active add-ons with at least 100 stars on GitHub. Each was checked against its latest release: the release was downloaded, installed the way the updater installs it and validated like an update. Add-ons without a stable release, add-ons with a GDExtension, and add-ons whose release the updater would refuse are not in the list.
+
+The list is read-only. **Update sites...** in the [ePlugin Manager](eplugin-manager.md) shows it below the project's update sites, with the installed add-ons first, so you can review which site each add-on uses. To use a different site for an add-on, set a [project update site](#project-update-sites); it is tried first. To ignore the list entirely, turn off `eplugin/updates/builtin_update_sites` in **Project Settings** (with **Advanced Settings** shown).
 
 ## Local plugin directories
 
@@ -71,9 +106,35 @@ This screenshot uses example local ZIP releases of the repository's sample plugi
 
 By default, the framework checks once per editor session when the last successful check was at least 20 hours ago. Results and the timestamp are cached under `.godot/eplugin/update-state.json`. The manager's **Check for updates** action bypasses the interval and also indexes local directories. Settings are under **Project Settings > eplugin/updates**.
 
-The manager shows installed and candidate versions, sources, warnings, and earlier failures. Select a batch and choose **Update** to download and validate it. Package warnings require another confirmation before installation; a changed source host requires the explicit trust checkbox. Canceling the download leaves installed addons untouched. An update that comes with a license file not accepted yet shows it before installation; an update that keeps the accepted license file does not ask again (see [Plugin licenses](plugin-licenses.md#updates)). Previously failed versions are shown but are not selected automatically. The **Version** selector also supports installing an earlier published version as a downgrade, with the same validation, backup, and rollback flow.
+The manager shows installed and candidate versions, sources, warnings, and earlier failures. Select a batch and choose **Update** to download and validate it. Package warnings require another confirmation before installation; a changed source host requires the explicit trust checkbox. Canceling the download leaves installed addons untouched. An update that comes with a license file not accepted yet shows it before installation; an update that keeps the accepted license file does not ask again (see [Plugin licenses](plugin-licenses.md#updates)). Updates never show a plugin's [welcome page](plugin-welcome.md#updates). Previously failed versions are shown but are not selected automatically. The **Version** selector also supports installing an earlier published version as a downgrade, with the same validation, backup, and rollback flow.
 
-Versions are listed from GitHub/GitLab releases (up to 100) or semantic tags of a Git source. A Git `update_url` pinned to a branch, tag, or commit has no version list. Configure **Update** and **Downgrade** from [ePlugin Manager](eplugin-manager.md).
+Versions are listed from GitHub/GitLab releases (up to 100) or semantic tags of a Git source. A Git `update_url` pinned to a branch, tag, or commit has no version list. When the list loaded for the selected plugin contains a version newer than the installed one, the plugin shows that update right away, as if **Check for updates** had found it. Configure **Update** and **Downgrade** from [ePlugin Manager](eplugin-manager.md).
+
+### Review before installation
+
+**Update** first downloads and validates every package of the batch. Addon files are only changed afterwards. Installation stops for a review when a package has a warning or when its update source moves to another host. The warnings are listed in the plugin's details under **Update** (or **Reviewed package** for a version chosen in the **Version** selector). Confirm again to install. A changed host also requires the trust checkbox.
+
+| Warning | Reason |
+|---|---|
+| Package version differs from the announced version | The `version` in the package's `plugin.cfg` is not the version of the release or tag that offered it. |
+| Plugin name changed | The package's `plugin.cfg` has a different `name`. |
+| Update source changed | The package's `plugin.cfg` has a different `update_url`, or none. A different host requires the trust checkbox. |
+| Plugin entry-point language changed | The `script` changed language, for example from `.gd` to `.cs`. |
+| Major version change | The major version differs, so project code that uses the plugin may need changes. |
+
+An update with an error cannot be selected or installed. These are refused:
+
+- a package without a readable `plugin.cfg`, without `name`, `version` or `script`, or whose script is missing or outside the addon
+- a package for a different addon slug
+- a version that is not newer than the installed one. The **Version** selector can downgrade, except ePlugin Framework.
+- a package or installed plugin with `.gdextension` files, a forbidden file, or a package over the size limits (see [Publish an updatable release](#publish-an-updatable-release))
+- a version rejected by a hard dependency constraint of another enabled plugin
+- a plugin whose update is changed or blocked: its `update_url` changed since the check, it is no longer enabled, or an earlier attempt needs **Retry failed** first
+
+Shown without stopping: an optional recipe of another plugin that no longer matches the new version (it stays installed until that plugin is toggled), and the last working version recorded in `addons/eplugin-state.json` when it differs from the installed one.
+
+> [!NOTE]
+> An update replaces the whole addon folder, `plugin.cfg` included. If you added `update_url` to a third-party plugin yourself, its next release usually does not contain it: the review reports **Update source changed: removed**, and after installing, the plugin has no `update_url` until you add it again. Set a [project update site](#project-update-sites) for plugins whose releases do not declare an `update_url`; it stays in use across updates.
 
 ## Builds, restart, and recovery
 
@@ -94,5 +155,6 @@ If automatic recovery cannot run, close the editor, restore `updates/<id>/backup
 | `allow_prerelease` | `false` | Includes semantic prereleases. |
 | `on_build_failure` | `ask` | Final build policy: `ask`, `rollback`, or `keep`; self-updates and headless runs always roll back. |
 | `restart_policy` | `auto` | Uses conservative C# restarts, or `always` to restart for every batch. |
+| `builtin_update_sites` | `true` | Uses ePlugin's [built-in update sites](#built-in-update-sites) for plugins that name no working update site. |
 
 Update journals and recipe snapshots use versioned, backward-compatible readers. Future framework releases must preserve that contract and keep the shared and local state schemas readable by a rolled-back framework. Unsupported future journals need manual repair. Updates do not install missing addons, resolve remote plugin dependencies, or run migration scripts.

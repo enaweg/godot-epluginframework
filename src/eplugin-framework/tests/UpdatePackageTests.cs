@@ -126,6 +126,11 @@ public class UpdatePackageTests
         var findings = new AddonPackageValidator().Validate(new(target, candidate, stage)).Findings;
         Assertions.AssertBool(findings.Any(f => f.Code == "R9" && f.RequiresTrust)).IsTrue();
         Assertions.AssertBool(findings.Any(f => f.Code == "R11" && f.Severity == FindingSeverity.Error)).IsTrue();
+        // with an update site set by the project, checks keep using it, so the new host needs no trust
+        var overridden = new AddonPackageValidator().Validate(new(target with { OverrideUrl = "https://github.com/fork/plugin/releases" }, candidate, stage)).Findings
+            .Single(f => f.Code == "R9");
+        Assertions.AssertBool(overridden.RequiresTrust).IsFalse();
+        Assertions.AssertString(overridden.Message).Contains("https://github.com/fork/plugin/releases");
     }
 
     [TestCase]

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using Enaweg.Plugin.Internal.Licenses;
 using Enaweg.Plugin.Internal.Update;
+using Enaweg.Plugin.Internal.Welcomes;
 
 namespace Enaweg.Plugin.Internal.Manager;
 
@@ -21,7 +22,8 @@ internal sealed class PluginRow(PluginInfo plugin, UpdateRow? update)
     public PluginInfo Plugin { get; } = plugin;
     public UpdateRow? Update { get; } = update;
     public bool IsEPlugin => Plugin.Kind is PluginKind.Framework or PluginKind.EPlugin;
-    public bool IsUpdatable => Plugin.UpdateUrl is not null || Plugin.LocalPackages > 0 || Update is not null;
+    public bool IsUpdatable => Plugin.UpdateUrl is not null || Plugin.UpdateSite is not null || Plugin.Known is not null ||
+                               Plugin.LocalPackages > 0 || Update is not null;
     public bool HasUpdate => Update is not null;
     public bool CanToggle => !Plugin.Missing;
 }
@@ -49,8 +51,8 @@ internal sealed class PluginManagerViewModel
             if (target is null) messages.Add(new("disabled", FindingSeverity.Error, "Plugin is no longer enabled."));
             else
             {
-                if (candidate.SourceUrl is not null && target.UpdateUrl != candidate.SourceUrl)
-                    messages.Add(new("source_changed", FindingSeverity.Error, "The plugin's update_url changed or was removed; check for updates again."));
+                if (candidate.SourceUrl is not null && !target.UpdateUrls.Contains(candidate.SourceUrl))
+                    messages.Add(new("source_changed", FindingSeverity.Error, "The plugin's update site changed or was removed; check for updates again."));
                 if (target.IsBlocked || target.StoreReadOnly) messages.Add(new("R17", FindingSeverity.Error, "Resolve local state with Retry failed first."));
                 if (target.RecordedVersion is not null && target.RecordedVersion != target.InstalledVersion)
                     messages.Add(new("recorded_version", FindingSeverity.Info, "Last working version: " + target.RecordedVersion));
@@ -134,8 +136,6 @@ internal sealed class PluginManagerViewModel
         return text;
     }
 
-    /// <summary>The details pane as BBCode. All plugin supplied text is escaped.</summary>
-    /// <param name="reviewed">Findings of a staged package for an explicitly chosen version, awaiting confirmation.</param>
     /// <summary>The meta of the license link in <see cref="Describe"/>, which opens the license dialog.</summary>
     public const string LicenseMeta = "eplugin-license";
 
@@ -158,7 +158,19 @@ internal sealed class PluginManagerViewModel
         return $"[b]License:[/b] [url={LicenseMeta}]{Escape(PluginLicense.Display(entry.Slug, entry.Source))}[/url]{state}\n";
     }
 
-    public static string Describe(PluginRow row, IReadOnlyList<Finding>? reviewed = null, LicenseInfo? license = null)
+    /// <summary>The meta of the welcome page link in <see cref="Describe"/>, which opens the welcome dialog.</summary>
+    public const string WelcomeMeta = "eplugin-welcome";
+
+    /// <summary>The welcome page line of the details: a link that shows the page again; empty without a page.</summary>
+    public static string WelcomeLine(WelcomeEntry? welcome) =>
+        welcome is null ? ""
+        : welcome.Problem is not null ? $"[b]Welcome page:[/b] [color=#ff7070]{Escape(welcome.Problem)}[/color]\n"
+        : $"[b]Welcome page:[/b] [url={WelcomeMeta}]{Escape(PluginLicense.Display(welcome.Slug, welcome.Source))}[/url]\n";
+
+    /// <summary>The details pane as BBCode. All plugin supplied text is escaped.</summary>
+    /// <param name="reviewed">Findings of a staged package for an explicitly chosen version, awaiting confirmation.</param>
+    public static string Describe(PluginRow row, IReadOnlyList<Finding>? reviewed = null, LicenseInfo? license = null,
+        WelcomeEntry? welcome = null)
     {
         var plugin = row.Plugin; var text = new StringBuilder();
         void Line(string label, string? value) { if (!string.IsNullOrWhiteSpace(value)) text.Append($"[b]{label}:[/b] {Escape(value)}\n"); }
@@ -171,7 +183,13 @@ internal sealed class PluginManagerViewModel
         Line("Status", StatusText(plugin));
         Line("Version", plugin.Version);
         Line("Author", plugin.Author);
+        // ePlugin's built-in list fills in what plugin.cfg does not set
+        Link("Documentation", plugin.DocumentationUrl ?? plugin.Known?.DocumentationUrl);
+        var source = plugin.SourceUrl ?? plugin.Known?.SourceUrl;
+        Link("Source", source);
+        if (plugin.Known?.WebsiteUrl is { } website && website != source) Link("Website", website);
         text.Append(LicenseLine(license));
+        text.Append(WelcomeLine(welcome));
         if (!string.IsNullOrWhiteSpace(plugin.Description)) text.Append('\n').Append(Escape(plugin.Description)).Append('\n');
         if (plugin.Error is not null) text.Append($"\n[color=#ff7070]{Escape(plugin.Error)}[/color]\n");
 
@@ -185,8 +203,24 @@ internal sealed class PluginManagerViewModel
             foreach (var finding in update.Findings) text.Append($"[color={Color(finding.Severity)}]{finding.Severity}:[/color] {Escape(finding.Message)}\n");
             if (update.Failed is { } failed) text.Append($"[color=#ff7070]Previously failed {failed.Utc:u}:[/color] {Escape(failed.Reason)}\n");
         }
-        else if (plugin.UpdateUrl is not null) Link("Update site", plugin.UpdateUrl);
-        else if (plugin.LocalPackages == 0) text.Append("Not updatable: plugin.cfg has no update_url and no local plugin directory holds a package of it.\n");
+        else if ((plugin.UpdateSite ?? plugin.UpdateUrl ?? plugin.Known?.UpdateUrl) is { } site) Link("Update site", site);
+        else if (plugin.LocalPackages == 0)
+            text.Append("Not updatable: plugin.cfg has no update_url, the project sets no update site, ePlugin's built-in list does " +
+                        "not know it, and no local plugin directory holds a package of it.\n");
+        if (plugin.UpdateSite is not null)
+        {
+            var replaced = plugin.UpdateUrl is not null && plugin.UpdateUrl != plugin.UpdateSite;
+            text.Append(replaced ? "The project sets this update site. It replaces plugin.cfg's update_url, which is used when it does not work:\n"
+                : "The project sets this update site.\n");
+            if (replaced) Link("plugin.cfg update_url", plugin.UpdateUrl);
+        }
+        if (plugin.Known is { } known)
+        {
+            if (plugin.UpdateSite is null && plugin.UpdateUrl is null)
+                text.Append("This update site comes from ePlugin's built-in list.\n");
+            else if (known.UpdateUrl != plugin.UpdateSite && known.UpdateUrl != plugin.UpdateUrl)
+                Link("Built-in update site", known.UpdateUrl);
+        }
         if (plugin.LocalPackages > 0) Line("Local packages", plugin.LocalPackages.ToString());
 
         if (reviewed is { Count: > 0 })

@@ -149,6 +149,9 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             host.Log(journal.Failure);
             return UpdateOutcome.KeptWithErrors;
         }
+        // Updates never show a welcome page, also not one the plugin did not have or show before.
+        var unseen = journal.Plugins.Where(p => !store.IsWelcomeShown(p.Slug)).Select(p => new ShownWelcome(p.Slug, p.NewVersion, DateTimeOffset.UtcNow)).ToArray();
+        if (unseen.Length > 0 && !store.TryRecordWelcomes(unseen)) host.Log("The updated plugins' welcome pages could not be marked as shown; they may be shown after the editor restarts.");
         try
         {
             foreach (var plugin in journal.Plugins)

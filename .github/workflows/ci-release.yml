@@ -43,7 +43,7 @@ jobs:
 
       - name: Build
         working-directory: src/eplugin-framework
-        run: dotnet build "EPlugin Framework.sln" --configuration Debug
+        run: dotnet build "EPluginFramework.sln" --configuration Debug
 
       - name: Rebuild Godot project cache
         working-directory: src/eplugin-framework
@@ -54,7 +54,7 @@ jobs:
         working-directory: src/eplugin-framework
         run: |
           xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" \
-            dotnet test "EPlugin Framework.sln" --configuration Debug --no-build --settings .runsettings --verbosity normal -m:1
+            dotnet test "EPluginFramework.sln" --configuration Debug --no-build --settings .runsettings --verbosity normal -m:1
 
       - name: Initialize version
         shell: bash

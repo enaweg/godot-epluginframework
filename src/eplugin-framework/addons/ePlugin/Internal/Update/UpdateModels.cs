@@ -1,6 +1,7 @@
 #if TOOLS
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
@@ -17,8 +18,19 @@ internal sealed record GitPackageRef(string Repository, string Path, string Comm
 /// <summary>A ZIP file found by indexing one of the user's local plugin directories.</summary>
 internal sealed record LocalZipPackageRef(string Path) : UpdatePackageRef;
 /// <param name="UpdateUrl">The plugin.cfg update_url; null when only local plugin directories can update the plugin.</param>
+/// <param name="OverrideUrl">The update site the project sets for the plugin, which is tried before the plugin.cfg one.</param>
+/// <param name="KnownUrl">The update site of ePlugin's built-in list, the last one tried.</param>
 internal sealed record PluginUpdateTarget(string Slug, string Name, string InstalledVersion, string? UpdateUrl,
-    string Directory, bool IsBlocked = false, bool StoreReadOnly = false, string? RecordedVersion = null);
+    string Directory, bool IsBlocked = false, bool StoreReadOnly = false, string? RecordedVersion = null,
+    string? OverrideUrl = null, string? KnownUrl = null)
+{
+    /// <summary>
+    /// The update sites to try, in order: the project's, the plugin.cfg update_url, then the built-in one. A candidate
+    /// found at any of them belongs to the plugin. Empty when only local plugin directories can update the plugin.
+    /// </summary>
+    public IReadOnlyList<string> UpdateUrls => new[] { OverrideUrl, UpdateUrl, KnownUrl }
+        .Where(url => !string.IsNullOrWhiteSpace(url)).Select(url => url!).Distinct(StringComparer.Ordinal).ToArray();
+}
 /// <param name="SourceUrl">The update_url the candidate was found at; null for a package of a local plugin directory.</param>
 internal sealed record UpdateCandidate(string Slug, string PluginName, string InstalledVersion, string NewVersion,
     string? SourceUrl, string? ReleaseUrl, string? ResolvedRevision, UpdatePackageRef Package)
@@ -27,8 +39,9 @@ internal sealed record UpdateCandidate(string Slug, string PluginName, string In
     [JsonIgnore] public string Origin => SourceUrl ?? (Package as LocalZipPackageRef)?.Path ?? "";
 }
 internal sealed record UpdateCheckFailure(string Slug, string Message);
+/// <param name="Fallbacks">Plugins whose project update site failed, so their plugin.cfg update_url was used instead.</param>
 internal sealed record UpdateCheckResult(IReadOnlyList<UpdateCandidate> Updates,
-    IReadOnlyList<UpdateCheckFailure> Failures, DateTimeOffset CheckedAtUtc);
+    IReadOnlyList<UpdateCheckFailure> Failures, DateTimeOffset CheckedAtUtc, IReadOnlyList<UpdateCheckFailure>? Fallbacks = null);
 internal sealed record UpdateCheckOptions(bool AllowPrerelease = false, int TimeoutSeconds = 15);
 internal interface IClock { DateTimeOffset UtcNow { get; } }
 internal sealed class SystemClock : IClock { public DateTimeOffset UtcNow => DateTimeOffset.UtcNow; }
@@ -50,6 +63,10 @@ internal sealed class UnsupportedUpdateSource(string url) : IUpdateSource
 }
 internal sealed class UpdateSourceFactory(UpdateHttp? http = null, IGitRunner? git = null) : IUpdateSourceFactory
 {
+    /// <summary>Whether <paramref name="url"/> is an update site the updater can read; nothing is contacted.</summary>
+    public static bool IsSupported(string? url) =>
+        !string.IsNullOrWhiteSpace(url) && new UpdateSourceFactory().Create(url.Trim()) is not UnsupportedUpdateSource;
+
     public IUpdateSource Create(string url)
     {
         var transport = http ?? new UpdateHttp();

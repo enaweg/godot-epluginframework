@@ -1,8 +1,9 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" uid="uid://bvv1rdcwentgp" path="res://addons/ePlugin/Internal/Manager/EPluginManagerDialog.cs" id="1_script"]
 [ext_resource type="Texture2D" uid="uid://c0e8d5lpm8fxh" path="res://addons/ePlugin/icons/update.svg" id="2_update"]
 [ext_resource type="PackedScene" path="res://addons/ePlugin/Internal/Manager/LocalSourcesDialog.tscn" id="3_local"]
+[ext_resource type="PackedScene" path="res://addons/ePlugin/Internal/Manager/UpdateSitesDialog.tscn" id="4_sites"]
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_details"]
 
@@ -45,6 +46,12 @@ unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "Manage your local plugin directories. Plugin ZIP files in them are offered as updates and versions."
 text = "Local directories..."
+
+[node name="UpdateSitesButton" type="Button" parent="Content/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Set update sites for plugins in this project, and review ePlugin's built-in list of add-on update sites. A project's site replaces a plugin's plugin.cfg update_url, which stays the fallback."
+text = "Update sites..."
 
 [node name="CheckButton" type="Button" parent="Content/Header"]
 unique_name_in_owner = true
@@ -204,4 +211,7 @@ ok_button_text = "Install"
 dialog_autowrap = true
 
 [node name="LocalSourcesDialog" parent="." instance=ExtResource("3_local")]
+unique_name_in_owner = true
+
+[node name="UpdateSitesDialog" parent="." instance=ExtResource("4_sites")]
 unique_name_in_owner = true

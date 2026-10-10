@@ -1,0 +1,64 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/ePlugin/Internal/Manager/WelcomeDialog.cs" id="1_script"]
+
+[node name="WelcomeDialog" type="AcceptDialog"]
+auto_translate_mode = 2
+title = "ePlugin — Welcome"
+initial_position = 2
+size = Vector2i(900, 560)
+min_size = Vector2i(600, 360)
+ok_button_text = "Close"
+script = ExtResource("1_script")
+
+[node name="Content" type="VBoxContainer" parent="."]
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 892.0
+offset_bottom = 511.0
+theme_override_constants/separation = 8
+
+[node name="Summary" type="Label" parent="Content"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(560, 0)
+layout_mode = 2
+text = "These plugins were installed. Select one to read its welcome page."
+autowrap_mode = 3
+
+[node name="Split" type="HSplitContainer" parent="Content"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="WelcomeList" type="ItemList" parent="Content/Split"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+tooltip_text = "Installed plugins with a welcome page. Select one to read it."
+
+[node name="WelcomeBox" type="VBoxContainer" parent="Content/Split"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="WelcomeName" type="Label" parent="Content/Split/WelcomeBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+theme_type_variation = &"HeaderMedium"
+text = "Plugin"
+autowrap_mode = 3
+
+[node name="WelcomeSource" type="Label" parent="Content/Split/WelcomeBox"]
+unique_name_in_owner = true
+modulate = Color(1, 1, 1, 0.7)
+layout_mode = 2
+mouse_filter = 1
+text_overrun_behavior = 3
+
+[node name="WelcomeText" type="RichTextLabel" parent="Content/Split/WelcomeBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+focus_mode = 2
+bbcode_enabled = true
+context_menu_enabled = true
+selection_enabled = true

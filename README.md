@@ -51,6 +51,7 @@ Screenshots show the repository's sample plugins and example update packages.
 - [Updating plugins](docs/updating-plugins.md): configure update sources, publish packages, and understand validation, builds, and recovery.
 - [Plugin state files](docs/plugin-state.md): checked-in state, per-user recovery state, and manual retry.
 - [Plugin licenses](docs/plugin-licenses.md): ask users to accept a plugin's license before it is enabled or updated.
+- [Plugin welcome pages](docs/plugin-welcome.md): greet users once after a plugin is installed, by default with its README.
 
 The repository includes a sample project under `src/eplugin-framework` with examples for required and optional dependencies.
 
@@ -66,8 +67,8 @@ The current CI configuration builds and tests pull requests with Godot 4.7.2 and
 
 ```bash
 cd src/eplugin-framework
-dotnet build "EPlugin Framework.sln" --configuration Debug
-dotnet test "EPlugin Framework.sln" --configuration Debug --settings .runsettings
+dotnet build "EPluginFramework.sln" --configuration Debug
+dotnet test "EPluginFramework.sln" --configuration Debug --settings .runsettings
 ```
 
 Tests require a Godot .NET editor executable. See the [CI workflow](https://github.com/enaweg/godot-epluginframework/blob/main/.github/workflows/ci-pr.yml) for its headless setup. Godot 4.5 and newer have an [EditorPlugin regression](https://github.com/godotengine/godot/issues/110971), so the framework uses an interface-based plugin API.

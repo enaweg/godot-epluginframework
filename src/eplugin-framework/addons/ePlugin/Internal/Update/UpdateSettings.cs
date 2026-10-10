@@ -12,6 +12,8 @@ internal static class UpdateSettings
         Add("allow_prerelease", false, Variant.Type.Bool);
         Add("on_build_failure", "ask", Variant.Type.String, PropertyHint.Enum, "ask,rollback,keep");
         Add("restart_policy", "auto", Variant.Type.String, PropertyHint.Enum, "auto,always");
+        // ePlugin's built-in list of add-on update sites, see KnownPlugins.
+        Add("builtin_update_sites", true, Variant.Type.Bool);
     }
     private static void Add(string name, Variant value, Variant.Type type, PropertyHint hint = PropertyHint.None, string hintString = "")
     {

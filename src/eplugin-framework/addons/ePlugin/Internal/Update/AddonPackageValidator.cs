@@ -64,7 +64,11 @@ internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules 
         {
             var oldHost = Uri.TryCreate(installed.UpdateUrl, UriKind.Absolute, out var before) ? before.Host : installed.UpdateUrl;
             var newHost = Uri.TryCreate(newUrl, UriKind.Absolute, out var after) ? after.Host : newUrl;
-            Add("R9", FindingSeverity.Warning, "Update source changed: " + (newUrl ?? "removed"), !string.IsNullOrWhiteSpace(newUrl) && oldHost != newHost);
+            // Checks keep using an update site the project sets, so the new plugin.cfg source is not trusted for anything.
+            if (installed.OverrideUrl is { } site)
+                Add("R9", FindingSeverity.Warning, $"Update source changed: {newUrl ?? "removed"}. Updates still come from the project's update site {site}.");
+            else
+                Add("R9", FindingSeverity.Warning, "Update source changed: " + (newUrl ?? "removed"), !string.IsNullOrWhiteSpace(newUrl) && oldHost != newHost);
         }
         var installedFiles = Directory.Exists(installed.Directory) ? PackageFiles.Files(installed.Directory).ToArray() : [];
         if (NativeExtension(files.Concat(installedFiles)) is { } native) findings.Add(native);

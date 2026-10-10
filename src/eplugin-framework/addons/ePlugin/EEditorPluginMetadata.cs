@@ -28,5 +28,11 @@ public class EEditorPluginMetadata
 
     /// <summary>Author of the plugin (the <c>author</c> key).</summary>
     public string Author { get; set; }
+
+    /// <summary>Where the plugin's documentation is (the <c>documentation_url</c> key).</summary>
+    public string? DocumentationUrl { get; set; }
+
+    /// <summary>Where the plugin's source code is (the <c>source_url</c> key).</summary>
+    public string? SourceUrl { get; set; }
 }
 #endif

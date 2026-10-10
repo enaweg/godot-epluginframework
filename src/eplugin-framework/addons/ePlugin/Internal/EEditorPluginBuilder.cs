@@ -36,6 +36,16 @@ internal sealed class EEditorPluginBuilder : IEEditorPluginBuilder
         return this;
     }
 
+    public IEEditorPluginBuilder SetWelcome(string welcome)
+    {
+        if (string.IsNullOrWhiteSpace(welcome)) throw new ArgumentException("The welcome page must not be empty.", nameof(welcome));
+        var path = welcome.Trim();
+        PluginRecipe.PluginWelcome = path.StartsWith("res://", StringComparison.Ordinal) && !path.Contains('\n')
+            ? new EEditorPluginRecipe.Welcome(null, path)
+            : new EEditorPluginRecipe.Welcome(welcome, null);
+        return this;
+    }
+
     public IEEditorPluginBuilder AddPluginDependency(string pluginSlug, string? version = null)
     {
         PluginRecipe.PluginDependencies.Add(new EEditorPluginRecipe.Plugin(pluginSlug, version));
