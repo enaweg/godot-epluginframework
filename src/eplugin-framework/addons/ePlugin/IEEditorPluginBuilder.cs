@@ -55,6 +55,19 @@ public interface IEEditorPluginBuilder : IEEditorPluginRecipeBuilder
     IEEditorPluginBuilder SetLicense(string license);
 
     /// <summary>
+    /// Sets the plugin's welcome page. It is shown once per project after the plugin is installed, and can be read
+    /// again in the ePlugin Manager. It replaces the <c>welcome_file</c> of <c>plugin.cfg</c> and the <c>README</c>
+    /// file of the plugin directory.
+    /// </summary>
+    /// <param name="welcome">
+    /// Either the welcome text, which may contain BBCode, or the <c>res://</c> path of the file holding it
+    /// (e.g. <c>$"{this.GetPluginDirectory()}/WELCOME.txt"</c>). A value starting with <c>res://</c> is a path.
+    /// </param>
+    /// <remarks>Updates never show the welcome page, also not when they change it.</remarks>
+    /// <returns>The builder itself.</returns>
+    IEEditorPluginBuilder SetWelcome(string welcome);
+
+    /// <summary>
     /// Declares a dependency on another plugin (C# or GDScript). The framework enables the
     /// dependency before activating this plugin and, when a version constraint is given, verifies
     /// the installed dependency satisfies it.

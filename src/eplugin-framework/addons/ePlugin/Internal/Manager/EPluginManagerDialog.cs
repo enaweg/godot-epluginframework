@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Enaweg.Plugin.Internal.Licenses;
 using Enaweg.Plugin.Internal.Update;
+using Enaweg.Plugin.Internal.Welcomes;
 using Godot;
 
 namespace Enaweg.Plugin.Internal.Manager;
@@ -57,6 +58,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private string? _versionNote;
     // Read on selection rather than for every row: a disabled ePlugin's recipe needs a throw-away instance of its plugin.
     private readonly Dictionary<string, LicenseInfo?> _licenses = [];
+    private readonly Dictionary<string, WelcomeEntry?> _welcomes = [];
     private UpdateCandidate? _pendingVersion;
     private bool _pendingDowngrade;
     private Texture2D? _ePluginIcon;
@@ -160,7 +162,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     {
         if (_working) return;
         ClearStaging();
-        _licenses.Clear();
+        _licenses.Clear(); _welcomes.Clear();
         var plugins = _global.CollectPlugins();
         _targets = _global.CollectUpdateTargets();
         _model = new(plugins, _global.PendingUpdates, _targets, _global.UpdateCache, candidate => _global.UpdatePreflightFindings([candidate]));
@@ -266,7 +268,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _detailsIcon.Texture = row?.IsEPlugin == true ? _logo : null;
         _detailsName.Text = row?.Plugin.Name ?? "No plugin selected";
         var reviewed = _versionInstall ? _staged?.FirstOrDefault(p => p.Candidate.Slug == slug)?.Findings : null;
-        _detailsText.Text = row is null ? "Select a plugin to see its details." : PluginManagerViewModel.Describe(row, reviewed, LicenseOf(row));
+        _detailsText.Text = row is null ? "Select a plugin to see its details." : PluginManagerViewModel.Describe(row, reviewed, LicenseOf(row), WelcomeOf(row));
         _release.Visible = IsSafeUrl(row?.Update?.Candidate.ReleaseUrl);
         _locationRow.Visible = row is not null;
         if (row is not null)
@@ -287,6 +289,15 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         return _licenses[row.Plugin.Slug] = license;
     }
 
+    private WelcomeEntry? WelcomeOf(PluginRow row)
+    {
+        if (row.Plugin.Missing) return null;
+        if (_welcomes.TryGetValue(row.Plugin.Slug, out var welcome)) return welcome;
+        try { welcome = _global.DescribeWelcome(row.Plugin.Slug); }
+        catch (Exception ex) { GD.PushError($"Cannot read the welcome page of {row.Plugin.Slug}: {ex.Message}"); welcome = null; }
+        return _welcomes[row.Plugin.Slug] = welcome;
+    }
+
     private void DetailsLinkClicked(Variant meta)
     {
         var link = meta.AsString();
@@ -294,6 +305,9 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         else if (link == PluginManagerViewModel.LicenseMeta && _selectedSlug is not null && _model.Find(_selectedSlug) is { } row &&
                  LicenseOf(row) is { Entry.Problem: null } license)
             LicenseDialog.CreateViewer(license).Open();
+        else if (link == PluginManagerViewModel.WelcomeMeta && _selectedSlug is not null && _model.Find(_selectedSlug) is { } shown &&
+                 WelcomeOf(shown) is { Problem: null } welcome)
+            WelcomeDialog.Create([welcome]).Open();
     }
 
     /// <summary>

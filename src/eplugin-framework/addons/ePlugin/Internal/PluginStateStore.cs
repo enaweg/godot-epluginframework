@@ -31,6 +31,10 @@ internal sealed record SharedPluginState(string Slug, string Version, PersistedP
 internal sealed record AcceptedLicense(string Slug, string License, string Version, DateTimeOffset AcceptedUtc,
     bool Automatic);
 
+/// <summary>A plugin whose welcome page was shown for the project. It is not shown again, also not after updates.</summary>
+/// <param name="Version">The plugin version whose welcome page was shown.</param>
+internal sealed record ShownWelcome(string Slug, string Version, DateTimeOffset ShownUtc);
+
 internal sealed record LocalPluginAttempt(
     Guid AttemptId,
     string Slug,
@@ -40,12 +44,13 @@ internal sealed record LocalPluginAttempt(
     string Reason);
 
 /// <summary>
-/// The committed file contains only completed states and the accepted plugin licenses. The adjacent .user file is a
+/// The committed file contains only completed states, the accepted plugin licenses and the shown welcome pages. The
+/// adjacent .user file is a
 /// local journal that blocks an automatic retry when a transition fails or an assembly reload interrupts it.
 /// </summary>
 /// <remarks>
-/// <c>licenses</c> is left out while no license was accepted, so such files stay readable by framework versions that
-/// do not know it.
+/// <c>licenses</c> and <c>welcomes</c> are left out while they are empty, so such files stay readable by framework
+/// versions that do not know them.
 /// </remarks>
 internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
 {
@@ -63,6 +68,7 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
     private Dictionary<string, SharedPluginState> _shared = new(StringComparer.Ordinal);
     private Dictionary<string, LocalPluginAttempt> _local = new(StringComparer.Ordinal);
     private Dictionary<string, AcceptedLicense> _licenses = new(StringComparer.Ordinal);
+    private Dictionary<string, ShownWelcome> _welcomes = new(StringComparer.Ordinal);
     private byte[]? _sharedBytes;
     private Guid? _lastCompletedAttemptId;
 
@@ -77,6 +83,8 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
     public LocalPluginAttempt? GetLocal(string slug) => _local.GetValueOrDefault(slug);
     public bool IsBlocked(string slug) => _local.ContainsKey(slug);
     public AcceptedLicense? GetLicense(string slug) => _licenses.GetValueOrDefault(slug);
+    public ShownWelcome? GetWelcome(string slug) => _welcomes.GetValueOrDefault(slug);
+    public bool IsWelcomeShown(string slug) => _welcomes.ContainsKey(slug);
 
     /// <summary>Whether the license of <paramref name="slug"/> was accepted as <paramref name="license"/>.</summary>
     public bool IsLicenseAccepted(string slug, string license) =>
@@ -101,6 +109,27 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
         }
 
         _licenses = next;
+        return false;
+    }
+
+    /// <summary>
+    /// Records shown welcome pages in the shared file. They count as shown for this session even when they cannot be
+    /// saved, so a page is not shown twice in a row.
+    /// </summary>
+    public bool TryRecordWelcomes(IEnumerable<ShownWelcome> shown)
+    {
+        var next = new Dictionary<string, ShownWelcome>(_welcomes, StringComparer.Ordinal);
+        foreach (var welcome in shown.Where(w => ValidSlug(w.Slug)))
+        {
+            next[welcome.Slug] = welcome;
+        }
+
+        if (!IsReadOnly && HasSharedFile && SaveShared(_shared, _lastCompletedAttemptId, welcomes: next))
+        {
+            return true;
+        }
+
+        _welcomes = next;
         return false;
     }
 
@@ -129,6 +158,8 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
             _licenses = (shared.Licenses ?? []).ToDictionary(x => x.Slug!, x =>
                 new AcceptedLicense(x.Slug!, x.License!, x.Version ?? "", x.AcceptedUtc ?? default, x.Automatic),
                 StringComparer.Ordinal);
+            _welcomes = (shared.Welcomes ?? []).ToDictionary(x => x.Slug!, x =>
+                new ShownWelcome(x.Slug!, x.Version ?? "", x.ShownUtc ?? default), StringComparer.Ordinal);
             _lastCompletedAttemptId = shared.LastCompletedAttemptId;
             IsReadOnly = false;
 
@@ -351,9 +382,10 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
     }
 
     private bool SaveShared(Dictionary<string, SharedPluginState> states, Guid? completedAttemptId,
-        Dictionary<string, AcceptedLicense>? licenses = null)
+        Dictionary<string, AcceptedLicense>? licenses = null, Dictionary<string, ShownWelcome>? welcomes = null)
     {
         licenses ??= _licenses;
+        welcomes ??= _welcomes;
         try
         {
             var actual = File.Exists(_sharedPath) ? File.ReadAllBytes(_sharedPath) : null;
@@ -377,12 +409,16 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
                     {
                         Slug = x.Slug, License = x.License, Version = x.Version, AcceptedUtc = x.AcceptedUtc,
                         Automatic = x.Automatic
-                    }).ToList()
+                    }).ToList(),
+                Welcomes = welcomes.Count == 0 ? null : welcomes.Values.OrderBy(x => x.Slug, StringComparer.Ordinal)
+                    .Select(x => new WelcomeDocumentEntry { Slug = x.Slug, Version = x.Version, ShownUtc = x.ShownUtc })
+                    .ToList()
             };
             var bytes = Serialize(document);
             AtomicWrite(_sharedPath, bytes);
             _shared = states;
             _licenses = licenses;
+            _welcomes = welcomes;
             _sharedBytes = bytes;
             _lastCompletedAttemptId = completedAttemptId;
             return true;
@@ -500,6 +536,15 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
         }
 
         slugs.Clear();
+        foreach (var entry in shared.Welcomes ?? [])
+        {
+            if (!ValidSlug(entry.Slug) || !slugs.Add(entry.Slug!))
+            {
+                throw new InvalidDataException("Shared plugin state has an invalid or duplicate welcome page.");
+            }
+        }
+
+        slugs.Clear();
         foreach (var entry in local.Attempts)
         {
             if (entry.AttemptId is null || entry.AttemptId == Guid.Empty ||
@@ -536,6 +581,16 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
 
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<LicenseDocumentEntry>? Licenses { get; set; }
+
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<WelcomeDocumentEntry>? Welcomes { get; set; }
+    }
+
+    private sealed class WelcomeDocumentEntry
+    {
+        public string? Slug { get; set; }
+        public string? Version { get; set; }
+        public DateTimeOffset? ShownUtc { get; set; }
     }
 
     private sealed class LicenseDocumentEntry

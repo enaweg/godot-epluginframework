@@ -25,6 +25,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
     private EPluginManagerDialog? _managerDialog;
     private UpdateFailureDialog? _failureDialog;
     private LicenseDialog? _licenseDialog;
+    private WelcomeDialog? _welcomeDialog;
     private EGlobal? _updateOwner;
     private CancellationTokenSource _updateLifetime = new();
     internal CancellationToken UpdateLifetime => _updateLifetime.Token;
@@ -62,6 +63,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         }
 
         ShowLicenseReview();
+        ShowWelcomes();
     }
 
     /// <summary>Asks for the licenses of plugins that were enabled outside the ePlugin Manager, one dialog at a time.</summary>
@@ -80,6 +82,24 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
             _licenseDialog = null;
             review.DeclineRemaining();
             EGlobal.Instance.CompleteLicenseReview(review);
+        }
+    }
+
+    /// <summary>Shows the welcome pages of newly installed plugins once no other ePlugin dialog asks for a decision.</summary>
+    private void ShowWelcomes()
+    {
+        static bool Open(Window? dialog) => dialog is not null && GodotObject.IsInstanceValid(dialog);
+        if (!EGlobal.Instance.IsValid() || Open(_welcomeDialog) || Open(_licenseDialog) || Open(_failureDialog)) return;
+        if (EGlobal.Instance.TakeWelcomes() is not { Count: > 0 } welcomes) return;
+        try
+        {
+            _welcomeDialog = WelcomeDialog.Create(welcomes, shown => { _welcomeDialog = null; EGlobal.Instance.CompleteWelcomes(shown); });
+            _welcomeDialog.Open();
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Cannot show the welcome dialog: {ex.Message}");
+            _welcomeDialog = null;
         }
     }
 
@@ -203,7 +223,8 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         if (_managerDialog is not null && GodotObject.IsInstanceValid(_managerDialog)) _managerDialog.QueueFree();
         if (_failureDialog is not null && GodotObject.IsInstanceValid(_failureDialog)) _failureDialog.QueueFree();
         if (_licenseDialog is not null && GodotObject.IsInstanceValid(_licenseDialog)) _licenseDialog.QueueFree();
-        _managerDialog = null; _failureDialog = null; _licenseDialog = null;
+        if (_welcomeDialog is not null && GodotObject.IsInstanceValid(_welcomeDialog)) _welcomeDialog.QueueFree();
+        _managerDialog = null; _failureDialog = null; _licenseDialog = null; _welcomeDialog = null;
     }
 
     private static void RestoreEarlyUpdateSettings()

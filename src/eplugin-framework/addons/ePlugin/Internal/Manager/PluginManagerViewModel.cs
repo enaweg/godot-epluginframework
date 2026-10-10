@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using Enaweg.Plugin.Internal.Licenses;
 using Enaweg.Plugin.Internal.Update;
+using Enaweg.Plugin.Internal.Welcomes;
 
 namespace Enaweg.Plugin.Internal.Manager;
 
@@ -134,8 +135,6 @@ internal sealed class PluginManagerViewModel
         return text;
     }
 
-    /// <summary>The details pane as BBCode. All plugin supplied text is escaped.</summary>
-    /// <param name="reviewed">Findings of a staged package for an explicitly chosen version, awaiting confirmation.</param>
     /// <summary>The meta of the license link in <see cref="Describe"/>, which opens the license dialog.</summary>
     public const string LicenseMeta = "eplugin-license";
 
@@ -158,7 +157,19 @@ internal sealed class PluginManagerViewModel
         return $"[b]License:[/b] [url={LicenseMeta}]{Escape(PluginLicense.Display(entry.Slug, entry.Source))}[/url]{state}\n";
     }
 
-    public static string Describe(PluginRow row, IReadOnlyList<Finding>? reviewed = null, LicenseInfo? license = null)
+    /// <summary>The meta of the welcome page link in <see cref="Describe"/>, which opens the welcome dialog.</summary>
+    public const string WelcomeMeta = "eplugin-welcome";
+
+    /// <summary>The welcome page line of the details: a link that shows the page again; empty without a page.</summary>
+    public static string WelcomeLine(WelcomeEntry? welcome) =>
+        welcome is null ? ""
+        : welcome.Problem is not null ? $"[b]Welcome page:[/b] [color=#ff7070]{Escape(welcome.Problem)}[/color]\n"
+        : $"[b]Welcome page:[/b] [url={WelcomeMeta}]{Escape(PluginLicense.Display(welcome.Slug, welcome.Source))}[/url]\n";
+
+    /// <summary>The details pane as BBCode. All plugin supplied text is escaped.</summary>
+    /// <param name="reviewed">Findings of a staged package for an explicitly chosen version, awaiting confirmation.</param>
+    public static string Describe(PluginRow row, IReadOnlyList<Finding>? reviewed = null, LicenseInfo? license = null,
+        WelcomeEntry? welcome = null)
     {
         var plugin = row.Plugin; var text = new StringBuilder();
         void Line(string label, string? value) { if (!string.IsNullOrWhiteSpace(value)) text.Append($"[b]{label}:[/b] {Escape(value)}\n"); }
@@ -172,6 +183,7 @@ internal sealed class PluginManagerViewModel
         Line("Version", plugin.Version);
         Line("Author", plugin.Author);
         text.Append(LicenseLine(license));
+        text.Append(WelcomeLine(welcome));
         if (!string.IsNullOrWhiteSpace(plugin.Description)) text.Append('\n').Append(Escape(plugin.Description)).Append('\n');
         if (plugin.Error is not null) text.Append($"\n[color=#ff7070]{Escape(plugin.Error)}[/color]\n");
 
