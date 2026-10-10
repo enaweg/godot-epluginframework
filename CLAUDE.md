@@ -213,7 +213,10 @@ See README's update/publishing/recovery contract and
 
 `Internal/Manager/` holds the framework's only editor UI entry point, opened from the single Tools menu entry and
 the toolbar button that `EPluginPlugin.AddManagerUi` installs (the button's instance id is kept in Engine metadata
-so a stale one can be removed after an assembly reload). Every dialog is its own scene (`EPluginManagerDialog.tscn`,
+so a stale one can be removed after an assembly reload). When an update restarts the editor while the manager is open,
+`EGlobal.RestartRequested` writes `ManagerReopenMarker` (`.godot/eplugin/manager-open`, renewed by an interim restart,
+expires after an hour); the start that requests no further restart wraps `Initialize` in one `ActivationProgress` scope,
+reopens the manager and closes that progress window a few frames later. Every dialog is its own scene (`EPluginManagerDialog.tscn`,
 `LocalSourcesDialog.tscn`, `UpdateFailureDialog.tscn`); scripts only bind `%`-unique nodes and set what a scene cannot
 store (e.g. Tree column titles/widths). Keep layout changes in the scenes. Scene roots set `auto_translate_mode = 2`,
 otherwise the editor translates the English UI into its own language. An autowrapping Label needs a

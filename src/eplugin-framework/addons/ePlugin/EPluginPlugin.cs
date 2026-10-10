@@ -27,6 +27,11 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
     private LicenseDialog? _licenseDialog;
     private WelcomeDialog? _welcomeDialog;
     private EGlobal? _updateOwner;
+    // An update restarted the editor while the ePlugin Manager was open; it opens again while the progress window of
+    // that start is still shown, which closes once the manager had a few frames to draw.
+    private bool _reopenManager;
+    private IDisposable? _reopenProgress;
+    private int _reopenFrames;
     private CancellationTokenSource _updateLifetime = new();
     internal CancellationToken UpdateLifetime => _updateLifetime.Token;
     public bool EnableDebugLogging => false;
@@ -62,8 +67,39 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
             AddManagerUi();
         }
 
+        ReopenManager();
         ShowLicenseReview();
         ShowWelcomes();
+    }
+
+    private static ManagerReopenMarker ManagerReopen => new(ProjectSettings.GlobalizePath("res://.godot/eplugin/manager-open"));
+
+    /// <summary>Opens the ePlugin Manager that was open when an update restarted the editor, then closes the progress window.</summary>
+    private void ReopenManager()
+    {
+        if (_reopenProgress is not null && !_reopenManager && ++_reopenFrames > 2) ReleaseReopenProgress();
+        if (!_reopenManager || !_managerUiAdded) return;
+        _reopenManager = false;
+        ManagerReopen.Take();
+        ActivationProgress.SetText("Opening the ePlugin Manager...");
+        try { OpenManager(); }
+        catch (Exception ex) { Logger.Error($"Cannot reopen the ePlugin Manager: {ex.Message}"); }
+    }
+
+    /// <summary>Keeps the ePlugin Manager open across an update's editor restarts.</summary>
+    private void RememberManagerForRestart()
+    {
+        var marker = ManagerReopen;
+        // A start that restarts again, e.g. after the interim build, has not reopened the manager yet: renew its marker.
+        var open = _managerDialog is not null && GodotObject.IsInstanceValid(_managerDialog) && _managerDialog.Visible;
+        if (open || _reopenManager || marker.IsSet) marker.Set();
+    }
+
+    private void ReleaseReopenProgress()
+    {
+        var progress = _reopenProgress;
+        _reopenProgress = null; _reopenManager = false; _reopenFrames = 0;
+        progress?.Dispose();
     }
 
     /// <summary>Asks for the licenses of plugins that were enabled outside the ePlugin Manager, one dialog at a time.</summary>
@@ -126,7 +162,12 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
     private void ReleaseManagerCallbacks()
     {
         _managerSignals.Dispose();
-        if (_updateOwner is not null) _updateOwner.UpdateDecisionNeeded -= ShowUpdateFailure;
+        if (_updateOwner is not null)
+        {
+            _updateOwner.UpdateDecisionNeeded -= ShowUpdateFailure;
+            _updateOwner.RestartRequested -= RememberManagerForRestart;
+        }
+        ReleaseReopenProgress();
         try { _updateLifetime.Cancel(); } catch (ObjectDisposedException) { }
     }
 
@@ -219,7 +260,12 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
     {
         if (_managerUiAdded) { RemoveToolMenuItem(ManagerMenuName); _managerUiAdded = false; }
         RemoveManagerButton();
-        if (_updateOwner is not null) _updateOwner.UpdateDecisionNeeded -= ShowUpdateFailure;
+        if (_updateOwner is not null)
+        {
+            _updateOwner.UpdateDecisionNeeded -= ShowUpdateFailure;
+            _updateOwner.RestartRequested -= RememberManagerForRestart;
+        }
+        ReleaseReopenProgress();
         if (_managerDialog is not null && GodotObject.IsInstanceValid(_managerDialog)) _managerDialog.QueueFree();
         if (_failureDialog is not null && GodotObject.IsInstanceValid(_failureDialog)) _failureDialog.QueueFree();
         if (_licenseDialog is not null && GodotObject.IsInstanceValid(_licenseDialog)) _licenseDialog.QueueFree();
@@ -265,11 +311,22 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         _updateOwner = EGlobal.Instance;
         _updateOwner.UpdateDecisionNeeded -= ShowUpdateFailure;
         _updateOwner.UpdateDecisionNeeded += ShowUpdateFailure;
+        _updateOwner.RestartRequested -= RememberManagerForRestart;
+        _updateOwner.RestartRequested += RememberManagerForRestart;
         var context = AssemblyLoadContext.GetLoadContext(typeof(EPluginPlugin).Assembly);
         if (context is not null) context.Unloading += _ => { try { _updateLifetime.Cancel(); } catch (ObjectDisposedException) { } };
         UpdateSettings.Register();
         LicenseSettings.Register();
-        EGlobal.Instance.Initialize(this, new GenericLoggerFactory(category => new GodotConsoleLogger(category)));
+        // An update restarted the editor while the ePlugin Manager was open. The progress window spans the whole start,
+        // so the manager is already shown when it closes.
+        var progress = ManagerReopen.IsSet ? ActivationProgress.Begin("Finishing the plugin update...") : null;
+        try { EGlobal.Instance.Initialize(this, new GenericLoggerFactory(category => new GodotConsoleLogger(category))); }
+        catch { progress?.Dispose(); throw; }
+        if (progress is null) return;
+        // Another restart follows, e.g. after the interim build: the manager opens after that one.
+        if (EGlobal.Instance.IsRestartPending) { progress.Dispose(); return; }
+        ReleaseReopenProgress();
+        _reopenProgress = progress; _reopenManager = true;
     }
 }
 #endif
