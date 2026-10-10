@@ -19,7 +19,7 @@ Select a plugin to see its status, author, documentation and source links, licen
 - **Update** installs the checked updates after validation and confirmation. See [Updating plugins](updating-plugins.md).
 - **Retry failed** retries activation, deactivation, or update work that failed or was interrupted. See [Plugin state files](plugin-state.md).
 - **Open release page** opens the release notes for the selected update.
-- **Version** selects a published version for an enabled plugin with an `update_url` or a package in a local plugin directory. Choose **Update** or **Downgrade** to install it. Downgrades use the same download, validation, backup, and rollback flow as updates. The ePlugin Framework itself cannot be downgraded because an older framework cannot complete or recover the update that installs it.
+- **Version** selects a published version for an enabled plugin with an `update_url` or a package in a local plugin directory. Choose **Update** or **Downgrade** to install it, or **Reinstall** with the installed version selected to install it again: this gets new commits of a pinned Git branch whose version did not change, and repairs addon files changed in the project. Downgrades and reinstalls use the same download, validation, backup, and rollback flow as updates. The ePlugin Framework itself cannot be downgraded because an older framework cannot complete or recover the update that installs it.
 
 ## Scheduled checks
 

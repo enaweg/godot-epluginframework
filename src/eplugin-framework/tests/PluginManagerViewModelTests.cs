@@ -159,12 +159,32 @@ public class PluginManagerViewModelTests
 
         var plugin = new PluginRow(Plugin("beta", PluginKind.EPlugin, "https://example.org/releases"), null);
         Assertions.AssertObject(PluginManagerViewModel.VersionChangeBlocked(plugin, options[2])).IsNull();
-        Assertions.AssertObject(PluginManagerViewModel.VersionChangeBlocked(plugin, options[1])).IsNotNull();
+        Assertions.AssertArray(options.Select(o => o.Action).ToArray()).IsEqual(new[] { "Update", "Reinstall", "Downgrade" });
         var framework = new PluginRow(Plugin("ePlugin", PluginKind.Framework, "https://example.org/releases"), null);
         Assertions.AssertString(PluginManagerViewModel.VersionChangeBlocked(framework, options[2])).Contains("cannot be downgraded");
         Assertions.AssertObject(PluginManagerViewModel.VersionChangeBlocked(framework, options[0])).IsNull();
         var disabled = new PluginRow(Plugin("gamma", PluginKind.EPlugin, "https://example.org/releases", enabled: false), null);
         Assertions.AssertString(PluginManagerViewModel.VersionChangeBlocked(disabled, options[0])).Contains("Enable");
+    }
+    [TestCase]
+    public void InstalledVersionCanBeReinstalledWhenItsPackageIsOffered()
+    {
+        var plugin = new PluginRow(Plugin("beta", PluginKind.EPlugin, "https://example.org/repo.git#main"), null);
+        // e.g. the head of a pinned git branch whose plugin.cfg version did not change
+        var head = Version("1.5.0") with { Package = new GitPackageRef("https://example.org/repo.git", "", "0123456789abcdef0123456789abcdef01234567") };
+        var listed = PluginManagerViewModel.VersionOptions("1.5.0", [head]).Single();
+        Assertions.AssertBool(listed.Installed && listed.IsReinstall).IsTrue();
+        Assertions.AssertString(listed.Action).IsEqual("Reinstall");
+        Assertions.AssertObject(PluginManagerViewModel.VersionChangeBlocked(plugin, listed)).IsNull();
+        Assertions.AssertString(PluginManagerViewModel.VersionSource(listed)).Contains("commit 0123456789");
+        var framework = new PluginRow(Plugin("ePlugin", PluginKind.Framework, "https://example.org/repo.git#main"), null);
+        Assertions.AssertObject(PluginManagerViewModel.VersionChangeBlocked(framework, listed)).IsNull();
+
+        var unlisted = PluginManagerViewModel.VersionOptions("1.5.0", []).Single();
+        Assertions.AssertBool(unlisted.IsReinstall).IsFalse();
+        Assertions.AssertString(PluginManagerViewModel.VersionChangeBlocked(plugin, unlisted)).Contains("installed");
+        var disabled = new PluginRow(Plugin("gamma", PluginKind.EPlugin, "https://example.org/repo.git#main", enabled: false), null);
+        Assertions.AssertString(PluginManagerViewModel.VersionChangeBlocked(disabled, listed)).Contains("Enable");
     }
     [TestCase]
     public void VersionLabelsMarkLatestInstalledAndLocalVersions()

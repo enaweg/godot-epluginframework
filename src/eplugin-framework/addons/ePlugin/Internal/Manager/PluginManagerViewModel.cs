@@ -30,6 +30,10 @@ internal sealed class PluginRow(PluginInfo plugin, UpdateRow? update)
 internal sealed record VersionOption(string Version, UpdateCandidate? Candidate, bool Installed, bool IsDowngrade)
 {
     public bool IsLocal => Candidate?.Package is LocalZipPackageRef;
+    /// <summary>The installed version offered again, e.g. new commits of a pinned git branch or to repair changed files.</summary>
+    public bool IsReinstall => Installed && Candidate is not null;
+    /// <summary>The text of the button and confirmation that install this version.</summary>
+    public string Action => Installed ? "Reinstall" : IsDowngrade ? "Downgrade" : "Update";
 }
 internal sealed class PluginManagerViewModel
 {
@@ -111,6 +115,7 @@ internal sealed class PluginManagerViewModel
     public static string? VersionSource(VersionOption option) => option.Candidate switch
     {
         { Package: LocalZipPackageRef local } => "Local package: " + local.Path,
+        { SourceUrl: { } url, Package: GitPackageRef git } => $"From the update site {url}, commit {git.Commit[..Math.Min(git.Commit.Length, 10)]}",
         { SourceUrl: { } url } => "From the update site " + url,
         _ => null
     };
@@ -118,7 +123,8 @@ internal sealed class PluginManagerViewModel
     /// <summary>Why the selected version cannot be installed, or null when it can.</summary>
     public static string? VersionChangeBlocked(PluginRow row, VersionOption option)
     {
-        if (option.Installed) return "This version is installed.";
+        if (option.Installed && option.Candidate is null)
+            return "This version is installed. Neither its update site nor a local plugin directory offers it to reinstall.";
         if (row.Plugin.Missing || option.Candidate is null) return "The plugin folder is missing.";
         if (!row.Plugin.Enabled) return "Enable the plugin to change its version.";
         if (row.Plugin.FailedAttempt is not null) return "Resolve the plugin's failed state with Retry failed first.";

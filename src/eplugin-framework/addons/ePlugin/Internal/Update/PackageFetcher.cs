@@ -10,7 +10,8 @@ namespace Enaweg.Plugin.Internal.Update;
 internal sealed class PackageFetcher(UpdateHttp http, IGitRunner git)
 {
     public async Task<IReadOnlyList<ValidatedPackage>> FetchAsync(IReadOnlyList<UpdateCandidate> candidates,
-        IReadOnlyList<PluginUpdateTarget> targets, string transactionDirectory, IProgress<double>? progress, CancellationToken ct, bool allowDowngrade = false)
+        IReadOnlyList<PluginUpdateTarget> targets, string transactionDirectory, IProgress<double>? progress, CancellationToken ct, bool allowDowngrade = false,
+        bool allowReinstall = false)
     {
         var result = new List<ValidatedPackage>();
         try
@@ -45,10 +46,10 @@ internal sealed class PackageFetcher(UpdateHttp http, IGitRunner git)
                 {
                     if (candidate.SourceUrl is null || !GitUrl.TryParse(candidate.SourceUrl, out var url) || url!.Repository != package.Repository || url.Path != package.Path)
                         throw new InvalidDataException("Git package does not match its declared source.");
-                    await new GitSource(http, git, url).FetchAsync(package, stage, ct).ConfigureAwait(false);
+                    await new GitSource(http, git, url).FetchAsync(package, candidate.Slug, stage, ct).ConfigureAwait(false);
                 }
                 else throw new InvalidDataException("Unsupported package reference.");
-                var validated = new AddonPackageValidator().Validate(new(target, candidate, stage, allowDowngrade));
+                var validated = new AddonPackageValidator().Validate(new(target, candidate, stage, allowDowngrade, allowReinstall));
                 if (!validated.IsValid) throw new InvalidDataException($"Package for '{candidate.Slug}' was refused: " + string.Join("; ", System.Linq.Enumerable.Select(System.Linq.Enumerable.Where(validated.Findings, f => f.Severity == FindingSeverity.Error), f => f.Message)));
                 result.Add(validated);
                 progress?.Report((i + 1.0) / candidates.Count);

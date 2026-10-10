@@ -9,7 +9,12 @@ namespace Enaweg.Plugin.Internal.Update;
 internal enum FindingSeverity { Info, Warning, Error }
 internal sealed record Finding(string Code, FindingSeverity Severity, string Message, bool RequiresTrust = false);
 /// <param name="AllowDowngrade">The user explicitly chose an older version, e.g. to undo a broken update.</param>
-internal sealed record ValidationContext(PluginUpdateTarget Installed, UpdateCandidate Candidate, string StagingDir, bool AllowDowngrade = false);
+/// <param name="AllowReinstall">
+/// The user explicitly chose the installed version again, e.g. to get new commits of a pinned git branch or to repair
+/// changed addon files.
+/// </param>
+internal sealed record ValidationContext(PluginUpdateTarget Installed, UpdateCandidate Candidate, string StagingDir, bool AllowDowngrade = false,
+    bool AllowReinstall = false);
 internal interface IAddonRule { IEnumerable<Finding> Check(ValidationContext context); }
 internal sealed record ValidatedPackage(UpdateCandidate Candidate, string StagingDir, SemVer NewVersion,
     string? NewUpdateUrl, bool ContainsCSharp, IReadOnlyList<Finding> Findings)
@@ -48,8 +53,13 @@ internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules 
         if (candidate.Slug != installed.Slug || Path.GetFileName(stage) != installed.Slug)
             Add("R5", FindingSeverity.Error, "Staged addon slug differs from the installed slug.");
         var validNew = SemVer.TryParse(metadata.GetValueOrDefault("version"), out var version);
-        if (!validNew || !SemVer.TryParse(installed.InstalledVersion, out var old) || version.CompareTo(old) == 0)
+        if (!validNew || !SemVer.TryParse(installed.InstalledVersion, out var old))
             Add("R6", FindingSeverity.Error, "Package version must be newer than the installed version.");
+        else if (version.CompareTo(old) == 0)
+        {
+            if (!context.AllowReinstall) Add("R6", FindingSeverity.Error, "Package version must be newer than the installed version.");
+            else Add("R6", FindingSeverity.Info, $"Reinstall of version {version}.");
+        }
         else if (version.CompareTo(old) < 0)
         {
             // Older framework releases cannot finish or recover the update transaction that installs them.

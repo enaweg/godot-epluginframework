@@ -124,9 +124,8 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
     }
 
     /// <summary>
-    /// Caches the newest listed version as the plugin's update. A cached update that is at least as new stays, e.g. the
-    /// branch head of a pinned git source, which has no versions to list. The last check time is not changed, since
-    /// the other plugins were not checked.
+    /// Caches the newest listed version as the plugin's update. A cached update that is at least as new stays. The last
+    /// check time is not changed, since the other plugins were not checked.
     /// </summary>
     private void RecordListedUpdate(PluginUpdateTarget target, string url, IReadOnlyList<UpdateCandidate> versions, UpdateCheckOptions options)
     {
