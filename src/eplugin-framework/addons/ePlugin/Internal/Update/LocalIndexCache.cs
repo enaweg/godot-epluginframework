@@ -27,7 +27,7 @@ internal sealed class LocalIndexCacheFile
 internal sealed class LocalIndexCache(string path)
 {
     /// <summary>Raise when what <see cref="LocalPackageIndexer.Read"/> takes from an archive changes, so it reads them again.</summary>
-    public const int IndexerVersion = 1;
+    public const int IndexerVersion = 2;
     private bool _newer;
     public string FilePath { get; } = path;
 

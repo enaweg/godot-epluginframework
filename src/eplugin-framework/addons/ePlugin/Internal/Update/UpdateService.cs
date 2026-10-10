@@ -147,7 +147,7 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
             .Select(c => (Candidate: c, Valid: SemVer.TryParse(c.NewVersion, out var v), Version: v))
             .Where(c => c.Valid)
             // Sorting is stable and local packages come first, so they win a tie.
-            .OrderByDescending(c => c.Version).DistinctBy(c => c.Version.ToString())
+            .OrderByDescending(c => c.Version).DistinctBy(c => c.Version.Key)
             .Select(c => c.Candidate).ToArray();
 }
 #endif

@@ -15,7 +15,7 @@ public class UpdateCoreTests
     [TestCase]
     public void SemVerParsingAndPrecedence()
     {
-        var ordered = new[] { "1.0.0-alpha", "1.0.0-alpha.1", "1.0.0-alpha.beta", "1.0.0-beta", "1.0.0-beta.2", "1.0.0-beta.11", "1.0.0-rc.1", "v1.0.0+build", "1.1", "2.0.0" };
+        var ordered = new[] { "1.0.0-alpha", "1.0.0-alpha.1", "1.0.0-alpha.beta", "1.0.0-beta", "1.0.0-beta.2", "1.0.0-beta.11", "1.0.0-rc.1", "v1.0.0+build", "1.0.0.1-rc", "1.0.0.1", "1.0.0.12", "1.1", "2.0.0" };
         for (var i = 0; i < ordered.Length; i++)
         {
             Assertions.AssertBool(SemVer.TryParse(ordered[i], out var current)).IsTrue();
@@ -25,8 +25,41 @@ public class UpdateCoreTests
                 Assertions.AssertBool(current.CompareTo(previous) > 0).IsTrue();
             }
         }
-        foreach (var invalid in new[] { "1", "01.0", "1.0.0.0", "1.0.0-01", "1.0.0+", "garbage", "1.0.0\nextra" })
+        foreach (var invalid in new[] { "1", "01.0", "1.0.0.0.0", "1.0.0.01", "1.0.0-", "1.0.0+", "1.0.0-a b", "1.0 beta", "garbage", "1.0.0\nextra" })
             Assertions.AssertBool(SemVer.TryParse(invalid, out _)).IsFalse();
+        // Any suffix after '-' is a prerelease of its numbers, and versions are shown as they are written.
+        var loose = new[] { "0.1.2-b1", "0.1.2-beta.1", "0.1.2", "v0.2-anystringhere", "0.2", "0.2.0.1-01_x/y", "0.2.0.1" };
+        for (var i = 0; i < loose.Length; i++)
+        {
+            Assertions.AssertBool(SemVer.TryParse(loose[i], out var current)).IsTrue();
+            Assertions.AssertString(current.ToString()).IsEqual(loose[i]);
+            if (i == 0) continue;
+            SemVer.TryParse(loose[i - 1], out var previous);
+            Assertions.AssertBool(current.CompareTo(previous) > 0).IsTrue();
+        }
+        SemVer.TryParse(" v0.11.0.3 ", out var four);
+        Assertions.AssertString(four.ToString()).IsEqual("v0.11.0.3");
+        Assertions.AssertString(four.Key).IsEqual("0.11.0.3");
+        SemVer.TryParse("v1.2+build", out var twoNumbers);
+        SemVer.TryParse("1.2.3.0", out var zero);
+        Assertions.AssertString(twoNumbers.Key).IsEqual("1.2.0");
+        Assertions.AssertString(zero.Key).IsEqual("1.2.3");
+        Assertions.AssertInt(zero.CompareTo(new SemVer(1, 2, 3))).IsEqual(0);
+    }
+
+    [TestCase]
+    public void PluginIniReadsGodotStrings()
+    {
+        var values = PluginIni.Parse("[plugin]\r\n\r\nname=\"Edit Resources as Spreadsheet\"\r\n" +
+            "description=\"Edit Many Resources from one Folder as a table.\r\n[not a section] key=\\\"quoted\\\"\r\n\ttab\\u00e9\\'\"\r\n" +
+            "author=\"Don Tnowe\" ; comment\r\nversion=\"3.4.0\"\r\n\r\n[other]\r\nnote=\"line\nline\"\r\n");
+        Assertions.AssertString(values["name"]).IsEqual("Edit Resources as Spreadsheet");
+        Assertions.AssertString(values["description"]).IsEqual("Edit Many Resources from one Folder as a table.\r\n[not a section] key=\"quoted\"\r\n\ttab\u00e9'");
+        Assertions.AssertString(values["author"]).IsEqual("Don Tnowe");
+        Assertions.AssertString(values["version"]).IsEqual("3.4.0");
+        Assertions.AssertBool(values.ContainsKey("note")).IsFalse();
+        foreach (var invalid in new[] { "[plugin]\nversion=\"1.0", "[plugin]\nversion=\"1.0\" + \"1\"", "[plugin]\nversion=\"\\u12\"" })
+            Assertions.AssertThrown(() => PluginIni.Parse(invalid)).IsInstanceOf<InvalidDataException>();
     }
 
     [TestCase]
