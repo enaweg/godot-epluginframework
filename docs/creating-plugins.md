@@ -67,6 +67,22 @@ builder.AddOptionalPluginDependency("other-plugin", ">1.0.0", optional => option
 
 Ship a `LICENSE` file in the plugin's root directory; the ePlugin Manager shows it in the plugin details. Set `license_required=true` in `plugin.cfg` to have users accept the license before the plugin is enabled. `license_file` in `plugin.cfg` or `SetLicense` in the recipe provide a different license. See [Plugin licenses](plugin-licenses.md).
 
+## Documentation and source links
+
+Add `documentation_url` and `source_url` to the `[plugin]` section of `plugin.cfg` to link the plugin's documentation and source code in the ePlugin Manager's plugin details. They work for every plugin, not only ePlugins:
+
+```ini
+[plugin]
+
+name="My Plugin"
+version="1.0.0"
+script="MyPlugin.cs"
+documentation_url="https://example.org/my-plugin/docs"
+source_url="https://github.com/owner/my-plugin"
+```
+
+Both are optional. Clicking an `http` or `https` link opens it in the system browser; any other value, such as an SSH Git address, is shown as text. `EditorPluginExtensions.ReadMetadata()` returns them as `DocumentationUrl` and `SourceUrl`.
+
 ## Welcome page
 
 The framework shows a plugin's welcome page once per project after the plugin is installed. By default it is the plugin's README (`README.md`, `README.txt` or `README`); `welcome_file` in `plugin.cfg` or `SetWelcome` in the recipe provide a BBCode page instead. A plugin without any of these shows nothing. See [Plugin welcome pages](plugin-welcome.md).
