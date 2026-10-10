@@ -198,7 +198,10 @@ shared index. Keep-after-final-build-failure retains an `update_kept_build_faile
 conflict retains `update_commit_failed`. Retry dispatches these to the update applier. An acknowledged attempt
 must never be rolled back merely because diagnostic cleanup failed. State-file schema remains unchanged.
 
-C# handoff uses a durable editor restart, with another restart after a managed final/rollback build. Engine
+C# handoff uses a durable editor restart, with another restart after a managed final/rollback build. The interim
+build already holds the new plugin code, so the final build and its restart are skipped when reconciling changed no
+NuGet, project or directory and the bridge kept no old files (`UpdateApplier.ChangedSinceInterimBuild`);
+`restart_policy=always` keeps them. Engine
 metadata prevents scheduled checks and early recovery counters from repeating after assembly reloads.
 `EPluginPlugin` invokes `UpdateRecovery` before touching EGlobal; this reader is deliberately independent of
 EGlobal and recipe execution. Self-update closes ActivationProgress before the folder swap and always rolls

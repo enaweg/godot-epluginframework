@@ -22,8 +22,10 @@ checks above are intentionally distinguished from verified automated behavior.
 M5 follow-up: the full managed-directory fixture (`.src` → `.code`, with game code consuming `Contract.Api`)
 exposed Godot 4.7.2 collectible-assembly unload failures after an in-process update. Removing the managed watchdog
 Timer did not make the reload reliable. Consequently `restart_policy=auto` conservatively uses a durable restart
-for C# handoff, and another restart after a managed final build (or rollback build) to load that assembly. Pure
-GDScript updates stay in-process. This avoids assuming that the simple S1 probe applies to the complete framework.
+for C# handoff, and another restart after a managed final build (or rollback build) to load that assembly. The
+final build, and with it the second restart, is skipped when reconciling leaves the interim build's inputs unchanged
+(no NuGet, project or directory change and no bridged old files); no assembly changes on disk then, so nothing can
+trigger an in-process reload. Pure GDScript updates stay in-process. This avoids assuming that the simple S1 probe applies to the complete framework.
 
 M7 timestamp finding: moving/copying backups restores old modification times. An incremental `dotnet build`
 reported success but left the broken new assembly in place. Both checked CLI build implementations now use

@@ -148,7 +148,36 @@ public class UpdateTransactionTests
         Assertions.AssertInt(_host.Reloads).IsEqual(1);
         Assertions.AssertObject(_applier.Resume(UpdateJournal.Load(package.Directory))).IsEqual(UpdateOutcome.Completed);
         Assertions.AssertInt(_host.Toggles).IsEqual(0);
-        Assertions.AssertInt(_host.Reloads).IsEqual(2);
+        // The recipe is unchanged, so the editor keeps running the interim build.
+        Assertions.AssertInt(_host.Reloads).IsEqual(1);
+    }
+    [TestCase]
+    public void ManagedUpdateRestartsOnceWhenReconcilingLeavesTheBuildUnchanged()
+    {
+        var package = Package(true); _host.Managed = true;
+        _host.OnPrepareJournal = journal => journal.Recipes["plugin"] = new() { Old = new() { Nugets = [new("Shared", "1.0", null)] }, Applied = new() };
+        _host.OnReconcile = journal => journal.Recipes["plugin"].Target = new() { Nugets = [new("Shared", "1.0", null)], Autoloads = [new("Global", "global.gd")] };
+        Assertions.AssertObject(_applier.Apply([package.Package], package.Directory)).IsEqual(UpdateOutcome.AwaitingReload);
+        Assertions.AssertObject(_applier.Resume(UpdateJournal.Load(package.Directory))).IsEqual(UpdateOutcome.Completed);
+        Assertions.AssertInt(_host.BuildCount).IsEqual(1);
+        Assertions.AssertInt(_host.Reloads).IsEqual(1);
+        Assertions.AssertString(_store.GetShared("plugin")!.Version).IsEqual("2.0.0");
+    }
+    [TestCase]
+    public void ManagedUpdateBuildsAndRestartsAgainWhenReconcilingChangesTheBuild()
+    {
+        foreach (var bridged in new[] { false, true })
+        {
+            Cleanup(); Setup();
+            var package = Package(true); _host.Managed = true;
+            _host.OnPrepareJournal = journal => journal.Recipes["plugin"] = new() { Old = new() { Nugets = [new("Shared", "1.0", null)] }, Applied = new() };
+            _host.OnBridge = plugin => { if (bridged) plugin.Preserved.Add("src"); };
+            _host.OnReconcile = journal => journal.Recipes["plugin"].Target = new() { Nugets = [new("Shared", bridged ? "1.0" : "2.0", null)] };
+            Assertions.AssertObject(_applier.Apply([package.Package], package.Directory)).IsEqual(UpdateOutcome.AwaitingReload);
+            Assertions.AssertObject(_applier.Resume(UpdateJournal.Load(package.Directory))).IsEqual(UpdateOutcome.Completed);
+            Assertions.AssertInt(_host.BuildCount).IsEqual(2);
+            Assertions.AssertInt(_host.Reloads).IsEqual(2);
+        }
     }
     [TestCase]
     public void CleanupFailureAfterAcknowledgementNeverRollsBackWorkingFiles()
@@ -166,7 +195,8 @@ public class UpdateTransactionTests
     private sealed class FakeHost(PluginStateStore store) : IUpdateHost
     {
         public bool Managed; public bool HasUi; public string Policy = "rollback"; public int Toggles; public bool MarkerBeforeToggle;
-        public Action? OnScan; public Action? OnBeforeSwap; public Action? OnCloseScenes; public int Reloads;
+        public Action? OnScan; public Action? OnBeforeSwap; public Action? OnCloseScenes; public int Reloads; public int BuildCount;
+        public Action<UpdateJournal>? OnPrepareJournal; public Action<UpdatePluginJournal>? OnBridge; public Action<UpdateJournal>? OnReconcile;
         public Queue<BuildOutcome> Builds { get; } = new();
         public bool UiAvailable => HasUi;
         public string BuildFailurePolicy => Policy;
@@ -174,14 +204,14 @@ public class UpdateTransactionTests
         public bool IsEnabled(string slug) => true;
         public bool IsManaged(string slug) => Managed;
         public void Preflight(IReadOnlyList<ValidatedPackage> packages) { }
-        public void PrepareJournal(UpdateJournal journal) { }
+        public void PrepareJournal(UpdateJournal journal) => OnPrepareJournal?.Invoke(journal);
         public void BeforeSwap(UpdateJournal journal) => OnBeforeSwap?.Invoke();
-        public void Bridge(UpdateJournal journal, UpdatePluginJournal plugin) { }
-        public void Reconcile(UpdateJournal journal, bool rollback) { }
+        public void Bridge(UpdateJournal journal, UpdatePluginJournal plugin) { OnBridge?.Invoke(plugin); journal.Save(); }
+        public void Reconcile(UpdateJournal journal, bool rollback) { if (!rollback) OnReconcile?.Invoke(journal); }
         public void SetPlainEnabled(string slug, bool enabled) { Toggles++; MarkerBeforeToggle |= store.IsBlocked(slug); }
         public void CloseScenes() => OnCloseScenes?.Invoke();
         public void Scan() => OnScan?.Invoke();
-        public BuildOutcome Build() => Builds.Count > 0 ? Builds.Dequeue() : new(0, []);
+        public BuildOutcome Build() { BuildCount++; return Builds.Count > 0 ? Builds.Dequeue() : new(0, []); }
         public void RequestReload(UpdateJournal journal) { Reloads++; }
         public bool Verify(UpdatePluginJournal plugin) => true;
         public void Log(string message) { }
