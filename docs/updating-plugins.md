@@ -26,6 +26,7 @@ Supported source examples:
 | Git over SSH | `git@host:owner/repository.git?path=addons/my_plugin#main` |
 | Local plugin directories | ZIP files in folders you choose; no `update_url` required |
 | Project update sites | Any of the above, set by the project for a plugin; replaces its `update_url` |
+| Built-in update sites | ePlugin's list of popular add-ons, for plugins that name no working update site |
 
 Release sources select the highest semantic version and a ZIP asset. If there are several assets, the updater prefers a slug-, addon-, or plugin-named ZIP; if none is suitable, it uses the release source archive. Ambiguous asset lists are refused. Git sources without a `#ref` choose the newest semantic tag, falling back to the default branch. A branch follows its tip; a tag or full commit SHA pins the source and opts out of update checks. Checks are version-based, so changing a commit without increasing `plugin.cfg`'s version does not offer an update.
 
@@ -43,7 +44,7 @@ A project can set the update site of a plugin itself, in **Update sites...** of 
 
 The URL can be any [supported source](#configure-an-update-source): GitHub or GitLab releases, or a Git repository. Other URLs are refused when you save them. The dialog shows each plugin's `plugin.cfg` `update_url` next to the site that replaces it.
 
-The project's update site is always tried first. When it does not work, the plugin's `update_url` is checked instead: for example when the site does not respond, returns an error, or is not a supported URL because the file was edited by hand. The output log and the manager's status line say when this happened. A plugin without an `update_url` reports the failed check.
+The project's update site is always tried first. When it does not work, the plugin's `update_url` is checked instead, and then its [built-in update site](#built-in-update-sites): for example when the site does not respond, returns an error, or is not a supported URL because the file was edited by hand. The output log and the manager's status line say when this happened. A plugin with no other site reports the failed check.
 
 The update sites are saved in `res://addons/eplugin-update-sites.json`. Commit the file, so everyone working on the project uses the same sites. The file is removed again with its last entry. A file that cannot be read, or that a newer ePlugin version wrote, is never overwritten: the sites can only be changed again once it is repaired or deleted.
 
@@ -57,6 +58,14 @@ The update sites are saved in `res://addons/eplugin-update-sites.json`. Commit t
 ```
 
 An update replaces the plugin's `plugin.cfg`, but not the project's update site, which stays in use. A new release that changes its own `update_url` is still shown for [review](#review-before-installation), but does not need the trust checkbox, because checks keep using the project's site. The plugin details in the manager show the project's update site and the `update_url` it replaces.
+
+## Built-in update sites
+
+ePlugin ships a list of update sites for popular Godot add-ons. It is the last fallback: a plugin uses its built-in update site only when the project sets no update site for it and its `plugin.cfg` names no `update_url`, or when those do not work. So the add-ons in the list get updates even when they do not declare an `update_url` themselves. The list also fills in the documentation, source and website links of the plugin details when `plugin.cfg` does not set them.
+
+The list matches add-ons by their folder name in `res://addons`. It holds active add-ons with at least 100 stars on GitHub. Each was checked against its latest release: the release was downloaded, installed the way the updater installs it and validated like an update. Add-ons without a stable release, add-ons with a GDExtension, and add-ons whose release the updater would refuse are not in the list.
+
+The list is read-only. **Update sites...** in the [ePlugin Manager](eplugin-manager.md) shows it below the project's update sites, with the installed add-ons first, so you can review which site each add-on uses. To use a different site for an add-on, set a [project update site](#project-update-sites); it is tried first. To ignore the list entirely, turn off `eplugin/updates/builtin_update_sites` in **Project Settings** (with **Advanced Settings** shown).
 
 ## Local plugin directories
 
@@ -146,5 +155,6 @@ If automatic recovery cannot run, close the editor, restore `updates/<id>/backup
 | `allow_prerelease` | `false` | Includes semantic prereleases. |
 | `on_build_failure` | `ask` | Final build policy: `ask`, `rollback`, or `keep`; self-updates and headless runs always roll back. |
 | `restart_policy` | `auto` | Uses conservative C# restarts, or `always` to restart for every batch. |
+| `builtin_update_sites` | `true` | Uses ePlugin's [built-in update sites](#built-in-update-sites) for plugins that name no working update site. |
 
 Update journals and recipe snapshots use versioned, backward-compatible readers. Future framework releases must preserve that contract and keep the shared and local state schemas readable by a rolled-back framework. Unsupported future journals need manual repair. Updates do not install missing addons, resolve remote plugin dependencies, or run migration scripts.

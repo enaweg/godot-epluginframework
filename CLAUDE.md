@@ -173,6 +173,10 @@ the plugin.cfg value (the validator's R9 compares new packages against it) and `
 or failing site falls back to plugin.cfg (reported in `UpdateCheckResult.Fallbacks`), and a candidate from either URL
 belongs to the plugin (`CurrentCached`, `source_changed`). `CollectUpdateTargets`/`CollectPlugins` reload the file;
 like `LocalSourceSettings` it is never overwritten when unreadable or newer, and it is deleted with its last entry.
+`KnownPlugins` (`KnownPlugins.Data.cs` is generated, see its header) is the built-in list of add-on update sites, keyed by
+slug: `PluginUpdateTarget.KnownUrl` is the last entry of `UpdateUrls`, and `PluginInfo.Known` fills in documentation,
+source and website links. `eplugin/updates/builtin_update_sites` (default on, `EGlobal.UseKnownPlugins`) turns it off.
+Regenerate the data only with slugs taken from each add-on's latest release and validated like an update.
 Checks use installed metadata and a 20-hour local cache, never the shared working-version index. Every apply
 requires dialog confirmation. Stage and validate the whole batch before touching addons, then save and close all
 open scenes (`IUpdateHost.CloseScenes`; `close_scene` exists only from Godot 4.5) before the swap. Managed plugins are
