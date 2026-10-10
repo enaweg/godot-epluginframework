@@ -7,7 +7,7 @@ namespace Enaweg.Plugin.Internal.Update;
 
 /// <summary>A popular Godot add-on whose update site ePlugin knows, for plugins that do not name a working one.</summary>
 /// <param name="Slug">The add-on's folder in res://addons, as its latest release installs it.</param>
-/// <param name="UpdateUrl">Where its releases are published.</param>
+/// <param name="UpdateUrl">Where its releases are published, or its tag page when it only tags versions.</param>
 /// <param name="WebsiteUrl">Its website; the repository when it has none.</param>
 /// <param name="SourceUrl">Its source repository.</param>
 internal sealed record KnownPlugin(string Slug, string Name, string UpdateUrl, string? DocumentationUrl, string? WebsiteUrl,
@@ -19,9 +19,10 @@ internal sealed record KnownPlugin(string Slug, string Name, string UpdateUrl, s
 /// for users and can be turned off with <see cref="SettingKey"/>.
 /// </summary>
 /// <remarks>
-/// The entries live in KnownPlugins.Data.cs. Each slug was taken from the add-on's latest release, installed the way the
-/// updater installs it and validated by <see cref="AddonPackageValidator"/>; add-ons that could not be updated that
-/// way are left out.
+/// The entries live in KnownPlugins.Data.cs, written by tools/generate_known_plugins.cs from the add-ons that
+/// tools/build_godot_addons.cs lists. Each slug is the plugin folder in the add-on's latest release ZIP or, without one,
+/// in its repository at its latest release or version tag; tools/extra_addons.txt can name it. The packages are not
+/// installed or validated, so an update from the list can still be refused like any other.
 /// </remarks>
 internal static partial class KnownPlugins
 {
