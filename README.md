@@ -33,9 +33,13 @@ Release archives include a small shared progress helper (about 20 KB) that runs 
 - **Plugin dependencies** enable required C# or GDScript plugins first, check optional version constraints, and disable dependants when a required plugin is disabled.
 - **Optional dependencies** apply a nested resource recipe only while another plugin is already enabled and matches its version. They never enable the other plugin or fail the declaring plugin's activation.
 - **Assembly reload recovery** rebuilds framework state from active plugins after Godot reloads C# assemblies. Startup initializers let managed code register `IInitialize` callbacks.
-- **ePlugin Manager** lists plugins and their state, controls activation, checks updates, selects versions (including downgrades), manages local package directories, and retries interrupted or failed work.
-- **Plugin updates** support GitHub and GitLab releases, Git sources, and ZIP packages in user-configured local directories. Local packages are indexed and can be rescanned; updates are validated, backed up, built, and recoverable while enabled ePlugins keep their recipes reconciled.
-- **Plugin state tracking** records acknowledged versions and completed lifecycle operations in a project file, with separate per-user markers for interrupted or failed work.
+- **ePlugin Manager** lists plugins and their state, controls activation, checks updates, selects versions (including downgrades), manages local package directories and update sites, and retries interrupted or failed work. Plugin details link the license, welcome page, documentation, and source of each plugin.
+- **Plugin updates** support GitHub and GitLab releases, Git sources, and ZIP packages in user-configured local directories. Local packages are indexed and can be rescanned; updates are validated, backed up, built, and recoverable while enabled ePlugins keep their recipes reconciled. Packages with warnings or a new update host are shown for review before installation.
+- **Update sites** come from a plugin's `update_url`, from sites the project sets in the committed `addons/eplugin-update-sites.json` (preferred, for plugins without a working `update_url`), or from a built-in list of popular add-ons as the last fallback. A site that fails or is unsupported falls back to the next one.
+- **Plugin licenses** can be required before a plugin is enabled or updated. Accepted licenses are recorded per project, and dependencies enabled together are reviewed in one dialog.
+- **Welcome pages** greet users once per project after a plugin is installed, by default with the plugin's BBCode README.
+- **Documentation and source links** from `documentation_url` and `source_url` in `plugin.cfg` open in the browser from the plugin details.
+- **Plugin state tracking** records acknowledged versions, completed lifecycle operations, accepted licenses, and shown welcome pages in a project file, with separate per-user markers for interrupted or failed work.
 - **Editor refresh** rescans the filesystem and rebuilds the solution after recipe changes. Project Settings is refreshed after activation and deactivation when possible.
 
 | [ePlugin Manager](docs/eplugin-manager.md) | [Available updates](docs/updating-plugins.md#checks-and-installation) |
@@ -47,13 +51,13 @@ Screenshots show the repository's sample plugins and example update packages.
 ## Documentation
 
 - [Create an ePlugin](docs/creating-plugins.md): starter code, recipe resources, dependencies, helpers, and initializers.
-- [ePlugin Manager](docs/eplugin-manager.md): inspect and control plugins, check updates, manage local sources, and retry failed work.
-- [Updating plugins](docs/updating-plugins.md): configure update sources, publish packages, and understand validation, builds, and recovery.
+- [ePlugin Manager](docs/eplugin-manager.md): inspect and control plugins, check updates, manage local sources and update sites, and retry failed work.
+- [Updating plugins](docs/updating-plugins.md): configure update sources, project and built-in update sites, publish packages, and understand review, validation, builds, and recovery.
 - [Plugin state files](docs/plugin-state.md): checked-in state, per-user recovery state, and manual retry.
 - [Plugin licenses](docs/plugin-licenses.md): ask users to accept a plugin's license before it is enabled or updated.
 - [Plugin welcome pages](docs/plugin-welcome.md): greet users once after a plugin is installed, by default with its README.
 
-The repository includes a sample project under `src/eplugin-framework` with examples for required and optional dependencies.
+The repository includes a sample project under `src/eplugin-framework` with examples for required and optional dependencies, managed directories, and welcome pages.
 
 ## Motivation and limitations
 
