@@ -10,11 +10,15 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 
 const string source = "https://raw.githubusercontent.com/sci-comp/godot-stars/main/README.md";
-const int minStars = 100;
+const int minStars = 50;
 const int maxItems = 500;
 const int maxRetries = 3;
 // Only add-ons with a commit on their default branch within the last year count as active.
 var cutoff = DateTimeOffset.UtcNow.AddYears(-1);
+// A version tag as ePlugin's updater reads it: an optional "v", then "1.2" or "1.2.3" with optional semantic
+// prerelease/build suffixes (see SemVer.TryParse). Only versions without a prerelease are offered by default.
+var versionTag = new Regex(@"^[vV]?(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$",
+    RegexOptions.Compiled | RegexOptions.CultureInvariant);
 // godot-stars categories that hold games, project templates or assets rather than add-ons.
 var skippedCategories = new HashSet<string>(["Demos", "Shader", "Shaders", "Templates", "Projects", "Materials"],
     StringComparer.OrdinalIgnoreCase);
@@ -99,7 +103,8 @@ foreach (var line in markdown.Split('\n'))
     if (category is null || skippedCategories.Contains(category)) continue;
 
     var match = listingPattern.Match(line);
-    if (!match.Success || !int.TryParse(match.Groups[3].Value.Replace(",", ""), out var oldStars) || oldStars < 50)
+    // The ranking's star counts are older, so add-ons that have grown since are kept for the current count to decide.
+    if (!match.Success || !int.TryParse(match.Groups[3].Value.Replace(",", ""), out var oldStars) || oldStars < minStars / 2)
         continue;
     var slug = match.Groups[2].Value["https://github.com/".Length..].TrimEnd('/');
     candidates[slug] = (slug, match.Groups[1].Value);
@@ -127,7 +132,21 @@ if (seedPath is not null)
     }
 }
 
+static IEnumerable<JsonElement> Nodes(JsonElement repo, string connection) =>
+    repo.TryGetProperty(connection, out var value) && value.ValueKind == JsonValueKind.Object &&
+    value.TryGetProperty("nodes", out var nodes) && nodes.ValueKind == JsonValueKind.Array
+        ? nodes.EnumerateArray().Where(n => n.ValueKind == JsonValueKind.Object) : [];
+
+// The highest stable version among the tag names, as it is written (e.g. "v1.2"), or null without one.
+string? Newest(IEnumerable<string?> tags) => tags
+    .Select(t => (Tag: t, Match: versionTag.Match(t ?? "")))
+    .Where(t => t.Match.Success && !t.Match.Groups[4].Success)
+    .Select(t => (t.Tag, Version: (Number(t.Match.Groups[1]), Number(t.Match.Groups[2]), Number(t.Match.Groups[3]))))
+    .OrderByDescending(t => t.Version).Select(t => t.Tag).FirstOrDefault();
+static long Number(Group group) => group.Success && long.TryParse(group.Value, out var value) ? value : 0;
+
 var results = new List<Addon>();
+var unversioned = new List<string>();
 var values = candidates.Values.ToArray();
 for (var offset = 0; offset < values.Length; offset += 20)
 {
@@ -138,7 +157,10 @@ for (var offset = 0; offset < values.Length; offset += 20)
         var slugParts = batch[i].Slug.Split('/', 2);
         fields.Append($"r{i}: repository(owner:{JsonSerializer.Serialize(slugParts[0])}, name:{JsonSerializer.Serialize(slugParts[1])}) {{ ");
         fields.Append("nameWithOwner isArchived isDisabled isFork stargazerCount url homepageUrl description ");
-        fields.Append("defaultBranchRef { target { ... on Commit { committedDate } } } } ");
+        fields.Append("defaultBranchRef { target { ... on Commit { committedDate } } } ");
+        // As many releases as the updater's check reads, and the newest tags for repositories without a release.
+        fields.Append("releases(first: 30, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { tagName isDraft isPrerelease } } ");
+        fields.Append("refs(refPrefix: \"refs/tags/\", first: 100, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) { nodes { name } } } ");
     }
     fields.Append('}');
 
@@ -163,25 +185,43 @@ for (var offset = 0; offset < values.Length; offset += 20)
         if (!DateTimeOffset.TryParse(dateValue.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var committed)
             || committed < cutoff) continue;
         var url = repo.GetProperty("url").GetString()!.TrimEnd('/');
+        // A published stable release (whose ZIP the updater downloads) wins; otherwise the repository's version tags,
+        // which the updater installs from git through the tag page URL. Without either there is nothing to update to.
+        var release = Newest(Nodes(repo, "releases")
+            .Where(r => !r.GetProperty("isDraft").GetBoolean() && !r.GetProperty("isPrerelease").GetBoolean())
+            .Select(r => r.GetProperty("tagName").GetString()));
+        var tag = release is null ? Newest(Nodes(repo, "refs").Select(r => r.GetProperty("name").GetString())) : null;
+        if (release is null && tag is null)
+        {
+            unversioned.Add(url);
+            continue;
+        }
         var homepage = repo.TryGetProperty("homepageUrl", out var hp) && hp.ValueKind == JsonValueKind.String
             ? hp.GetString() : null;
         results.Add(new Addon(batch[i].Name, stars, committed.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture),
-            url + "/releases", string.IsNullOrWhiteSpace(homepage) ? url : homepage, url + "#readme", url));
+            release is not null ? url + "/releases" : url + "/tags", release is not null ? "releases" : "tags", (release ?? tag)!,
+            string.IsNullOrWhiteSpace(homepage) ? url : homepage, url + "#readme", url));
     }
     Console.Error.WriteLine($"Checked {Math.Min(offset + 20, values.Length)}/{values.Length} candidates");
 }
 
 var output = results.OrderByDescending(x => x.Stars).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
     .Take(maxItems).ToArray();
-var dest = Path.Combine(Environment.CurrentDirectory, "godot_addons_active_100_stars.json");
+var dest = Path.Combine(Environment.CurrentDirectory, $"godot_addons_active_{minStars}_stars.json");
 await File.WriteAllTextAsync(dest, JsonSerializer.Serialize(output, new JsonSerializerOptions
 {
     WriteIndented = true,
     PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
     Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
 }) + "\n");
-Console.WriteLine($"Saved {output.Length} qualifying add-ons to {dest}");
+Console.WriteLine($"Saved {output.Length} qualifying add-ons to {dest} " +
+    $"({output.Count(a => a.UpdateSource == "releases")} with releases, {output.Count(a => a.UpdateSource == "tags")} with version tags only)");
+if (unversioned.Count > 0)
+    Console.WriteLine($"Left out {unversioned.Count} add-ons without a stable release or version tag: {string.Join(", ", unversioned)}");
 Console.WriteLine("Candidate discovery uses an older ranking; the result may omit recently published add-ons.");
 
-record Addon(string Name, int Stars, string LastCommitAt, string GithubReleasesUrl,
+/// <param name="UpdateUrl">The releases page, or the tag page when the add-on publishes no release.</param>
+/// <param name="UpdateSource">"releases" or "tags": where <paramref name="LatestVersion"/> was found.</param>
+/// <param name="LatestVersion">The tag name of the newest stable release or version tag.</param>
+record Addon(string Name, int Stars, string LastCommitAt, string UpdateUrl, string UpdateSource, string LatestVersion,
     string WebsiteUrl, string DocumentationUrl, string GithubUrl);

@@ -35,4 +35,4 @@ src/eplugin-framework/addons/ePlugin/progress/ActivationProgress.*
 **/addons/eplugin-update-sites.json.tmp-*
 
 # Output of tools/build_godot_addons.cs, written to the directory it runs in
-godot_addons_active_100_stars.json
+godot_addons_active_*_stars.json
