@@ -73,7 +73,7 @@ By default, the framework checks once per editor session when the last successfu
 
 The manager shows installed and candidate versions, sources, warnings, and earlier failures. Select a batch and choose **Update** to download and validate it. Package warnings require another confirmation before installation; a changed source host requires the explicit trust checkbox. Canceling the download leaves installed addons untouched. An update that comes with a license file not accepted yet shows it before installation; an update that keeps the accepted license file does not ask again (see [Plugin licenses](plugin-licenses.md#updates)). Previously failed versions are shown but are not selected automatically. The **Version** selector also supports installing an earlier published version as a downgrade, with the same validation, backup, and rollback flow.
 
-Versions are listed from GitHub/GitLab releases (up to 100) or semantic tags of a Git source. A Git `update_url` pinned to a branch, tag, or commit has no version list. Configure **Update** and **Downgrade** from [ePlugin Manager](eplugin-manager.md).
+Versions are listed from GitHub/GitLab releases (up to 100) or semantic tags of a Git source. A Git `update_url` pinned to a branch, tag, or commit has no version list. When the list loaded for the selected plugin contains a version newer than the installed one, the plugin shows that update right away, as if **Check for updates** had found it. Configure **Update** and **Downgrade** from [ePlugin Manager](eplugin-manager.md).
 
 ## Builds, restart, and recovery
 
