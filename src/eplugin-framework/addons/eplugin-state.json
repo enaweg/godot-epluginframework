@@ -27,5 +27,22 @@
       "version": "1.0",
       "state": "activated"
     }
+  ],
+  "welcomes": [
+    {
+      "slug": "ePlugin",
+      "version": "1.0",
+      "shownUtc": "2026-10-10T08:05:33.9704884+00:00"
+    },
+    {
+      "slug": "sample_dependant_plugin",
+      "version": "1.0",
+      "shownUtc": "2026-10-10T08:05:33.9704884+00:00"
+    },
+    {
+      "slug": "sample_plugin",
+      "version": "1.0",
+      "shownUtc": "2026-10-10T08:05:33.9704884+00:00"
+    }
   ]
 }
