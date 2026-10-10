@@ -25,6 +25,7 @@ obj/
 
 # gdUnit Test ignores
 reports/
+**/addons/gdUnit4/GdUnitRunner.cfg
 
 build/
 src/activation-progress/bin/
