@@ -1,7 +1,9 @@
 #:property TargetFramework=net10.0
 #:property PublishAot=false
 // Run with: dotnet run build_godot_addons.cs
-// Requires GITHUB_TOKEN (public-repository access) and .NET 10 SDK.
+// Requires .NET 10 SDK and GITHUB_TOKEN. Only public repositories are read, but GitHub's GraphQL API answers no
+// unauthenticated requests and its REST API allows 60 per hour, too few for several hundred repositories. A token
+// without any scopes (classic) or with read-only access to public repositories (fine-grained) is enough.
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
@@ -23,10 +25,12 @@ var versionTag = new Regex(@"^[vV]?(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?
 var skippedCategories = new HashSet<string>(["Demos", "Shader", "Shaders", "Templates", "Projects", "Materials"],
     StringComparer.OrdinalIgnoreCase);
 
-var token = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+// cmd keeps the quotes of `set GITHUB_TOKEN="..."` in the value, and a pasted token can carry spaces.
+var token = Environment.GetEnvironmentVariable("GITHUB_TOKEN")?.Trim().Trim('"', '\'').Trim();
 if (string.IsNullOrWhiteSpace(token))
 {
-    Console.Error.WriteLine("Set GITHUB_TOKEN to a GitHub personal access token.");
+    Console.Error.WriteLine("Set GITHUB_TOKEN to a GitHub personal access token. It needs no scopes: GitHub's API " +
+        "requires a token for GraphQL and rate-limits anonymous requests, even for public repositories.");
     Environment.ExitCode = 1;
     return;
 }
@@ -53,6 +57,10 @@ async Task<string> RequestAsync(string url, object? body = null)
         var content = await response.Content.ReadAsStringAsync();
         if (response.IsSuccessStatusCode)
             return content;
+        if (response.StatusCode == HttpStatusCode.Unauthorized && uri.Host == "api.github.com")
+            throw new UnauthorizedAccessException("GitHub rejected GITHUB_TOKEN (401 Bad credentials): it is mistyped, " +
+                "expired, revoked, or a fine-grained token still awaiting approval. Check it with " +
+                "`curl -H \"Authorization: Bearer <token>\" https://api.github.com/user`.");
         if (attempt < maxRetries && RetryDelay(response, attempt) is { } delay)
         {
             Console.Error.WriteLine($"{(int)response.StatusCode} from {uri.Host}, retrying in {delay.TotalSeconds:0} s");
@@ -90,6 +98,15 @@ static TimeSpan? RetryDelay(HttpResponseMessage response, int attempt)
 
 static string? Header(HttpResponseMessage response, string name) =>
     response.Headers.TryGetValues(name, out var values) ? values.FirstOrDefault() : null;
+
+// Check the token before any work; /rate_limit does not count against the limit.
+try { await RequestAsync("https://api.github.com/rate_limit"); }
+catch (UnauthorizedAccessException ex)
+{
+    Console.Error.WriteLine(ex.Message);
+    Environment.ExitCode = 1;
+    return;
+}
 
 // One candidate per GitHub slug, with the title shown in the Godot Asset Library ranking.
 var candidates = new Dictionary<string, (string Slug, string Name)>(StringComparer.OrdinalIgnoreCase);
