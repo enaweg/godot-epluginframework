@@ -18,14 +18,14 @@ The Godot project and solution are under `src/eplugin-framework/`.
 ## Build and test
 
 ```text
-dotnet build "src/eplugin-framework/EPlugin Framework.sln"
-dotnet test "src/eplugin-framework/EPlugin Framework.sln"
+dotnet build "src/eplugin-framework/EPluginFramework.sln"
+dotnet test "src/eplugin-framework/EPluginFramework.sln"
 ```
 
 Tests require `GODOT_BIN` to point to a Godot .NET/Mono editor executable. To run one test:
 
 ```text
-dotnet test "src/eplugin-framework/EPlugin Framework.sln" --filter "FullyQualifiedName~IDotnetCliTests.VersionTest"
+dotnet test "src/eplugin-framework/EPluginFramework.sln" --filter "FullyQualifiedName~IDotnetCliTests.VersionTest"
 ```
 
 ## Architecture notes

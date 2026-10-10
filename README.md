@@ -66,8 +66,8 @@ The current CI configuration builds and tests pull requests with Godot 4.7.2 and
 
 ```bash
 cd src/eplugin-framework
-dotnet build "EPlugin Framework.sln" --configuration Debug
-dotnet test "EPlugin Framework.sln" --configuration Debug --settings .runsettings
+dotnet build "EPluginFramework.sln" --configuration Debug
+dotnet test "EPluginFramework.sln" --configuration Debug --settings .runsettings
 ```
 
 Tests require a Godot .NET editor executable. See the [CI workflow](https://github.com/enaweg/godot-epluginframework/blob/main/.github/workflows/ci-pr.yml) for its headless setup. Godot 4.5 and newer have an [EditorPlugin regression](https://github.com/godotengine/godot/issues/110971), so the framework uses an interface-based plugin API.

@@ -12,7 +12,7 @@ references, autoloads, managed asset directories, other plugin dependencies) and
 it automatically when the plugin is enabled/disabled in the Godot editor.
 
 The whole project lives under `src/eplugin-framework/` (Godot project root — `project.godot`,
-`EPlugin Framework.csproj/.sln`).
+`EPluginFramework.csproj/.sln`).
 
 ### Repository layout
 
@@ -36,17 +36,17 @@ exported games.
 
 Build:
 ```
-dotnet build "src/eplugin-framework/EPlugin Framework.sln"
+dotnet build "src/eplugin-framework/EPluginFramework.sln"
 ```
 
 Run tests (gdUnit4 via its VSTest adapter — requires the `GODOT_BIN` environment variable to point at a
 Godot .NET/Mono editor binary, since tests spin up a headless Godot runtime):
 ```
-dotnet test "src/eplugin-framework/EPlugin Framework.sln" --settings "src/eplugin-framework/.runsettings"
+dotnet test "src/eplugin-framework/EPluginFramework.sln" --settings "src/eplugin-framework/.runsettings"
 ```
 Run a single test:
 ```
-dotnet test "src/eplugin-framework/EPlugin Framework.sln" --filter "FullyQualifiedName~IDotnetCliTests.VersionTest"
+dotnet test "src/eplugin-framework/EPluginFramework.sln" --filter "FullyQualifiedName~IDotnetCliTests.VersionTest"
 ```
 Alternative: gdUnit4's own CLI runner (`src/eplugin-framework/addons/gdUnit4/runtest.cmd` /
 `runtest.sh`), which takes `--godot_binary <path>` or the same `GODOT_BIN` env var.
