@@ -12,7 +12,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 
 const string source = "https://raw.githubusercontent.com/sci-comp/godot-stars/main/README.md";
-const int minStars = 50;
+const int minStars = 20;
 const int maxItems = 500;
 const int maxRetries = 3;
 // Only add-ons with a commit on their default branch within the last year count as active.
@@ -222,7 +222,9 @@ for (var offset = 0; offset < values.Length; offset += 20)
     Console.Error.WriteLine($"Checked {Math.Min(offset + 20, values.Length)}/{values.Length} candidates");
 }
 
-var output = results.OrderByDescending(x => x.Stars).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+// Several candidates can name one repository, e.g. an old name that GitHub redirects to the renamed one.
+var output = results.DistinctBy(x => x.GithubUrl, StringComparer.OrdinalIgnoreCase)
+    .OrderByDescending(x => x.Stars).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
     .Take(maxItems).ToArray();
 var dest = Path.Combine(Environment.CurrentDirectory, $"godot_addons_active_{minStars}_stars.json");
 await File.WriteAllTextAsync(dest, JsonSerializer.Serialize(output, new JsonSerializerOptions
