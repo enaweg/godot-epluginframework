@@ -53,17 +53,18 @@ internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules 
         if (candidate.Slug != installed.Slug || Path.GetFileName(stage) != installed.Slug)
             Add("R5", FindingSeverity.Error, "Staged addon slug differs from the installed slug.");
         var validNew = SemVer.TryParse(metadata.GetValueOrDefault("version"), out var version);
+        var versionProblem = $"Package plugin.cfg version '{metadata.GetValueOrDefault("version") ?? "missing"}' must be newer than installed version '{installed.InstalledVersion}' (announced: '{candidate.NewVersion}').";
         if (!validNew || !SemVer.TryParse(installed.InstalledVersion, out var old))
-            Add("R6", FindingSeverity.Error, "Package version must be newer than the installed version.");
+            Add("R6", FindingSeverity.Error, versionProblem);
         else if (version.CompareTo(old) == 0)
         {
-            if (!context.AllowReinstall) Add("R6", FindingSeverity.Error, "Package version must be newer than the installed version.");
+            if (!context.AllowReinstall) Add("R6", FindingSeverity.Error, versionProblem);
             else Add("R6", FindingSeverity.Info, $"Reinstall of version {version}.");
         }
         else if (version.CompareTo(old) < 0)
         {
             // Older framework releases cannot finish or recover the update transaction that installs them.
-            if (!context.AllowDowngrade || installed.Slug == "ePlugin") Add("R6", FindingSeverity.Error, "Package version must be newer than the installed version.");
+            if (!context.AllowDowngrade || installed.Slug == "ePlugin") Add("R6", FindingSeverity.Error, versionProblem);
             else Add("R6", FindingSeverity.Info, $"Downgrade from {installed.InstalledVersion} to {version}.");
         }
         if (validNew && SemVer.TryParse(candidate.NewVersion, out var announced) && version.CompareTo(announced) != 0)

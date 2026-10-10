@@ -43,12 +43,14 @@ internal sealed partial class EGlobal
     {
         RefreshPlainPlugins();
         var ct = _ePluginContext!.UpdateLifetime;
+        // Restored when this method returns, before the deferred editor restart saves the editor settings.
+        using var unfocusedScans = UnfocusedScanSuspension.Begin();
         var filesystem = EditorInterface.Singleton.GetResourceFilesystem();
         var deadline = DateTimeOffset.UtcNow.AddSeconds(10);
         while (filesystem.IsScanning())
         {
             ct.ThrowIfCancellationRequested();
-            if (DateTimeOffset.UtcNow >= deadline) throw new TimeoutException("Editor filesystem scan did not finish.");
+            if (DateTimeOffset.UtcNow >= deadline) throw new TimeoutException("Editor filesystem scan did not finish. Wait until the editor is idle and try again.");
             await _ePluginContext.ToSignal(_ePluginContext.GetTree().CreateTimer(0.1), SceneTreeTimer.SignalName.Timeout);
         }
         using var progress = ActivationProgress.Begin("Updating plugins...");
@@ -130,6 +132,32 @@ internal sealed partial class EGlobal
         if (journal is null) { _ePluginContext?.Logger.Error("Update journal is missing; restore addon files and project references manually before clearing local state."); return; }
         using var progress = ActivationProgress.Begin("Recovering plugin update...");
         HandleUpdateOutcome(journal.Directory, Applier().Retry(journal));
+    }
+
+    /// <summary>
+    /// Turns off "Import Resources When Unfocused" while an update waits for and swaps addon files. While the editor is
+    /// unfocused, that setting rescans every half second; a project whose rescan takes longer never becomes idle.
+    /// </summary>
+    private sealed class UnfocusedScanSuspension : IDisposable
+    {
+        // Recent Godot versions keep the setting under behavior/; older ones do not.
+        private static readonly string[] Keys = ["interface/editor/behavior/import_resources_when_unfocused", "interface/editor/import_resources_when_unfocused"];
+        private readonly string[] _suspended;
+        private UnfocusedScanSuspension(string[] suspended) => _suspended = suspended;
+
+        public static UnfocusedScanSuspension Begin()
+        {
+            var settings = EditorInterface.Singleton.GetEditorSettings();
+            var suspended = Keys.Where(key => settings.HasSetting(key) && settings.GetSetting(key).AsBool()).ToArray();
+            foreach (var key in suspended) settings.SetSetting(key, false);
+            return new(suspended);
+        }
+
+        public void Dispose()
+        {
+            var settings = EditorInterface.Singleton.GetEditorSettings();
+            foreach (var key in _suspended) settings.SetSetting(key, true);
+        }
     }
 
     private sealed class GodotUpdateHost(EGlobal global) : IUpdateHost

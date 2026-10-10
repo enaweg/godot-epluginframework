@@ -77,6 +77,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private string? _selectedSlug;
     private bool _working;
     private bool _swapping;
+    // Rendering runs after async operations and on theme changes; keep their result until the next update operation.
+    private string? _operationNotice;
 
     /// <summary>False once an assembly reload dropped the C# state of this still existing editor node.</summary>
     public bool IsInitialized => _global is not null;
@@ -158,6 +160,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
 
     public void Open()
     {
+        _operationNotice = null;
         Refresh();
         PopupCenteredClamped(Size, 0.9f);
         GetCancelButton().GrabFocus();
@@ -225,9 +228,10 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         if (selected is not null) { selected.Select(NameColumn); _tree.ScrollToItem(selected); }
         else ShowDetails(null);
         var count = _model.Updates.Count;
-        _status.Text = (count == 0 ? "" : $"{count} update{(count == 1 ? "" : "s")} available · ") +
+        _status.Text = _operationNotice ?? (count == 0 ? "" : $"{count} update{(count == 1 ? "" : "s")} available · ") +
                        "Last checked: " + (_global.LastUpdateCheck?.ToLocalTime().ToString("g") ?? "never") +
                        (_global.IsIndexingLocalSources ? " · Indexing local directories..." : "");
+        _status.TooltipText = _status.Text;
         Buttons();
     }
 
@@ -567,6 +571,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private async void CheckNow()
     {
         if (_working) return;
+        _operationNotice = null;
         ClearStaging(); _remoteVersions.Clear(); _remoteVersionErrors.Clear();
         _working = true; Buttons(); _status.Text = "Checking for updates...";
         string? failure = null, notice = null;
@@ -583,9 +588,13 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             _working = false;
             if (GodotObject.IsInstanceValid(this) && IsInsideTree())
             {
+                if (failure is not null)
+                {
+                    _operationNotice = "Update check failed: " + failure;
+                    GD.PushError(_operationNotice);
+                }
+                else _operationNotice = notice;
                 Refresh();
-                if (failure is not null) _status.Text = "Update check failed: " + failure;
-                else if (notice is not null) _status.Text = notice;
             }
         }
     }
@@ -603,11 +612,11 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private async void Install(IReadOnlyList<UpdateCandidate> batch, bool versionInstall, bool allowDowngrade, bool allowReinstall)
     {
         if (_working || batch.Count == 0) return;
+        _operationNotice = null;
         _batch = batch; _versionInstall = versionInstall; _allowDowngrade = allowDowngrade; _allowReinstall = allowReinstall;
         _working = true; _cancel?.Dispose(); _cancel = CancellationTokenSource.CreateLinkedTokenSource(_lifetime);
         Render();
         var refresh = false;
-        string? notice = null;
         try
         {
             if (_staged is null)
@@ -622,7 +631,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
                         _model.Updates.First(r => r.Candidate.Slug == package.Candidate.Slug).Findings.AddRange(package.Findings);
                 // Warnings discovered inside the package are reviewed before the first project side effect.
                 if (_staged.Any(p => p.Findings.Any(f => f.Severity == FindingSeverity.Warning)) || NeedsTrust && !_model.TrustChangedSource)
-                { _working = false; _progress.Visible = false; Render(); _status.Text = "Review package warnings in the details, then confirm installation."; return; }
+                { _working = false; _progress.Visible = false; _operationNotice = "Review package warnings in the details, then confirm installation."; return; }
             }
             _cancel.Token.ThrowIfCancellationRequested();
             if (!CanProceed) return;
@@ -638,7 +647,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
                 if (_lifetime.IsCancellationRequested || !GodotObject.IsInstanceValid(this) || !IsInsideTree()) { ClearStaging(); return; }
                 if (selected.Length == 0)
                 {
-                    notice = "Update canceled: its license was declined. Addon files were not changed.";
+                    _operationNotice = "Update canceled: its license was declined. Addon files were not changed.";
                     ClearStaging();
                     return;
                 }
@@ -646,19 +655,34 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             }
             _swapping = true; Buttons(); _status.Text = versionInstall ? "Installing the selected version..." : "Installing selected addons...";
             var outcome = await _global.ApplyUpdatesAsync(selected, _directory!, _model.TrustChangedSource);
-            _directory = null; _staged = null; Hide();
+            var directory = _directory!;
+            _directory = null; _staged = null;
+            if (outcome is UpdateOutcome.RolledBack or UpdateOutcome.KeptWithErrors)
+            {
+                var failure = UpdateJournal.Load(directory).Failure;
+                _operationNotice = (outcome == UpdateOutcome.RolledBack ? "Update rolled back: " : "Update needs recovery: ") +
+                                   (failure ?? "Use Retry failed in the ePlugin Manager.") + ". Logs: " + directory;
+                GD.PushError(_operationNotice);
+            }
+            else Hide();
             // Installed versions changed, so the list is read again rather than only redrawn.
-            refresh = outcome == UpdateOutcome.Completed;
+            refresh = outcome is UpdateOutcome.Completed or UpdateOutcome.RolledBack or UpdateOutcome.KeptWithErrors;
         }
-        catch (OperationCanceledException) { if (GodotObject.IsInstanceValid(this) && IsInsideTree()) _status.Text = "Download canceled. Addon files were not changed."; ClearStaging(); }
-        catch (Exception ex) { if (GodotObject.IsInstanceValid(this) && IsInsideTree()) _status.Text = "Update failed: " + ex.Message; if (!_swapping) ClearStaging(); }
+        catch (OperationCanceledException) { _operationNotice = "Download canceled. Addon files were not changed."; ClearStaging(); }
+        catch (Exception ex)
+        {
+            _operationNotice = "Update failed: " + ex.Message;
+            GD.PushError(_operationNotice);
+            // A refusal before the transaction leaves no journal; keeping the staged batch would lock the selection and make
+            // every later Update retry it. ClearStaging keeps a directory that already has a journal.
+            ClearStaging();
+        }
         finally
         {
             _working = false; _swapping = false;
             if (GodotObject.IsInstanceValid(this) && IsInsideTree())
             {
                 _progress.Visible = false; if (refresh) Refresh(); else Render();
-                if (notice is not null) _status.Text = notice;
             }
         }
     }
