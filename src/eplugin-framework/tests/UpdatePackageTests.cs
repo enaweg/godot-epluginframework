@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using Enaweg.Plugin.Internal.Update;
 using GdUnit4;
 
@@ -136,6 +137,38 @@ public class UpdatePackageTests
             File.WriteAllText(Path.Combine(stage, "plugin.cfg"), Config("1.0.0"));
             Assertions.AssertBool(validator.Validate(new(target, candidate, stage, AllowReinstall: true)).IsValid).IsFalse();
         }
+    }
+
+    [TestCase]
+    public async Task MisversionedPackageRefusesTheWholeBatchBeforeChangingInstalledFiles()
+    {
+        var candidates = new[] { (Slug: "first", Installed: "1.0.0", Announced: "2.0.0", Actual: "2.0.0"),
+            (Slug: "virtual_joystick_cf", Installed: "2.0.0", Announced: "2.0.1", Actual: "2.0.0") };
+        var targets = candidates.Select(c =>
+        {
+            var installed = Path.Combine(_root, "addons", c.Slug);
+            Directory.CreateDirectory(installed);
+            File.WriteAllText(Path.Combine(installed, "plugin.cfg"), Config(c.Installed));
+            return new PluginUpdateTarget(c.Slug, "Plugin", c.Installed, "https://example.org/releases", installed);
+        }).ToArray();
+        var packages = candidates.Select(c => new UpdateCandidate(c.Slug, "Plugin", c.Installed, c.Announced, null, null, null,
+            new LocalZipPackageRef(Zip(($"{c.Slug}/plugin.cfg", Config(c.Actual)), ($"{c.Slug}/plugin.gd", "extends EditorPlugin"))))).ToArray();
+        var transaction = Path.Combine(_root, "transaction");
+        try
+        {
+            await new PackageFetcher(new(), new GitRunner()).FetchAsync(packages, targets, transaction, null, CancellationToken.None);
+            throw new InvalidOperationException("A package with the installed version was accepted as an update.");
+        }
+        catch (InvalidDataException ex)
+        {
+            Assertions.AssertString(ex.Message).Contains("virtual_joystick_cf");
+            Assertions.AssertString(ex.Message).Contains("plugin.cfg version '2.0.0'");
+            Assertions.AssertString(ex.Message).Contains("installed version '2.0.0'");
+            Assertions.AssertString(ex.Message).Contains("announced: '2.0.1'");
+        }
+        Assertions.AssertBool(Directory.Exists(transaction)).IsFalse();
+        foreach (var target in targets)
+            Assertions.AssertString(File.ReadAllText(Path.Combine(target.Directory, "plugin.cfg"))).IsEqual(Config(target.InstalledVersion));
     }
 
     [TestCase]
