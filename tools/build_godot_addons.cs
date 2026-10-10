@@ -1,6 +1,7 @@
 #:property TargetFramework=net10.0
 #:property PublishAot=false
 // Run with: dotnet run build_godot_addons.cs
+// Then write ePlugin's built-in list from its output with: dotnet run generate_known_plugins.cs
 // Requires .NET 10 SDK and GITHUB_TOKEN. Only public repositories are read, but GitHub's GraphQL API answers no
 // unauthenticated requests and its REST API allows 60 per hour, too few for several hundred repositories. A token
 // without any scopes (classic) or with read-only access to public repositories (fine-grained) is enough.
