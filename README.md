@@ -29,18 +29,27 @@ Release archives include a small shared progress helper (about 20 KB) that runs 
 
 ## Features
 
-- **Declarative plugin recipes** install NuGet packages, C# projects, autoloads, and managed directories on activation, then reverse those changes on deactivation. NuGet sources are recorded in the project-root `nuget.config` for reproducible restores.
-- **Plugin dependencies** enable required C# or GDScript plugins first, check optional version constraints, and disable dependants when a required plugin is disabled.
-- **Optional dependencies** apply a nested resource recipe only while another plugin is already enabled and matches its version. They never enable the other plugin or fail the declaring plugin's activation.
-- **Assembly reload recovery** rebuilds framework state from active plugins after Godot reloads C# assemblies. Startup initializers let managed code register `IInitialize` callbacks.
-- **ePlugin Manager** lists plugins and their state, controls activation, checks updates, selects versions (including downgrades), manages local package directories and update sites, and retries interrupted or failed work. Plugin details link the license, welcome page, documentation, and source of each plugin.
-- **Plugin updates** support GitHub and GitLab releases, Git sources, and ZIP packages in user-configured local directories. Local packages are indexed and can be rescanned; updates are validated, backed up, built, and recoverable while enabled ePlugins keep their recipes reconciled. Packages with warnings or a new update host are shown for review before installation.
-- **Update sites** come from a plugin's `update_url`, from sites the project sets in the committed `addons/eplugin-update-sites.json` (preferred, for plugins without a working `update_url`), or from a built-in list of popular add-ons as the last fallback. A site that fails or is unsupported falls back to the next one.
+For plugin authors:
+
+- **Declarative plugin recipes** install NuGet packages, C# projects and project references, autoloads, and managed directories on activation, then reverse those changes on deactivation. Removing something that is already gone counts as done. NuGet sources are recorded in the project-root `nuget.config` for reproducible restores.
+- **Managed directories** keep plugin code that needs those packages or projects hidden (for example as `.src`) until the plugin is enabled, so the plugin's root code always compiles.
+- **Plugin dependencies** enable required C# or GDScript plugins first, check version constraints, and disable dependants when a required plugin is disabled.
+- **Optional dependencies** apply a nested resource recipe only while another plugin is enabled and matches its version, in whichever order the two are enabled. They never enable the other plugin or fail the declaring plugin's activation.
+- **Licenses and welcome pages** can be declared in the recipe or in `plugin.cfg`; by default the plugin's `LICENSE` and README are used.
+- **Startup initializers** let code in managed directories run `IInitialize` callbacks once the framework is ready.
+- **Updatable releases** need only an `update_url` in `plugin.cfg` pointing at GitHub or GitLab releases or a Git repository.
+
+For everyone working on the project:
+
+- **ePlugin Manager** lists every plugin below `res://addons` (ePlugins, plain C# and GDScript plugins) with its state, enables and disables them, checks for updates, selects versions (including downgrades and reinstalls), manages local package directories and update sites, and retries interrupted or failed work. Plugin details link the license, welcome page, documentation, source, and update site of each plugin.
+- **Plugin updates** support GitHub and GitLab releases (including self-hosted GitLab), Git tags and branches, and ZIP packages in user-configured local directories. Updates are downloaded and validated as a batch, backed up, built, and rolled back on failure; dependent plugins are installed together and independent ones separately, so one failing update does not undo the others. Packages with warnings or a new update host are shown for review before installation.
+- **Update sites** come from a project's committed `addons/eplugin-update-sites.json`, a plugin's own `update_url`, or a built-in list of popular Godot add-ons, tried in that order. A site that fails or is unsupported falls back to the next one, so add-ons without an `update_url` can be updated too.
 - **Plugin licenses** can be required before a plugin is enabled or updated. Accepted licenses are recorded per project, and dependencies enabled together are reviewed in one dialog.
-- **Welcome pages** greet users once per project after a plugin is installed, by default with the plugin's BBCode README.
-- **Documentation and source links** from `documentation_url` and `source_url` in `plugin.cfg` open in the browser from the plugin details.
-- **Plugin state tracking** records acknowledged versions, completed lifecycle operations, accepted licenses, and shown welcome pages in a project file, with separate per-user markers for interrupted or failed work.
-- **Editor refresh** rescans the filesystem and rebuilds the solution after recipe changes. Project Settings is refreshed after activation and deactivation when possible.
+- **Welcome pages** greet users once per project after a plugin is installed.
+- **Progress window**: a separate native window (Windows, macOS, and Linux with GTK 3) shows enabling, disabling, update checks, downloads, and installation while the editor is busy.
+- **Recovery**: interrupted or failed work is recorded per user and can be retried; an update interrupted by a crash resumes or rolls back on the next start, and a framework self-update that breaks the editor is restored automatically.
+- **Assembly reload safety** rebuilds framework state after Godot reloads C# assemblies, and the ePlugin Manager waits for a pending reload before it starts the next action.
+- **Plugin state tracking** records acknowledged versions, completed lifecycle operations, accepted licenses, and shown welcome pages in a committed project file, so the whole team shares them.
 
 | [ePlugin Manager](docs/eplugin-manager.md) | [Available updates](docs/updating-plugins.md#checks-and-installation) |
 |---|---|
@@ -57,13 +66,15 @@ Screenshots show the repository's sample plugins and example update packages.
 - [Plugin licenses](docs/plugin-licenses.md): ask users to accept a plugin's license before it is enabled or updated.
 - [Plugin welcome pages](docs/plugin-welcome.md): greet users once after a plugin is installed, by default with its README.
 
-The repository includes a sample project under `src/eplugin-framework` with examples for required and optional dependencies, managed directories, and welcome pages.
+The repository includes a sample project under `src/eplugin-framework` with examples for required and optional dependencies, managed directories, startup initializers, and welcome pages.
 
 ## Motivation and limitations
 
 Godot plugins do not provide a built-in way to manage C# project references or NuGet packages, and external C# plugin code can trigger assembly reloads that discard editor state. ePlugin Framework handles those project changes around plugin lifecycle events.
 
-Godot currently needs project-managed resource IDs for assets such as scenes, models, and scripts, so the framework cannot manage those assets outside the project. Plugin activation and deactivation can also freeze the editor while project changes are built. On supported desktop platforms the separate progress window remains responsive during that work.
+Godot currently needs project-managed resource IDs for assets such as scenes, models, and scripts, so the framework cannot manage those assets outside the project. Plugin activation and deactivation can also freeze the editor while project changes are built. On supported desktop platforms the separate progress window remains responsive during that work. A failure in the middle of installing or removing a recipe can leave the project in a state that does not build; fix the cause and use **Retry failed** in the ePlugin Manager (see [Plugin state files](docs/plugin-state.md)).
+
+Updates replace whole addon folders. They do not install missing plugins or resolve dependencies from remote sources, and plugins containing GDExtensions are not updated.
 
 ## Testing
 

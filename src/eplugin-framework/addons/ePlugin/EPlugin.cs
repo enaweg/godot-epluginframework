@@ -39,6 +39,11 @@ public static class EPlugin
         }
     }
 
+    /// <summary>
+    /// Queues an initializer whose <see cref="IInitialize.Initialize"/> is called once the framework has finished
+    /// starting up.
+    /// </summary>
+    /// <param name="initializer">The initializer to call.</param>
     public static void RegisterInitializer(IInitialize initializer)
     {
         EGlobal.Instance.AddInitializer(initializer);
