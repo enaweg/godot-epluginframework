@@ -292,7 +292,9 @@ the updated plugins as shown, so updates never show a page. The ePlugin Manager 
 `ILogger`/`ILoggerFactory` are pluggable (`GodotConsoleLogger`, `NullLogger`, `GenericLoggerFactory`).
 `EGlobal.SwitchLogging` lets a dependent plugin (e.g. an external logging plugin) take over ePlugin's own
 console logging at runtime — this is why logger wiring goes through the factory rather than being
-constructed once and cached globally.
+constructed once and cached globally. `GD.PushError`/`PushWarning` always report their direct caller, so
+`GodotConsoleLogger` binds GodotSharp's internal `NativeFuncs.godotsharp_err_print_error` and passes the first frame
+outside any `ILogger` (or `[StackTraceHidden]` method) as the location; without that binding it falls back to `GD.Push*`.
 
 ### Directory show/hide
 
