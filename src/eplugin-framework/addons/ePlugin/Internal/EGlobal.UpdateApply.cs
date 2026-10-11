@@ -60,7 +60,10 @@ internal sealed partial class EGlobal
     /// alone. All groups run in one go without letting the editor process frames, so it cannot reload an assembly one of
     /// them built; the editor restarts at most once, after the last group.
     /// </summary>
-    internal async Task<IReadOnlyList<UpdateGroupResult>> ApplyUpdatesAsync(IReadOnlyList<ValidatedPackage> packages, string directory, bool trustChangedSources)
+    /// <param name="askOnBuildFailure">Set for an update started from a plugin's details: a build failure may then ask
+    /// whether to keep the new version instead of rolling it back.</param>
+    internal async Task<IReadOnlyList<UpdateGroupResult>> ApplyUpdatesAsync(IReadOnlyList<ValidatedPackage> packages, string directory, bool trustChangedSources,
+        bool askOnBuildFailure = false)
     {
         RefreshPlainPlugins();
         var ct = _ePluginContext!.UpdateLifetime;
@@ -91,7 +94,14 @@ internal sealed partial class EGlobal
             {
                 if (result.Outcome is { } outcome) HandleUpdateOutcome(result.Directory, outcome);
                 if (groups.Count > 1 && result.Packages.Any(p => p.Candidate.Slug == "ePlugin")) ActivationProgress.ReopenAfterUpdate("Updating plugins...");
-            });
+            }, askOnBuildFailure);
+    }
+
+    /// <summary>What a build failure does to an update of this plugin started from its details: ask, keep or rollback.</summary>
+    internal string DetailsBuildFailurePolicy(string slug)
+    {
+        var host = new GodotUpdateHost(this);
+        return UpdateFailureDecision.Choose(slug == "ePlugin", UpdateFailureDecision.Policy(host.BuildFailurePolicy, false, true), host.UiAvailable);
     }
 
     private static string GroupNames(IReadOnlyList<ValidatedPackage> group) => string.Join(", ", group.Select(p => p.Candidate.PluginName));
@@ -304,6 +314,7 @@ internal sealed partial class EGlobal
             journal.Save();
         }
         public void Reconcile(UpdateJournal journal, bool rollback) => global.ReconcileUpdateRecipes(journal, rollback);
+        public void RebaseRecipes(UpdateJournal journal) => global.RebaseUpdateRecipes(journal);
         public void SetPlainEnabled(string slug, bool enabled) => EditorInterface.Singleton.SetPluginEnabled(slug, enabled);
         public void CloseScenes()
         {

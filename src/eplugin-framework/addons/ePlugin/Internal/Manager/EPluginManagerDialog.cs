@@ -438,7 +438,12 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             (option.IsDowngrade
                 ? "Use this to undo an update that broke the project. Project code or saved data that already relies on the newer version may stop working. "
                 : "") +
-            "Open scenes are saved first; files and project references are backed up and restored if installation fails.";
+            "Open scenes are saved first; files and project references are backed up" + _global.DetailsBuildFailurePolicy(row.Plugin.Slug) switch
+            {
+                "ask" => ". If the project does not build with it, you choose whether to keep it and fix the errors yourself or to restore the previous version.",
+                "keep" => ". If the project does not build with it, it is kept so you can fix the errors (project setting eplugin/updates/on_build_failure).",
+                _ => " and restored if installation fails.",
+            };
         _versionConfirm.PopupCentered();
     }
 
@@ -705,10 +710,11 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             }
             _swapping = true; Buttons(); _status.Text = versionInstall ? "Installing the selected version..." : "Installing selected addons...";
             // Independent groups are installed one after another; a failing group is rolled back without the others.
-            var results = await _global.ApplyUpdatesAsync(selected, _directory!, _model.TrustChangedSource);
+            // Only an update started from the plugin's details asks whether to keep a version that does not build.
+            var results = await _global.ApplyUpdatesAsync(selected, _directory!, _model.TrustChangedSource, askOnBuildFailure: versionInstall);
             var skipped = _refused;
             _directory = null; _staged = null; _refused = [];
-            // The build-failure dialog takes over the decision; only a batch installed as one group asks.
+            // The build-failure dialog takes over the decision.
             if (results.Any(r => r.Outcome == UpdateOutcome.AwaitingDecision)) Hide();
             // Stays open: an update that needs no restart is finished here, and a restart reopens the manager.
             else

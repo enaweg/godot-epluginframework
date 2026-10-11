@@ -26,6 +26,8 @@ internal interface IUpdateHost
     void BeforeSwap(UpdateJournal journal) { }
     void Bridge(UpdateJournal journal, UpdatePluginJournal plugin);
     void Reconcile(UpdateJournal journal, bool rollback);
+    /// <summary>Takes the recipes of the plugins a kept update does not change from the project as it is now.</summary>
+    void RebaseRecipes(UpdateJournal journal) { }
     void SetPlainEnabled(string slug, bool enabled);
     // Saves and closes every open scene so none keeps nodes whose scripts or resources disappear mid-update.
     void CloseScenes();
@@ -37,8 +39,16 @@ internal interface IUpdateHost
 }
 internal static class UpdateFailureDecision
 {
-    public static string Choose(bool finalBuild, bool selfUpdate, string policy, bool uiAvailable) =>
-        !finalBuild || selfUpdate || !uiAvailable ? "rollback" : policy == "keep" ? "keep" : policy == "ask" && uiAvailable ? "ask" : "rollback";
+    public static string Choose(bool selfUpdate, string policy, bool uiAvailable) =>
+        selfUpdate || !uiAvailable ? "rollback" : policy is "keep" or "ask" ? policy : "rollback";
+
+    /// <summary>
+    /// The project's <c>on_build_failure</c> setting for one transaction: <c>ask</c> asks only for an update started from
+    /// a plugin's details, so installing all updates rolls back; a group of a larger batch always rolls back, because
+    /// keeping a project that does not build would fail every later group too.
+    /// </summary>
+    public static string Policy(string setting, bool grouped, bool askOnBuildFailure) =>
+        grouped ? "rollback" : setting == "keep" ? "keep" : setting == "ask" && askOnBuildFailure ? "ask" : "rollback";
 }
 internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, IUpdateHost host, IUpdateStateStore cache)
 {
@@ -49,15 +59,16 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
     /// rolled back alone and the next group is still installed on top of the ones that succeeded. A batch of one group
     /// is applied exactly like <see cref="Apply"/>, including its exceptions.
     /// </summary>
+    /// <param name="askOnBuildFailure">Whether a batch of one group may ask to keep a version that does not build.</param>
     public IReadOnlyList<UpdateGroupResult> ApplyGroups(IReadOnlyList<IReadOnlyList<ValidatedPackage>> groups, string transactionDirectory,
         Func<string> newDirectory, bool trustChangedSources = false, Action<int, IReadOnlyList<ValidatedPackage>>? starting = null,
-        Action<UpdateGroupResult>? finished = null)
+        Action<UpdateGroupResult>? finished = null, bool askOnBuildFailure = false)
     {
         if (groups.Count == 0) throw new InvalidOperationException("No valid distinct addon batch was selected.");
         if (groups.Count == 1)
         {
             starting?.Invoke(0, groups[0]);
-            var single = Result(groups[0], transactionDirectory, Apply(groups[0], transactionDirectory, trustChangedSources));
+            var single = Result(groups[0], transactionDirectory, Apply(groups[0], transactionDirectory, trustChangedSources, askOnBuildFailure: askOnBuildFailure));
             finished?.Invoke(single);
             return [single];
         }
@@ -126,14 +137,15 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         return split;
     }
 
-    public UpdateOutcome Apply(IReadOnlyList<ValidatedPackage> packages, string transactionDirectory, bool trustChangedSources = false, int? group = null)
+    public UpdateOutcome Apply(IReadOnlyList<ValidatedPackage> packages, string transactionDirectory, bool trustChangedSources = false, int? group = null,
+        bool askOnBuildFailure = false)
     {
         if (packages.Count == 0 || packages.Any(p => !p.IsValid) || packages.Select(p => p.Candidate.Slug).Distinct().Count() != packages.Count)
             throw new InvalidOperationException("No valid distinct addon batch was selected.");
         if (!trustChangedSources && packages.Any(p => p.Findings.Any(f => f.RequiresTrust))) throw new InvalidOperationException("Confirm trust in the changed update source before installation.");
         if (store.IsReadOnly || packages.Any(p => store.IsBlocked(p.Candidate.Slug))) throw new InvalidOperationException("Resolve local plugin state before updating.");
         host.Preflight(packages);
-        var journal = new UpdateJournal { Id = Path.GetFileName(transactionDirectory), Directory = transactionDirectory, Group = group };
+        var journal = new UpdateJournal { Id = Path.GetFileName(transactionDirectory), Directory = transactionDirectory, Group = group, AskOnBuildFailure = askOnBuildFailure };
         foreach (var package in packages)
         {
             var slug = package.Candidate.Slug;
@@ -180,12 +192,14 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                 var managed = journal.Plugins.Any(p => p.IsEPlugin);
                 if (Build(journal, managed ? "interim" : "final").ExitCode != 0)
                 {
-                    var decision = UpdateFailureDecision.Choose(!managed, journal.Plugins.Any(p => p.Slug == "ePlugin"), Policy(journal), host.UiAvailable);
-                    if (!managed)
-                        foreach (var plugin in journal.Plugins.Where(p => !p.IsEPlugin)) host.SetPlainEnabled(plugin.Slug, true);
-                    if (decision == "ask") { journal.Failure = "Plain C# addon build failed; the assembly cannot reload until the project compiles."; journal.Save(UpdatePhase.AwaitingDecision); return UpdateOutcome.AwaitingDecision; }
-                    if (decision == "keep") return Keep(journal);
-                    return Rollback(journal, "Build failed.");
+                    var decision = UpdateFailureDecision.Choose(journal.Plugins.Any(p => p.Slug == "ePlugin"), Policy(journal), host.UiAvailable);
+                    if (decision == "rollback") return Rollback(journal, "Build failed.");
+                    foreach (var plugin in journal.Plugins.Where(p => !p.IsEPlugin)) host.SetPlainEnabled(plugin.Slug, true);
+                    // The editor cannot load the new code, so the recipes are reconciled once the project builds again.
+                    journal.BeforeReconcile = true;
+                    journal.Failure = (managed ? "Interim build failed" : "Plain C# addon build failed") + "; the assembly cannot reload until the project compiles.";
+                    if (decision == "ask") { journal.Save(UpdatePhase.AwaitingDecision); return UpdateOutcome.AwaitingDecision; }
+                    return Keep(journal);
                 }
                 journal.Save(UpdatePhase.InterimBuilt);
                 foreach (var plugin in journal.Plugins.Where(p => !p.IsEPlugin)) host.SetPlainEnabled(plugin.Slug, true);
@@ -216,7 +230,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             if (managedCSharp && !finalBuild) host.Log("The updated recipes do not change the build; the editor keeps the interim build without another restart.");
             if (finalBuild && Build(journal, "final").ExitCode != 0)
             {
-                var decision = UpdateFailureDecision.Choose(true, journal.Plugins.Any(p => p.Slug == "ePlugin"), Policy(journal), host.UiAvailable);
+                var decision = UpdateFailureDecision.Choose(journal.Plugins.Any(p => p.Slug == "ePlugin"), Policy(journal), host.UiAvailable);
                 if (decision == "ask") { journal.Failure = "Final build failed."; journal.Save(UpdatePhase.AwaitingDecision); return UpdateOutcome.AwaitingDecision; }
                 if (decision == "keep") return Keep(journal);
                 return Rollback(journal, "Final build failed.");
@@ -337,11 +351,38 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         if (reason == "update_kept_build_failed")
         {
             if (Build(journal, "retry").ExitCode != 0) return UpdateOutcome.KeptWithErrors;
+            if (journal.BeforeReconcile) return ResumeAfterRestart(journal);
             if (!journal.Plugins.All(host.Verify)) return Rollback(journal, "Retry verification failed.");
             journal.Save(UpdatePhase.Verified);
             return Commit(journal);
         }
         return Rollback(journal, "Manual update recovery.");
+    }
+
+    /// <summary>
+    /// Continues an update kept before its recipes were reconciled, now that the project builds: like after a working
+    /// interim build, the editor restarts into the new code and the update resumes with reconciling. The project may have
+    /// changed since it was kept, so a rollback from here on restores it, and the other plugins' recipes, as they are now.
+    /// </summary>
+    private UpdateOutcome ResumeAfterRestart(UpdateJournal journal)
+    {
+        if (!store.TryFail(journal.AttemptId, PersistedPluginState.Failed, "attempt_in_progress"))
+        {
+            host.Log("Cannot clear the kept-update marker; the update stays kept. Backup: " + journal.Directory);
+            return UpdateOutcome.KeptWithErrors;
+        }
+        try
+        {
+            host.RebaseRecipes(journal);
+            BackupProject(journal, true);
+            journal.BeforeReconcile = false;
+            journal.Failure = null;
+            journal.Save(UpdatePhase.InterimBuilt);
+            host.Log("The kept update builds now; the editor restarts to finish it.");
+            host.RequestReload(journal);
+            return UpdateOutcome.AwaitingReload;
+        }
+        catch (Exception ex) { return Rollback(journal, ex.Message); }
     }
 
     /// <summary>
@@ -367,8 +408,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         journal.Save();
         return build;
     }
-    /// <summary>A group that fails never asks: keeping a project that does not build would fail every later group too.</summary>
-    private string Policy(UpdateJournal journal) => journal.Group is null ? host.BuildFailurePolicy : "rollback";
+    private string Policy(UpdateJournal journal) => UpdateFailureDecision.Policy(host.BuildFailurePolicy, journal.Group is not null, journal.AskOnBuildFailure);
 
     /// <summary>
     /// The other groups of a batch that have not reconciled yet were backed up before this journal changed the project.

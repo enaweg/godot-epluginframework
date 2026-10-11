@@ -219,7 +219,9 @@ A staged batch is split by `UpdateGroups.Plan` (pure, tested): plugins connected
 plugins outside the batch, share a group; the implicit dependency on the framework does not join groups, and the
 framework's group goes first. `UpdateApplier.ApplyGroups` moves each later group's staging into its own transaction
 folder, then runs every group as an independent transaction (`UpdateJournal.Group` set; one group keeps `Group` null and
-behaves exactly as before). A grouped journal never asks or keeps on a build failure; it rolls back. `EGlobal` runs all
+behaves exactly as before). A grouped journal never asks or keeps on a build failure; it rolls back. Only an update
+started from a plugin's details (`ApplyUpdatesAsync(askOnBuildFailure: true)`, persisted as `UpdateJournal.AskOnBuildFailure`)
+asks, for the interim and the final build (`UpdateFailureDecision.Policy`); the batch **Update** rolls back. `EGlobal` runs all
 groups synchronously (no frames, so the editor cannot reload an assembly a group built), defers `RequestReload` and
 `Scan` until the last group (`DeferRestarts`/`DeferScans`, also around `ResumeUpdates`), and restarts at most once.
 `UpdateJournals.Read` orders journals by creation and group, so groups resume in the order they were applied; resume
@@ -230,8 +232,11 @@ the recipes of plugins in another active journal or rolled back since the assemb
 
 A group owns one PluginStateStore attempt. Write its local marker before side effects; acknowledge all versions
 once after final build/verification. Rollback restores backups and abandons the marker without changing the
-shared index. Keep-after-final-build-failure retains an `update_kept_build_failed` marker; an acknowledgement
-conflict retains `update_commit_failed`. Retry dispatches these to the update applier. An acknowledged attempt
+shared index. Keep-after-build-failure retains an `update_kept_build_failed` marker; an acknowledgement
+conflict retains `update_commit_failed`. Retry dispatches these to the update applier. A journal kept before reconciling
+(`BeforeReconcile`: interim or plain C# build failed) is not committed by Retry: once it builds, Retry resets the marker
+to `attempt_in_progress`, rebases the other plugins' recipes and `backup-project`, saves `InterimBuilt` and restarts, so
+the update resumes with reconciling and the final build. An acknowledged attempt
 must never be rolled back merely because diagnostic cleanup failed. State-file schema remains unchanged.
 
 C# handoff uses a durable editor restart, with another restart after a managed final/rollback build. The interim

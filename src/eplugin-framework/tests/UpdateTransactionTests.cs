@@ -85,19 +85,68 @@ public class UpdateTransactionTests
         Assertions.AssertInt(_host.Toggles).IsEqual(0);
     }
     [TestCase]
-    public void PlainCSharpFailureCanAskOrKeepButHeadlessAlwaysRollsBack()
+    public void BuildFailureAsksOnlyForAnUpdateFromTheDetailsAndHeadlessOrSelfUpdatesRollBack()
     {
-        Assertions.AssertString(UpdateFailureDecision.Choose(true, false, "keep", false)).IsEqual("rollback");
-        Assertions.AssertString(UpdateFailureDecision.Choose(false, false, "keep", true)).IsEqual("rollback");
-        Assertions.AssertString(UpdateFailureDecision.Choose(true, true, "ask", true)).IsEqual("rollback");
+        Assertions.AssertString(UpdateFailureDecision.Choose(false, "keep", false)).IsEqual("rollback");
+        Assertions.AssertString(UpdateFailureDecision.Choose(true, "ask", true)).IsEqual("rollback");
+        Assertions.AssertString(UpdateFailureDecision.Choose(false, "ask", true)).IsEqual("ask");
+        Assertions.AssertString(UpdateFailureDecision.Choose(false, "keep", true)).IsEqual("keep");
+        // installing all updates never asks, a group of a batch never asks or keeps
+        Assertions.AssertString(UpdateFailureDecision.Policy("ask", false, false)).IsEqual("rollback");
+        Assertions.AssertString(UpdateFailureDecision.Policy("ask", false, true)).IsEqual("ask");
+        Assertions.AssertString(UpdateFailureDecision.Policy("rollback", false, true)).IsEqual("rollback");
+        Assertions.AssertString(UpdateFailureDecision.Policy("keep", false, false)).IsEqual("keep");
+        Assertions.AssertString(UpdateFailureDecision.Policy("keep", true, true)).IsEqual("rollback");
         _host.HasUi = true; _host.Policy = "ask"; _host.Builds.Enqueue(new(1, ["error CS0246"]));
         var package = Package(true);
-        Assertions.AssertObject(_applier.Apply([package.Package], package.Directory)).IsEqual(UpdateOutcome.AwaitingDecision);
+        Assertions.AssertObject(_applier.Apply([package.Package], package.Directory, askOnBuildFailure: true)).IsEqual(UpdateOutcome.AwaitingDecision);
         var journal = UpdateJournal.Load(package.Directory);
+        Assertions.AssertBool(journal.AskOnBuildFailure).IsTrue();
         Assertions.AssertObject(_applier.Keep(journal)).IsEqual(UpdateOutcome.KeptWithErrors);
         Assertions.AssertString(_store.GetShared("plugin")!.Version).IsEqual("0.9.0");
         Assertions.AssertString(_store.GetLocal("plugin")!.Reason).IsEqual("update_kept_build_failed");
         Assertions.AssertBool(Directory.Exists(journal.Backup("plugin"))).IsTrue();
+    }
+    [TestCase]
+    public void InstallingAllUpdatesRollsBackABuildFailureWithoutAsking()
+    {
+        _host.HasUi = true; _host.Policy = "ask"; _host.Builds.Enqueue(new(1, ["error CS0246"]));
+        var package = Package(true);
+        Assertions.AssertObject(_applier.Apply([package.Package], package.Directory)).IsEqual(UpdateOutcome.RolledBack);
+        Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/plugin/plugin.cfg")).Contains("1.0.0")).IsTrue();
+        Assertions.AssertInt(_store.LocalAttempts.Count).IsEqual(0);
+    }
+    [TestCase]
+    public void KeptInterimFailureResumesWithReconcilingOnceRetryBuilds()
+    {
+        _host.Managed = true; _host.HasUi = true; _host.Policy = "ask";
+        _host.OnPrepareJournal = journal => journal.Recipes["plugin"] = new() { Old = new(), Applied = new() };
+        _host.OnReconcile = journal => journal.Recipes["plugin"].Target = new() { Nugets = [new("Needed", "1.0", null)] };
+        _host.Builds.Enqueue(new(1, ["error CS0246"]));
+        var package = Package(true);
+        Assertions.AssertObject(_applier.Apply([package.Package], package.Directory, askOnBuildFailure: true)).IsEqual(UpdateOutcome.AwaitingDecision);
+        var journal = UpdateJournal.Load(package.Directory);
+        Assertions.AssertBool(journal.BeforeReconcile).IsTrue();
+        Assertions.AssertObject(_applier.Keep(journal)).IsEqual(UpdateOutcome.KeptWithErrors);
+        Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/plugin/plugin.cfg")).Contains("2.0.0")).IsTrue();
+        // still broken: the update stays kept
+        _host.Builds.Enqueue(new(1, ["error CS0246"]));
+        Assertions.AssertObject(_applier.Retry(UpdateJournal.Load(package.Directory))).IsEqual(UpdateOutcome.KeptWithErrors);
+        Assertions.AssertString(_store.GetLocal("plugin")!.Reason).IsEqual("update_kept_build_failed");
+        // the user fixed the project in the meantime; a rollback from here on keeps that fix
+        File.WriteAllText(Path.Combine(_root, "Game.csproj"), "fixed project");
+        Assertions.AssertObject(_applier.Retry(UpdateJournal.Load(package.Directory))).IsEqual(UpdateOutcome.AwaitingReload);
+        Assertions.AssertInt(_host.Rebases).IsEqual(1);
+        Assertions.AssertInt(_host.Reloads).IsEqual(1);
+        Assertions.AssertString(_store.GetLocal("plugin")!.Reason).IsEqual("attempt_in_progress");
+        journal = UpdateJournal.Load(package.Directory);
+        Assertions.AssertObject(journal.State).IsEqual(UpdatePhase.InterimBuilt);
+        Assertions.AssertBool(journal.BeforeReconcile).IsFalse();
+        Assertions.AssertString(File.ReadAllText(Path.Combine(package.Directory, "backup-project/Game.csproj"))).IsEqual("fixed project");
+        // after the restart the update finishes as usual: reconcile, final build, commit
+        Assertions.AssertObject(_applier.Resume(journal)).IsEqual(UpdateOutcome.Completed);
+        Assertions.AssertString(_store.GetShared("plugin")!.Version).IsEqual("2.0.0");
+        Assertions.AssertInt(_store.LocalAttempts.Count).IsEqual(0);
     }
     [TestCase]
     public void AcknowledgeRequiresWholeAttemptAndAbandonLeavesSharedUntouched()
@@ -285,7 +334,7 @@ public class UpdateTransactionTests
     private sealed class FakeHost(PluginStateStore store) : IUpdateHost
     {
         public bool Managed; public HashSet<string> ManagedSlugs { get; } = []; public bool HasUi; public string Policy = "rollback"; public int Toggles; public bool MarkerBeforeToggle;
-        public Action? OnScan; public Action? OnBeforeSwap; public Action? OnCloseScenes; public int Reloads; public int BuildCount;
+        public Action? OnScan; public Action? OnBeforeSwap; public Action? OnCloseScenes; public int Reloads; public int BuildCount; public int Rebases;
         public Action<UpdateJournal>? OnPrepareJournal; public Action<UpdatePluginJournal>? OnBridge; public Action<UpdateJournal>? OnReconcile;
         public Queue<BuildOutcome> Builds { get; } = new();
         public bool UiAvailable => HasUi;
@@ -298,6 +347,7 @@ public class UpdateTransactionTests
         public void BeforeSwap(UpdateJournal journal) => OnBeforeSwap?.Invoke();
         public void Bridge(UpdateJournal journal, UpdatePluginJournal plugin) { OnBridge?.Invoke(plugin); journal.Save(); }
         public void Reconcile(UpdateJournal journal, bool rollback) { if (!rollback) OnReconcile?.Invoke(journal); }
+        public void RebaseRecipes(UpdateJournal journal) => Rebases++;
         public void SetPlainEnabled(string slug, bool enabled) { Toggles++; MarkerBeforeToggle |= store.IsBlocked(slug); }
         public void CloseScenes() => OnCloseScenes?.Invoke();
         public void Scan() => OnScan?.Invoke();

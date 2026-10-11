@@ -32,7 +32,8 @@ internal sealed partial class UpdateFailureDialog : AcceptDialog, ISerialization
         _decide = decide;
         EditorWindows.Prepare(this, _signals, this, nameof(QueueWindowIcon));
         GetNode<Label>("%Summary").Text = string.Join("\n", journal.Plugins.Select(p => $"{p.Slug} {p.OldVersion} → {p.NewVersion}")) +
-                                          "\nThe project does not compile with the installed version.";
+                                          "\nThe project does not compile with the installed version." +
+                                          "\nKeep it to fix the errors yourself, then use Retry failed in the ePlugin Manager to finish the update.";
         var logName = journal.Builds.LastOrDefault()?.LogFile;
         var log = logName is not null ? PackageFiles.Inside(journal.Directory, logName) : null;
         _log = log;
