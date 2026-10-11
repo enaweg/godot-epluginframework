@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "lastCompletedAttemptId": "bfdd9fde-e408-4957-99ce-21b2e52da01c",
+  "lastCompletedAttemptId": "677a4f80-3057-4184-aa12-849e2cc700b2",
   "plugins": [
     {
       "slug": "ePlugin",
@@ -10,6 +10,11 @@
     {
       "slug": "gdUnit4",
       "version": "6.2.2",
+      "state": "activated"
+    },
+    {
+      "slug": "sample_addedcode_plugin",
+      "version": "1.0",
       "state": "activated"
     },
     {
