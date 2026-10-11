@@ -79,6 +79,46 @@ public class EGlobalTests
     }
 
     [TestCase]
+    public void PluginRejoiningItsOwnTransitionIsNotBlockedByItsMarker()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "eplugin-rejoin-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new PluginStateStore(Path.Combine(directory, "state.json"), new NullLogger());
+            store.Load();
+            store.TryCreateBaseline([]);
+            store.TryBeginAttempt("other-blocked", "1.0", PersistedPluginState.Activated, out _);
+            var global = (EGlobal)Activator.CreateInstance(typeof(EGlobal), nonPublic: true)!;
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            typeof(EGlobal).GetField("_stateStore", flags)!.SetValue(global, store);
+            var join = typeof(EGlobal).GetMethod("JoinTransition", flags)!;
+            PluginContext Context(string slug) => new(null, CreatePluginBase(), new NullLogger())
+            {
+                Slug = slug, Metadata = new EEditorPluginMetadata { Version = "1.0.0" }, State = EEditorPluginState.Activated
+            };
+            bool Join(PluginContext context) => (bool)join.Invoke(global, [context, PersistedPluginState.Deactivated, false])!;
+            var disabled = Context("disabled");
+            var dependant = Context("dependant");
+
+            // Disabling a plugin with a dependant: the plugin starts the transition, its dependant joins, then the
+            // plugin resumes once the dependant is done.
+            Assertions.AssertBool(Join(disabled)).IsTrue();
+            Assertions.AssertBool(Join(dependant)).IsTrue();
+            Assertions.AssertBool(Join(disabled)).IsTrue();
+            Assertions.AssertString(store.GetLocal("disabled")!.Reason).IsEqual("attempt_in_progress");
+            Assertions.AssertObject(disabled.State).IsEqual(EEditorPluginState.Activated);
+            // A marker of another attempt still blocks.
+            var blocked = Context("other-blocked");
+            Assertions.AssertBool(Join(blocked)).IsFalse();
+            Assertions.AssertObject(blocked.State).IsEqual(EEditorPluginState.Error);
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+        }
+    }
+
+    [TestCase]
     public void BaselineIncludesPlainContextsAndExcludesBlockedAndInvalidVersions()
     {
         var directory = Path.Combine(Path.GetTempPath(), "eplugin-baseline-" + Guid.NewGuid().ToString("N"));

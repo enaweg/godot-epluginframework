@@ -422,18 +422,21 @@ internal sealed partial class EGlobal
             return true;
         }
 
-        if (_stateStore.IsReadOnly || (_stateStore.IsBlocked(context.Slug) && !manualRetry))
+        // A plugin joins again when its operation resumes, e.g. it is disabled once its dependants are done; the
+        // transition's own local marker must not block it then.
+        if (_transition?.Participants.TryGetValue(context, out var joinedTarget) == true)
+        {
+            return joinedTarget == target;
+        }
+
+        var ownMarker = _transition is not null && _stateStore.GetLocal(context.Slug)?.AttemptId == _transition.AttemptId;
+        if (_stateStore.IsReadOnly || (_stateStore.IsBlocked(context.Slug) && !manualRetry && !ownMarker))
         {
             context.Logger?.Error(
                 $"Plugin {context.Slug} is blocked by local state ({DescribeLocalState(context.Slug)}). Use manual retry after recovery.");
             context.State = EEditorPluginState.Error;
             FailTransition("participant_blocked");
             return false;
-        }
-
-        if (_transition?.Participants.TryGetValue(context, out var joinedTarget) == true)
-        {
-            return joinedTarget == target;
         }
 
         var version = context.Metadata?.Version;
