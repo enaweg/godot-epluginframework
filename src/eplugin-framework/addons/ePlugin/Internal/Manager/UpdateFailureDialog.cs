@@ -53,7 +53,7 @@ internal sealed partial class UpdateFailureDialog : AcceptDialog, ISerialization
     private void Choose(bool keep)
     {
         if (_decided) return;
-        _decided = true; Hide(); _decide(keep); QueueFree();
+        _decided = true; Hide(); _decide(keep); EditorWindows.Release(this);
     }
     private void HandleCustomAction(StringName action)
     {

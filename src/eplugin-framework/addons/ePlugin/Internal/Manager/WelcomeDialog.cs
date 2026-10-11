@@ -75,7 +75,7 @@ internal sealed partial class WelcomeDialog : AcceptDialog, ISerializationListen
     private void Finish()
     {
         if (_done) return;
-        _done = true; Hide(); _closed?.Invoke(_welcomes); QueueFree();
+        _done = true; Hide(); _closed?.Invoke(_welcomes); EditorWindows.Release(this);
     }
 
     private void QueueWindowIcon() => CallDeferred(nameof(RefreshWindowIcon));
@@ -86,7 +86,7 @@ internal sealed partial class WelcomeDialog : AcceptDialog, ISerializationListen
     {
         _signals.Dispose();
         if (_done) return;
-        _done = true; Hide(); QueueFree();
+        _done = true; EditorWindows.Release(this);
     }
 
     public void OnAfterDeserialize() { }

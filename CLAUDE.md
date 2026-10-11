@@ -251,7 +251,10 @@ so a stale one can be removed after an assembly reload). When an update restarts
 expires after an hour); the start that requests no further restart wraps `Initialize` in one `ActivationProgress` scope,
 reopens the manager and closes that progress window a few frames later. Every dialog is its own scene (`EPluginManagerDialog.tscn`,
 `LocalSourcesDialog.tscn`, `UpdateFailureDialog.tscn`); scripts only bind `%`-unique nodes and set what a scene cannot
-store (e.g. Tree column titles/widths). Keep layout changes in the scenes. Scene roots set `auto_translate_mode = 2`,
+store (e.g. Tree column titles/widths). Keep layout changes in the scenes. Close dialogs with `EditorWindows.Release`, never `QueueFree` in the frame that hides them: freeing a window from its
+own button, or right after a reload while it has focus and the mouse, crashed Godot 4.7.2 on the next window message
+(use-after-free in its message handling). Release hides it now and frees it 0.25 s later through a native callable.
+Scene roots set `auto_translate_mode = 2`,
 otherwise the editor translates the English UI into its own language. An autowrapping Label needs a
 `custom_minimum_size` width, or the dialog measures it at zero width and pops up taller than the screen. Icons come
 from `EditorIcons`, which renders the SVGs at the editor scale (a headless editor re-imports them at 100%). `EGlobal.CollectPlugins` scans every `res://addons/<slug>/plugin.cfg`; `PluginCatalog.Classify`

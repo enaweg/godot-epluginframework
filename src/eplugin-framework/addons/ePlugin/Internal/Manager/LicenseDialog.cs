@@ -194,7 +194,7 @@ internal sealed partial class LicenseDialog : AcceptDialog, ISerializationListen
     private void Finish()
     {
         if (_done) return;
-        _done = true; Hide(); _finished?.Invoke(_review); QueueFree();
+        _done = true; Hide(); _finished?.Invoke(_review); EditorWindows.Release(this);
     }
 
     private void QueueWindowIcon() => CallDeferred(nameof(RefreshWindowIcon));
@@ -205,7 +205,7 @@ internal sealed partial class LicenseDialog : AcceptDialog, ISerializationListen
     {
         _signals.Dispose();
         if (_done) return;
-        _done = true; Hide(); QueueFree();
+        _done = true; EditorWindows.Release(this);
     }
 
     public void OnAfterDeserialize() { }
