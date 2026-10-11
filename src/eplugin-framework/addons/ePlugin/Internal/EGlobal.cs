@@ -64,6 +64,7 @@ internal sealed partial class EGlobal
     /// <param name="loggerFactory"></param>
     public void Initialize(EPluginPlugin plugin, ILoggerFactory loggerFactory)
     {
+        AssemblyReload.Capture();
         using var progress = _toCheckEnable.Any() ? ActivationProgress.Begin("Activating plugins...") : null;
         _loggerFactory = loggerFactory;
         _ePluginContext = plugin;

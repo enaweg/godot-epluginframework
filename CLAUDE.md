@@ -67,6 +67,15 @@ There is no lint command configured beyond the `.editorconfig` (UTF-8 charset on
 assembly-reload behavior, which wipes static state (including `EGlobal`) without re-running
 `_EnterTree`/`_EnablePlugin`.
 
+Every build of the project assembly (an activation's `TryRebuildSolution`, but also Rider or `dotnet test`) makes
+GodotTools' `HotReloadAssemblyWatcher` reload it in place within half a second, and Godot 4.7.2's in-place reload is
+fragile. Two rules follow. Never hand Godot a C# delegate for later work: use `CallDeferred(MethodName.X, args)` or
+`new Callable(this, MethodName.X)` on a GodotObject (Godot resolves those on the reloaded instance, so guard against a
+stale one), and `EGlobal.Post` from anywhere else, including background threads (`OnEditorThread` uses it; a queue
+drained by `EPluginPlugin._Process` that a reload discards). And do not start a plugin operation while a reload is due:
+`AssemblyReload.IsPending` (GodotTools' own check via reflection, else the build's timestamp) blocks the ePlugin
+Manager's actions until the new assembly is loaded.
+
 `EGlobal` (`addons/ePlugin/Internal/EGlobal.cs`) is an internal singleton owning all plugin state. It is the
 brain of the framework: it tracks a `PluginContext` per managed `EditorPlugin`, drives the
 enable/disable state machine (`EEditorPluginState`: `Created → Activated`/`Deactivated`/`Error`), resolves

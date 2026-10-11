@@ -76,11 +76,22 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private string? _selectedSlug;
     private bool _working;
     private bool _swapping;
+    // A build of this assembly waits for Godot's hot reload; see AssemblyReload. Plugin operations wait for it.
+    private bool _reloadPending;
+    private double _reloadPoll;
+    private const double ReloadPollSeconds = 0.25;
+    private const string ReloadNotice = "Waiting for the editor to load the rebuilt C# code...";
     // Rendering runs after async operations and on theme changes; keep their result until the next update operation.
     private string? _operationNotice;
 
     /// <summary>False once an assembly reload dropped the C# state of this still existing editor node.</summary>
     public bool IsInitialized => _global is not null;
+
+    /// <summary>
+    /// An operation runs, or the editor is about to reload the assembly an earlier one built. Asked directly rather than
+    /// from the last poll, so a click right after an operation finished cannot slip in before the reload.
+    /// </summary>
+    private bool Busy => _working || (_reloadPending = AssemblyReload.IsPending);
 
     public static EPluginManagerDialog Create(EGlobal global, CancellationToken lifetime)
     {
@@ -227,9 +238,10 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         if (selected is not null) { selected.Select(NameColumn); _tree.ScrollToItem(selected); }
         else ShowDetails(null);
         var count = _model.Updates.Count;
-        _status.Text = _operationNotice ?? (count == 0 ? "" : $"{count} update{(count == 1 ? "" : "s")} available · ") +
+        _status.Text = (_operationNotice ?? (count == 0 ? "" : $"{count} update{(count == 1 ? "" : "s")} available · ") +
                        "Last checked: " + (_global.LastUpdateCheck?.ToLocalTime().ToString("g") ?? "never") +
-                       (_global.IsIndexingLocalSources ? " · Indexing local directories..." : "");
+                       (_global.IsIndexingLocalSources ? " · Indexing local directories..." : "")) +
+                       ((_reloadPending = AssemblyReload.IsPending) ? " · " + ReloadNotice : "");
         _status.TooltipText = _status.Text;
         Buttons();
     }
@@ -399,7 +411,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         if (row is null || option is null) { _installVersion.Disabled = true; _installVersion.Text = "Update"; ShowVersionHint(_versionNote); return; }
         var blocked = PluginManagerViewModel.VersionChangeBlocked(row, option);
         _installVersion.Text = option.Action;
-        _installVersion.Disabled = blocked is not null || _working || _staged is not null;
+        _installVersion.Disabled = blocked is not null || Busy || _staged is not null;
         _installVersion.TooltipText = blocked ?? (option.IsReinstall
             ? $"Install version {option.Version} of {row.Plugin.Name} again, replacing its files."
             : $"Install version {option.Version} of {row.Plugin.Name}.");
@@ -412,7 +424,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     {
         var row = _selectedSlug is null ? null : _model.Find(_selectedSlug);
         var option = SelectedVersion();
-        if (row is null || option?.Candidate is null || PluginManagerViewModel.VersionChangeBlocked(row, option) is not null || _working) return;
+        if (row is null || option?.Candidate is null || PluginManagerViewModel.VersionChangeBlocked(row, option) is not null || Busy) return;
         // The listed candidate was built when the list was loaded; the installed version may have changed since.
         _pendingVersion = option.Candidate with { InstalledVersion = row.Plugin.Version };
         _pendingDowngrade = option.IsDowngrade; _pendingReinstall = option.IsReinstall;
@@ -431,13 +443,13 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private void Buttons()
     {
         GetOkButton().Text = _staged is null ? _model.OkText : _versionInstall ? "Install reviewed version" : "Install reviewed updates";
-        GetOkButton().Disabled = _working || !CanProceed;
+        GetOkButton().Disabled = Busy || !CanProceed;
         GetOkButton().Visible = _model.Updates.Count > 0 || _staged is not null;
         GetCancelButton().Disabled = _swapping;
         GetCancelButton().Text = _working && !_swapping ? "Cancel" : "Close";
         _trust.Visible = NeedsTrust;
-        _check.Disabled = _working || _staged is not null;
-        _retry.Disabled = _working || _staged is not null || !_model.CanRetry;
+        _check.Disabled = Busy || _staged is not null;
+        _retry.Disabled = Busy || _staged is not null || !_model.CanRetry;
         VersionButtons();
     }
 
@@ -451,7 +463,14 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     {
         var item = _tree.GetEdited();
         var row = SlugOf(item) is { } slug ? _model.Find(slug) : null;
-        if (item is null || row is null || _working || _staged is not null) return;
+        if (item is null || row is null) return;
+        if (Busy || _staged is not null)
+        {
+            // Undo the click; the tree is rebuilt outside its own edit signal.
+            if (_reloadPending) _status.Text = ReloadNotice;
+            CallDeferred(MethodName.Render);
+            return;
+        }
         if (_tree.GetEditedColumn() == VersionColumn && row.Update is { } update)
         {
             update.Selected = item.IsChecked(VersionColumn);
@@ -470,8 +489,9 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             // inside the Tree's own edit signal.
             _working = true; Buttons();
             _status.Text = (enable ? "Enabling " : "Disabling ") + row.Plugin.Name + "...";
-            if (enable) Callable.From(() => EnableAfterLicenses(row.Plugin.Slug, row.Plugin.Name)).CallDeferred();
-            else Callable.From(() => SetPluginEnabled(row.Plugin.Slug, row.Plugin.Name, false)).CallDeferred();
+            // Method calls rather than delegates, which Godot cannot carry over an assembly reload.
+            if (enable) CallDeferred(MethodName.EnableAfterLicenses, row.Plugin.Slug, row.Plugin.Name);
+            else CallDeferred(MethodName.SetPluginEnabled, row.Plugin.Slug, row.Plugin.Name, false);
         }
     }
 
@@ -481,6 +501,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     /// </summary>
     private void EnableAfterLicenses(string slug, string name)
     {
+        // An assembly reload replaced this dialog since the click; its successor shows the current state.
+        if (!IsInitialized) return;
         LicenseReview? review;
         try { review = _global.ReviewActivationLicenses(slug, name); }
         catch (Exception ex)
@@ -495,7 +517,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         LicenseDialog.Create(review, decided =>
         {
             _global.RecordLicenses(decided);
-            if (decided.Approved.Any()) { Callable.From(() => SetPluginEnabled(slug, name, true)).CallDeferred(); return; }
+            if (decided.Approved.Any()) { CallDeferred(MethodName.SetPluginEnabled, slug, name, true); return; }
             _working = false;
             if (!GodotObject.IsInstanceValid(this) || !IsInsideTree()) return;
             Refresh();
@@ -513,6 +535,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
 
     private void SetPluginEnabled(string slug, string name, bool enable)
     {
+        if (!IsInitialized) return;
         // Also covers plain plugins; an ePlugin's own activation shares this window.
         using var progress = ActivationProgress.Begin((enable ? "Enabling " : "Disabling ") + name + "...");
         try { EditorInterface.Singleton.SetPluginEnabled(slug, enable); }
@@ -530,7 +553,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         // The framework removes this dialog while it is disabled.
         Hide();
         var slug = _model.Plugins.First(p => p.Plugin.Kind == PluginKind.Framework).Plugin.Slug;
-        Callable.From(() => EditorInterface.Singleton.SetPluginEnabled(slug, false)).CallDeferred();
+        EditorInterface.Singleton.CallDeferred(EditorInterface.MethodName.SetPluginEnabled, slug, false);
     }
 
     private void OpenRelease()
@@ -564,14 +587,14 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
 
     private void RetryFailed()
     {
-        if (_working || _staged is not null) return;
+        if (Busy || _staged is not null) return;
         using (ActivationProgress.Begin("Retrying failed plugins...")) _global.RetryFailedPlugins();
         if (GodotObject.IsInstanceValid(this) && IsInsideTree()) Refresh();
     }
 
     private async void CheckNow()
     {
-        if (_working) return;
+        if (Busy) return;
         _operationNotice = null;
         ClearStaging(); _remoteVersions.Clear(); _remoteVersionErrors.Clear();
         _working = true; Buttons(); _status.Text = "Checking for updates...";
@@ -614,7 +637,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     /// </summary>
     private async void Install(IReadOnlyList<UpdateCandidate> batch, bool versionInstall, bool allowDowngrade, bool allowReinstall)
     {
-        if (_working || batch.Count == 0) return;
+        if (Busy || batch.Count == 0) return;
         _operationNotice = null;
         _batch = batch; _versionInstall = versionInstall; _allowDowngrade = allowDowngrade; _allowReinstall = allowReinstall;
         _working = true; _cancel?.Dispose(); _cancel = CancellationTokenSource.CreateLinkedTokenSource(_lifetime);
@@ -631,12 +654,12 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
                 {
                     // Reported from the download thread; a report arriving after the scope ended must not relabel another operation.
                     var active = true; var shown = -1;
-                    var relay = new InlineProgress(value => Callable.From(() =>
+                    var relay = new InlineProgress(value => EGlobal.Post(() =>
                     {
                         var percent = (int)(value * 100);
                         if (!active || percent == shown) return;
                         shown = percent; ActivationProgress.SetText($"{text} {percent}%");
-                    }).CallDeferred());
+                    }));
                     try { staged = await _global.StageUpdatesAsync(batch, relay, _cancel.Token, allowDowngrade, allowReinstall); }
                     finally { active = false; }
                 }
@@ -725,6 +748,19 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private static Color UpdateColor() => ThemeColor("success_color", "Editor", new Color(0.45f, 0.95f, 0.5f));
     private static Color ErrorColor() => ThemeColor("error_color", "Editor", new Color(1f, 0.47f, 0.42f));
     private static Color DisabledColor() => ThemeColor("font_disabled_color", "Button", new Color(0.5f, 0.5f, 0.5f));
+
+    public override void _Process(double delta)
+    {
+        base._Process(delta);
+        if (!IsInitialized || !Visible || (_reloadPoll += delta) < ReloadPollSeconds) return;
+        _reloadPoll = 0;
+        var pending = AssemblyReload.IsPending;
+        if (pending == _reloadPending) return;
+        _reloadPending = pending;
+        // Not while staging or installing: those render their own progress and refresh when done.
+        if (_working || _staged is not null) Buttons();
+        else Render();
+    }
 
     public override void _EnterTree()
     {

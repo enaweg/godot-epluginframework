@@ -67,6 +67,8 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
             AddManagerUi();
         }
 
+        EGlobal.RunPosted();
+
         ReopenManager();
         ShowLicenseReview();
         ShowWelcomes();
@@ -186,7 +188,8 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
     {
         // A C# assembly reload resets this script's fields while the native menu item and toolbar button survive.
         RemoveToolMenuItem(ManagerMenuName);
-        AddToolMenuItem(ManagerMenuName, Callable.From(OpenManager));
+        // A method callable rather than a delegate: Godot resolves it on the script instance an assembly reload creates.
+        AddToolMenuItem(ManagerMenuName, new Callable(this, MethodName.OpenManager));
         RemoveManagerButton();
         _managerButton = new Button
         {
@@ -201,7 +204,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         Engine.Singleton.SetMeta(ManagerButtonMeta, _managerButton.GetInstanceId());
         _managerUiAdded = true;
         // Toggling a plugin in the manager may rebuild and reload the assembly while the dialog is open.
-        if (RemoveStaleManagerDialog()) Callable.From(OpenManager).CallDeferred();
+        if (RemoveStaleManagerDialog()) CallDeferred(MethodName.OpenManager);
     }
 
     private void RefreshManagerIcon()

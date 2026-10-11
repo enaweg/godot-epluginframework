@@ -148,11 +148,11 @@ internal sealed partial class EGlobal
         if (result == UpdateOutcome.AwaitingDecision)
         {
             var journal = UpdateJournal.Load(directory);
-            Callable.From(() =>
+            Post(() =>
             {
                 if (UpdateDecisionNeeded is null) Applier().Rollback(journal, "No build-failure dialog is available.");
                 else UpdateDecisionNeeded(journal);
-            }).CallDeferred();
+            });
         }
         if (result == UpdateOutcome.RolledBack)
         {
