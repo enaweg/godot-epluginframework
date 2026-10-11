@@ -26,6 +26,7 @@ internal static class ActivationProgress
     private static int _depth;
     private static IProgressHelper? _helper;
     private static IDisposable? _settingsDialog;
+    private static bool _closedForUpdate;
 
     /// <summary>Starts a helper, or returns null when none can run. Tests replace it with a fake.</summary>
     internal static Func<IProgressHelper?> Launch { get; set; } = LaunchDefault;
@@ -98,7 +99,28 @@ internal static class ActivationProgress
         }
     }
 
-    internal static void ForceCloseForUpdate() => Stop();
+    /// <summary>The helper runs from the framework folder, which a self-update is about to replace.</summary>
+    internal static void ForceCloseForUpdate()
+    {
+        Stop();
+        _closedForUpdate = _depth > 0;
+    }
+
+    /// <summary>
+    /// Shows the window again for the rest of an operation whose self-update closed it, e.g. the remaining groups of an
+    /// update batch. The helper then starts from the framework folder now in place.
+    /// </summary>
+    internal static void ReopenAfterUpdate(string text)
+    {
+        if (!_closedForUpdate || _depth == 0)
+        {
+            return;
+        }
+
+        _closedForUpdate = false;
+        Start();
+        SetText(text);
+    }
 
     private static void Stop()
     {
@@ -129,6 +151,7 @@ internal static class ActivationProgress
             if (--_depth == 0)
             {
                 Stop();
+                _closedForUpdate = false;
                 var settingsDialog = _settingsDialog;
                 _settingsDialog = null;
                 try
