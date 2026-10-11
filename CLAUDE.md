@@ -192,7 +192,20 @@ operations without intermediate builds/refreshes, tracks pending operations dura
 dependencies, and protects shared NuGets. `ICheckedDotnetCli.TryBuild` in both CLI implementations returns exit
 status/output and forces non-incremental compilation, including rollback (old timestamps cannot reuse new code).
 
-A batch owns one PluginStateStore attempt. Write its local marker before side effects; acknowledge all versions
+A staged batch is split by `UpdateGroups.Plan` (pure, tested): plugins connected by hard dependencies, also through
+plugins outside the batch, share a group; the implicit dependency on the framework does not join groups, and the
+framework's group goes first. `UpdateApplier.ApplyGroups` moves each later group's staging into its own transaction
+folder, then runs every group as an independent transaction (`UpdateJournal.Group` set; one group keeps `Group` null and
+behaves exactly as before). A grouped journal never asks or keeps on a build failure; it rolls back. `EGlobal` runs all
+groups synchronously (no frames, so the editor cannot reload an assembly a group built), defers `RequestReload` and
+`Scan` until the last group (`DeferRestarts`/`DeferScans`, also around `ResumeUpdates`), and restarts at most once.
+`UpdateJournals.Read` orders journals by creation and group, so groups resume in the order they were applied; resume
+reloads each journal because an earlier group may have changed it. When a journal commits or rolls back,
+`RebasePending` refreshes the `backup-project` of every journal that has not reconciled yet and, on commit, its recipe
+baselines for plugins it does not update, so a later rollback keeps the earlier group's changes. Reconcile leaves alone
+the recipes of plugins in another active journal or rolled back since the assembly was loaded (`UntouchedRecipes`).
+
+A group owns one PluginStateStore attempt. Write its local marker before side effects; acknowledge all versions
 once after final build/verification. Rollback restores backups and abandons the marker without changing the
 shared index. Keep-after-final-build-failure retains an `update_kept_build_failed` marker; an acknowledgement
 conflict retains `update_commit_failed`. Retry dispatches these to the update applier. An acknowledged attempt
