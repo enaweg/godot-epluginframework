@@ -7,7 +7,8 @@ using System.Text.Json;
 
 namespace Enaweg.Plugin.Internal.Update;
 
-internal sealed record AppliedRevision(string Source, string? Revision, DateTimeOffset AppliedUtc);
+/// <param name="Version">The plugin.cfg version the revision installed; null in caches written before it was recorded.</param>
+internal sealed record AppliedRevision(string Source, string? Revision, DateTimeOffset AppliedUtc, string? Version = null);
 internal sealed record FailedUpdate(string Version, string Reason, DateTimeOffset Utc);
 internal sealed class UpdateCache
 {

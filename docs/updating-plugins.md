@@ -122,7 +122,7 @@ Versions are listed from GitHub/GitLab releases (up to 100) or semantic tags of 
 | Warning | Reason |
 |---|---|
 | Package version differs from the announced version | The `version` in the package's `plugin.cfg` is not the version of the release or tag that offered it. |
-| Release announced as newer, but not inside | The release or tag offers a newer version, but its `plugin.cfg` still names the installed version (or an older one, except for ePlugin Framework), usually because its author forgot to raise it. Confirming installs it anyway: the files are replaced and the installed version stays what `plugin.cfg` says. |
+| Release announced as newer, but not inside | The release or tag offers a newer version, but its `plugin.cfg` still names the installed version (or an older one, except for ePlugin Framework), usually because its author forgot to raise it. Confirming installs it anyway: the files are replaced and the installed version stays what `plugin.cfg` says. That release is not offered again afterwards. |
 | Plugin name changed | The package's `plugin.cfg` has a different `name`. |
 | Update source changed | The package's `plugin.cfg` has a different `update_url`, or none. A different host requires the trust checkbox. |
 | Plugin entry-point language changed | The `script` changed language, for example from `.gd` to `.cs`. |

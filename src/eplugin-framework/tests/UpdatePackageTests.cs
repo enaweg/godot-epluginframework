@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -117,6 +118,21 @@ public class UpdatePackageTests
             Assertions.AssertBool(older.IsValid).IsEqual(slug == "plugin");
             Assertions.AssertBool(older.Findings.Any(f => f.Code == "R6" && f.Severity == (slug == "plugin" ? FindingSeverity.Warning : FindingSeverity.Error))).IsTrue();
         }
+    }
+
+    [TestCase]
+    public void InstalledReleaseIsNotOfferedAgain()
+    {
+        var release = new UpdateCandidate("plugin", "Plugin", "2.0.0", "2.0.1", "https://example.org/releases", null, "v2.0.1", new ZipPackageRef("https://example.org/plugin.zip", "plugin"));
+        var installed = new Dictionary<string, AppliedRevision> { ["plugin"] = new("https://example.org/releases", "v2.0.1", DateTimeOffset.UtcNow, "2.0.0") };
+        Assertions.AssertInt(UpdateService.WithoutInstalled([release], installed).Count).IsEqual(0);
+        // another release, another source, or files changed since: offered
+        Assertions.AssertInt(UpdateService.WithoutInstalled([release with { ResolvedRevision = "v2.0.2" }], installed).Count).IsEqual(1);
+        Assertions.AssertInt(UpdateService.WithoutInstalled([release with { SourceUrl = "https://example.org/other" }], installed).Count).IsEqual(1);
+        Assertions.AssertInt(UpdateService.WithoutInstalled([release with { InstalledVersion = "1.0.0" }], installed).Count).IsEqual(1);
+        // caches written before the version was recorded never hide an update
+        installed["plugin"] = installed["plugin"] with { Version = null };
+        Assertions.AssertInt(UpdateService.WithoutInstalled([release], installed).Count).IsEqual(1);
     }
 
     [TestCase]

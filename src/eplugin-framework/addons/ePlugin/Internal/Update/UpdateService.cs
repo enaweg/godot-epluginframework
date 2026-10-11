@@ -63,6 +63,14 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
             .OfType<UpdateCandidate>().OrderBy(c => c.Slug, StringComparer.Ordinal).ToArray();
     }
 
+    /// <summary>
+    /// Leaves out the releases that are installed already. That matters for a release announced as a newer version whose
+    /// plugin.cfg did not raise it: after it was installed, the installed version is still lower than the announced one.
+    /// </summary>
+    public static IReadOnlyList<UpdateCandidate> WithoutInstalled(IEnumerable<UpdateCandidate> candidates, IReadOnlyDictionary<string, AppliedRevision>? revisions) =>
+        candidates.Where(c => !(c.ResolvedRevision is { } revision && revisions?.GetValueOrDefault(c.Slug) is { } applied &&
+                                applied.Source == c.Origin && applied.Revision == revision && applied.Version == c.InstalledVersion)).ToArray();
+
     /// <summary>The highest version per plugin; a local package wins over a download of the same version.</summary>
     public static IReadOnlyList<UpdateCandidate> Merge(IEnumerable<UpdateCandidate> remote, IEnumerable<UpdateCandidate> local) =>
         local.Concat(remote).GroupBy(c => c.Slug, StringComparer.Ordinal)
