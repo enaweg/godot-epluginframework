@@ -205,7 +205,9 @@ the repository at the latest release or version tag. A slug claimed by several r
 stars. Release ZIPs the updater refuses (no or several plugin roots, GDExtension) leave the add-on out. Entries are not
 installed or validated in advance. Add-ons the ranking misses go in `tools/extra_addons.txt` (`slug;url` or `url` per
 line, any git host), which `build_godot_addons.cs` always lists regardless of stars and activity.
-Checks use installed metadata and a 20-hour local cache, never the shared working-version index. Every apply
+Checks use installed metadata and a 20-hour local cache, never the shared working-version index. A release announced as
+newer whose `plugin.cfg` is not (an author forgot to raise it) is an R6 review warning rather than a refusal; once it is
+installed, `UpdateService.WithoutInstalled` hides it using the revision and version `Commit` records in `UpdateCache.Revisions`. Every apply
 requires dialog confirmation. Stage and validate the whole batch before touching addons (`PackageFetcher` leaves a package
 that cannot be fetched or is refused out of the batch, as a `RefusedPackage`, and fails only when all are refused), then save and close all
 open scenes (`IUpdateHost.CloseScenes`; `close_scene` exists only from Godot 4.5) before the swap. Managed plugins are

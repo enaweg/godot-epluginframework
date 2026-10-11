@@ -17,8 +17,11 @@ internal sealed partial class EGlobal
     private UpdateService? _updateService;
     private bool _checkingUpdates;
     private IReadOnlyList<UpdateCandidate> _remoteUpdates = [];
-    /// <summary>The highest known version per plugin, from its update_url or from the local plugin directories.</summary>
-    public IReadOnlyList<UpdateCandidate> PendingUpdates => UpdateService.Merge(_remoteUpdates, _localUpdates);
+    /// <summary>
+    /// The highest known version per plugin, from its update_url or from the local plugin directories, without a release
+    /// that is installed already.
+    /// </summary>
+    public IReadOnlyList<UpdateCandidate> PendingUpdates => UpdateService.Merge(UpdateService.WithoutInstalled(_remoteUpdates, _updateCache?.State.Revisions), _localUpdates);
     internal DateTimeOffset? LastUpdateCheck => _updateCache?.State.LastCheckUtc;
     internal UpdateCache? UpdateCache => _updateCache?.State;
     private static bool AllowPrerelease => ProjectSettings.GetSetting("eplugin/updates/allow_prerelease", false).AsBool();

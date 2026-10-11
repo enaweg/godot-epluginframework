@@ -54,8 +54,19 @@ internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules 
             Add("R5", FindingSeverity.Error, "Staged addon slug differs from the installed slug.");
         var validNew = SemVer.TryParse(metadata.GetValueOrDefault("version"), out var version);
         var versionProblem = $"Package plugin.cfg version '{metadata.GetValueOrDefault("version") ?? "missing"}' must be newer than installed version '{installed.InstalledVersion}' (announced: '{candidate.NewVersion}').";
-        if (!validNew || !SemVer.TryParse(installed.InstalledVersion, out var old))
+        var validAnnounced = SemVer.TryParse(candidate.NewVersion, out var announced);
+        var validOld = SemVer.TryParse(installed.InstalledVersion, out var old);
+        // A release announced as an update whose plugin.cfg still names the installed or an older version, usually because
+        // its author forgot to raise it. It is installed only after the review confirms it; an older framework never is,
+        // because it cannot finish or recover the update transaction that installs it.
+        var mislabeled = validNew && validOld && validAnnounced && announced.CompareTo(old) > 0 && version.CompareTo(old) <= 0 &&
+                         !context.AllowReinstall && !context.AllowDowngrade && (version.CompareTo(old) == 0 || installed.Slug != "ePlugin");
+        if (!validNew || !validOld)
             Add("R6", FindingSeverity.Error, versionProblem);
+        else if (mislabeled)
+            Add("R6", FindingSeverity.Warning, version.CompareTo(old) == 0
+                ? $"The release is announced as version {candidate.NewVersion}, but its plugin.cfg still names the installed version {version}. Installing it replaces the installed files, and the version stays {version}."
+                : $"The release is announced as version {candidate.NewVersion}, but its plugin.cfg names version {version}, older than the installed {installed.InstalledVersion}. Installing it downgrades the plugin to {version}.");
         else if (version.CompareTo(old) == 0)
         {
             if (!context.AllowReinstall) Add("R6", FindingSeverity.Error, versionProblem);
@@ -67,7 +78,8 @@ internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules 
             if (!context.AllowDowngrade || installed.Slug == "ePlugin") Add("R6", FindingSeverity.Error, versionProblem);
             else Add("R6", FindingSeverity.Info, $"Downgrade from {installed.InstalledVersion} to {version}.");
         }
-        if (validNew && SemVer.TryParse(candidate.NewVersion, out var announced) && version.CompareTo(announced) != 0)
+        // The R6 warning of a mislabeled release already says how the versions differ.
+        if (validNew && validAnnounced && version.CompareTo(announced) != 0 && !mislabeled)
             Add("R7", FindingSeverity.Warning, "Package version differs from the announced version.");
         if (metadata.GetValueOrDefault("name") != installed.Name) Add("R8", FindingSeverity.Warning, "Plugin name changed.");
         var newUrl = metadata.GetValueOrDefault("update_url");

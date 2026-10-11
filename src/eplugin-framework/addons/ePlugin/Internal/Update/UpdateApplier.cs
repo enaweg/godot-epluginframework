@@ -263,7 +263,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         {
             foreach (var plugin in journal.Plugins)
             {
-                cache.State.Revisions[plugin.Slug] = new(plugin.SourceUrl, plugin.Revision, DateTimeOffset.UtcNow);
+                cache.State.Revisions[plugin.Slug] = new(plugin.SourceUrl, plugin.Revision, DateTimeOffset.UtcNow, plugin.NewVersion);
                 cache.State.Results.RemoveAll(c => c.Slug == plugin.Slug);
                 host.Log(plugin.OldVersion == plugin.NewVersion ? $"Reinstalled {plugin.Slug} {plugin.NewVersion}."
                     : $"Updated {plugin.Slug} {plugin.OldVersion} -> {plugin.NewVersion}.");

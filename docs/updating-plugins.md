@@ -122,6 +122,7 @@ Versions are listed from GitHub/GitLab releases (up to 100) or semantic tags of 
 | Warning | Reason |
 |---|---|
 | Package version differs from the announced version | The `version` in the package's `plugin.cfg` is not the version of the release or tag that offered it. |
+| Release announced as newer, but not inside | The release or tag offers a newer version, but its `plugin.cfg` still names the installed version (or an older one, except for ePlugin Framework), usually because its author forgot to raise it. Confirming installs it anyway: the files are replaced and the installed version stays what `plugin.cfg` says. That release is not offered again afterwards. |
 | Plugin name changed | The package's `plugin.cfg` has a different `name`. |
 | Update source changed | The package's `plugin.cfg` has a different `update_url`, or none. A different host requires the trust checkbox. |
 | Plugin entry-point language changed | The `script` changed language, for example from `.gd` to `.cs`. |
@@ -131,12 +132,12 @@ An update with an error cannot be selected or installed. These are refused:
 
 - a package without a readable `plugin.cfg`, without `name`, `version` or `script`, or whose script is missing or outside the addon
 - a package for a different addon slug
-- a version that is not newer than the installed one. The **Version** selector can downgrade, except ePlugin Framework, and reinstall the installed version.
+- a version that is not newer than the installed one, unless the release announced a newer version (see the warning above). The **Version** selector can downgrade, except ePlugin Framework, and reinstall the installed version.
 - a package or installed plugin with `.gdextension` files, a forbidden file, or a package over the size limits (see [Publish an updatable release](#publish-an-updatable-release))
 - a version rejected by a hard dependency constraint of another enabled plugin
 - a plugin whose update is changed or blocked: its `update_url` changed since the check, it is no longer enabled, or an earlier attempt needs **Retry failed** first
 
-Some of these can only be found once the package is downloaded, for example a release whose `plugin.cfg` still names the installed version. Such a package is left out of the batch and its details show why; the other selected updates are still installed, and the manager lists the skipped package after them. Only when every package of the batch is refused is nothing installed.
+Some of these can only be found once the package is downloaded, for example a release whose plugin script is missing. Such a package is left out of the batch and its details show why; the other selected updates are still installed, and the manager lists the skipped package after them. Only when every package of the batch is refused is nothing installed.
 
 Shown without stopping: an optional recipe of another plugin that no longer matches the new version (it stays installed until that plugin is toggled), and the last working version recorded in `addons/eplugin-state.json` when it differs from the installed one.
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -86,7 +87,52 @@ public class UpdatePackageTests
         File.Delete(Path.Combine(stage, "native.gdextension"));
         File.WriteAllText(Path.Combine(stage, "plugin.cfg"), Config("1.0.0").Replace("plugin.gd", "../outside.gd"));
         var refused = validator.Validate(new(target with { IsBlocked = true }, candidate, stage));
-        foreach (var rule in new[] { "R4", "R6", "R17" }) Assertions.AssertBool(refused.Findings.Any(f => f.Code == rule && f.Severity == FindingSeverity.Error)).IsTrue();
+        foreach (var rule in new[] { "R4", "R17" }) Assertions.AssertBool(refused.Findings.Any(f => f.Code == rule && f.Severity == FindingSeverity.Error)).IsTrue();
+        // announced as 2.0.0 but still 1.0.0 inside: reviewed rather than refused
+        Assertions.AssertBool(refused.Findings.Any(f => f.Code == "R6" && f.Severity == FindingSeverity.Warning)).IsTrue();
+    }
+
+    [TestCase]
+    public void ReleaseAnnouncedAsNewerButNotRaisedInsideNeedsReview()
+    {
+        var installed = Path.Combine(_root, "installed");
+        Directory.CreateDirectory(installed);
+        File.WriteAllText(Path.Combine(installed, "plugin.cfg"), Config("2.0.0"));
+        foreach (var slug in new[] { "plugin", "ePlugin" })
+        {
+            var stage = Path.Combine(_root, slug);
+            Directory.CreateDirectory(stage);
+            File.WriteAllText(Path.Combine(stage, "plugin.gd"), "extends EditorPlugin");
+            var candidate = new UpdateCandidate(slug, "Plugin", "2.0.0", "2.0.1", "https://example.org/releases", null, "v2.0.1", new ZipPackageRef("https://example.org/plugin.zip", slug));
+            var target = new PluginUpdateTarget(slug, "Plugin", "2.0.0", candidate.SourceUrl, installed);
+            var validator = new AddonPackageValidator();
+            // the author forgot to raise plugin.cfg: installed after the review confirms it
+            File.WriteAllText(Path.Combine(stage, "plugin.cfg"), Config("2.0.0"));
+            var same = validator.Validate(new(target, candidate, stage));
+            Assertions.AssertBool(same.IsValid).IsTrue();
+            Assertions.AssertBool(same.Findings.Any(f => f.Code == "R6" && f.Severity == FindingSeverity.Warning)).IsTrue();
+            Assertions.AssertBool(same.Findings.Any(f => f.Code == "R7")).IsFalse();
+            // older inside: a confirmed downgrade, never for the framework
+            File.WriteAllText(Path.Combine(stage, "plugin.cfg"), Config("1.0.0"));
+            var older = validator.Validate(new(target, candidate, stage));
+            Assertions.AssertBool(older.IsValid).IsEqual(slug == "plugin");
+            Assertions.AssertBool(older.Findings.Any(f => f.Code == "R6" && f.Severity == (slug == "plugin" ? FindingSeverity.Warning : FindingSeverity.Error))).IsTrue();
+        }
+    }
+
+    [TestCase]
+    public void InstalledReleaseIsNotOfferedAgain()
+    {
+        var release = new UpdateCandidate("plugin", "Plugin", "2.0.0", "2.0.1", "https://example.org/releases", null, "v2.0.1", new ZipPackageRef("https://example.org/plugin.zip", "plugin"));
+        var installed = new Dictionary<string, AppliedRevision> { ["plugin"] = new("https://example.org/releases", "v2.0.1", DateTimeOffset.UtcNow, "2.0.0") };
+        Assertions.AssertInt(UpdateService.WithoutInstalled([release], installed).Count).IsEqual(0);
+        // another release, another source, or files changed since: offered
+        Assertions.AssertInt(UpdateService.WithoutInstalled([release with { ResolvedRevision = "v2.0.2" }], installed).Count).IsEqual(1);
+        Assertions.AssertInt(UpdateService.WithoutInstalled([release with { SourceUrl = "https://example.org/other" }], installed).Count).IsEqual(1);
+        Assertions.AssertInt(UpdateService.WithoutInstalled([release with { InstalledVersion = "1.0.0" }], installed).Count).IsEqual(1);
+        // caches written before the version was recorded never hide an update
+        installed["plugin"] = installed["plugin"] with { Version = null };
+        Assertions.AssertInt(UpdateService.WithoutInstalled([release], installed).Count).IsEqual(1);
     }
 
     [TestCase]
@@ -140,10 +186,12 @@ public class UpdatePackageTests
     }
 
     [TestCase]
-    public async Task MisversionedPackageIsRefusedAloneAndTheRestOfTheBatchIsStaged()
+    public async Task RefusedPackageIsLeftOutAloneAndTheRestOfTheBatchIsStaged()
     {
-        var candidates = new[] { (Slug: "first", Installed: "1.0.0", Announced: "2.0.0", Actual: "2.0.0"),
-            (Slug: "virtual_joystick_cf", Installed: "2.0.0", Announced: "2.0.1", Actual: "2.0.0") };
+        var candidates = new[] { (Slug: "first", Installed: "1.0.0", Announced: "2.0.0", Actual: "2.0.0", Script: true),
+            (Slug: "broken", Installed: "1.0.0", Announced: "2.0.0", Actual: "2.0.0", Script: false),
+            // announced as 2.0.1 but plugin.cfg still says 2.0.0: staged for review, not refused
+            (Slug: "virtual_joystick_cf", Installed: "2.0.0", Announced: "2.0.1", Actual: "2.0.0", Script: true) };
         var targets = candidates.Select(c =>
         {
             var installed = Path.Combine(_root, "addons", c.Slug);
@@ -152,19 +200,19 @@ public class UpdatePackageTests
             return new PluginUpdateTarget(c.Slug, "Plugin", c.Installed, "https://example.org/releases", installed);
         }).ToArray();
         var packages = candidates.Select(c => new UpdateCandidate(c.Slug, "Plugin", c.Installed, c.Announced, null, null, null,
-            new LocalZipPackageRef(Zip(($"{c.Slug}/plugin.cfg", Config(c.Actual)), ($"{c.Slug}/plugin.gd", "extends EditorPlugin"))))).ToArray();
+            new LocalZipPackageRef(c.Script ? Zip(($"{c.Slug}/plugin.cfg", Config(c.Actual)), ($"{c.Slug}/plugin.gd", "extends EditorPlugin"))
+                : Zip(($"{c.Slug}/plugin.cfg", Config(c.Actual)), ($"{c.Slug}/readme.txt", "no script"))))).ToArray();
         var transaction = Path.Combine(_root, "transaction");
         var staged = await new PackageFetcher(new(), new GitRunner()).FetchAsync(packages, targets, transaction, null, CancellationToken.None);
-        Assertions.AssertString(staged.Packages.Single().Candidate.Slug).IsEqual("first");
-        Assertions.AssertBool(File.Exists(Path.Combine(staged.Packages.Single().StagingDir, "plugin.cfg"))).IsTrue();
+        Assertions.AssertThat(staged.Packages.Select(p => p.Candidate.Slug).ToArray()).ContainsExactly("first", "virtual_joystick_cf");
+        Assertions.AssertBool(File.Exists(Path.Combine(staged.Packages[0].StagingDir, "plugin.cfg"))).IsTrue();
+        Assertions.AssertBool(staged.Packages[1].Findings.Any(f => f.Code == "R6" && f.Severity == FindingSeverity.Warning)).IsTrue();
         var refused = staged.Refused.Single();
-        Assertions.AssertString(refused.Candidate.Slug).IsEqual("virtual_joystick_cf");
-        Assertions.AssertString(refused.Reason).Contains("virtual_joystick_cf");
-        Assertions.AssertString(refused.Reason).Contains("plugin.cfg version '2.0.0'");
-        Assertions.AssertString(refused.Reason).Contains("installed version '2.0.0'");
-        Assertions.AssertString(refused.Reason).Contains("announced: '2.0.1'");
+        Assertions.AssertString(refused.Candidate.Slug).IsEqual("broken");
+        Assertions.AssertString(refused.Reason).Contains("'broken' was refused");
+        Assertions.AssertString(refused.Reason).Contains("Plugin script is missing.");
         // Nothing of the refused package stays staged, so it cannot end up in a group.
-        Assertions.AssertBool(Directory.Exists(Path.Combine(transaction, "staging", "virtual_joystick_cf"))).IsFalse();
+        Assertions.AssertBool(Directory.Exists(Path.Combine(transaction, "staging", "broken"))).IsFalse();
         foreach (var target in targets)
             Assertions.AssertString(File.ReadAllText(Path.Combine(target.Directory, "plugin.cfg"))).IsEqual(Config(target.InstalledVersion));
 
@@ -180,7 +228,7 @@ public class UpdatePackageTests
         {
             Assertions.AssertString(ex.Message).Contains("'first'");
             Assertions.AssertString(ex.Message).Contains("gone.zip");
-            Assertions.AssertString(ex.Message).Contains("'virtual_joystick_cf' was refused");
+            Assertions.AssertString(ex.Message).Contains("'broken' was refused");
         }
         Assertions.AssertBool(Directory.Exists(all)).IsFalse();
     }
