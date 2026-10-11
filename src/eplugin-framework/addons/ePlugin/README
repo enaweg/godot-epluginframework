@@ -5,8 +5,8 @@ ePlugin takes care of the setup that C# editor plugins need. Plugins built on it
 [b]What it does for you[/b]
 [ul]
 [b]Automatic setup:[/b] NuGet packages, C# projects, autoloads and plugin files are added to your project when you enable an ePlugin, and removed when you disable it.
-[b]Dependencies:[/b] plugins an ePlugin needs are enabled first, and their versions are checked.
-[b]Updates:[/b] plugins with an update source, and ZIP packages in folders you choose, are checked for new versions. Updates are validated and backed up, and a failed update is rolled back.
+[b]Dependencies:[/b] plugins an ePlugin needs are enabled first, and their versions are checked. Optional integrations are added only while the other plugin is enabled.
+[b]Updates:[/b] plugins with an update source, popular add-ons without one, and ZIP packages in folders you choose are checked for new versions. Updates are validated and backed up, and a failed update is rolled back.
 [b]Licenses and welcome pages:[/b] a plugin can ask you to accept its license before it is enabled, and greet you once after it is installed, like this page.
 [/ul]
 
@@ -15,7 +15,7 @@ Open the [b]ePlugin Manager[/b] with the ePlugin button at the right of the main
 
 [b]Good to know[/b]
 [ul]
-The editor is busy for a moment while an ePlugin is enabled or disabled, because the project is rebuilt.
+The editor is busy for a moment while an ePlugin is enabled or disabled, because the project is rebuilt. A separate progress window shows what is happening.
 Commit [code]addons/eplugin-state.json[/code] with your addons. It records the plugin versions, accepted licenses and shown welcome pages for your team. Do not commit [code]addons/eplugin-state.json.user[/code]; it only holds local recovery state.
 [/ul]
 

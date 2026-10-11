@@ -47,11 +47,13 @@ public partial class SamplePlugin : EditorPlugin, IEEditorPlugin
 - `AddNuget(name, version?, source?)` adds a NuGet package. Omit the version to use the latest stable version. `AddNugets(names...)` adds several packages. External and local feeds are recorded in the project's root `nuget.config`.
 - `AddProject(path, addReference?)` adds a project to the solution and optionally references it from the main Godot project. The overload `AddProject(path, virtualFolderName?, addReference?)` also places it under a solution folder.
 - `AddAutoload(name, path)` registers an autoload singleton while the plugin is enabled.
-- `AddDirectory(path)` makes a plugin directory available while enabled and hides it while disabled. Ship managed source directories in hidden form, such as `.src`, so they are inert until activation.
-- `AddPluginDependency(slug, version?)` requires another C# or GDScript plugin. The framework enables it first and disables dependants if it is turned off. A version such as `">2.0.0"` sets a minimum; an exact version such as `"1.2.3"` requires that version.
+- `AddDirectory(path)` makes a plugin directory available while enabled and hides it while disabled, by renaming it with or without a leading `.` (and setting the hidden attribute on Windows). Ship managed source directories in hidden form, such as `.src`, so they are inert until activation. The path may name either form (`src` or `.src`). A directory already in the wanted state is left alone and a missing one is only reported as a warning; only both forms existing at once fails.
+- `AddPluginDependency(slug, version?)` requires another C# or GDScript plugin. The framework enables it first and disables dependants if it is turned off. A version such as `">2.0.0"` means that version or higher; an exact version such as `"1.2.3"` requires that version. Prerelease suffixes such as `-beta.1` are ignored when comparing.
 - `SetLicense(license)` sets the plugin's license, either as text (BBCode allowed) or as a `res://` path to a file. See [Plugin licenses](plugin-licenses.md#in-the-recipe).
 - `SetWelcome(welcome)` sets the welcome page shown once after the plugin is installed, either as text (BBCode allowed) or as a `res://` path to a file. See [Plugin welcome pages](plugin-welcome.md#in-the-recipe).
 - `AddOptionalPluginDependency(slug, version?, recipe)` declares resources needed only when another plugin is already enabled and matches the constraint. The other plugin is never enabled automatically and a missing or mismatched plugin does not fail activation.
+
+Deactivation reverses the recipe. Removing a NuGet package, project reference, or solution entry that is already gone, for example because it was removed by hand, is reported as a warning and counts as done.
 
 Optional dependencies are re-evaluated when either ePlugin-managed plugin is enabled or disabled, so activation order does not matter. Disabling the optional plugin removes the nested recipe while leaving the declaring plugin active. Nested recipes receive `IEEditorPluginRecipeBuilder`, which supports resources but cannot declare dependencies of its own.
 
@@ -91,4 +93,19 @@ The framework shows a plugin's welcome page once per project after the plugin is
 
 The `EditorPlugin` extensions `GetPluginSlug()`, `GetPluginDirectory()`, `ReadMetadata()`, and `Cli()` help recipes locate plugin files, read metadata, and access the .NET CLI abstraction. See the [sample project](../src/eplugin-framework/addons/sample_plugin) for a complete example.
 
-Code in a managed directory can implement `IInitialize`. Register it with `EPlugin.RegisterInitializer` to receive its startup callback once the framework is ready. The [added-code sample](../src/eplugin-framework/addons/sample_addedcode_plugin) demonstrates this pattern.
+Code in a managed directory can implement `IInitialize`. Register it with `EPlugin.RegisterInitializer` to receive its `Initialize(IEPlugin)` callback once the framework is ready, after every startup and C# assembly reload. A module initializer is a convenient place to register it, because it runs whenever the assembly is loaded:
+
+```csharp
+public class MyInitializer : IInitialize
+{
+    public void Initialize(IEPlugin ePlugin) => ePlugin.Logger.Log("My plugin code is ready.");
+}
+
+public static class MyInitializerSetup
+{
+    [ModuleInitializer]
+    public static void Register() => EPlugin.RegisterInitializer(new MyInitializer());
+}
+```
+
+An `EditorPlugin` that implements `IInitialize` itself is initialized when the framework first sees it, without registering. `IEPlugin.Logger` writes to ePlugin's log. The [added-code sample](../src/eplugin-framework/addons/sample_addedcode_plugin) demonstrates this pattern.

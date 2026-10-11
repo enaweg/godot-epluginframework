@@ -5,10 +5,11 @@
 /// framework starts up.
 /// </summary>
 /// <remarks>
-/// On startup the framework scans the executing assembly for all exported types that
-/// implement <see cref="IInitialize"/>, instantiates each with
-/// <see cref="Activator.CreateInstance"/>, and calls <see cref="Initialize"/> once with
-/// the <see cref="IEPlugin"/> instance.
+/// Register an instance with <c>EPlugin.RegisterInitializer</c>, for example from a
+/// <c>[ModuleInitializer]</c> so it is registered again after every assembly reload. The framework
+/// calls <see cref="Initialize"/> once it has finished starting up. An <c>EditorPlugin</c> that
+/// implements this interface is initialized when the framework first creates its context, without
+/// registering it.
 /// </remarks>
 public interface IInitialize
 {
