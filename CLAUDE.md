@@ -206,7 +206,8 @@ stars. Release ZIPs the updater refuses (no or several plugin roots, GDExtension
 installed or validated in advance. Add-ons the ranking misses go in `tools/extra_addons.txt` (`slug;url` or `url` per
 line, any git host), which `build_godot_addons.cs` always lists regardless of stars and activity.
 Checks use installed metadata and a 20-hour local cache, never the shared working-version index. Every apply
-requires dialog confirmation. Stage and validate the whole batch before touching addons, then save and close all
+requires dialog confirmation. Stage and validate the whole batch before touching addons (`PackageFetcher` leaves a package
+that cannot be fetched or is refused out of the batch, as a `RefusedPackage`, and fails only when all are refused), then save and close all
 open scenes (`IUpdateHost.CloseScenes`; `close_scene` exists only from Godot 4.5) before the swap. Managed plugins are
 updated in place without disabling/uninstalling them; plain plugins may be toggled under observer suppression.
 The interim bridge keeps old visible resources until the new assembly is loaded. Reconcile executes per-item

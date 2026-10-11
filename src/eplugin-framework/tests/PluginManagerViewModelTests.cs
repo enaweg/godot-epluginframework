@@ -219,6 +219,11 @@ public class PluginManagerViewModelTests
         Assertions.AssertBool(PluginManagerViewModel.AnyUpdateFailed([Group("a", UpdateOutcome.Completed)])).IsFalse();
         Assertions.AssertBool(PluginManagerViewModel.AnyUpdateFailed([Group("a", UpdateOutcome.Completed), Group("d", null)])).IsTrue();
         Assertions.AssertString(PluginManagerViewModel.UpdateSummary([Group("a", UpdateOutcome.Completed)], restarting: false)).IsEqual("Installed a 2.0.0.");
+        // Packages refused while staging are reported after the groups that were installed.
+        var refused = new RefusedPackage(Candidate("e") with { NewVersion = "v2.0.1" }, "Package for 'e' was refused: version is not newer.");
+        Assertions.AssertString(PluginManagerViewModel.UpdateSummary([Group("a", UpdateOutcome.Completed)], restarting: false, [refused]))
+            .IsEqual("Installed a 2.0.0. Skipped e v2.0.1: Package for 'e' was refused: version is not newer. Its files were not changed.");
+        Assertions.AssertString(PluginManagerViewModel.RefusedSummary([])).IsEqual("");
     }
     private static ValidatedPackage Package(string slug)
     {

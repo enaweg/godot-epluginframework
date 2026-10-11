@@ -67,6 +67,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private Texture2D? _updateIcon;
     private PluginManagerViewModel _model = null!;
     private IReadOnlyList<ValidatedPackage>? _staged;
+    // Packages of the staged batch that were refused; the others are installed without them.
+    private IReadOnlyList<RefusedPackage> _refused = [];
     // What is being staged/installed: the checked updates, or one explicitly chosen version.
     private IReadOnlyList<UpdateCandidate> _batch = [];
     private bool _versionInstall;
@@ -649,7 +651,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             {
                 var text = versionInstall ? $"Downloading and validating {batch[0].PluginName} {batch[0].NewVersion}..." : "Downloading and validating selected addons...";
                 _status.Text = text;
-                (IReadOnlyList<ValidatedPackage> Packages, string Directory) staged;
+                (IReadOnlyList<ValidatedPackage> Packages, IReadOnlyList<RefusedPackage> Refused, string Directory) staged;
                 using (var progress = ActivationProgress.Begin(text))
                 {
                     // Reported from the download thread; a report arriving after the scope ended must not relabel another operation.
@@ -663,14 +665,23 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
                     try { staged = await _global.StageUpdatesAsync(batch, relay, _cancel.Token, allowDowngrade, allowReinstall); }
                     finally { active = false; }
                 }
-                _staged = staged.Packages; _directory = staged.Directory;
+                _staged = staged.Packages; _refused = staged.Refused; _directory = staged.Directory;
                 if (_lifetime.IsCancellationRequested || !GodotObject.IsInstanceValid(this) || !IsInsideTree()) { ClearStaging(); return; }
                 if (!versionInstall)
+                {
                     foreach (var package in _staged)
                         _model.Updates.First(r => r.Candidate.Slug == package.Candidate.Slug).Findings.AddRange(package.Findings);
+                    // A refused package stays out of this batch; its details say why.
+                    foreach (var refused in _refused)
+                        _model.Updates.First(r => r.Candidate.Slug == refused.Candidate.Slug).Findings.Add(new("refused", FindingSeverity.Error, refused.Reason));
+                }
                 // Warnings discovered inside the package are reviewed before the first project side effect.
                 if (_staged.Any(p => p.Findings.Any(f => f.Severity == FindingSeverity.Warning)) || NeedsTrust && !_model.TrustChangedSource)
-                { _working = false; _operationNotice = "Review package warnings in the details, then confirm installation."; return; }
+                {
+                    _working = false;
+                    _operationNotice = PluginManagerViewModel.RefusedSummary(_refused) + "Review package warnings in the details, then confirm installation.";
+                    return;
+                }
             }
             _cancel.Token.ThrowIfCancellationRequested();
             if (!CanProceed) return;
@@ -686,7 +697,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
                 if (_lifetime.IsCancellationRequested || !GodotObject.IsInstanceValid(this) || !IsInsideTree()) { ClearStaging(); return; }
                 if (selected.Length == 0)
                 {
-                    _operationNotice = "Update canceled: its license was declined. Addon files were not changed.";
+                    _operationNotice = PluginManagerViewModel.RefusedSummary(_refused) + "Update canceled: its license was declined. Addon files were not changed.";
                     ClearStaging();
                     return;
                 }
@@ -695,14 +706,15 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             _swapping = true; Buttons(); _status.Text = versionInstall ? "Installing the selected version..." : "Installing selected addons...";
             // Independent groups are installed one after another; a failing group is rolled back without the others.
             var results = await _global.ApplyUpdatesAsync(selected, _directory!, _model.TrustChangedSource);
-            _directory = null; _staged = null;
+            var skipped = _refused;
+            _directory = null; _staged = null; _refused = [];
             // The build-failure dialog takes over the decision; only a batch installed as one group asks.
             if (results.Any(r => r.Outcome == UpdateOutcome.AwaitingDecision)) Hide();
             // Stays open: an update that needs no restart is finished here, and a restart reopens the manager.
             else
             {
-                _operationNotice = PluginManagerViewModel.UpdateSummary(results, _global.IsRestartPending);
-                if (PluginManagerViewModel.AnyUpdateFailed(results)) GD.PushError(_operationNotice);
+                _operationNotice = PluginManagerViewModel.UpdateSummary(results, _global.IsRestartPending, skipped);
+                if (PluginManagerViewModel.AnyUpdateFailed(results) || skipped.Count > 0) GD.PushError(_operationNotice);
             }
             // Installed versions changed, so the list is read again rather than only redrawn.
             refresh = results.Any(r => r.Outcome is not (UpdateOutcome.AwaitingReload or UpdateOutcome.AwaitingDecision));
@@ -737,7 +749,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private void ClearStaging()
     {
         if (_directory is not null && !File.Exists(Path.Combine(_directory, "journal.json")) && Directory.Exists(_directory)) Directory.Delete(_directory, true);
-        _directory = null; _staged = null; _batch = []; _versionInstall = false; _allowDowngrade = false; _allowReinstall = false;
+        _directory = null; _staged = null; _refused = []; _batch = []; _versionInstall = false; _allowDowngrade = false; _allowReinstall = false;
     }
 
     private static Color ThemeColor(string name, string type, Color fallback)

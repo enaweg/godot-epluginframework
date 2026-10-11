@@ -172,7 +172,7 @@ public class LocalSourceTests
         var target = new PluginUpdateTarget("plugin", "Plugin", "1.0.0", null, installed);
         var candidate = LocalDirectorySource.Versions(LocalPackageIndexer.Build([Path.GetDirectoryName(zip)!], CancellationToken.None), target, new()).Single();
         var transaction = Path.Combine(_root, "transaction");
-        var staged = await new PackageFetcher(new UpdateHttp(), new GitRunner()).FetchAsync([candidate], [target], transaction, null, CancellationToken.None);
+        var staged = (await new PackageFetcher(new UpdateHttp(), new GitRunner()).FetchAsync([candidate], [target], transaction, null, CancellationToken.None)).Packages;
         Assertions.AssertBool(staged.Single().IsValid).IsTrue();
         Assertions.AssertBool(File.Exists(Path.Combine(staged.Single().StagingDir, "plugin.gd"))).IsTrue();
         Assertions.AssertBool(File.Exists(zip)).IsTrue();
