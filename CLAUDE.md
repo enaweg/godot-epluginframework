@@ -227,7 +227,10 @@ otherwise the editor translates the English UI into its own language. An autowra
 from `EditorIcons`, which renders the SVGs at the editor scale (a headless editor re-imports them at 100%). `EGlobal.CollectPlugins` scans every `res://addons/<slug>/plugin.cfg`; `PluginCatalog.Classify`
 recognizes disabled ePlugins by the `ScriptPathAttribute` of their compiled type. `PluginManagerViewModel` is pure
 (rows, update selection, BBCode details) and unit-tested. New user-facing actions belong in this dialog, not in
-additional Tools menu entries.
+additional Tools menu entries. Long-running actions (enabling/disabling, Retry failed, Check for updates,
+downloading and installing) show their progress through an `ActivationProgress` scope, not through the dialog: the
+dialog has no progress bar and only puts the outcome in its status line. An async scope reports from background threads
+via `CallDeferred`, because `ActivationProgress` is editor-thread only.
 
 ### Plugin licenses
 
