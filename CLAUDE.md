@@ -298,7 +298,9 @@ constructed once and cached globally.
 
 `ShowHideHelper` implements `AddDirectory`: it toggles a managed directory's visibility by renaming it with/
 without a leading `.` (POSIX-style hidden dirs) and toggling the Windows hidden attribute. Used for shipping
-plugin source that should stay inert until the plugin is activated.
+plugin source that should stay inert until the plugin is activated. A recipe may name either form (`src` or `.src`).
+A directory already in the wanted state is left alone, one missing in both forms is only logged as a warning, and only
+both forms existing at once fails, because neither can be renamed onto the other.
 
 ## Known constraints (see README for full list)
 
