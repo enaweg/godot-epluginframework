@@ -49,6 +49,8 @@ internal sealed partial class EGlobal
         var ct = _ePluginContext!.UpdateLifetime;
         // Restored when this method returns, before the deferred editor restart saves the editor settings.
         using var unfocusedScans = UnfocusedScanSuspension.Begin();
+        // Opened before waiting for the filesystem scan, so the window covers the whole installation.
+        using var progress = ActivationProgress.Begin("Updating plugins...");
         var filesystem = EditorInterface.Singleton.GetResourceFilesystem();
         var deadline = DateTimeOffset.UtcNow.AddSeconds(10);
         while (filesystem.IsScanning())
@@ -57,7 +59,6 @@ internal sealed partial class EGlobal
             if (DateTimeOffset.UtcNow >= deadline) throw new TimeoutException("Editor filesystem scan did not finish. Wait until the editor is idle and try again.");
             await _ePluginContext.ToSignal(_ePluginContext.GetTree().CreateTimer(0.1), SceneTreeTimer.SignalName.Timeout);
         }
-        using var progress = ActivationProgress.Begin("Updating plugins...");
         var result = Applier().Apply(packages, directory, trustChangedSources);
         HandleUpdateOutcome(directory, result);
         return result;

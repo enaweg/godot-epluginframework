@@ -32,7 +32,6 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private Button _retry = null!;
     private Button _release = null!;
     private CheckBox _trust = null!;
-    private ProgressBar _progress = null!;
     private ConfirmationDialog _disableFrameworkConfirm = null!;
     private TextureRect _detailsIcon = null!;
     private Label _detailsName = null!;
@@ -95,7 +94,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _global = global; _lifetime = lifetime;
         _tree = GetNode<Tree>("%PluginTree"); _status = GetNode<Label>("%Status");
         _check = GetNode<Button>("%CheckButton"); _retry = GetNode<Button>("%RetryButton"); _release = GetNode<Button>("%ReleaseButton");
-        _trust = GetNode<CheckBox>("%TrustCheck"); _progress = GetNode<ProgressBar>("%Progress");
+        _trust = GetNode<CheckBox>("%TrustCheck");
         _disableFrameworkConfirm = GetNode<ConfirmationDialog>("%DisableFrameworkConfirm");
         _detailsIcon = GetNode<TextureRect>("%DetailsIcon"); _detailsName = GetNode<Label>("%DetailsName"); _detailsText = GetNode<RichTextLabel>("%DetailsText");
         _versionSeparator = GetNode<Control>("%VersionSeparator"); _versionRow = GetNode<Control>("%VersionRow");
@@ -574,6 +573,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _operationNotice = null;
         ClearStaging(); _remoteVersions.Clear(); _remoteVersionErrors.Clear();
         _working = true; Buttons(); _status.Text = "Checking for updates...";
+        // Remote sites and local ZIPs can take a while; the scope ends after the list is read again.
+        using var progress = ActivationProgress.Begin("Checking for updates...");
         string? failure = null, notice = null;
         try
         {
@@ -621,9 +622,22 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         {
             if (_staged is null)
             {
-                _progress.Visible = true; _status.Text = versionInstall ? $"Downloading and validating {batch[0].PluginName} {batch[0].NewVersion}..." : "Downloading and validating selected addons...";
-                var relay = new InlineProgress(value => Callable.From(() => { if (GodotObject.IsInstanceValid(this)) _progress.Value = value * 100; }).CallDeferred());
-                var staged = await _global.StageUpdatesAsync(batch, relay, _cancel.Token, allowDowngrade, allowReinstall);
+                var text = versionInstall ? $"Downloading and validating {batch[0].PluginName} {batch[0].NewVersion}..." : "Downloading and validating selected addons...";
+                _status.Text = text;
+                (IReadOnlyList<ValidatedPackage> Packages, string Directory) staged;
+                using (var progress = ActivationProgress.Begin(text))
+                {
+                    // Reported from the download thread; a report arriving after the scope ended must not relabel another operation.
+                    var active = true; var shown = -1;
+                    var relay = new InlineProgress(value => Callable.From(() =>
+                    {
+                        var percent = (int)(value * 100);
+                        if (!active || percent == shown) return;
+                        shown = percent; ActivationProgress.SetText($"{text} {percent}%");
+                    }).CallDeferred());
+                    try { staged = await _global.StageUpdatesAsync(batch, relay, _cancel.Token, allowDowngrade, allowReinstall); }
+                    finally { active = false; }
+                }
                 _staged = staged.Packages; _directory = staged.Directory;
                 if (_lifetime.IsCancellationRequested || !GodotObject.IsInstanceValid(this) || !IsInsideTree()) { ClearStaging(); return; }
                 if (!versionInstall)
@@ -631,7 +645,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
                         _model.Updates.First(r => r.Candidate.Slug == package.Candidate.Slug).Findings.AddRange(package.Findings);
                 // Warnings discovered inside the package are reviewed before the first project side effect.
                 if (_staged.Any(p => p.Findings.Any(f => f.Severity == FindingSeverity.Warning)) || NeedsTrust && !_model.TrustChangedSource)
-                { _working = false; _progress.Visible = false; _operationNotice = "Review package warnings in the details, then confirm installation."; return; }
+                { _working = false; _operationNotice = "Review package warnings in the details, then confirm installation."; return; }
             }
             _cancel.Token.ThrowIfCancellationRequested();
             if (!CanProceed) return;
@@ -687,7 +701,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             _working = false; _swapping = false;
             if (GodotObject.IsInstanceValid(this) && IsInsideTree())
             {
-                _progress.Visible = false; if (refresh) Refresh(); else Render();
+                if (refresh) Refresh(); else Render();
             }
         }
     }
