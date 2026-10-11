@@ -43,6 +43,10 @@ A project can set the update site of a plugin itself, in **Update sites...** of 
 - **Edit...** (or double-clicking an entry) changes the URL of the selected plugin.
 - **Remove** deletes the entry; the plugin uses its `update_url` again.
 
+![Update sites dialog with a project update site for gdUnit4 and the expanded built-in list, installed add-ons first](images/eplugin-update-sites.png)
+
+![Edit update site dialog for gdUnit4 with its URL and the supported URL forms](images/eplugin-update-site-editor.png)
+
 The URL can be any [supported source](#configure-an-update-source): GitHub or GitLab releases, or a Git repository. Other URLs are refused when you save them. The dialog shows each plugin's `plugin.cfg` `update_url` next to the site that replaces it.
 
 The project's update site is always tried first. When it does not work, the plugin's `update_url` is checked instead, and then its [built-in update site](#built-in-update-sites): for example when the site does not respond, returns an error, or is not a supported URL because the file was edited by hand. The output log and the manager's status line say when this happened. A plugin with no other site reports the failed check.
@@ -144,6 +148,10 @@ A batch is installed in groups, one after another. Plugins that depend on each o
 Each group has a durable journal, old addon trees, project backups, and build logs under `.godot/eplugin/updates/<id>/`. A local state marker is written before file changes. The shared `addons/eplugin-state.json` advances for a group's plugins after that group builds and verifies successfully. Commit that index with the updated addon files. Backups are removed after success; failed updates retain logs. When a group finishes, the backups of the groups still waiting for the restart are refreshed, so rolling one of them back later keeps the finished group's project changes.
 
 Interim build failures, installation failures, and self-update failures roll back automatically. A final build failure of a batch installed as one group normally offers **Roll back**, **Keep new version**, and **Open build log**; a batch of several groups always rolls the failed group back, because a project that does not build would fail every later group. Closing the dialog rolls back; closing the editor while a decision is pending preserves it for the next startup. Headless execution always rolls back. Keeping a failed version retains its backup and an `update_kept_build_failed` local marker without advancing the shared index. Fix the build and use **Retry failed** in the manager to verify and acknowledge it. If the shared index changed externally, merge it and retry acknowledgement.
+
+![Update failure dialog for sample_plugin 1.0 to 1.1.0 listing the compiler errors, the build log path, and the Keep new version, Roll back and Open build log buttons](images/update-build-failure.png)
+
+The dialog lists the errors of the build log; the plugin, errors and paths in the screenshot are sample data.
 
 C# updates may restart for the assembly handoff; managed C# recipes restart after their final build, and ePlugin Framework self-updates always restart. If automatic launch fails, reopen the project to resume its journal. Before a self-update swap, the progress helper closes to release Windows file locks. Early recovery runs before framework initialization: after two startups without a health marker, it restores the prior framework, rebuilds it, clears its local marker, and requests a restart.
 

@@ -68,7 +68,8 @@ internal sealed partial class WelcomeDialog : AcceptDialog, ISerializationListen
         _source.Text = PluginLicense.Display(entry.Slug, entry.Source);
         _source.TooltipText = _source.Text;
         // the welcome page is BBCode; a problem is plain text
-        _text.Text = entry.Problem is null ? entry.Text : $"[color=#ff7070]{entry.Problem.Replace("[", "[lb]")}[/color]";
+        var scale = EditorInterface.Singleton.GetEditorScale();
+        _text.Text = entry.Problem is null ? PluginManagerViewModel.ScaleFontSizes(entry.Text, scale) : $"[color=#ff7070]{entry.Problem.Replace("[", "[lb]")}[/color]";
         _text.ScrollToLine(0);
     }
 

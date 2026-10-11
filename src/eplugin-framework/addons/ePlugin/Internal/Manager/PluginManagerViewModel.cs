@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using Enaweg.Plugin.Internal.Licenses;
 using Enaweg.Plugin.Internal.Update;
 using Enaweg.Plugin.Internal.Welcomes;
@@ -294,6 +295,14 @@ internal sealed class PluginManagerViewModel
     };
     internal static string Escape(string value) => value.Replace("[", "[lb]");
     /// <summary>An http(s) URL without credentials that can be embedded in a BBCode url tag and opened in a browser.</summary>
+    /// <summary>
+    /// Scales the <c>[font_size]</c> of a plugin's BBCode page by the editor scale. Its sizes are pixels written for 100%,
+    /// while the default font of the dialog is scaled, so a heading would otherwise be smaller than the text at 200%.
+    /// </summary>
+    internal static string ScaleFontSizes(string bbcode, float scale) => Math.Abs(scale - 1f) < 0.01f ? bbcode
+        : FontSize.Replace(bbcode, m => $"[font_size={Math.Max(1, (int)Math.Round(int.Parse(m.Groups[1].Value) * scale))}]");
+    private static readonly Regex FontSize = new(@"\[font_size=(\d{1,4})\]", RegexOptions.CultureInvariant);
+
     internal static bool IsWebUrl(string? value) =>
         Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme is "https" or "http" && uri.UserInfo.Length == 0 &&
         value!.IndexOfAny(['[', ']']) < 0;

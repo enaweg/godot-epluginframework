@@ -50,6 +50,10 @@ The welcome dialog opens once a plugin is installed and enabled: after an ePlugi
 
 When several plugins are installed together, for example a plugin with the dependencies it enables, their welcome pages are collected into one dialog. The list on the left shows each plugin; select one to read its page. Close the dialog when you are done: closing it counts every page in it as read. Pages do not have to be opened one by one.
 
+![Welcome dialog listing Sample Dependant Plugin and SamplePlugin, showing the BBCode README of Sample Dependant Plugin](images/plugin-welcome.png)
+
+The screenshot shows the welcome pages of the repository's sample plugins, which are their BBCode `README` files.
+
 At startup and after C# assembly reloads, the framework also checks the enabled plugins whose welcome page was not shown yet, for example plugins enabled while the editor was closed, or enabled before the framework supported welcome pages. Their pages are shown then.
 
 A plugin's welcome page is shown once per project, not once per developer: disabling and enabling the plugin again does not show it again. An editor restart or assembly reload while the dialog is open closes it without counting the pages as read, so they are shown again afterwards. In a headless editor no dialog can be shown and nothing is recorded.

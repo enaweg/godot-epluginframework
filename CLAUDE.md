@@ -57,6 +57,11 @@ directly (e.g. `EGlobal`) with a mocked `EPluginPlugin` (Moq) rather than drivin
 
 There is no lint command configured beyond the `.editorconfig` (UTF-8 charset only).
 
+Documentation screenshots (`docs/images`) are regenerated with `tools/screenshots/capture.sh` (needs a desktop session
+with X11 or Xwayland, `GODOT_BIN`, python3 with python-xlib and Pillow; `EPLUGIN_SCREENSHOTS_DARK=1` on GNOME). It
+injects `tools/screenshots/DocScreenshots.cs` as an autoload for one editor run, opens every dialog with sample data,
+captures each window with its frame, and restores the project afterwards. Add new dialogs there.
+
 ## Architecture
 
 ### Bootstrap and lifecycle
@@ -256,7 +261,9 @@ own button, or right after a reload while it has focus and the mouse, crashed Go
 (use-after-free in its message handling). Release hides it now and frees it 0.25 s later through a native callable.
 Scene roots set `auto_translate_mode = 2`,
 otherwise the editor translates the English UI into its own language. An autowrapping Label needs a
-`custom_minimum_size` width, or the dialog measures it at zero width and pops up taller than the screen. Icons come
+`custom_minimum_size` width, or the dialog measures it at zero width and pops up taller than the screen. Scenes are
+authored for 100% editor scale: `EditorWindows.Prepare` scales the window's size and its controls' minimum sizes, and
+plugin BBCode pages go through `PluginManagerViewModel.ScaleFontSizes`. Icons come
 from `EditorIcons`, which renders the SVGs at the editor scale (a headless editor re-imports them at 100%). `EGlobal.CollectPlugins` scans every `res://addons/<slug>/plugin.cfg`; `PluginCatalog.Classify`
 recognizes disabled ePlugins by the `ScriptPathAttribute` of their compiled type. `PluginManagerViewModel` is pure
 (rows, update selection, BBCode details) and unit-tested. New user-facing actions belong in this dialog, not in
