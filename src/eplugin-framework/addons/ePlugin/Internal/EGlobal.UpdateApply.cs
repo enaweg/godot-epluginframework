@@ -36,7 +36,11 @@ internal sealed partial class EGlobal
         return _updateApplier ??= new(UpdateProjectRoot, _stateStore, new GodotUpdateHost(this), _updateCache);
     }
 
-    internal async Task<(IReadOnlyList<ValidatedPackage> Packages, string Directory)> StageUpdatesAsync(IReadOnlyList<UpdateCandidate> candidates, IProgress<double>? progress, CancellationToken ct, bool allowDowngrade = false, bool allowReinstall = false)
+    /// <summary>
+    /// Stages and validates a batch. Packages that cannot be fetched or are refused are returned apart and the rest can
+    /// still be installed; it throws only when every package was refused.
+    /// </summary>
+    internal async Task<(IReadOnlyList<ValidatedPackage> Packages, IReadOnlyList<RefusedPackage> Refused, string Directory)> StageUpdatesAsync(IReadOnlyList<UpdateCandidate> candidates, IProgress<double>? progress, CancellationToken ct, bool allowDowngrade = false, bool allowReinstall = false)
     {
         if (_fetchingUpdate || _updateJournals is null || _updateJournals.Read().Any(j => j.IsActive)) throw new InvalidOperationException("An update is already in progress.");
         _fetchingUpdate = true;
@@ -45,7 +49,8 @@ internal sealed partial class EGlobal
         try
         {
             var result = await Task.Run(() => new PackageFetcher(new(), new GitRunner()).FetchAsync(candidates, targets, directory, progress, ct, allowDowngrade, allowReinstall), ct);
-            return (result, directory);
+            foreach (var refused in result.Refused) _ePluginContext?.Logger.Warn($"Skipping the update of {refused.Candidate.Slug} {refused.Candidate.NewVersion}: {refused.Reason}");
+            return (result.Packages, result.Refused, directory);
         }
         finally { _fetchingUpdate = false; }
     }

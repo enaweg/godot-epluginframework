@@ -136,6 +136,8 @@ An update with an error cannot be selected or installed. These are refused:
 - a version rejected by a hard dependency constraint of another enabled plugin
 - a plugin whose update is changed or blocked: its `update_url` changed since the check, it is no longer enabled, or an earlier attempt needs **Retry failed** first
 
+Some of these can only be found once the package is downloaded, for example a release whose `plugin.cfg` still names the installed version. Such a package is left out of the batch and its details show why; the other selected updates are still installed, and the manager lists the skipped package after them. Only when every package of the batch is refused is nothing installed.
+
 Shown without stopping: an optional recipe of another plugin that no longer matches the new version (it stays installed until that plugin is toggled), and the last working version recorded in `addons/eplugin-state.json` when it differs from the installed one.
 
 > [!NOTE]

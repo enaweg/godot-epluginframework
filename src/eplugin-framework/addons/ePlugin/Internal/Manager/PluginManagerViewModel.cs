@@ -176,9 +176,9 @@ internal sealed class PluginManagerViewModel
 
     /// <summary>
     /// The status line after installing a batch: what was installed and, per group that was not, why. A group that failed
-    /// names its log folder.
+    /// names its log folder. <paramref name="refused"/> are the packages left out when the batch was staged.
     /// </summary>
-    public static string UpdateSummary(IReadOnlyList<UpdateGroupResult> results, bool restarting)
+    public static string UpdateSummary(IReadOnlyList<UpdateGroupResult> results, bool restarting, IReadOnlyList<RefusedPackage>? refused = null)
     {
         static string Names(IEnumerable<ValidatedPackage> packages) => string.Join(", ", packages.Select(p => $"{p.Candidate.PluginName} {p.NewVersion}"));
         static string Reason(string? failure, string fallback) => (failure ?? fallback).TrimEnd('.');
@@ -192,6 +192,7 @@ internal sealed class PluginManagerViewModel
             else if (result.Outcome == UpdateOutcome.KeptWithErrors)
                 parts.Add($"{Names(result.Packages)} needs recovery: {Reason(result.Failure, "Use Retry failed in the ePlugin Manager")}. Logs: {result.Directory}");
         }
+        if (refused is { Count: > 0 }) parts.Add(RefusedSummary(refused).TrimEnd());
         if (restarting)
             parts.Add(installed.Length switch
             {
@@ -201,6 +202,10 @@ internal sealed class PluginManagerViewModel
             });
         return string.Join(" ", parts);
     }
+
+    /// <summary>The packages left out of a staged batch and why, each followed by a space; empty when none was.</summary>
+    public static string RefusedSummary(IReadOnlyList<RefusedPackage> refused) =>
+        string.Concat(refused.Select(r => $"Skipped {r.Candidate.PluginName} {r.Candidate.NewVersion}: {r.Reason.TrimEnd('.')}. Its files were not changed. "));
 
     /// <summary>Whether any group of the batch was not installed.</summary>
     public static bool AnyUpdateFailed(IReadOnlyList<UpdateGroupResult> results) =>

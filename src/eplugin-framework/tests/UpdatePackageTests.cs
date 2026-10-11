@@ -140,7 +140,7 @@ public class UpdatePackageTests
     }
 
     [TestCase]
-    public async Task MisversionedPackageRefusesTheWholeBatchBeforeChangingInstalledFiles()
+    public async Task MisversionedPackageIsRefusedAloneAndTheRestOfTheBatchIsStaged()
     {
         var candidates = new[] { (Slug: "first", Installed: "1.0.0", Announced: "2.0.0", Actual: "2.0.0"),
             (Slug: "virtual_joystick_cf", Installed: "2.0.0", Announced: "2.0.1", Actual: "2.0.0") };
@@ -154,21 +154,35 @@ public class UpdatePackageTests
         var packages = candidates.Select(c => new UpdateCandidate(c.Slug, "Plugin", c.Installed, c.Announced, null, null, null,
             new LocalZipPackageRef(Zip(($"{c.Slug}/plugin.cfg", Config(c.Actual)), ($"{c.Slug}/plugin.gd", "extends EditorPlugin"))))).ToArray();
         var transaction = Path.Combine(_root, "transaction");
+        var staged = await new PackageFetcher(new(), new GitRunner()).FetchAsync(packages, targets, transaction, null, CancellationToken.None);
+        Assertions.AssertString(staged.Packages.Single().Candidate.Slug).IsEqual("first");
+        Assertions.AssertBool(File.Exists(Path.Combine(staged.Packages.Single().StagingDir, "plugin.cfg"))).IsTrue();
+        var refused = staged.Refused.Single();
+        Assertions.AssertString(refused.Candidate.Slug).IsEqual("virtual_joystick_cf");
+        Assertions.AssertString(refused.Reason).Contains("virtual_joystick_cf");
+        Assertions.AssertString(refused.Reason).Contains("plugin.cfg version '2.0.0'");
+        Assertions.AssertString(refused.Reason).Contains("installed version '2.0.0'");
+        Assertions.AssertString(refused.Reason).Contains("announced: '2.0.1'");
+        // Nothing of the refused package stays staged, so it cannot end up in a group.
+        Assertions.AssertBool(Directory.Exists(Path.Combine(transaction, "staging", "virtual_joystick_cf"))).IsFalse();
+        foreach (var target in targets)
+            Assertions.AssertString(File.ReadAllText(Path.Combine(target.Directory, "plugin.cfg"))).IsEqual(Config(target.InstalledVersion));
+
+        // A batch in which every package is refused fails as a whole, naming each reason, and leaves no staging behind.
+        var missing = packages[0] with { Package = new LocalZipPackageRef(Path.Combine(_root, "gone.zip")) };
+        var all = Path.Combine(_root, "all-refused");
         try
         {
-            await new PackageFetcher(new(), new GitRunner()).FetchAsync(packages, targets, transaction, null, CancellationToken.None);
-            throw new InvalidOperationException("A package with the installed version was accepted as an update.");
+            await new PackageFetcher(new(), new GitRunner()).FetchAsync([missing, packages[1]], targets, all, null, CancellationToken.None);
+            throw new InvalidOperationException("A batch without a valid package was staged.");
         }
         catch (InvalidDataException ex)
         {
-            Assertions.AssertString(ex.Message).Contains("virtual_joystick_cf");
-            Assertions.AssertString(ex.Message).Contains("plugin.cfg version '2.0.0'");
-            Assertions.AssertString(ex.Message).Contains("installed version '2.0.0'");
-            Assertions.AssertString(ex.Message).Contains("announced: '2.0.1'");
+            Assertions.AssertString(ex.Message).Contains("'first'");
+            Assertions.AssertString(ex.Message).Contains("gone.zip");
+            Assertions.AssertString(ex.Message).Contains("'virtual_joystick_cf' was refused");
         }
-        Assertions.AssertBool(Directory.Exists(transaction)).IsFalse();
-        foreach (var target in targets)
-            Assertions.AssertString(File.ReadAllText(Path.Combine(target.Directory, "plugin.cfg"))).IsEqual(Config(target.InstalledVersion));
+        Assertions.AssertBool(Directory.Exists(all)).IsFalse();
     }
 
     [TestCase]
