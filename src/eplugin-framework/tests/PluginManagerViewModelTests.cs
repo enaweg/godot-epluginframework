@@ -108,6 +108,15 @@ public class PluginManagerViewModelTests
         Assertions.AssertString(PluginManagerViewModel.Describe(new(Plugin("plain", PluginKind.GDScript), null))).Contains("no update_url");
     }
     [TestCase]
+    public void PluginPagesScaleTheirFontSizesWithTheEditor()
+    {
+        const string page = "[font_size=20][b]Title[/b][/font_size]\n[font_size=13]small[/font_size] [code]font_size=20[/code]";
+        Assertions.AssertString(PluginManagerViewModel.ScaleFontSizes(page, 2f))
+            .IsEqual("[font_size=40][b]Title[/b][/font_size]\n[font_size=26]small[/font_size] [code]font_size=20[/code]");
+        Assertions.AssertString(PluginManagerViewModel.ScaleFontSizes(page, 1.5f)).StartsWith("[font_size=30]");
+        Assertions.AssertString(PluginManagerViewModel.ScaleFontSizes(page, 1f)).IsEqual(page);
+    }
+    [TestCase]
     public void DetailsLinkDocumentationAndSource()
     {
         var plugin = Plugin("docs", PluginKind.EPlugin) with

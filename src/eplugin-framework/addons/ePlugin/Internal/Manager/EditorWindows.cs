@@ -17,9 +17,25 @@ internal static class EditorWindows
         var scale = EditorInterface.Singleton.GetEditorScale();
         window.Size = (Vector2I)((Vector2)window.Size * scale);
         window.MinSize = (Vector2I)((Vector2)window.MinSize * scale);
+        ScaleMinimumSizes(window, scale);
         if (DisplayServer.Singleton.HasMethod(WindowSetIcon))
             // A closure capturing Window cannot be serialized by Godot on reload. Use a native method callable.
             signals.Connect(window, Window.SignalName.VisibilityChanged, new Callable(owner, visibilityChanged));
+    }
+
+    /// <summary>
+    /// The minimum sizes of the window's controls, e.g. a list's width or an autowrapping label's. A window inside the
+    /// scene is prepared on its own, so it is left out here.
+    /// </summary>
+    private static void ScaleMinimumSizes(Node parent, float scale)
+    {
+        if (Math.Abs(scale - 1f) < 0.01f) return;
+        foreach (var child in parent.GetChildren())
+        {
+            if (child is Window) continue;
+            if (child is Control control) control.CustomMinimumSize *= scale;
+            ScaleMinimumSizes(child, scale);
+        }
     }
 
     /// <summary>
