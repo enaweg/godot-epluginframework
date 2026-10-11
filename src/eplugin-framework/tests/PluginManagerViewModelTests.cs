@@ -197,6 +197,25 @@ public class PluginManagerViewModelTests
         Assertions.AssertString(PluginManagerViewModel.VersionSource(options[0])).IsEqual("Local package: /packages/beta.zip");
         Assertions.AssertString(PluginManagerViewModel.VersionSource(options[1])).Contains("https://example.org/releases");
     }
+    [TestCase]
+    public void UpdateSummaryNamesInstalledAndFailedGroups()
+    {
+        UpdateGroupResult Group(string slug, UpdateOutcome? outcome, string? failure = null) =>
+            new([Package(slug)], "/updates/" + slug, outcome, failure);
+        var summary = PluginManagerViewModel.UpdateSummary(
+            [Group("a", UpdateOutcome.AwaitingReload), Group("b", UpdateOutcome.RolledBack, "Build failed."), Group("c", UpdateOutcome.Completed), Group("d", null, "Plugin d changed since the update check; check again.")],
+            restarting: true);
+        Assertions.AssertString(summary).IsEqual("Installed a 2.0.0, c 2.0.0. Rolled back b 2.0.0: Build failed. Logs: /updates/b " +
+            "Skipped d 2.0.0: Plugin d changed since the update check; check again. Its files were not changed. Restarting the editor to load the updates...");
+        Assertions.AssertBool(PluginManagerViewModel.AnyUpdateFailed([Group("a", UpdateOutcome.Completed)])).IsFalse();
+        Assertions.AssertBool(PluginManagerViewModel.AnyUpdateFailed([Group("a", UpdateOutcome.Completed), Group("d", null)])).IsTrue();
+        Assertions.AssertString(PluginManagerViewModel.UpdateSummary([Group("a", UpdateOutcome.Completed)], restarting: false)).IsEqual("Installed a 2.0.0.");
+    }
+    private static ValidatedPackage Package(string slug)
+    {
+        SemVer.TryParse("2.0.0", out var version);
+        return new(Candidate(slug), "/staging/" + slug, version, null, false, []);
+    }
     private static UpdateCandidate Version(string version) => Candidate("beta") with { InstalledVersion = "1.5.0", NewVersion = version };
     private static PluginInfo Plugin(string slug, PluginKind kind, string? updateUrl = null, bool enabled = true) =>
         new(slug, slug, kind, enabled) { Version = "1.0.0", UpdateUrl = updateUrl };

@@ -179,6 +179,96 @@ public class UpdateTransactionTests
             Assertions.AssertInt(_host.Reloads).IsEqual(2);
         }
     }
+    /// <summary>A second plugin "other" 1.0.0 staged as 2.0.0 into the batch folder of <see cref="Package"/>.</summary>
+    private ValidatedPackage Other(string directory, bool csharp = false)
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "addons/other"));
+        File.WriteAllText(Path.Combine(_root, "addons/other/plugin.cfg"), Config("1.0.0"));
+        File.WriteAllText(Path.Combine(_root, "addons/other/old.txt"), "old payload");
+        var stage = Path.Combine(directory, "staging/other"); Directory.CreateDirectory(stage);
+        File.WriteAllText(Path.Combine(stage, "plugin.cfg"), Config("2.0.0"));
+        var candidate = new UpdateCandidate("other", "Other", "1.0.0", "2.0.0", "https://example.org/releases", null, "v2.0.0", new ZipPackageRef("https://example.org/other.zip", "other"));
+        SemVer.TryParse("2.0.0", out var version);
+        return new(candidate, stage, version, null, csharp, []);
+    }
+    private string NewDirectory() => Path.Combine(_root, ".godot/eplugin/updates", "group-" + Guid.NewGuid().ToString("N")[..8]);
+    [TestCase]
+    public void GroupedBatchRollsBackOnlyTheFailingGroupWithoutAsking()
+    {
+        var package = Package(true);
+        var other = Other(package.Directory, true);
+        // Asking would stop the batch; a group's failure always rolls back.
+        _host.HasUi = true; _host.Policy = "ask";
+        _host.Builds.Enqueue(new(0, [])); _host.Builds.Enqueue(new(1, ["error CS0246"])); _host.Builds.Enqueue(new(0, []));
+        var started = new List<int>();
+        var results = _applier.ApplyGroups([[package.Package], [other]], package.Directory, NewDirectory, false, (index, _) => started.Add(index));
+        Assertions.AssertThat(started).ContainsExactly(0, 1);
+        Assertions.AssertObject(results[0].Outcome).IsEqual(UpdateOutcome.AwaitingReload);
+        Assertions.AssertObject(results[1].Outcome).IsEqual(UpdateOutcome.RolledBack);
+        Assertions.AssertString(results[1].Failure).IsEqual("Build failed.");
+        Assertions.AssertString(results[1].Directory).IsNotEqual(package.Directory);
+        Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/plugin/plugin.cfg")).Contains("2.0.0")).IsTrue();
+        Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/other/plugin.cfg")).Contains("1.0.0")).IsTrue();
+        Assertions.AssertBool(File.Exists(Path.Combine(_root, "addons/other/old.txt"))).IsTrue();
+        Assertions.AssertBool(_store.IsBlocked("plugin")).IsTrue();
+        Assertions.AssertBool(_store.IsBlocked("other")).IsFalse();
+        var journal = UpdateJournal.Load(package.Directory);
+        Assertions.AssertObject(journal.State).IsEqual(UpdatePhase.InterimBuilt);
+        Assertions.AssertInt(journal.Group ?? -1).IsEqual(0);
+    }
+    [TestCase]
+    public void RefusedGroupIsSkippedAndItsStagingRemoved()
+    {
+        var package = Package();
+        var other = Other(package.Directory);
+        // Changed since the update check, so the second group is refused before its transaction begins.
+        File.WriteAllText(Path.Combine(_root, "addons/other/plugin.cfg"), Config("1.5.0"));
+        var results = _applier.ApplyGroups([[package.Package], [other]], package.Directory, NewDirectory);
+        Assertions.AssertObject(results[0].Outcome).IsEqual(UpdateOutcome.Completed);
+        Assertions.AssertObject(results[1].Outcome).IsNull();
+        Assertions.AssertBool(Directory.Exists(results[1].Directory)).IsFalse();
+        Assertions.AssertString(_store.GetShared("plugin")!.Version).IsEqual("2.0.0");
+    }
+    [TestCase]
+    public void FinishedGroupRebasesTheBackupsOfAPendingGroup()
+    {
+        var package = Package(true);
+        var other = Other(package.Directory);
+        _host.ManagedSlugs.Add("plugin");
+        _host.OnPrepareJournal = journal => journal.Recipes["lib"] = new() { Old = new() { Nugets = [new("Shared", "1.0", null)] }, Applied = new() { Nugets = [new("Shared", "1.0", null)] } };
+        _host.OnReconcile = journal =>
+        {
+            if (journal.Plugins.All(p => p.Slug != "other")) return;
+            // The plain group changes the project and a shared recipe while the managed group waits for its restart.
+            File.WriteAllText(Path.Combine(_root, "Game.csproj"), "project with other");
+            journal.Recipes["lib"].Applied = new() { Nugets = [new("Shared", "2.0", null)] };
+        };
+        var results = _applier.ApplyGroups([[package.Package], [other]], package.Directory, NewDirectory);
+        Assertions.AssertObject(results[0].Outcome).IsEqual(UpdateOutcome.AwaitingReload);
+        Assertions.AssertObject(results[1].Outcome).IsEqual(UpdateOutcome.Completed);
+        var pending = UpdateJournal.Load(package.Directory);
+        Assertions.AssertString(pending.Recipes["lib"].Old.Nugets.Single().Version).IsEqual("2.0");
+        Assertions.AssertString(File.ReadAllText(Path.Combine(package.Directory, "backup-project/Game.csproj"))).IsEqual("project with other");
+        // Rolling the managed group back no longer undoes the plain group's project change.
+        Assertions.AssertObject(_applier.Rollback(pending, "test")).IsEqual(UpdateOutcome.RolledBack);
+        Assertions.AssertString(File.ReadAllText(Path.Combine(_root, "Game.csproj"))).IsEqual("project with other");
+        Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/plugin/plugin.cfg")).Contains("1.0.0")).IsTrue();
+        Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/other/plugin.cfg")).Contains("2.0.0")).IsTrue();
+    }
+    [TestCase]
+    public void JournalsAreReadInTheOrderTheirGroupsWereApplied()
+    {
+        var root = Path.Combine(_root, ".godot/eplugin/updates");
+        var created = DateTimeOffset.UtcNow;
+        foreach (var (name, group) in new[] { ("a-second", 1), ("b-first", 0), ("c-third", 2) })
+        {
+            var journal = new UpdateJournal { Id = name, Directory = Path.Combine(root, name), AttemptId = Guid.NewGuid(), CreatedUtc = created, Group = group };
+            journal.Plugins.Add(new() { Slug = name, OldVersion = "1.0.0", NewVersion = "2.0.0" });
+            Directory.CreateDirectory(journal.Directory);
+            journal.Save(UpdatePhase.InterimBuilt);
+        }
+        Assertions.AssertThat(new UpdateJournals(root).Read().Select(j => j.Id).ToArray()).ContainsExactly("b-first", "a-second", "c-third");
+    }
     [TestCase]
     public void CleanupFailureAfterAcknowledgementNeverRollsBackWorkingFiles()
     {
@@ -194,7 +284,7 @@ public class UpdateTransactionTests
     private sealed class MemoryStore : IUpdateStateStore { public UpdateCache State { get; } = new(); public void Save() { } }
     private sealed class FakeHost(PluginStateStore store) : IUpdateHost
     {
-        public bool Managed; public bool HasUi; public string Policy = "rollback"; public int Toggles; public bool MarkerBeforeToggle;
+        public bool Managed; public HashSet<string> ManagedSlugs { get; } = []; public bool HasUi; public string Policy = "rollback"; public int Toggles; public bool MarkerBeforeToggle;
         public Action? OnScan; public Action? OnBeforeSwap; public Action? OnCloseScenes; public int Reloads; public int BuildCount;
         public Action<UpdateJournal>? OnPrepareJournal; public Action<UpdatePluginJournal>? OnBridge; public Action<UpdateJournal>? OnReconcile;
         public Queue<BuildOutcome> Builds { get; } = new();
@@ -202,7 +292,7 @@ public class UpdateTransactionTests
         public string BuildFailurePolicy => Policy;
         public bool RestartAlways => false;
         public bool IsEnabled(string slug) => true;
-        public bool IsManaged(string slug) => Managed;
+        public bool IsManaged(string slug) => Managed || ManagedSlugs.Contains(slug);
         public void Preflight(IReadOnlyList<ValidatedPackage> packages) { }
         public void PrepareJournal(UpdateJournal journal) => OnPrepareJournal?.Invoke(journal);
         public void BeforeSwap(UpdateJournal journal) => OnBeforeSwap?.Invoke();

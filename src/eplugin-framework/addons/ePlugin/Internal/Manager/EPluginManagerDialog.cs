@@ -670,24 +670,19 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
                 _cancel.Token.ThrowIfCancellationRequested();
             }
             _swapping = true; Buttons(); _status.Text = versionInstall ? "Installing the selected version..." : "Installing selected addons...";
-            var outcome = await _global.ApplyUpdatesAsync(selected, _directory!, _model.TrustChangedSource);
-            var directory = _directory!;
+            // Independent groups are installed one after another; a failing group is rolled back without the others.
+            var results = await _global.ApplyUpdatesAsync(selected, _directory!, _model.TrustChangedSource);
             _directory = null; _staged = null;
-            if (outcome is UpdateOutcome.RolledBack or UpdateOutcome.KeptWithErrors)
-            {
-                var failure = UpdateJournal.Load(directory).Failure;
-                _operationNotice = (outcome == UpdateOutcome.RolledBack ? "Update rolled back: " : "Update needs recovery: ") +
-                                   (failure ?? "Use Retry failed in the ePlugin Manager.") + ". Logs: " + directory;
-                GD.PushError(_operationNotice);
-            }
-            // The build-failure dialog takes over the decision.
-            else if (outcome == UpdateOutcome.AwaitingDecision) Hide();
+            // The build-failure dialog takes over the decision; only a batch installed as one group asks.
+            if (results.Any(r => r.Outcome == UpdateOutcome.AwaitingDecision)) Hide();
             // Stays open: an update that needs no restart is finished here, and a restart reopens the manager.
-            else _operationNotice = outcome == UpdateOutcome.AwaitingReload ? "Restarting the editor to load the update..."
-                : selected.Length == 1 ? $"Installed {selected[0].Candidate.PluginName} {selected[0].NewVersion}."
-                : $"Installed {selected.Length} updates.";
+            else
+            {
+                _operationNotice = PluginManagerViewModel.UpdateSummary(results, _global.IsRestartPending);
+                if (PluginManagerViewModel.AnyUpdateFailed(results)) GD.PushError(_operationNotice);
+            }
             // Installed versions changed, so the list is read again rather than only redrawn.
-            refresh = outcome is UpdateOutcome.Completed or UpdateOutcome.RolledBack or UpdateOutcome.KeptWithErrors;
+            refresh = results.Any(r => r.Outcome is not (UpdateOutcome.AwaitingReload or UpdateOutcome.AwaitingDecision));
         }
         catch (OperationCanceledException) { _operationNotice = "Download canceled. Addon files were not changed."; ClearStaging(); }
         catch (Exception ex)

@@ -73,6 +73,7 @@ internal sealed partial class EGlobal
         _updateRefreshSuppression++;
         try
         {
+            var untouched = UntouchedRecipes(journal);
             foreach (var context in _contexts) context.RefreshMetadata();
             foreach (var entry in journal.Recipes.ToArray())
             {
@@ -84,6 +85,7 @@ internal sealed partial class EGlobal
                     record.Pending = null;
                     record.Target = record.Old.Clone();
                 }
+                else if (untouched.Contains(entry.Key)) record.Target = record.Applied.Clone();
                 else if (context is not null)
                 {
                     var updated = journal.Plugins.Any(p => p.Slug == entry.Key);
@@ -131,6 +133,7 @@ internal sealed partial class EGlobal
                 {
                     var context = _contexts.FirstOrDefault(c => c.Slug == entry.Key);
                     if (context is null) continue;
+                    if (untouched.Contains(entry.Key)) { entry.Value.Target = entry.Value.Applied.Clone(); continue; }
                     var updated = journal.Plugins.Any(p => p.Slug == entry.Key);
                     if (updated) context.AppliedOptionalDependencies = null;
                     entry.Value.Target = Snapshot(context, updated ? null : entry.Value.Old.AppliedOptionals);
@@ -172,6 +175,20 @@ internal sealed partial class EGlobal
         }
         finally { _recipeUpdateJournal = null; _updateRefreshSuppression--; }
     }
+    /// <summary>
+    /// Plugins this journal must leave as they are: those another group of the batch has swapped but not reconciled yet,
+    /// whose loaded code may already be their new version, and those rolled back since this assembly was loaded, whose
+    /// loaded code still is. Their recipes are reconciled by their own journal, or after the next restart.
+    /// </summary>
+    private HashSet<string> UntouchedRecipes(UpdateJournal journal)
+    {
+        var untouched = new HashSet<string>(_rolledBackUpdates, StringComparer.Ordinal);
+        foreach (var other in _updateJournals?.Read().Where(j => j.IsActive && j.Id != journal.Id) ?? [])
+            untouched.UnionWith(other.Plugins.Select(p => p.Slug));
+        untouched.ExceptWith(journal.Plugins.Select(p => p.Slug));
+        return untouched;
+    }
+
     private void ExecuteUpdateOperation(PluginContext context, RecipeOperation operation, UpdateJournal journal, UpdatePluginJournal? plugin)
     {
         switch (operation.Kind)
