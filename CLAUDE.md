@@ -73,8 +73,10 @@ fragile. Two rules follow. Never hand Godot a C# delegate for later work: use `C
 `new Callable(this, MethodName.X)` on a GodotObject (Godot resolves those on the reloaded instance, so guard against a
 stale one), and `EGlobal.Post` from anywhere else, including background threads (`OnEditorThread` uses it; a queue
 drained by `EPluginPlugin._Process` that a reload discards). And do not start a plugin operation while a reload is due:
-`AssemblyReload.IsPending` (GodotTools' own check via reflection, else the build's timestamp) blocks the ePlugin
-Manager's actions until the new assembly is loaded.
+`AssemblyReload.IsPending` (the build's timestamp against the one this assembly was loaded from) blocks the ePlugin
+Manager's actions until the new assembly is loaded, and gives up after 15 s so a reload that never happens cannot lock
+the manager. Don't use GodotTools' `Internal.IsAssembliesReloadingNeeded` for this: it reported a reload as needed
+with no newer build on disk.
 
 `EGlobal` (`addons/ePlugin/Internal/EGlobal.cs`) is an internal singleton owning all plugin state. It is the
 brain of the framework: it tracks a `PluginContext` per managed `EditorPlugin`, drives the

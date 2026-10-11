@@ -1,8 +1,6 @@
 #if TOOLS
 using System;
 using System.IO;
-using System.Linq;
-using System.Reflection;
 using Godot;
 
 namespace Enaweg.Plugin.Internal;
@@ -13,25 +11,35 @@ namespace Enaweg.Plugin.Internal;
 /// it on that old code and stacks another build and reload onto the pending one, and Godot 4.7.2's in-place reload is
 /// unreliable enough that this has crashed the editor.
 /// </summary>
+/// <remarks>
+/// Compares the build on disk with the one this assembly was loaded from. GodotTools' own check is not used: it can
+/// report a reload as needed while no newer build exists, which locked the ePlugin Manager.
+/// </remarks>
 internal static class AssemblyReload
 {
-    // GodotTools' own check, the one its watcher reloads on. It is internal to the editor's C# tools, so without it
-    // (another Godot version) the build's timestamp is compared with the one this assembly was loaded from.
-    private static readonly Func<bool>? GodotCheck = BindGodotCheck();
+    /// <summary>
+    /// The watcher reloads within half a second and a reload takes a few seconds. A build still not loaded after this
+    /// long will not be (e.g. the reload failed); waiting longer would only lock the ePlugin Manager.
+    /// </summary>
+    internal static readonly TimeSpan GiveUpAfter = TimeSpan.FromSeconds(15);
+
     private static DateTime? _loadedBuild;
+    private static DateTime? _pendingSince;
 
     /// <summary>Remembers the build this assembly was loaded from; called once the framework initializes.</summary>
     public static void Capture() => _loadedBuild ??= BuildTime();
 
-    /// <summary>True while a newer build of this assembly waits to be loaded. Editor thread only.</summary>
+    /// <summary>True while a newer build of this assembly waits to be loaded.</summary>
     public static bool IsPending
     {
         get
         {
             try
             {
-                if (GodotCheck is not null) return GodotCheck();
-                return _loadedBuild is { } loaded && BuildTime() is { } built && built > loaded;
+                var state = Decide(ref _loadedBuild, BuildTime(), DateTime.UtcNow, ref _pendingSince);
+                if (state == State.GaveUp)
+                    EPlugin.Instance?.Logger.Warn("The editor did not load the rebuilt C# code. Restart the editor if plugins behave unexpectedly.");
+                return state == State.Pending;
             }
             catch (Exception)
             {
@@ -40,19 +48,25 @@ internal static class AssemblyReload
         }
     }
 
-    private static Func<bool>? BindGodotCheck()
+    internal enum State { Current, Pending, GaveUp }
+
+    /// <summary>
+    /// Whether <paramref name="built"/> still waits to replace <paramref name="loaded"/>. Giving up accepts the build as
+    /// loaded, so a later build is waited for again.
+    /// </summary>
+    internal static State Decide(ref DateTime? loaded, DateTime? built, DateTime now, ref DateTime? pendingSince)
     {
-        try
+        if (loaded is null || built is null || built <= loaded)
         {
-            return AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == "GodotTools")
-                ?.GetType("GodotTools.Internals.Internal")
-                ?.GetMethod("IsAssembliesReloadingNeeded", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static, Type.EmptyTypes)
-                ?.CreateDelegate<Func<bool>>();
+            pendingSince = null;
+            return State.Current;
         }
-        catch (Exception)
-        {
-            return null;
-        }
+
+        pendingSince ??= now;
+        if (now - pendingSince < GiveUpAfter) return State.Pending;
+        loaded = built;
+        pendingSince = null;
+        return State.GaveUp;
     }
 
     private static DateTime? BuildTime()
