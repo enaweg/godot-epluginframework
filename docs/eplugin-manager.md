@@ -2,7 +2,9 @@
 
 Open **ePlugin Manager** with the ePlugin button at the right of the editor's main toolbar or from **Project > Tools > ePlugin Manager...**.
 
-![ePlugin Manager listing enabled and disabled sample plugins with the selected plugin's details](images/eplugin-manager.png)
+![The ePlugin button at the right end of the editor's main toolbar, after the run buttons](images/eplugin-toolbar-button.png)
+
+![ePlugin Manager listing the installed plugins, with the details of the selected SamplePlugin: status, missing license, welcome page and update source](images/eplugin-manager.png)
 
 The overview above uses the repository's sample plugins in Godot's default dark editor theme.
 
@@ -21,7 +23,9 @@ Select a plugin to see its status, author, documentation and source links, licen
 - **Open release page** opens the release notes for the selected update.
 - **Version** selects a published version for an enabled plugin with an `update_url` or a package in a local plugin directory. Choose **Update** or **Downgrade** to install it, or **Reinstall** with the installed version selected to install it again: this gets new commits of a pinned Git branch whose version did not change, and repairs addon files changed in the project. Downgrades and reinstalls use the same download, validation, backup, and rollback flow as updates. The ePlugin Framework itself cannot be downgraded because an older framework cannot complete or recover the update that installs it.
 
-Long-running actions (enabling and disabling, **Retry failed**, **Check for updates**, downloading and installing) show their progress in ePlugin's separate progress window; the manager's status line reports the outcome. After the C# project was rebuilt, for example by an activation or an IDE build, the actions wait until the editor has loaded the rebuilt code, and the status line says *Waiting for the editor to load the rebuilt C# code...* meanwhile. They become available again after at most 15 seconds, even if the editor does not reload.
+Long-running actions (enabling and disabling, **Retry failed**, **Check for updates**, downloading and installing) show their progress in ePlugin's separate progress window; the manager's status line reports the outcome. After the C# project was rebuilt, for example by an activation or an IDE build, the actions wait until the editor has loaded the rebuilt code, and the status line says *Waiting for the editor to load the rebuilt C# code...* meanwhile. They become available again after at most 15 seconds, even if the editor does not reload. The progress window comes from a small helper included in release archives (see [Requirements and installation](../README.md#requirements-and-installation)).
+
+![The ePlugin Framework progress window while Sample Dependant Plugin is activated](images/activation-progress.png)
 
 ## Scheduled checks
 

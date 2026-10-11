@@ -53,6 +53,10 @@ The plugin shows as disabled in **Project Settings > Plugins** while the dialog 
 
 When enabling a plugin also enables disabled dependencies that ask for a license, all of these licenses are collected into one dialog. The list on the left shows each plugin and whether its license was accepted or declined. **Accept all** accepts every license that is not decided yet. A plugin is enabled only if all the licenses it needs are accepted. Declining a dependency's license leaves the plugin that needs it disabled as well.
 
+![License dialog for enabling Sample Dependant Plugin: SamplePlugin's license is accepted, and the plugin's own license is shown next with Decline and Accept](images/plugin-license.png)
+
+In this example, enabling Sample Dependant Plugin also enables SamplePlugin, its dependency. SamplePlugin's license was accepted already, so the dialog shows the plugin's own license next. The sample plugins do not ask for a license themselves; the screenshot uses the framework's MIT license as an example.
+
 A license is accepted once per project. Disabling and enabling the plugin again does not ask again. In a headless editor no dialog can be shown, so a plugin that needs a license is not enabled unless licenses are accepted automatically.
 
 ## When a license counts as accepted
