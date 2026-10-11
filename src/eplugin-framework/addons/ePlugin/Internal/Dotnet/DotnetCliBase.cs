@@ -9,9 +9,11 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
 {
     protected readonly string SolutionPath;
     protected readonly string GodotProjectPath;
+    protected readonly ILogger? Logger;
 
     protected DotnetCliBase(ILogger? logger, bool enableDebugLogging) : base(logger, enableDebugLogging)
     {
+        Logger = logger;
         var pathToSolution = ProjectSettings.GlobalizePath("res://");
         var solutionName = $"{ProjectSettings.GetSetting("dotnet/project/assembly_name")}.sln";
 
@@ -33,6 +35,54 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
             logger?.Log($"Using {this.GetType().Name} for dotnet commands.");
         }
     }
+
+    /// <summary>
+    /// Settles a package removal before the CLI runs, because the CLI fails to remove a package the project no longer
+    /// references although that is the state the caller wants: false for an invalid package id, true (with a warning)
+    /// when the project does not reference it, null to let the CLI remove it.
+    /// </summary>
+    protected bool? CheckPackageRemoval(string nugetName)
+    {
+        if (!ProjectReferences.IsValidPackageId(nugetName))
+        {
+            Logger?.Error($"Cannot remove NuGet '{nugetName}': it is not a valid package id.");
+            return false;
+        }
+
+        if (ProjectReferences.ReferencesPackage(GodotProjectPath, nugetName) != false) return null;
+        Logger?.Warn($"NuGet {nugetName} is not referenced by {Path.GetFileName(GodotProjectPath)}; nothing to remove.");
+        return true;
+    }
+
+    /// <summary>Like <see cref="CheckPackageRemoval"/>, for a project reference given relative to <c>res://</c>.</summary>
+    protected bool? CheckProjectReferenceRemoval(string projectReference)
+    {
+        if (!ProjectReferences.IsValidProjectPath(projectReference))
+        {
+            Logger?.Error($"Cannot remove project reference '{projectReference}': it is not a project file path.");
+            return false;
+        }
+
+        if (ProjectReferences.ReferencesProject(GodotProjectPath, ProjectFile(projectReference)) != false) return null;
+        Logger?.Warn($"{Path.GetFileName(GodotProjectPath)} does not reference {projectReference}; nothing to remove.");
+        return true;
+    }
+
+    /// <summary>Like <see cref="CheckPackageRemoval"/>, for a solution entry given relative to <c>res://</c>.</summary>
+    protected bool? CheckSolutionRemoval(string projectPath)
+    {
+        if (!ProjectReferences.IsValidProjectPath(projectPath))
+        {
+            Logger?.Error($"Cannot remove '{projectPath}' from the solution: it is not a project file path.");
+            return false;
+        }
+
+        if (ProjectReferences.SolutionContains(SolutionPath, ProjectFile(projectPath)) != false) return null;
+        Logger?.Warn($"{Path.GetFileName(SolutionPath)} does not contain {projectPath}; nothing to remove.");
+        return true;
+    }
+
+    private static string ProjectFile(string path) => Path.GetFullPath(Path.Combine(ProjectSettings.GlobalizePath("res://"), path));
 
     public abstract void RebuildSolution();
     public abstract void RunTests();

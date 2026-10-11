@@ -151,6 +151,12 @@ enough in `sln`/`nuget`/reference command behavior to need separate implementati
 the actual process execution. Any new dotnet CLI operation needs a corresponding abstract member on
 `DotnetCliBase`/`IDotnetCli` implemented in both `DotnetCli9` and `DotnetCli10`.
 
+Removals are idempotent: the CLI fails to remove a package, project reference or solution entry that is already gone,
+although that is the state the caller wants. Both CLIs therefore first ask `DotnetCliBase.Check*Removal`, which reads
+the `.csproj`/`.sln`/`.slnx` through `ProjectReferences` (pure, tested): an invalid package id or project path fails,
+an absent entry succeeds with a warning, and anything it cannot tell (unreadable file, MSBuild properties) runs the CLI
+as before.
+
 ### Update system
 
 `Internal/Update/` contains pure checks/sources, bounded ZIP and sparse-git staging, validation, the transaction

@@ -36,6 +36,7 @@ internal sealed class DotnetCli10(ILogger? logger, bool enableDebugLogging)
 
     public override bool TryRemoveProjectFromSolution(string projectPath)
     {
+        if (CheckSolutionRemoval(projectPath) is { } settled) return settled;
         var pathToSolution = ProjectSettings.GlobalizePath("res://");
 
         return Execute(null, null,
@@ -129,6 +130,7 @@ internal sealed class DotnetCli10(ILogger? logger, bool enableDebugLogging)
 
     public override bool TryRemoveNugetFromProject(string nugetName)
     {
+        if (CheckPackageRemoval(nugetName) is { } settled) return settled;
         return Execute("package", "remove", [
             nugetName,
             "--project",
@@ -158,6 +160,7 @@ internal sealed class DotnetCli10(ILogger? logger, bool enableDebugLogging)
 
     public override bool TryRemoveProjectReference(string projectReference)
     {
+        if (CheckProjectReferenceRemoval(projectReference) is { } settled) return settled;
         return Execute("reference", "remove",
         [
             projectReference,
