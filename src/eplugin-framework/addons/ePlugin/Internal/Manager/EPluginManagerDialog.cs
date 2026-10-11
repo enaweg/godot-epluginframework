@@ -471,7 +471,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             _working = true; Buttons();
             _status.Text = (enable ? "Enabling " : "Disabling ") + row.Plugin.Name + "...";
             if (enable) Callable.From(() => EnableAfterLicenses(row.Plugin.Slug, row.Plugin.Name)).CallDeferred();
-            else Callable.From(() => SetPluginEnabled(row.Plugin.Slug, false)).CallDeferred();
+            else Callable.From(() => SetPluginEnabled(row.Plugin.Slug, row.Plugin.Name, false)).CallDeferred();
         }
     }
 
@@ -490,12 +490,12 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             if (GodotObject.IsInstanceValid(this) && IsInsideTree()) Refresh();
             return;
         }
-        if (review is null) { SetPluginEnabled(slug, true); return; }
+        if (review is null) { SetPluginEnabled(slug, name, true); return; }
         _status.Text = $"Review the license to enable {name}.";
         LicenseDialog.Create(review, decided =>
         {
             _global.RecordLicenses(decided);
-            if (decided.Approved.Any()) { Callable.From(() => SetPluginEnabled(slug, true)).CallDeferred(); return; }
+            if (decided.Approved.Any()) { Callable.From(() => SetPluginEnabled(slug, name, true)).CallDeferred(); return; }
             _working = false;
             if (!GodotObject.IsInstanceValid(this) || !IsInsideTree()) return;
             Refresh();
@@ -511,8 +511,10 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         return decided.Task;
     }
 
-    private void SetPluginEnabled(string slug, bool enable)
+    private void SetPluginEnabled(string slug, string name, bool enable)
     {
+        // Also covers plain plugins; an ePlugin's own activation shares this window.
+        using var progress = ActivationProgress.Begin((enable ? "Enabling " : "Disabling ") + name + "...");
         try { EditorInterface.Singleton.SetPluginEnabled(slug, enable); }
         catch (Exception ex) { GD.PushError($"Cannot {(enable ? "enable" : "disable")} {slug}: {ex.Message}"); }
         finally
@@ -563,7 +565,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private void RetryFailed()
     {
         if (_working || _staged is not null) return;
-        _global.RetryFailedPlugins();
+        using (ActivationProgress.Begin("Retrying failed plugins...")) _global.RetryFailedPlugins();
         if (GodotObject.IsInstanceValid(this) && IsInsideTree()) Refresh();
     }
 
