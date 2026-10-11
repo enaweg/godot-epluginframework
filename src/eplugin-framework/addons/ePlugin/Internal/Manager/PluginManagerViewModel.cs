@@ -173,6 +173,38 @@ internal sealed class PluginManagerViewModel
         : welcome.Problem is not null ? $"[b]Welcome page:[/b] [color=#ff7070]{Escape(welcome.Problem)}[/color]\n"
         : $"[b]Welcome page:[/b] [url={WelcomeMeta}]{Escape(PluginLicense.Display(welcome.Slug, welcome.Source))}[/url]\n";
 
+    /// <summary>
+    /// The status line after installing a batch: what was installed and, per group that was not, why. A group that failed
+    /// names its log folder.
+    /// </summary>
+    public static string UpdateSummary(IReadOnlyList<UpdateGroupResult> results, bool restarting)
+    {
+        static string Names(IEnumerable<ValidatedPackage> packages) => string.Join(", ", packages.Select(p => $"{p.Candidate.PluginName} {p.NewVersion}"));
+        static string Reason(string? failure, string fallback) => (failure ?? fallback).TrimEnd('.');
+        var parts = new List<string>();
+        var installed = results.Where(r => r.Outcome is UpdateOutcome.Completed or UpdateOutcome.AwaitingReload).SelectMany(r => r.Packages).ToArray();
+        if (installed.Length > 0) parts.Add($"Installed {Names(installed)}.");
+        foreach (var result in results)
+        {
+            if (result.Outcome is null) parts.Add($"Skipped {Names(result.Packages)}: {Reason(result.Failure, "it was refused")}. Its files were not changed.");
+            else if (result.Outcome == UpdateOutcome.RolledBack) parts.Add($"Rolled back {Names(result.Packages)}: {Reason(result.Failure, "the update failed")}. Logs: {result.Directory}");
+            else if (result.Outcome == UpdateOutcome.KeptWithErrors)
+                parts.Add($"{Names(result.Packages)} needs recovery: {Reason(result.Failure, "Use Retry failed in the ePlugin Manager")}. Logs: {result.Directory}");
+        }
+        if (restarting)
+            parts.Add(installed.Length switch
+            {
+                0 => "Restarting the editor to load the restored plugins...",
+                1 => "Restarting the editor to load the update...",
+                _ => "Restarting the editor to load the updates..."
+            });
+        return string.Join(" ", parts);
+    }
+
+    /// <summary>Whether any group of the batch was not installed.</summary>
+    public static bool AnyUpdateFailed(IReadOnlyList<UpdateGroupResult> results) =>
+        results.Any(r => r.Outcome is null or UpdateOutcome.RolledBack or UpdateOutcome.KeptWithErrors);
+
     /// <summary>The details pane as BBCode. All plugin supplied text is escaped.</summary>
     /// <param name="reviewed">Findings of a staged package for an explicitly chosen version, awaiting confirmation.</param>
     public static string Describe(PluginRow row, IReadOnlyList<Finding>? reviewed = null, LicenseInfo? license = null,

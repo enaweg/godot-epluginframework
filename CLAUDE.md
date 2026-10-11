@@ -67,6 +67,17 @@ There is no lint command configured beyond the `.editorconfig` (UTF-8 charset on
 assembly-reload behavior, which wipes static state (including `EGlobal`) without re-running
 `_EnterTree`/`_EnablePlugin`.
 
+Every build of the project assembly (an activation's `TryRebuildSolution`, but also Rider or `dotnet test`) makes
+GodotTools' `HotReloadAssemblyWatcher` reload it in place within half a second, and Godot 4.7.2's in-place reload is
+fragile. Two rules follow. Never hand Godot a C# delegate for later work: use `CallDeferred(MethodName.X, args)` or
+`new Callable(this, MethodName.X)` on a GodotObject (Godot resolves those on the reloaded instance, so guard against a
+stale one), and `EGlobal.Post` from anywhere else, including background threads (`OnEditorThread` uses it; a queue
+drained by `EPluginPlugin._Process` that a reload discards). And do not start a plugin operation while a reload is due:
+`AssemblyReload.IsPending` (the build's timestamp against the one this assembly was loaded from) blocks the ePlugin
+Manager's actions until the new assembly is loaded, and gives up after 15 s so a reload that never happens cannot lock
+the manager. Don't use GodotTools' `Internal.IsAssembliesReloadingNeeded` for this: it reported a reload as needed
+with no newer build on disk.
+
 `EGlobal` (`addons/ePlugin/Internal/EGlobal.cs`) is an internal singleton owning all plugin state. It is the
 brain of the framework: it tracks a `PluginContext` per managed `EditorPlugin`, drives the
 enable/disable state machine (`EEditorPluginState`: `Created → Activated`/`Deactivated`/`Error`), resolves
@@ -151,6 +162,12 @@ enough in `sln`/`nuget`/reference command behavior to need separate implementati
 the actual process execution. Any new dotnet CLI operation needs a corresponding abstract member on
 `DotnetCliBase`/`IDotnetCli` implemented in both `DotnetCli9` and `DotnetCli10`.
 
+Removals are idempotent: the CLI fails to remove a package, project reference or solution entry that is already gone,
+although that is the state the caller wants. Both CLIs therefore first ask `DotnetCliBase.Check*Removal`, which reads
+the `.csproj`/`.sln`/`.slnx` through `ProjectReferences` (pure, tested): an invalid package id or project path fails,
+an absent entry succeeds with a warning, and anything it cannot tell (unreadable file, MSBuild properties) runs the CLI
+as before.
+
 ### Update system
 
 `Internal/Update/` contains pure checks/sources, bounded ZIP and sparse-git staging, validation, the transaction
@@ -192,7 +209,20 @@ operations without intermediate builds/refreshes, tracks pending operations dura
 dependencies, and protects shared NuGets. `ICheckedDotnetCli.TryBuild` in both CLI implementations returns exit
 status/output and forces non-incremental compilation, including rollback (old timestamps cannot reuse new code).
 
-A batch owns one PluginStateStore attempt. Write its local marker before side effects; acknowledge all versions
+A staged batch is split by `UpdateGroups.Plan` (pure, tested): plugins connected by hard dependencies, also through
+plugins outside the batch, share a group; the implicit dependency on the framework does not join groups, and the
+framework's group goes first. `UpdateApplier.ApplyGroups` moves each later group's staging into its own transaction
+folder, then runs every group as an independent transaction (`UpdateJournal.Group` set; one group keeps `Group` null and
+behaves exactly as before). A grouped journal never asks or keeps on a build failure; it rolls back. `EGlobal` runs all
+groups synchronously (no frames, so the editor cannot reload an assembly a group built), defers `RequestReload` and
+`Scan` until the last group (`DeferRestarts`/`DeferScans`, also around `ResumeUpdates`), and restarts at most once.
+`UpdateJournals.Read` orders journals by creation and group, so groups resume in the order they were applied; resume
+reloads each journal because an earlier group may have changed it. When a journal commits or rolls back,
+`RebasePending` refreshes the `backup-project` of every journal that has not reconciled yet and, on commit, its recipe
+baselines for plugins it does not update, so a later rollback keeps the earlier group's changes. Reconcile leaves alone
+the recipes of plugins in another active journal or rolled back since the assembly was loaded (`UntouchedRecipes`).
+
+A group owns one PluginStateStore attempt. Write its local marker before side effects; acknowledge all versions
 once after final build/verification. Rollback restores backups and abandons the marker without changing the
 shared index. Keep-after-final-build-failure retains an `update_kept_build_failed` marker; an acknowledgement
 conflict retains `update_commit_failed`. Retry dispatches these to the update applier. An acknowledged attempt
@@ -221,13 +251,19 @@ so a stale one can be removed after an assembly reload). When an update restarts
 expires after an hour); the start that requests no further restart wraps `Initialize` in one `ActivationProgress` scope,
 reopens the manager and closes that progress window a few frames later. Every dialog is its own scene (`EPluginManagerDialog.tscn`,
 `LocalSourcesDialog.tscn`, `UpdateFailureDialog.tscn`); scripts only bind `%`-unique nodes and set what a scene cannot
-store (e.g. Tree column titles/widths). Keep layout changes in the scenes. Scene roots set `auto_translate_mode = 2`,
+store (e.g. Tree column titles/widths). Keep layout changes in the scenes. Close dialogs with `EditorWindows.Release`, never `QueueFree` in the frame that hides them: freeing a window from its
+own button, or right after a reload while it has focus and the mouse, crashed Godot 4.7.2 on the next window message
+(use-after-free in its message handling). Release hides it now and frees it 0.25 s later through a native callable.
+Scene roots set `auto_translate_mode = 2`,
 otherwise the editor translates the English UI into its own language. An autowrapping Label needs a
 `custom_minimum_size` width, or the dialog measures it at zero width and pops up taller than the screen. Icons come
 from `EditorIcons`, which renders the SVGs at the editor scale (a headless editor re-imports them at 100%). `EGlobal.CollectPlugins` scans every `res://addons/<slug>/plugin.cfg`; `PluginCatalog.Classify`
 recognizes disabled ePlugins by the `ScriptPathAttribute` of their compiled type. `PluginManagerViewModel` is pure
 (rows, update selection, BBCode details) and unit-tested. New user-facing actions belong in this dialog, not in
-additional Tools menu entries.
+additional Tools menu entries. Long-running actions (enabling/disabling, Retry failed, Check for updates,
+downloading and installing) show their progress through an `ActivationProgress` scope, not through the dialog: the
+dialog has no progress bar and only puts the outcome in its status line. An async scope reports from background threads
+via `CallDeferred`, because `ActivationProgress` is editor-thread only.
 
 ### Plugin licenses
 
@@ -270,13 +306,17 @@ the updated plugins as shown, so updates never show a page. The ePlugin Manager 
 `ILogger`/`ILoggerFactory` are pluggable (`GodotConsoleLogger`, `NullLogger`, `GenericLoggerFactory`).
 `EGlobal.SwitchLogging` lets a dependent plugin (e.g. an external logging plugin) take over ePlugin's own
 console logging at runtime — this is why logger wiring goes through the factory rather than being
-constructed once and cached globally.
+constructed once and cached globally. `GD.PushError`/`PushWarning` always report their direct caller, so
+`GodotConsoleLogger` binds GodotSharp's internal `NativeFuncs.godotsharp_err_print_error` and passes the first frame
+outside any `ILogger` (or `[StackTraceHidden]` method) as the location; without that binding it falls back to `GD.Push*`.
 
 ### Directory show/hide
 
 `ShowHideHelper` implements `AddDirectory`: it toggles a managed directory's visibility by renaming it with/
 without a leading `.` (POSIX-style hidden dirs) and toggling the Windows hidden attribute. Used for shipping
-plugin source that should stay inert until the plugin is activated.
+plugin source that should stay inert until the plugin is activated. A recipe may name either form (`src` or `.src`).
+A directory already in the wanted state is left alone, one missing in both forms is only logged as a warning, and only
+both forms existing at once fails, because neither can be renamed onto the other.
 
 ## Known constraints (see README for full list)
 

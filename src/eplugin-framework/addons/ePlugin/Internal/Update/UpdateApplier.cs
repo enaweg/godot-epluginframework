@@ -9,6 +9,11 @@ using Enaweg.Plugin.Internal.Dotnet;
 namespace Enaweg.Plugin.Internal.Update;
 
 internal enum UpdateOutcome { Completed, AwaitingReload, AwaitingDecision, KeptWithErrors, RolledBack }
+/// <summary>
+/// What became of one group of a batch. <paramref name="Outcome"/> is null when the group was refused before its
+/// transaction began, so none of its addons changed; <paramref name="Failure"/> then says why.
+/// </summary>
+internal sealed record UpdateGroupResult(IReadOnlyList<ValidatedPackage> Packages, string Directory, UpdateOutcome? Outcome, string? Failure);
 internal interface IUpdateHost
 {
     bool UiAvailable { get; }
@@ -38,14 +43,97 @@ internal static class UpdateFailureDecision
 internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, IUpdateHost host, IUpdateStateStore cache)
 {
     private string Installed(string slug) => PackageFiles.Inside(Path.Combine(projectRoot, "addons"), slug);
-    public UpdateOutcome Apply(IReadOnlyList<ValidatedPackage> packages, string transactionDirectory, bool trustChangedSources = false)
+
+    /// <summary>
+    /// Installs the groups of one staged batch one after another, each as its own transaction: a group that fails is
+    /// rolled back alone and the next group is still installed on top of the ones that succeeded. A batch of one group
+    /// is applied exactly like <see cref="Apply"/>, including its exceptions.
+    /// </summary>
+    public IReadOnlyList<UpdateGroupResult> ApplyGroups(IReadOnlyList<IReadOnlyList<ValidatedPackage>> groups, string transactionDirectory,
+        Func<string> newDirectory, bool trustChangedSources = false, Action<int, IReadOnlyList<ValidatedPackage>>? starting = null,
+        Action<UpdateGroupResult>? finished = null)
+    {
+        if (groups.Count == 0) throw new InvalidOperationException("No valid distinct addon batch was selected.");
+        if (groups.Count == 1)
+        {
+            starting?.Invoke(0, groups[0]);
+            var single = Result(groups[0], transactionDirectory, Apply(groups[0], transactionDirectory, trustChangedSources));
+            finished?.Invoke(single);
+            return [single];
+        }
+        var results = new List<UpdateGroupResult>();
+        var split = SplitStaging(groups, transactionDirectory, newDirectory);
+        for (var i = 0; i < split.Count; i++)
+        {
+            var (packages, directory) = split[i];
+            starting?.Invoke(i, packages);
+            UpdateGroupResult result;
+            try { result = Result(packages, directory, Apply(packages, directory, trustChangedSources, i)); }
+            catch (Exception ex) { result = new(packages, directory, null, ex.Message); }
+            try
+            {
+                // A group refused before its marker leaves only its staging behind.
+                if (!File.Exists(Path.Combine(directory, "journal.json")) && System.IO.Directory.Exists(directory)) System.IO.Directory.Delete(directory, true);
+            }
+            catch (Exception ex) { host.Log($"Cannot remove the staging folder {directory}: {ex.Message}"); }
+            results.Add(result);
+            finished?.Invoke(result);
+        }
+        return results;
+    }
+
+    private static UpdateGroupResult Result(IReadOnlyList<ValidatedPackage> packages, string directory, UpdateOutcome outcome)
+    {
+        string? failure = null;
+        if (outcome is UpdateOutcome.RolledBack or UpdateOutcome.KeptWithErrors)
+        {
+            try { failure = UpdateJournal.Load(directory).Failure; }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or System.Text.Json.JsonException) { }
+        }
+        return new(packages, directory, outcome, failure);
+    }
+
+    /// <summary>
+    /// Gives every group after the first its own transaction folder, before the first group's commit deletes the batch
+    /// folder with everything still staged in it.
+    /// </summary>
+    private static List<(IReadOnlyList<ValidatedPackage> Packages, string Directory)> SplitStaging(
+        IReadOnlyList<IReadOnlyList<ValidatedPackage>> groups, string transactionDirectory, Func<string> newDirectory)
+    {
+        var split = new List<(IReadOnlyList<ValidatedPackage>, string)> { (groups[0], transactionDirectory) };
+        try
+        {
+            foreach (var group in groups.Skip(1))
+            {
+                var directory = newDirectory();
+                var moved = new List<ValidatedPackage>();
+                split.Add((moved, directory));
+                foreach (var package in group)
+                {
+                    var staging = PackageFiles.Inside(Path.Combine(directory, "staging"), package.Candidate.Slug);
+                    System.IO.Directory.CreateDirectory(Path.GetDirectoryName(staging)!);
+                    Move(package.StagingDir, staging);
+                    moved.Add(package with { StagingDir = staging });
+                }
+            }
+        }
+        catch
+        {
+            foreach (var (_, directory) in split.Skip(1))
+                if (System.IO.Directory.Exists(directory)) System.IO.Directory.Delete(directory, true);
+            throw;
+        }
+        return split;
+    }
+
+    public UpdateOutcome Apply(IReadOnlyList<ValidatedPackage> packages, string transactionDirectory, bool trustChangedSources = false, int? group = null)
     {
         if (packages.Count == 0 || packages.Any(p => !p.IsValid) || packages.Select(p => p.Candidate.Slug).Distinct().Count() != packages.Count)
             throw new InvalidOperationException("No valid distinct addon batch was selected.");
         if (!trustChangedSources && packages.Any(p => p.Findings.Any(f => f.RequiresTrust))) throw new InvalidOperationException("Confirm trust in the changed update source before installation.");
         if (store.IsReadOnly || packages.Any(p => store.IsBlocked(p.Candidate.Slug))) throw new InvalidOperationException("Resolve local plugin state before updating.");
         host.Preflight(packages);
-        var journal = new UpdateJournal { Id = Path.GetFileName(transactionDirectory), Directory = transactionDirectory };
+        var journal = new UpdateJournal { Id = Path.GetFileName(transactionDirectory), Directory = transactionDirectory, Group = group };
         foreach (var package in packages)
         {
             var slug = package.Candidate.Slug;
@@ -92,7 +180,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                 var managed = journal.Plugins.Any(p => p.IsEPlugin);
                 if (Build(journal, managed ? "interim" : "final").ExitCode != 0)
                 {
-                    var decision = UpdateFailureDecision.Choose(!managed, journal.Plugins.Any(p => p.Slug == "ePlugin"), host.BuildFailurePolicy, host.UiAvailable);
+                    var decision = UpdateFailureDecision.Choose(!managed, journal.Plugins.Any(p => p.Slug == "ePlugin"), Policy(journal), host.UiAvailable);
                     if (!managed)
                         foreach (var plugin in journal.Plugins.Where(p => !p.IsEPlugin)) host.SetPlainEnabled(plugin.Slug, true);
                     if (decision == "ask") { journal.Failure = "Plain C# addon build failed; the assembly cannot reload until the project compiles."; journal.Save(UpdatePhase.AwaitingDecision); return UpdateOutcome.AwaitingDecision; }
@@ -128,7 +216,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             if (managedCSharp && !finalBuild) host.Log("The updated recipes do not change the build; the editor keeps the interim build without another restart.");
             if (finalBuild && Build(journal, "final").ExitCode != 0)
             {
-                var decision = UpdateFailureDecision.Choose(true, journal.Plugins.Any(p => p.Slug == "ePlugin"), host.BuildFailurePolicy, host.UiAvailable);
+                var decision = UpdateFailureDecision.Choose(true, journal.Plugins.Any(p => p.Slug == "ePlugin"), Policy(journal), host.UiAvailable);
                 if (decision == "ask") { journal.Failure = "Final build failed."; journal.Save(UpdatePhase.AwaitingDecision); return UpdateOutcome.AwaitingDecision; }
                 if (decision == "keep") return Keep(journal);
                 return Rollback(journal, "Final build failed.");
@@ -153,6 +241,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             host.Log(journal.Failure);
             return UpdateOutcome.KeptWithErrors;
         }
+        RebasePending(journal, true);
         // Updates never show a welcome page, also not one the plugin did not have or show before.
         var unseen = journal.Plugins.Where(p => !store.IsWelcomeShown(p.Slug)).Select(p => new ShownWelcome(p.Slug, p.NewVersion, DateTimeOffset.UtcNow)).ToArray();
         if (unseen.Length > 0 && !store.TryRecordWelcomes(unseen)) host.Log("The updated plugins' welcome pages could not be marked as shown; they may be shown after the editor restarts.");
@@ -219,6 +308,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             if (journal.Plugins.Any(p => p.ContainsCSharp) && Build(journal, "rollback").ExitCode != 0) throw new IOException("Restored project failed to build.");
             if (store.LocalAttempts.Any(a => a.AttemptId == journal.AttemptId) && !store.TryAbandonAttempt(journal.AttemptId)) throw new IOException("Cannot clear the rollback marker.");
             journal.Save(UpdatePhase.RolledBack);
+            RebasePending(journal, false);
             foreach (var plugin in journal.Plugins)
             {
                 if (!cache.State.FailedUpdates.TryGetValue(plugin.Slug, out var failures)) cache.State.FailedUpdates[plugin.Slug] = failures = [];
@@ -277,15 +367,54 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         journal.Save();
         return build;
     }
-    private void BackupProject(UpdateJournal journal)
+    /// <summary>A group that fails never asks: keeping a project that does not build would fail every later group too.</summary>
+    private string Policy(UpdateJournal journal) => journal.Group is null ? host.BuildFailurePolicy : "rollback";
+
+    /// <summary>
+    /// The other groups of a batch that have not reconciled yet were backed up before this journal changed the project.
+    /// They take over its result, so rolling one of them back later restores the project with this journal's changes
+    /// rather than undoing them. Recipes are taken over only from a commit: a rollback restored what they already hold.
+    /// </summary>
+    private void RebasePending(UpdateJournal finished, bool committed)
+    {
+        try
+        {
+            foreach (var pending in new UpdateJournals(Path.Combine(projectRoot, ".godot/eplugin/updates")).Read()
+                         .Where(j => j.Id != finished.Id && j.State is UpdatePhase.Staged or UpdatePhase.Swapped or UpdatePhase.InterimBuilt))
+            {
+                if (committed)
+                    foreach (var (slug, record) in finished.Recipes)
+                        if (pending.Plugins.All(p => p.Slug != slug) && pending.Recipes.TryGetValue(slug, out var own))
+                        { own.Old = record.Applied.Clone(); own.Applied = record.Applied.Clone(); }
+                BackupProject(pending, true);
+                pending.Save();
+            }
+        }
+        catch (Exception ex) { host.Log("Cannot refresh the backups of the remaining plugin updates; rolling one of them back may undo this update's project changes: " + ex.Message); }
+    }
+
+    private void BackupProject(UpdateJournal journal, bool replace = false)
     {
         var backup = Path.Combine(journal.Directory, "backup-project");
-        System.IO.Directory.CreateDirectory(backup);
+        // A replaced backup is written next to the old one and swapped in, so it is never half written.
+        var target = replace ? backup + ".new" : backup;
+        if (replace && System.IO.Directory.Exists(target)) System.IO.Directory.Delete(target, true);
+        System.IO.Directory.CreateDirectory(target);
+        var files = new List<string>();
         foreach (var file in System.IO.Directory.GetFiles(projectRoot).Where(f => new[] { ".csproj", ".sln", ".slnx" }.Contains(Path.GetExtension(f)) || Path.GetFileName(f).Equals("nuget.config", StringComparison.OrdinalIgnoreCase) || Path.GetFileName(f) == "project.godot"))
         {
-            journal.ProjectFiles.Add(Path.GetFileName(file));
-            File.Copy(file, Path.Combine(backup, Path.GetFileName(file)), false);
+            files.Add(Path.GetFileName(file));
+            File.Copy(file, Path.Combine(target, Path.GetFileName(file)), false);
         }
+        if (replace)
+        {
+            var old = backup + ".old";
+            if (System.IO.Directory.Exists(old)) System.IO.Directory.Delete(old, true);
+            if (System.IO.Directory.Exists(backup)) Move(backup, old);
+            Move(target, backup);
+            if (System.IO.Directory.Exists(old)) System.IO.Directory.Delete(old, true);
+        }
+        journal.ProjectFiles = files;
     }
     private void RestoreProject(UpdateJournal journal)
     {

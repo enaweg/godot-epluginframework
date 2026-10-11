@@ -37,6 +37,30 @@ internal static class EditorWindows
         if (_icon is not null) display.Call(WindowSetIcon, _icon, id);
     }
 
+    // Long enough for the editor to process the frames and window messages that still follow the hide.
+    private const double ReleaseDelaySeconds = 0.25;
+
+    /// <summary>
+    /// Hides a window now and frees it a moment later. Freeing a window in the frame that hides it, from its own button
+    /// or right after an assembly reload while it had focus and the mouse, left Godot handling the next window message
+    /// with references to the freed window, and the editor crashed.
+    /// </summary>
+    public static void Release(Window window)
+    {
+        if (!GodotObject.IsInstanceValid(window) || window.IsQueuedForDeletion()) return;
+        window.Hide();
+        if (!window.IsInsideTree())
+        {
+            // Never shown, so nothing refers to it yet.
+            window.QueueFree();
+            return;
+        }
+
+        // A native method callable rather than a C# delegate, so it still runs after an assembly reload.
+        window.GetTree().CreateTimer(ReleaseDelaySeconds)
+            .Connect(SceneTreeTimer.SignalName.Timeout, new Callable(window, Node.MethodName.QueueFree));
+    }
+
     /// <summary>The logo rendered large and centered on a square, as title bar icons are square.</summary>
     private static Image? IconImage()
     {

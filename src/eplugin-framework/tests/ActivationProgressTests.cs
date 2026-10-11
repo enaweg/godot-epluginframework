@@ -117,6 +117,30 @@ public class ActivationProgressTests
     }
 
     [TestCase]
+    public void SelfUpdateClosesHelperAndOnlyAnExplicitReopenStartsItAgain()
+    {
+        using (ActivationProgress.Begin("Updating plugins..."))
+        {
+            ActivationProgress.ForceCloseForUpdate();
+            Assertions.AssertBool(_launched[0].Disposed).IsTrue();
+            using (ActivationProgress.Begin("Nested..."))
+            {
+            }
+
+            Assertions.AssertInt(_launched.Count).IsEqual(1);
+            ActivationProgress.ReopenAfterUpdate("Updating B...");
+            ActivationProgress.ReopenAfterUpdate("Updating C...");
+            Assertions.AssertInt(_launched.Count).IsEqual(2);
+            Assertions.AssertThat(_launched[1].Received).ContainsExactly("Updating B...");
+        }
+
+        Assertions.AssertBool(_launched[1].Disposed).IsTrue();
+        // Outside an operation there is nothing to reopen.
+        ActivationProgress.ReopenAfterUpdate("Idle...");
+        Assertions.AssertInt(_launched.Count).IsEqual(2);
+    }
+
+    [TestCase]
     public void MissingOrFailingHelperDoesNotAffectOperation()
     {
         ActivationProgress.Launch = () => null;

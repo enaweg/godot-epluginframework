@@ -66,7 +66,7 @@ internal sealed partial class EGlobal
         // Godot is still running this plugin's _EnablePlugin. Disabling it right away would free the plugin inside its
         // own callback. Deactivated makes the DisableEPlugin it triggers a no-op, as nothing was installed.
         context.State = EEditorPluginState.Deactivated;
-        Callable.From(() =>
+        Post(() =>
         {
             if (EditorInterface.Singleton.IsPluginEnabled(context.Slug))
             {
@@ -74,7 +74,7 @@ internal sealed partial class EGlobal
             }
 
             _contexts.Remove(context);
-        }).CallDeferred();
+        });
         return false;
     }
 
@@ -403,13 +403,13 @@ internal sealed partial class EGlobal
         foreach (var (activation, enable) in review.Approved.Where(a => !a.Enabled).Select(a => (a, true))
                      .Concat(review.Canceled.Where(a => a.Enabled).Select(a => (a, false))))
         {
-            Callable.From(() =>
+            Post(() =>
             {
                 if (EditorInterface.Singleton.IsPluginEnabled(activation.Slug) != enable)
                 {
                     EditorInterface.Singleton.SetPluginEnabled(activation.Slug, enable);
                 }
-            }).CallDeferred();
+            });
         }
     }
 }

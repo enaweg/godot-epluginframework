@@ -40,6 +40,11 @@ internal sealed class UpdateJournal
     public Dictionary<string, RecipeJournal> Recipes { get; set; } = [];
     public Dictionary<string, string> AdditionalVersions { get; set; } = [];
     public string? Failure { get; set; }
+    /// <summary>
+    /// Position in a batch split into independent groups, each its own transaction; null for a batch applied as one.
+    /// A group's build failure always rolls back that group, so the remaining groups can still be installed.
+    /// </summary>
+    public int? Group { get; set; }
     [JsonIgnore] public string Directory { get; set; } = "";
     public string Backup(string slug) => PackageFiles.Inside(Path.Combine(Directory, "backup"), slug);
     public string Staging(string slug) => PackageFiles.Inside(Path.Combine(Directory, "staging"), slug);
@@ -81,7 +86,8 @@ internal sealed class UpdateJournals(string root, Action<string>? log = null)
             try { result.Add(UpdateJournal.Load(folder)); }
             catch (Exception ex) when (ex is IOException or JsonException or ArgumentException) { log?.Invoke($"Cannot read update journal {folder}: {ex.Message}"); }
         }
-        return result;
+        // Groups of one batch resume in the order they were applied: a later group built on top of the earlier ones.
+        return result.OrderBy(j => j.CreatedUtc).ThenBy(j => j.Group ?? 0).ToList();
     }
     public bool OwnsAttempt(Guid? id) => id is not null && Read().Any(j => j.IsActive && j.AttemptId == id);
     public IReadOnlySet<string> OwnedSlugs => Read().Where(j => j.IsActive).SelectMany(j => j.Plugins.Select(p => p.Slug).Concat(j.AdditionalVersions.Keys)).ToHashSet(StringComparer.Ordinal);

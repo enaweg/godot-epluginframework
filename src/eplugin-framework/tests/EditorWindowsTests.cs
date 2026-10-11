@@ -1,0 +1,38 @@
+using System.Threading.Tasks;
+using Enaweg.Plugin.Internal.Manager;
+using GdUnit4;
+using Godot;
+
+namespace Enaweg.Plugin.Tests;
+
+[TestSuite]
+[RequireGodotRuntime]
+public class EditorWindowsTests
+{
+    [TestCase]
+    public async Task ReleaseHidesAWindowNowAndFreesItOnlyLater()
+    {
+        var tree = (SceneTree)Engine.GetMainLoop();
+        var window = new Window { Visible = false };
+        tree.Root.AddChild(window);
+
+        EditorWindows.Release(window);
+        await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        // Still alive frames after the hide, so the window messages that follow it find it.
+        Assertions.AssertBool(GodotObject.IsInstanceValid(window)).IsTrue();
+        Assertions.AssertBool(window.Visible).IsFalse();
+
+        await tree.ToSignal(tree.CreateTimer(0.5), SceneTreeTimer.SignalName.Timeout);
+        await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        Assertions.AssertBool(GodotObject.IsInstanceValid(window)).IsFalse();
+    }
+
+    [TestCase]
+    public void ReleasingAWindowOutsideTheTreeFreesItRightAway()
+    {
+        var window = new Window { Visible = false };
+        EditorWindows.Release(window);
+        Assertions.AssertBool(window.IsQueuedForDeletion()).IsTrue();
+    }
+}

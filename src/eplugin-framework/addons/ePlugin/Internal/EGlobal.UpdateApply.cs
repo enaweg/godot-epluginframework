@@ -21,6 +21,13 @@ internal sealed partial class EGlobal
     internal event Action? RestartRequested;
     /// <summary>True once an editor restart was scheduled in this session.</summary>
     internal bool IsRestartPending { get; private set; }
+    // While positive, restarts requested by update transactions wait until the last of them is done.
+    private int _restartDeferrals;
+    private bool _restartDeferred;
+    private bool _deferScans;
+    private bool _scanDeferred;
+    // Plugins rolled back since this assembly was loaded: it still holds their new code until the editor restarts.
+    private readonly HashSet<string> _rolledBackUpdates = new(StringComparer.Ordinal);
     private string UpdateProjectRoot => ProjectSettings.GlobalizePath("res://");
     private void InitializeUpdateJournals() => _updateJournals = new(Path.Combine(UpdateProjectRoot, ".godot/eplugin/updates"), message => _ePluginContext?.Logger.Error(message));
     private UpdateApplier Applier()
@@ -43,12 +50,19 @@ internal sealed partial class EGlobal
         finally { _fetchingUpdate = false; }
     }
 
-    internal async Task<UpdateOutcome> ApplyUpdatesAsync(IReadOnlyList<ValidatedPackage> packages, string directory, bool trustChangedSources)
+    /// <summary>
+    /// Installs a staged batch in independent groups (see <see cref="UpdateGroups"/>): a group that fails is rolled back
+    /// alone. All groups run in one go without letting the editor process frames, so it cannot reload an assembly one of
+    /// them built; the editor restarts at most once, after the last group.
+    /// </summary>
+    internal async Task<IReadOnlyList<UpdateGroupResult>> ApplyUpdatesAsync(IReadOnlyList<ValidatedPackage> packages, string directory, bool trustChangedSources)
     {
         RefreshPlainPlugins();
         var ct = _ePluginContext!.UpdateLifetime;
         // Restored when this method returns, before the deferred editor restart saves the editor settings.
         using var unfocusedScans = UnfocusedScanSuspension.Begin();
+        // Opened before waiting for the filesystem scan, so the window covers the whole installation.
+        using var progress = ActivationProgress.Begin("Updating plugins...");
         var filesystem = EditorInterface.Singleton.GetResourceFilesystem();
         var deadline = DateTimeOffset.UtcNow.AddSeconds(10);
         while (filesystem.IsScanning())
@@ -57,21 +71,93 @@ internal sealed partial class EGlobal
             if (DateTimeOffset.UtcNow >= deadline) throw new TimeoutException("Editor filesystem scan did not finish. Wait until the editor is idle and try again.");
             await _ePluginContext.ToSignal(_ePluginContext.GetTree().CreateTimer(0.1), SceneTreeTimer.SignalName.Timeout);
         }
-        using var progress = ActivationProgress.Begin("Updating plugins...");
-        var result = Applier().Apply(packages, directory, trustChangedSources);
-        HandleUpdateOutcome(directory, result);
-        return result;
+        var groups = UpdateGroupsOf(packages);
+        using var restarts = DeferRestarts();
+        // The editor drops a scan requested while one runs, so a scan per group would miss later groups: scan once after all.
+        using var scans = groups.Count > 1 ? DeferScans() : null;
+        return Applier().ApplyGroups(groups, directory, _updateJournals!.NewDirectory, trustChangedSources,
+            (index, group) =>
+            {
+                if (groups.Count == 1) return;
+                ActivationProgress.SetText($"Updating {GroupNames(group)} ({index + 1} of {groups.Count})...");
+                ActivationProgress.Heartbeat();
+            },
+            result =>
+            {
+                if (result.Outcome is { } outcome) HandleUpdateOutcome(result.Directory, outcome);
+                if (groups.Count > 1 && result.Packages.Any(p => p.Candidate.Slug == "ePlugin")) ActivationProgress.ReopenAfterUpdate("Updating plugins...");
+            });
+    }
+
+    private static string GroupNames(IReadOnlyList<ValidatedPackage> group) => string.Join(", ", group.Select(p => p.Candidate.PluginName));
+
+    private IReadOnlyList<IReadOnlyList<ValidatedPackage>> UpdateGroupsOf(IReadOnlyList<ValidatedPackage> packages)
+    {
+        var dependencies = _contexts.Where(c => c.Plugin is not null && c.State == EEditorPluginState.Activated).DistinctBy(c => c.Slug)
+            .ToDictionary(c => c.Slug, c => (IReadOnlyCollection<string>)Snapshot(c).PluginDependencies.Select(d => d.Slug).ToArray(), StringComparer.Ordinal);
+        return UpdateGroups.Plan(packages.Select(p => p.Candidate.Slug).ToArray(), dependencies, "ePlugin")
+            .Select(group => (IReadOnlyList<ValidatedPackage>)group.Select(slug => packages.First(p => p.Candidate.Slug == slug)).ToArray()).ToArray();
+    }
+
+    private IDisposable DeferRestarts()
+    {
+        _restartDeferrals++;
+        return new Deferral(() =>
+        {
+            if (--_restartDeferrals > 0 || !_restartDeferred) return;
+            _restartDeferred = false;
+            RestartForUpdate();
+        });
+    }
+
+    private IDisposable DeferScans()
+    {
+        _deferScans = true;
+        return new Deferral(() =>
+        {
+            _deferScans = false;
+            var scan = _scanDeferred && !_restartDeferred && !IsRestartPending;
+            _scanDeferred = false;
+            // A restart scans everything anyway.
+            if (scan) EditorInterface.Singleton.GetResourceFilesystem().Scan();
+        });
+    }
+
+    private void RestartForUpdate()
+    {
+        if (IsRestartPending) return;
+        _ePluginContext?.Logger.Log("Restarting editor to load the updated assembly. If automatic launch fails, reopen the project to resume.");
+        IsRestartPending = true;
+        try { RestartRequested?.Invoke(); }
+        catch (Exception ex) { _ePluginContext?.Logger.Log("Cannot prepare the editor restart: " + ex.Message); }
+        EditorInterface.Singleton.CallDeferred(EditorInterface.MethodName.RestartEditor, true);
+    }
+
+    private sealed class Deferral(Action release) : IDisposable
+    {
+        private Action? _release = release;
+        public void Dispose()
+        {
+            var release = _release;
+            _release = null;
+            release?.Invoke();
+        }
     }
     private void HandleUpdateOutcome(string directory, UpdateOutcome result)
     {
         if (result == UpdateOutcome.AwaitingDecision)
         {
             var journal = UpdateJournal.Load(directory);
-            Callable.From(() =>
+            Post(() =>
             {
                 if (UpdateDecisionNeeded is null) Applier().Rollback(journal, "No build-failure dialog is available.");
                 else UpdateDecisionNeeded(journal);
-            }).CallDeferred();
+            });
+        }
+        if (result == UpdateOutcome.RolledBack)
+        {
+            try { _rolledBackUpdates.UnionWith(UpdateJournal.Load(directory).Plugins.Select(p => p.Slug)); }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or System.Text.Json.JsonException) { }
         }
         if (result is UpdateOutcome.Completed or UpdateOutcome.RolledBack) RefreshPendingUpdates();
     }
@@ -87,8 +173,18 @@ internal sealed partial class EGlobal
         // Cache is needed by recovery before the first scheduled check.
         _updateCache ??= new UpdateStateStore(Path.Combine(UpdateProjectRoot, ".godot/eplugin/update-state.json"));
         _updateCache.Load();
-        foreach (var journal in _updateJournals.Read())
+        // Groups of one batch restart the editor once, after the last of them.
+        using var restarts = DeferRestarts();
+        foreach (var listed in _updateJournals.Read())
         {
+            // An earlier group's commit or rollback may have refreshed this journal's backups since it was listed.
+            UpdateJournal journal;
+            try { journal = UpdateJournal.Load(listed.Directory); }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or System.Text.Json.JsonException)
+            {
+                _ePluginContext?.Logger.Error($"Cannot read update journal {listed.Directory}: {ex.Message}");
+                continue;
+            }
             if (_stateStore.LastCompletedAttemptId == journal.AttemptId)
             {
                 Directory.Delete(journal.Directory, true);
@@ -225,7 +321,11 @@ internal sealed partial class EGlobal
         }
         private static bool HasUntitledScene() => EditorInterface.Singleton.HasMethod(GetOpenSceneRoots) &&
             EditorInterface.Singleton.Call(GetOpenSceneRoots).AsGodotArray<Node>().Any(root => root is not null && string.IsNullOrEmpty(root.SceneFilePath));
-        public void Scan() => EditorInterface.Singleton.GetResourceFilesystem().Scan();
+        public void Scan()
+        {
+            if (global._deferScans) { global._scanDeferred = true; return; }
+            EditorInterface.Singleton.GetResourceFilesystem().Scan();
+        }
         public BuildOutcome Build()
         {
             ActivationProgress.SetText("Building updated project...");
@@ -236,11 +336,8 @@ internal sealed partial class EGlobal
             // The full in-place fixture exposed unreliable collectible-assembly reload on Godot 4.7.2.
             // Auto therefore uses the journal-backed restart path rather than a callback that pins old code.
             if (journal.IsActive) { journal.RestartRequired = true; journal.Save(); }
-            Log("Restarting editor to load the updated assembly. If automatic launch fails, reopen the project to resume.");
-            global.IsRestartPending = true;
-            try { global.RestartRequested?.Invoke(); }
-            catch (Exception ex) { Log("Cannot prepare the editor restart: " + ex.Message); }
-            EditorInterface.Singleton.CallDeferred(EditorInterface.MethodName.RestartEditor, true);
+            if (global._restartDeferrals > 0) { global._restartDeferred = true; return; }
+            global.RestartForUpdate();
         }
         public bool Verify(UpdatePluginJournal plugin)
         {

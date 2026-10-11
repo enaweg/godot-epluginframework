@@ -67,6 +67,8 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
             AddManagerUi();
         }
 
+        EGlobal.RunPosted();
+
         ReopenManager();
         ShowLicenseReview();
         ShowWelcomes();
@@ -186,7 +188,8 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
     {
         // A C# assembly reload resets this script's fields while the native menu item and toolbar button survive.
         RemoveToolMenuItem(ManagerMenuName);
-        AddToolMenuItem(ManagerMenuName, Callable.From(OpenManager));
+        // A method callable rather than a delegate: Godot resolves it on the script instance an assembly reload creates.
+        AddToolMenuItem(ManagerMenuName, new Callable(this, MethodName.OpenManager));
         RemoveManagerButton();
         _managerButton = new Button
         {
@@ -201,7 +204,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         Engine.Singleton.SetMeta(ManagerButtonMeta, _managerButton.GetInstanceId());
         _managerUiAdded = true;
         // Toggling a plugin in the manager may rebuild and reload the assembly while the dialog is open.
-        if (RemoveStaleManagerDialog()) Callable.From(OpenManager).CallDeferred();
+        if (RemoveStaleManagerDialog()) CallDeferred(MethodName.OpenManager);
     }
 
     private void RefreshManagerIcon()
@@ -210,14 +213,16 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         _managerButton.Icon = EditorIcons.EPlugin;
         _managerButton.Text = _managerButton.Icon is null ? "ePlugin" : "";
     }
-    /// <summary>Frees a dialog whose C# state was lost to an assembly reload; returns whether it was showing.</summary>
+    /// <summary>Releases a dialog whose C# state was lost to an assembly reload; returns whether it was showing.</summary>
     private bool RemoveStaleManagerDialog()
     {
         var parent = EditorInterface.Singleton.GetBaseControl();
         if (parent.GetNodeOrNull(nameof(EPluginManagerDialog)) is not Window stale ||
             stale is EPluginManagerDialog { IsInitialized: true }) return false;
         var visible = stale.Visible;
-        stale.Hide(); parent.RemoveChild(stale); stale.QueueFree();
+        // It stays in the tree until it is freed; renamed, so the dialog that replaces it gets the name this looks up.
+        stale.Name = nameof(EPluginManagerDialog) + "Released";
+        EditorWindows.Release(stale);
         if (stale == _managerDialog) _managerDialog = null;
         return visible;
     }
@@ -266,10 +271,8 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
             _updateOwner.RestartRequested -= RememberManagerForRestart;
         }
         ReleaseReopenProgress();
-        if (_managerDialog is not null && GodotObject.IsInstanceValid(_managerDialog)) _managerDialog.QueueFree();
-        if (_failureDialog is not null && GodotObject.IsInstanceValid(_failureDialog)) _failureDialog.QueueFree();
-        if (_licenseDialog is not null && GodotObject.IsInstanceValid(_licenseDialog)) _licenseDialog.QueueFree();
-        if (_welcomeDialog is not null && GodotObject.IsInstanceValid(_welcomeDialog)) _welcomeDialog.QueueFree();
+        foreach (var dialog in new Window?[] { _managerDialog, _failureDialog, _licenseDialog, _welcomeDialog })
+            if (dialog is not null) EditorWindows.Release(dialog);
         _managerDialog = null; _failureDialog = null; _licenseDialog = null; _welcomeDialog = null;
     }
 

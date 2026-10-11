@@ -186,11 +186,6 @@ visible = false
 layout_mode = 2
 text = "I trust the changed update source"
 
-[node name="Progress" type="ProgressBar" parent="Content"]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-
 [node name="DisableFrameworkConfirm" type="ConfirmationDialog" parent="."]
 unique_name_in_owner = true
 title = "Disable ePlugin Framework"
