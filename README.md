@@ -90,8 +90,8 @@ Tests require a Godot .NET editor executable. See the [CI workflow](https://gith
 
 ## Plugins using ePlugin Framework
 
-- [godot-elogger](https://github.com/enaweg/godot-elogger)
-- [godot-econtainer](https://github.com/enaweg/godot-econtainer)
+- [godot-elogger](https://github.com/enaweg/godot-elogger) — Zero-allocation text and structured logging with ZLogger for Godot .NET, which can also take over ePlugin's own logging
+- [godot-econtainer](https://github.com/enaweg/godot-econtainer) — VContainer, Unity's fast dependency injection container, ported to Godot .NET
 - [godot-emessagepipe](https://github.com/enaweg/godot-emessagepipe) — MessagePipe support for Godot .NET, with optional eContainer integration
 
 ## Contribute
