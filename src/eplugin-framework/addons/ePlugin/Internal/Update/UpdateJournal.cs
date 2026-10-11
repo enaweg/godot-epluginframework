@@ -45,6 +45,16 @@ internal sealed class UpdateJournal
     /// A group's build failure always rolls back that group, so the remaining groups can still be installed.
     /// </summary>
     public int? Group { get; set; }
+    /// <summary>
+    /// Started for one plugin from its details, so a build failure may ask whether to keep the new version (see
+    /// <see cref="UpdateFailureDecision.Policy"/>); installing all updates rolls back instead.
+    /// </summary>
+    public bool AskOnBuildFailure { get; set; }
+    /// <summary>
+    /// Kept, or awaiting the decision, after a build that ran before the recipes were reconciled: Retry failed resumes
+    /// the update with reconciling once the project builds.
+    /// </summary>
+    public bool BeforeReconcile { get; set; }
     [JsonIgnore] public string Directory { get; set; } = "";
     public string Backup(string slug) => PackageFiles.Inside(Path.Combine(Directory, "backup"), slug);
     public string Staging(string slug) => PackageFiles.Inside(Path.Combine(Directory, "staging"), slug);

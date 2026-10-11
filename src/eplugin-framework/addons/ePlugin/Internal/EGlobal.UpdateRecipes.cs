@@ -67,6 +67,22 @@ internal sealed partial class EGlobal
         journal.Plugins = journal.Plugins.OrderBy(p => { var i = order.ToList().IndexOf(p.Slug); return i < 0 ? int.MaxValue : i; }).ToList();
     }
 
+    /// <summary>
+    /// Plugins may have been enabled or disabled while an update was kept with build errors: the recipes of the plugins it
+    /// does not update are taken from what is enabled now. Those it updates keep their baseline, because the loaded code
+    /// may already be their new version.
+    /// </summary>
+    private void RebaseUpdateRecipes(UpdateJournal journal)
+    {
+        var updated = journal.Plugins.Select(p => p.Slug).ToHashSet(StringComparer.Ordinal);
+        foreach (var slug in journal.Recipes.Keys.Where(s => !updated.Contains(s)).ToArray()) journal.Recipes.Remove(slug);
+        foreach (var context in _contexts.Where(c => c.State == EEditorPluginState.Activated && (c.Plugin is not null || c.PluginBase == _ePluginContext) && !updated.Contains(c.Slug)))
+        {
+            var snapshot = Snapshot(context);
+            journal.Recipes[context.Slug] = new() { Old = snapshot, Applied = snapshot.Clone(), WasEnabled = true };
+        }
+    }
+
     private void ReconcileUpdateRecipes(UpdateJournal journal, bool rollback)
     {
         _recipeUpdateJournal = journal;
