@@ -9,6 +9,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Numerics;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -20,8 +21,8 @@ const int maxRetries = 3;
 // Only add-ons with a commit on their default branch within the last two years count as active.
 var cutoff = DateTimeOffset.UtcNow.AddYears(-2);
 // A version tag as ePlugin's updater reads it: an optional "v", then "1.2", "1.2.3" or "1.2.3.4", optionally followed by any
-// prerelease suffix after a '-' and build metadata after a '+' (see SemVer.TryParse). Only versions without a prerelease
-// are offered by default.
+// prerelease suffix after a '-' and build metadata after a '+' (see SemVer.TryParse). Prereleases are versions like any
+// other, as they are for the updater.
 var versionTag = new Regex(@"^[vV]?(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\.(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?)?(?:-([^\s\p{Cc}+]+))?(?:\+[^\s\p{Cc}]+)?$",
     RegexOptions.Compiled | RegexOptions.CultureInvariant);
 // godot-stars categories that hold games, project templates or assets rather than add-ons.
@@ -189,13 +190,35 @@ static IEnumerable<JsonElement> Nodes(JsonElement repo, string connection) =>
     value.TryGetProperty("nodes", out var nodes) && nodes.ValueKind == JsonValueKind.Array
         ? nodes.EnumerateArray().Where(n => n.ValueKind == JsonValueKind.Object) : [];
 
-// The highest stable version among the tag names, as it is written (e.g. "v1.2"), or null without one.
+// The highest version among the tag names, as it is written (e.g. "v1.2"), or null without one.
 string? Newest(IEnumerable<string?> tags) => tags
     .Select(t => (Tag: t, Match: versionTag.Match(t ?? "")))
-    .Where(t => t.Match.Success && !t.Match.Groups[5].Success)
-    .Select(t => (t.Tag, Version: (Number(t.Match.Groups[1]), Number(t.Match.Groups[2]), Number(t.Match.Groups[3]), Number(t.Match.Groups[4]))))
-    .OrderByDescending(t => t.Version).Select(t => t.Tag).FirstOrDefault();
+    .Where(t => t.Match.Success)
+    .OrderByDescending(t => t.Match, Comparer<Match>.Create(CompareVersions)).Select(t => t.Tag).FirstOrDefault();
 static long Number(Group group) => group.Success && long.TryParse(group.Value, out var value) ? value : 0;
+// Orders two versionTag matches like the updater's SemVer.CompareTo: by their numbers, then a prerelease before the same
+// numbers without one, and prereleases by their dot-separated parts (numbers before text).
+static int CompareVersions(Match left, Match right)
+{
+    for (var i = 1; i <= 4; i++)
+    {
+        var result = Number(left.Groups[i]).CompareTo(Number(right.Groups[i]));
+        if (result != 0) return result;
+    }
+    if (!left.Groups[5].Success || !right.Groups[5].Success)
+        return left.Groups[5].Success == right.Groups[5].Success ? 0 : left.Groups[5].Success ? -1 : 1;
+    var leftParts = left.Groups[5].Value.Split('.');
+    var rightParts = right.Groups[5].Value.Split('.');
+    for (var i = 0; i < Math.Min(leftParts.Length, rightParts.Length); i++)
+    {
+        var leftNumeric = BigInteger.TryParse(leftParts[i], NumberStyles.None, CultureInfo.InvariantCulture, out var l);
+        var rightNumeric = BigInteger.TryParse(rightParts[i], NumberStyles.None, CultureInfo.InvariantCulture, out var r);
+        var result = leftNumeric && rightNumeric ? l.CompareTo(r)
+            : leftNumeric != rightNumeric ? (leftNumeric ? -1 : 1) : string.CompareOrdinal(leftParts[i], rightParts[i]);
+        if (result != 0) return result;
+    }
+    return leftParts.Length.CompareTo(rightParts.Length);
+}
 // The ZIP assets, as the updater recognizes them: by name or by the URL's path.
 static ReleaseAsset[] Zips(IEnumerable<ReleaseAsset> assets) => assets.Where(a => a.Url.Length > 0 &&
     (a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
@@ -203,7 +226,7 @@ static ReleaseAsset[] Zips(IEnumerable<ReleaseAsset> assets) => assets.Where(a =
 static string? Utc(DateTimeOffset? time) => time?.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
 
 // An extra add-on outside GitHub. GitLab's API (gitlab.com or self-hosted) gives its stars, activity and releases; any
-// other host only its version tags, read with git. Null when it has no stable release or version tag.
+// other host only its version tags, read with git. Null when it has no release or version tag.
 async Task<Addon?> OtherAddon(string repository, string? pluginSlug)
 {
     var https = Uri.TryCreate(repository, UriKind.Absolute, out var uri) && uri.Scheme == "https";
@@ -302,7 +325,7 @@ for (var offset = 0; offset < values.Length; offset += 20)
         fields.Append("defaultBranchRef { target { ... on Commit { committedDate } } } ");
         // As many releases as the updater's check reads, and the newest tags for repositories without a release.
         // Each release's assets, so generate_known_plugins.cs can read the ZIP the updater downloads.
-        fields.Append("releases(first: 30, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { tagName isDraft isPrerelease ");
+        fields.Append("releases(first: 30, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { tagName isDraft ");
         fields.Append("releaseAssets(first: 20) { nodes { name downloadUrl } } } } ");
         fields.Append("refs(refPrefix: \"refs/tags/\", first: 100, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) { nodes { name } } } ");
     }
@@ -333,10 +356,10 @@ for (var offset = 0; offset < values.Length; offset += 20)
             && DateTimeOffset.TryParse(dateValue.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date : null;
         if (!extra && (committed is null || committed < cutoff)) continue;
         var url = repo.GetProperty("url").GetString()!.TrimEnd('/');
-        // A published stable release (whose ZIP the updater downloads) wins; otherwise the repository's version tags,
+        // A published release (whose ZIP the updater downloads), prereleases included, wins; otherwise the repository's version tags,
         // which the updater installs from git through the tag page URL. Without either there is nothing to update to.
         var release = Newest(Nodes(repo, "releases")
-            .Where(r => !r.GetProperty("isDraft").GetBoolean() && !r.GetProperty("isPrerelease").GetBoolean())
+            .Where(r => !r.GetProperty("isDraft").GetBoolean())
             .Select(r => r.GetProperty("tagName").GetString()));
         var tag = release is null ? Newest(Nodes(repo, "refs").Select(r => r.GetProperty("name").GetString())) : null;
         if (release is null && tag is null)
@@ -379,14 +402,14 @@ await File.WriteAllTextAsync(dest, JsonSerializer.Serialize(output, new JsonSeri
 Console.WriteLine($"Saved {output.Length} qualifying add-ons to {dest} " +
     $"({output.Count(a => a.UpdateSource == "releases")} with releases, {output.Count(a => a.UpdateSource == "tags")} with version tags only)");
 if (unversioned.Count > 0)
-    Console.WriteLine($"Left out {unversioned.Count} add-ons without a stable release or version tag: {string.Join(", ", unversioned)}");
+    Console.WriteLine($"Left out {unversioned.Count} add-ons without a release or version tag: {string.Join(", ", unversioned)}");
 Console.WriteLine("Candidate discovery uses an older ranking; the result may omit recently published add-ons. " +
     "List those in extra_addons.txt.");
 
 /// <param name="LastCommitAt">The last commit on the default branch, or GitLab's last activity; null when unknown.</param>
 /// <param name="UpdateUrl">The releases page, or the tag page (a .git URL off GitHub and GitLab) without a release.</param>
 /// <param name="UpdateSource">"releases" or "tags": where <paramref name="LatestVersion"/> was found.</param>
-/// <param name="LatestVersion">The tag name of the newest stable release or version tag.</param>
+/// <param name="LatestVersion">The tag name of the newest release or version tag, prereleases included.</param>
 /// <param name="RepositoryUrl">The repository's web page, or its git URL when it has none.</param>
 /// <param name="GitUrl">The URL to clone the repository from.</param>
 /// <param name="Extra">Listed in extra_addons.txt, so it skips the star and activity filters.</param>

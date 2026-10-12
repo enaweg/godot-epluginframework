@@ -70,8 +70,11 @@ public class UpdateCoreTests
         Assertions.AssertBool(UpdateScheduler.ShouldCheck(now, now.AddHours(-19), true)).IsFalse();
         Assertions.AssertBool(UpdateScheduler.ShouldCheck(now, null, false)).IsFalse();
         var cache = new UpdateCache { Results = [Candidate("plugin", "2.0.0")] };
-        Assertions.AssertInt(UpdateScheduler.CurrentCached(cache, [Target("plugin", "3.0.0")], false).Count).IsEqual(0);
-        Assertions.AssertInt(UpdateScheduler.CurrentCached(cache, [Target("plugin", "1.0.0")], false).Count).IsEqual(1);
+        Assertions.AssertInt(UpdateScheduler.CurrentCached(cache, [Target("plugin", "3.0.0")]).Count).IsEqual(0);
+        Assertions.AssertInt(UpdateScheduler.CurrentCached(cache, [Target("plugin", "1.0.0")]).Count).IsEqual(1);
+        var beta = new UpdateCache { Results = [Candidate("plugin", "2.0.0-beta.1")] };
+        Assertions.AssertInt(UpdateScheduler.CurrentCached(beta, [Target("plugin", "1.0.0")]).Count).IsEqual(1);
+        Assertions.AssertInt(UpdateScheduler.CurrentCached(beta, [Target("plugin", "2.0.0")]).Count).IsEqual(0);
     }
 
     [TestCase]
@@ -132,7 +135,7 @@ public class UpdateCoreTests
         var service = new UpdateService(new Factory(), new SystemClock(), store);
         var target = Target("listed", "1.5.0") with { UpdateUrl = "https://example.org/listed/releases" };
         await service.ListVersionsAsync(target, new(), CancellationToken.None);
-        var cached = UpdateScheduler.CurrentCached(store.State, [target], false).Single();
+        var cached = UpdateScheduler.CurrentCached(store.State, [target]).Single();
         Assertions.AssertString(cached.NewVersion).IsEqual("2.0.0");
         Assertions.AssertString(cached.InstalledVersion).IsEqual("1.5.0");
         Assertions.AssertObject(store.State.LastCheckUtc).IsNull();

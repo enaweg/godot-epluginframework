@@ -65,11 +65,10 @@ internal static class UpdateScheduler
     public static bool ShouldCheck(DateTimeOffset now, DateTimeOffset? last, bool enabled, double intervalHours = 20) =>
         enabled && (last is null || now - last.Value >= TimeSpan.FromHours(Math.Clamp(intervalHours, 1, 8760)));
 
-    public static IReadOnlyList<UpdateCandidate> CurrentCached(UpdateCache cache, IReadOnlyList<PluginUpdateTarget> targets,
-        bool allowPrerelease) => cache.Results.Where(candidate => targets.Any(t => t.Slug == candidate.Slug &&
+    public static IReadOnlyList<UpdateCandidate> CurrentCached(UpdateCache cache, IReadOnlyList<PluginUpdateTarget> targets) =>
+        cache.Results.Where(candidate => targets.Any(t => t.Slug == candidate.Slug &&
             candidate.SourceUrl is { } source && t.UpdateUrls.Contains(source) && SemVer.TryParse(t.InstalledVersion, out var installed) &&
-            SemVer.TryParse(candidate.NewVersion, out var remote) && remote.CompareTo(installed) > 0 &&
-            (allowPrerelease || remote.Prerelease is null)))
+            SemVer.TryParse(candidate.NewVersion, out var remote) && remote.CompareTo(installed) > 0))
         .Select(c => c with { InstalledVersion = targets.First(t => t.Slug == c.Slug).InstalledVersion }).ToArray();
 }
 #endif

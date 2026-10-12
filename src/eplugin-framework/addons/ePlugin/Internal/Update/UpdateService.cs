@@ -33,7 +33,7 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
                     (source, site, token) => source.CheckAsync(site, options, token), ct).ConfigureAwait(false);
                 if (fallback is not null) fallbacks.Add(new(target.Slug, fallback));
                 if (candidate is not null && SemVer.TryParse(candidate.NewVersion, out var remote) &&
-                    remote.CompareTo(installed) > 0 && (options.AllowPrerelease || remote.Prerelease is null)) updates.Add(candidate);
+                    remote.CompareTo(installed) > 0) updates.Add(candidate);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (Exception ex) { failures.Add(new(target.Slug, ex is OperationCanceledException ? "Request timed out." : ex.Message)); }
@@ -55,10 +55,10 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
     /// The newest version in the local plugin directories that is newer than the installed one, per target. The index
     /// is in memory and rebuilt every editor start, so this is never cached.
     /// </summary>
-    public static IReadOnlyList<UpdateCandidate> CheckLocal(IReadOnlyList<PluginUpdateTarget> targets, LocalPackageIndex index, UpdateCheckOptions options)
+    public static IReadOnlyList<UpdateCandidate> CheckLocal(IReadOnlyList<PluginUpdateTarget> targets, LocalPackageIndex index)
     {
         return targets.Select(target => SemVer.TryParse(target.InstalledVersion, out var installed) &&
-                LocalDirectorySource.Versions(index, target, options).FirstOrDefault() is { } candidate && SemVer.TryParse(candidate.NewVersion, out var local) &&
+                LocalDirectorySource.Versions(index, target).FirstOrDefault() is { } candidate && SemVer.TryParse(candidate.NewVersion, out var local) &&
                 local.CompareTo(installed) > 0 ? candidate : null)
             .OfType<UpdateCandidate>().OrderBy(c => c.Slug, StringComparer.Ordinal).ToArray();
     }
@@ -90,7 +90,7 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
             (source, site, token) => source is IVersionListSource list ? list.ListAsync(site, options, token)
                 : throw new NotSupportedException("This update source cannot list versions."), ct).ConfigureAwait(false);
         var versions = MergeVersions([], listed);
-        RecordListedUpdate(target, url, versions, options);
+        RecordListedUpdate(target, url, versions);
         return versions;
     }
 
@@ -135,12 +135,11 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
     /// Caches the newest listed version as the plugin's update. A cached update that is at least as new stays. The last
     /// check time is not changed, since the other plugins were not checked.
     /// </summary>
-    private void RecordListedUpdate(PluginUpdateTarget target, string url, IReadOnlyList<UpdateCandidate> versions, UpdateCheckOptions options)
+    private void RecordListedUpdate(PluginUpdateTarget target, string url, IReadOnlyList<UpdateCandidate> versions)
     {
         if (!SemVer.TryParse(target.InstalledVersion, out var installed)) return;
         var newest = versions.FirstOrDefault();
-        if (newest is null || !SemVer.TryParse(newest.NewVersion, out var listed) || listed.CompareTo(installed) <= 0 ||
-            !options.AllowPrerelease && listed.Prerelease is not null) return;
+        if (newest is null || !SemVer.TryParse(newest.NewVersion, out var listed) || listed.CompareTo(installed) <= 0) return;
         var cached = store.State.Results.FirstOrDefault(c => c.Slug == target.Slug && c.SourceUrl is { } source && target.UpdateUrls.Contains(source));
         if (cached is not null && SemVer.TryParse(cached.NewVersion, out var known) && known.CompareTo(listed) >= 0) return;
         // The list was read from this site, which is what the cache entry is matched against.
