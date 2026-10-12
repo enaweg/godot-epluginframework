@@ -169,7 +169,8 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
     }
 
     /// <summary>
-    /// The newest version tag, or without one the default branch; a pinned branch its head. A pinned commit or tag never
+    /// The newest version tag the install may move to (a stable install only to a stable tag, see
+    /// <see cref="UpdateService.IsUpdate"/>), or without version tags the default branch; a pinned branch its head. A pinned commit or tag never
     /// offers an update; it can only be installed again from the version choice.
     /// </summary>
     public async Task<UpdateCandidate?> CheckAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct)
@@ -182,7 +183,9 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
             await EnsureVersion(work, ct).ConfigureAwait(false);
             var refs = await Refs(work, ct).ConfigureAwait(false);
             if (url.Ref is { } reference && Tagged(refs, reference) is not null) return null;
-            if (url.Ref is null && TagCandidates(refs, target).FirstOrDefault() is { } newest) return newest;
+            // With version tags the newest one this install is offered (see UpdateService.IsUpdate), if any.
+            if (url.Ref is null && TagCandidates(refs, target) is { Count: > 0 } tags)
+                return tags.FirstOrDefault(c => SemVer.TryParse(c.NewVersion, out var version) && UpdateService.Offers(target, version));
             return await Candidate(work, target, await Commit(work, refs, ct).ConfigureAwait(false), ct).ConfigureAwait(false);
         }
         finally { DeleteWork(work); }

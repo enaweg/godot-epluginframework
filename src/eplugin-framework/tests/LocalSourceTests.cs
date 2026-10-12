@@ -108,10 +108,12 @@ public class LocalSourceTests
         Assertions.AssertArray(versions.Select(c => c.NewVersion).ToArray()).IsEqual(new[] { "3.0.0-beta.1", "2.0.0", "1.5.0" });
         Assertions.AssertString(((LocalZipPackageRef)versions[1].Package).Path).IsEqual("b.zip");
 
+        // A stable install is updated to the newest stable version, a prerelease install to the newest version.
         var updates = UpdateService.CheckLocal([target, Target("unrelated")], index);
         Assertions.AssertInt(updates.Count).IsEqual(1);
-        Assertions.AssertString(updates[0].NewVersion).IsEqual("3.0.0-beta.1");
-        Assertions.AssertInt(UpdateService.CheckLocal([target with { InstalledVersion = "3.0.0" }], index).Count).IsEqual(0);
+        Assertions.AssertString(updates[0].NewVersion).IsEqual("2.0.0");
+        Assertions.AssertInt(UpdateService.CheckLocal([target with { InstalledVersion = "2.0.0" }], index).Count).IsEqual(0);
+        Assertions.AssertString(UpdateService.CheckLocal([target with { InstalledVersion = "2.0.0-rc.1" }], index).Single().NewVersion).IsEqual("3.0.0-beta.1");
     }
 
     [TestCase]

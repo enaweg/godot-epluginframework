@@ -24,9 +24,10 @@ public class UpdateSourceTests
     }
 
     [TestCase]
-    public async Task GitHubChoosesHighestVersionAndPluginAsset()
+    public async Task GitHubChoosesNextBetterVersionAndPluginAsset()
     {
-        // A prerelease, whether GitHub flags it or only its tag says so, is a version like any other; drafts are not.
+        // A stable install is offered the highest stable release, a prerelease install the highest release of any kind.
+        // Drafts are never offered.
         using var client = new HttpClient(new Handler(_ => Json("""
             [{"tag_name":"v1.2.0","draft":false,"prerelease":false,"assets":[{"name":"plugin.zip","browser_download_url":"https://example.org/plugin.zip"}]},
              {"tag_name":"2.0.0-beta.1","draft":false,"prerelease":true,"assets":[{"name":"plugin.zip","browser_download_url":"https://example.org/beta.zip"}]},
@@ -34,8 +35,11 @@ public class UpdateSourceTests
             """)));
         var source = new GitHubReleaseSource(new(client), "owner", "repo");
         var result = await source.CheckAsync(Target(), new(), CancellationToken.None);
-        Assertions.AssertString(result!.NewVersion).IsEqual("2.0.0-beta.1");
-        Assertions.AssertString(((ZipPackageRef)result.Package).Url).IsEqual("https://example.org/beta.zip");
+        Assertions.AssertString(result!.NewVersion).IsEqual("v1.2.0");
+        Assertions.AssertString(((ZipPackageRef)result.Package).Url).IsEqual("https://example.org/plugin.zip");
+        var beta = await source.CheckAsync(Target() with { InstalledVersion = "1.0.0-beta.1" }, new(), CancellationToken.None);
+        Assertions.AssertString(beta!.NewVersion).IsEqual("2.0.0-beta.1");
+        Assertions.AssertString(((ZipPackageRef)beta.Package).Url).IsEqual("https://example.org/beta.zip");
         Assertions.AssertObject(await new GitHubReleaseSource(new(client), "owner", "repo", true).CheckAsync(Target(), new(), CancellationToken.None)).IsNull();
     }
 
@@ -207,9 +211,11 @@ public class UpdateSourceTests
         Assertions.AssertString(((GitPackageRef)listed[1].Package).Repository).IsEqual("https://github.com/owner/repo.git");
         Assertions.AssertString(((GitPackageRef)listed[^1].Package).Commit).IsEqual(Commit('2'));
 
-        // the newest tag is the update; the tag name announces it, so nothing is fetched
+        // the newest stable tag is the update of a stable install; the tag name announces it, so nothing is fetched
         var update = await source.CheckAsync(Target(), new(), CancellationToken.None);
-        Assertions.AssertString(update!.NewVersion).IsEqual("v2.0.0-beta.1");
+        Assertions.AssertString(update!.NewVersion).IsEqual("v1.4");
+        var beta = await source.CheckAsync(Target() with { InstalledVersion = "1.4-rc.1" }, new(), CancellationToken.None);
+        Assertions.AssertString(beta!.NewVersion).IsEqual("v2.0.0-beta.1");
         Assertions.AssertBool(git.Calls.Any(c => c.Contains("fetch") || c.Contains("show"))).IsFalse();
     }
 

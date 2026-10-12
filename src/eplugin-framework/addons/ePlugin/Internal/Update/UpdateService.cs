@@ -11,6 +11,22 @@ namespace Enaweg.Plugin.Internal.Update;
 internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, IUpdateStateStore store)
 {
     /// <summary>
+    /// Whether <paramref name="version"/> is offered as an update of <paramref name="installed"/>: the next better version
+    /// of the same kind. A stable version moves only to a newer stable one, a prerelease to any newer version (a newer
+    /// prerelease or the release). Every other version is installed from the plugin's version list.
+    /// </summary>
+    public static bool IsUpdate(SemVer installed, SemVer version) => version.CompareTo(installed) > 0 && Offers(installed, version);
+
+    /// <summary>
+    /// Whether a check may choose <paramref name="version"/> for the target, before comparing it with the installed one
+    /// (see <see cref="IsUpdate"/>). An installed version that cannot be read counts as stable.
+    /// </summary>
+    public static bool Offers(PluginUpdateTarget target, SemVer version) =>
+        Offers(SemVer.TryParse(target.InstalledVersion, out var installed) ? installed : default, version);
+
+    private static bool Offers(SemVer installed, SemVer version) => version.Prerelease is null || installed.Prerelease is not null;
+
+    /// <summary>
     /// Checks the update site of every target that has one and caches the result. A project update site is tried first,
     /// then the plugin.cfg update_url, then the built-in one, each when the ones before are unsupported or fail.
     /// </summary>
@@ -33,7 +49,7 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
                     (source, site, token) => source.CheckAsync(site, options, token), ct).ConfigureAwait(false);
                 if (fallback is not null) fallbacks.Add(new(target.Slug, fallback));
                 if (candidate is not null && SemVer.TryParse(candidate.NewVersion, out var remote) &&
-                    remote.CompareTo(installed) > 0) updates.Add(candidate);
+                    IsUpdate(installed, remote)) updates.Add(candidate);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (Exception ex) { failures.Add(new(target.Slug, ex is OperationCanceledException ? "Request timed out." : ex.Message)); }
@@ -52,14 +68,15 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
     }
 
     /// <summary>
-    /// The newest version in the local plugin directories that is newer than the installed one, per target. The index
+    /// The newest version in the local plugin directories that is an update of the installed one (see
+    /// <see cref="IsUpdate"/>), per target. The index
     /// is in memory and rebuilt every editor start, so this is never cached.
     /// </summary>
     public static IReadOnlyList<UpdateCandidate> CheckLocal(IReadOnlyList<PluginUpdateTarget> targets, LocalPackageIndex index)
     {
-        return targets.Select(target => SemVer.TryParse(target.InstalledVersion, out var installed) &&
-                LocalDirectorySource.Versions(index, target).FirstOrDefault() is { } candidate && SemVer.TryParse(candidate.NewVersion, out var local) &&
-                local.CompareTo(installed) > 0 ? candidate : null)
+        return targets.Select(target => SemVer.TryParse(target.InstalledVersion, out var installed)
+                ? LocalDirectorySource.Versions(index, target).FirstOrDefault(c => SemVer.TryParse(c.NewVersion, out var local) && IsUpdate(installed, local))
+                : null)
             .OfType<UpdateCandidate>().OrderBy(c => c.Slug, StringComparer.Ordinal).ToArray();
     }
 
@@ -132,14 +149,15 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
     }
 
     /// <summary>
-    /// Caches the newest listed version as the plugin's update. A cached update that is at least as new stays. The last
+    /// Caches the newest listed version that is an update (see <see cref="IsUpdate"/>) as the plugin's update. A cached
+    /// update that is at least as new stays. The last
     /// check time is not changed, since the other plugins were not checked.
     /// </summary>
     private void RecordListedUpdate(PluginUpdateTarget target, string url, IReadOnlyList<UpdateCandidate> versions)
     {
         if (!SemVer.TryParse(target.InstalledVersion, out var installed)) return;
-        var newest = versions.FirstOrDefault();
-        if (newest is null || !SemVer.TryParse(newest.NewVersion, out var listed) || listed.CompareTo(installed) <= 0) return;
+        var newest = versions.FirstOrDefault(v => SemVer.TryParse(v.NewVersion, out var version) && IsUpdate(installed, version));
+        if (newest is null || !SemVer.TryParse(newest.NewVersion, out var listed)) return;
         var cached = store.State.Results.FirstOrDefault(c => c.Slug == target.Slug && c.SourceUrl is { } source && target.UpdateUrls.Contains(source));
         if (cached is not null && SemVer.TryParse(cached.NewVersion, out var known) && known.CompareTo(listed) >= 0) return;
         // The list was read from this site, which is what the cache entry is matched against.

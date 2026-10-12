@@ -56,7 +56,8 @@ internal sealed class GitHubReleaseSource(UpdateHttp http, string owner, string 
         {
             using var document = JsonDocument.Parse(await http.ReadTextAsync($"https://api.github.com/repos/{owner}/{repository}/releases?per_page=30", ct, Token).ConfigureAwait(false));
             var release = document.RootElement.EnumerateArray()
-                .Where(r => !ReleaseAssets.Flag(r, "draft") && SemVer.TryParse(ReleaseAssets.String(r, "tag_name"), out _))
+                .Where(r => !ReleaseAssets.Flag(r, "draft") && SemVer.TryParse(ReleaseAssets.String(r, "tag_name"), out var v) &&
+                    UpdateService.Offers(target, v))
                 .OrderByDescending(r => { SemVer.TryParse(ReleaseAssets.String(r, "tag_name"), out var v); return v; }).Select(r => (JsonElement?)r).FirstOrDefault();
             return release is null ? null : Candidate(target, release.Value);
         }
@@ -67,6 +68,7 @@ internal sealed class GitHubReleaseSource(UpdateHttp http, string owner, string 
             var path = final.AbsolutePath;
             var marker = path.IndexOf("/releases/tag/", StringComparison.Ordinal);
             if (final.Host != "github.com" || marker < 0 || !SemVer.TryParse(Uri.UnescapeDataString(path[(marker + 14)..]), out var version)) throw;
+            if (!UpdateService.Offers(target, version)) return null;
             var tag = Uri.UnescapeDataString(path[(marker + 14)..]);
             return new(target.Slug, target.Name, target.InstalledVersion, version.ToString(), target.UpdateUrl, final.ToString(), tag,
                 new ZipPackageRef($"{root}/archive/refs/tags/{Uri.EscapeDataString(tag)}.zip", target.Slug));
@@ -87,6 +89,7 @@ internal sealed class GitLabReleaseSource(UpdateHttp http, string host, string p
     {
         if (pinned) return null;
         var release = (await Releases(30, ct).ConfigureAwait(false))
+            .Where(r => SemVer.TryParse(ReleaseAssets.String(r, "tag_name"), out var v) && UpdateService.Offers(target, v))
             .OrderByDescending(r => { SemVer.TryParse(ReleaseAssets.String(r, "tag_name"), out var v); return v; }).Select(r => (JsonElement?)r).FirstOrDefault();
         return release is null ? null : Candidate(target, release.Value);
     }
