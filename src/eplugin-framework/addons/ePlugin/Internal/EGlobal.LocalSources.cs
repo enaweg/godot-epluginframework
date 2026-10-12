@@ -109,6 +109,6 @@ internal sealed partial class EGlobal
         LocalIndexChanged?.Invoke();
     }
 
-    private void RefreshLocalUpdates() => _localUpdates = UpdateService.CheckLocal(CollectUpdateTargets(), LocalIndex, new(AllowPrerelease));
+    private void RefreshLocalUpdates() => _localUpdates = UpdateService.CheckLocal(CollectUpdateTargets(), LocalIndex);
 }
 #endif

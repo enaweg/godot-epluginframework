@@ -35,8 +35,7 @@ internal sealed class GitHubReleaseSource(UpdateHttp http, string owner, string 
         if (pinned) return [];
         using var document = JsonDocument.Parse(await http.ReadTextAsync($"https://api.github.com/repos/{owner}/{repository}/releases?per_page=100", ct, Token).ConfigureAwait(false));
         return document.RootElement.EnumerateArray()
-            .Where(r => !ReleaseAssets.Flag(r, "draft") && (options.AllowPrerelease || !ReleaseAssets.Flag(r, "prerelease")) &&
-                SemVer.TryParse(ReleaseAssets.String(r, "tag_name"), out var v) && (options.AllowPrerelease || v.Prerelease is null))
+            .Where(r => !ReleaseAssets.Flag(r, "draft") && SemVer.TryParse(ReleaseAssets.String(r, "tag_name"), out _))
             .Select(r => Candidate(target, r)).ToArray();
     }
     private UpdateCandidate Candidate(PluginUpdateTarget target, JsonElement release)
@@ -57,8 +56,8 @@ internal sealed class GitHubReleaseSource(UpdateHttp http, string owner, string 
         {
             using var document = JsonDocument.Parse(await http.ReadTextAsync($"https://api.github.com/repos/{owner}/{repository}/releases?per_page=30", ct, Token).ConfigureAwait(false));
             var release = document.RootElement.EnumerateArray()
-                .Where(r => !ReleaseAssets.Flag(r, "draft") && (options.AllowPrerelease || !ReleaseAssets.Flag(r, "prerelease")) &&
-                    SemVer.TryParse(ReleaseAssets.String(r, "tag_name"), out var v) && (options.AllowPrerelease || v.Prerelease is null))
+                .Where(r => !ReleaseAssets.Flag(r, "draft") && SemVer.TryParse(ReleaseAssets.String(r, "tag_name"), out var v) &&
+                    UpdateService.Offers(target, v))
                 .OrderByDescending(r => { SemVer.TryParse(ReleaseAssets.String(r, "tag_name"), out var v); return v; }).Select(r => (JsonElement?)r).FirstOrDefault();
             return release is null ? null : Candidate(target, release.Value);
         }
@@ -68,8 +67,8 @@ internal sealed class GitHubReleaseSource(UpdateHttp http, string owner, string 
             var final = response.RequestMessage?.RequestUri ?? throw new IOException("Cannot resolve latest release.");
             var path = final.AbsolutePath;
             var marker = path.IndexOf("/releases/tag/", StringComparison.Ordinal);
-            if (final.Host != "github.com" || marker < 0 || !SemVer.TryParse(Uri.UnescapeDataString(path[(marker + 14)..]), out var version) ||
-                !options.AllowPrerelease && version.Prerelease is not null) throw;
+            if (final.Host != "github.com" || marker < 0 || !SemVer.TryParse(Uri.UnescapeDataString(path[(marker + 14)..]), out var version)) throw;
+            if (!UpdateService.Offers(target, version)) return null;
             var tag = Uri.UnescapeDataString(path[(marker + 14)..]);
             return new(target.Slug, target.Name, target.InstalledVersion, version.ToString(), target.UpdateUrl, final.ToString(), tag,
                 new ZipPackageRef($"{root}/archive/refs/tags/{Uri.EscapeDataString(tag)}.zip", target.Slug));
@@ -78,18 +77,19 @@ internal sealed class GitHubReleaseSource(UpdateHttp http, string owner, string 
 }
 internal sealed class GitLabReleaseSource(UpdateHttp http, string host, string project, bool pinned = false) : IUpdateSource, IVersionListSource
 {
-    private async Task<JsonElement[]> Releases(UpdateCheckOptions options, int count, CancellationToken ct)
+    private async Task<JsonElement[]> Releases(int count, CancellationToken ct)
     {
         var token = Environment.GetEnvironmentVariable("EPLUGIN_GITLAB_TOKEN") ?? Environment.GetEnvironmentVariable("GITLAB_TOKEN");
         using var document = JsonDocument.Parse(await http.ReadTextAsync($"https://{host}/api/v4/projects/{Uri.EscapeDataString(project)}/releases?per_page={count}", ct, token, true).ConfigureAwait(false));
         return document.RootElement.EnumerateArray().Where(r => !ReleaseAssets.Flag(r, "upcoming_release") &&
-            SemVer.TryParse(ReleaseAssets.String(r, "tag_name"), out var v) && (options.AllowPrerelease || v.Prerelease is null))
+            SemVer.TryParse(ReleaseAssets.String(r, "tag_name"), out _))
             .Select(r => r.Clone()).ToArray();
     }
     public async Task<UpdateCandidate?> CheckAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct)
     {
         if (pinned) return null;
-        var release = (await Releases(options, 30, ct).ConfigureAwait(false))
+        var release = (await Releases(30, ct).ConfigureAwait(false))
+            .Where(r => SemVer.TryParse(ReleaseAssets.String(r, "tag_name"), out var v) && UpdateService.Offers(target, v))
             .OrderByDescending(r => { SemVer.TryParse(ReleaseAssets.String(r, "tag_name"), out var v); return v; }).Select(r => (JsonElement?)r).FirstOrDefault();
         return release is null ? null : Candidate(target, release.Value);
     }
@@ -98,7 +98,7 @@ internal sealed class GitLabReleaseSource(UpdateHttp http, string host, string p
         if (pinned) return [];
         var candidates = new List<UpdateCandidate>();
         // A release without a ZIP cannot be installed; leave it out instead of failing the whole list.
-        foreach (var release in await Releases(options, 100, ct).ConfigureAwait(false))
+        foreach (var release in await Releases(100, ct).ConfigureAwait(false))
             try { candidates.Add(Candidate(target, release)); } catch (IOException) { }
         return candidates;
     }

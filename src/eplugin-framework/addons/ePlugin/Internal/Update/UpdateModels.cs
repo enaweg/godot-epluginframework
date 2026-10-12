@@ -42,7 +42,7 @@ internal sealed record UpdateCheckFailure(string Slug, string Message);
 /// <param name="Fallbacks">Plugins whose project update site failed, so their plugin.cfg update_url was used instead.</param>
 internal sealed record UpdateCheckResult(IReadOnlyList<UpdateCandidate> Updates,
     IReadOnlyList<UpdateCheckFailure> Failures, DateTimeOffset CheckedAtUtc, IReadOnlyList<UpdateCheckFailure>? Fallbacks = null);
-internal sealed record UpdateCheckOptions(bool AllowPrerelease = false, int TimeoutSeconds = 15);
+internal sealed record UpdateCheckOptions(int TimeoutSeconds = 15);
 internal interface IClock { DateTimeOffset UtcNow { get; } }
 internal sealed class SystemClock : IClock { public DateTimeOffset UtcNow => DateTimeOffset.UtcNow; }
 internal interface IUpdateSource

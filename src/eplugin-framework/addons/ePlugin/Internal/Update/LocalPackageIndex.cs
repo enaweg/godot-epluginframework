@@ -124,10 +124,9 @@ internal static class LocalPackageIndexer
 internal static class LocalDirectorySource
 {
     /// <summary>One candidate per version, newest first; of several files with the same version the newest file wins.</summary>
-    public static IReadOnlyList<UpdateCandidate> Versions(LocalPackageIndex index, PluginUpdateTarget target, UpdateCheckOptions options) =>
+    public static IReadOnlyList<UpdateCandidate> Versions(LocalPackageIndex index, PluginUpdateTarget target) =>
         index.Matching(target.Slug)
             .Select(p => (Package: p, Version: SemVer.TryParse(p.Version, out var v) ? v : default))
-            .Where(p => options.AllowPrerelease || p.Version.Prerelease is null)
             .OrderByDescending(p => p.Version).ThenByDescending(p => p.Package.ModifiedUtc)
             .DistinctBy(p => p.Version.Key)
             .Select(p => new UpdateCandidate(target.Slug, target.Name, target.InstalledVersion, p.Package.Version, null,

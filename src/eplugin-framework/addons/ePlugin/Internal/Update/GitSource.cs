@@ -98,15 +98,15 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
         {
             await EnsureVersion(work, ct).ConfigureAwait(false);
             var refs = await Refs(work, ct).ConfigureAwait(false);
-            var tags = url.Ref is null ? TagCandidates(refs, target, options) : [];
+            var tags = url.Ref is null ? TagCandidates(refs, target) : [];
             if (tags.Count > 0) return tags;
             return [await Candidate(work, target, await Commit(work, refs, ct).ConfigureAwait(false), ct).ConfigureAwait(false)];
         }
         finally { DeleteWork(work); }
     }
     /// <summary>One candidate per version tag, announcing the tag's version; nothing is fetched.</summary>
-    private IReadOnlyList<UpdateCandidate> TagCandidates(string[][] refs, PluginUpdateTarget target, UpdateCheckOptions options) =>
-        refs.Where(p => IsVersionTag(p[1], options))
+    private IReadOnlyList<UpdateCandidate> TagCandidates(string[][] refs, PluginUpdateTarget target) =>
+        refs.Where(p => IsVersionTag(p[1]))
             .Select(p =>
             {
                 var tag = p[1][10..];
@@ -143,9 +143,9 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
         return remote.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => line.Trim().Split('\t')).Where(p => p.Length == 2).ToArray();
     }
     private static bool IsCommit(string? value) => value is not null && Regex.IsMatch(value, "^[a-fA-F0-9]{40}$");
-    private static bool IsVersionTag(string name, UpdateCheckOptions options) =>
+    private static bool IsVersionTag(string name) =>
         name.StartsWith("refs/tags/", StringComparison.Ordinal) && !name.EndsWith("^{}", StringComparison.Ordinal) &&
-        SemVer.TryParse(name[10..], out var v) && (options.AllowPrerelease || v.Prerelease is null);
+        SemVer.TryParse(name[10..], out _);
     /// <summary>The commit a tag points to, peeled for an annotated tag; null when there is no such tag.</summary>
     private static string? Tagged(string[][] refs, string tag) =>
         refs.FirstOrDefault(p => p[1] == "refs/tags/" + tag + "^{}")?[0] ?? refs.FirstOrDefault(p => p[1] == "refs/tags/" + tag)?[0];
@@ -169,7 +169,8 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
     }
 
     /// <summary>
-    /// The newest version tag, or without one the default branch; a pinned branch its head. A pinned commit or tag never
+    /// The newest version tag the install may move to (a stable install only to a stable tag, see
+    /// <see cref="UpdateService.IsUpdate"/>), or without version tags the default branch; a pinned branch its head. A pinned commit or tag never
     /// offers an update; it can only be installed again from the version choice.
     /// </summary>
     public async Task<UpdateCandidate?> CheckAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct)
@@ -182,7 +183,9 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
             await EnsureVersion(work, ct).ConfigureAwait(false);
             var refs = await Refs(work, ct).ConfigureAwait(false);
             if (url.Ref is { } reference && Tagged(refs, reference) is not null) return null;
-            if (url.Ref is null && TagCandidates(refs, target, options).FirstOrDefault() is { } newest) return newest;
+            // With version tags the newest one this install is offered (see UpdateService.IsUpdate), if any.
+            if (url.Ref is null && TagCandidates(refs, target) is { Count: > 0 } tags)
+                return tags.FirstOrDefault(c => SemVer.TryParse(c.NewVersion, out var version) && UpdateService.Offers(target, version));
             return await Candidate(work, target, await Commit(work, refs, ct).ConfigureAwait(false), ct).ConfigureAwait(false);
         }
         finally { DeleteWork(work); }

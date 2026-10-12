@@ -103,15 +103,17 @@ public class LocalSourceTests
             Package("e.zip", "plugin-9.0/", "9.0.0")
         ], [], 5, []);
         var target = Target();
-        var stable = LocalDirectorySource.Versions(index, target, new());
-        Assertions.AssertArray(stable.Select(c => c.NewVersion).ToArray()).IsEqual(new[] { "2.0.0", "1.5.0" });
-        Assertions.AssertString(((LocalZipPackageRef)stable[0].Package).Path).IsEqual("b.zip");
-        Assertions.AssertString(LocalDirectorySource.Versions(index, target, new(AllowPrerelease: true))[0].NewVersion).IsEqual("3.0.0-beta.1");
+        // A prerelease is a version like any other.
+        var versions = LocalDirectorySource.Versions(index, target);
+        Assertions.AssertArray(versions.Select(c => c.NewVersion).ToArray()).IsEqual(new[] { "3.0.0-beta.1", "2.0.0", "1.5.0" });
+        Assertions.AssertString(((LocalZipPackageRef)versions[1].Package).Path).IsEqual("b.zip");
 
-        var updates = UpdateService.CheckLocal([target, Target("unrelated")], index, new());
+        // A stable install is updated to the newest stable version, a prerelease install to the newest version.
+        var updates = UpdateService.CheckLocal([target, Target("unrelated")], index);
         Assertions.AssertInt(updates.Count).IsEqual(1);
         Assertions.AssertString(updates[0].NewVersion).IsEqual("2.0.0");
-        Assertions.AssertInt(UpdateService.CheckLocal([target with { InstalledVersion = "2.0.0" }], index, new()).Count).IsEqual(0);
+        Assertions.AssertInt(UpdateService.CheckLocal([target with { InstalledVersion = "2.0.0" }], index).Count).IsEqual(0);
+        Assertions.AssertString(UpdateService.CheckLocal([target with { InstalledVersion = "2.0.0-rc.1" }], index).Single().NewVersion).IsEqual("3.0.0-beta.1");
     }
 
     [TestCase]
@@ -119,7 +121,7 @@ public class LocalSourceTests
     {
         var older = Package("old.zip", "addons/plugin/", "2.0.0") with { ModifiedUtc = DateTime.UtcNow.AddDays(-1) };
         var newer = Package("new.zip", "addons/plugin/", "2.0.0");
-        var local = LocalDirectorySource.Versions(new([older, newer], [], 2, []), Target(), new()).Single();
+        var local = LocalDirectorySource.Versions(new([older, newer], [], 2, []), Target()).Single();
         Assertions.AssertString(((LocalZipPackageRef)local.Package).Path).IsEqual("new.zip");
         Assertions.AssertString(local.SourceUrl).IsNull();
         Assertions.AssertString(local.Origin).IsEqual("new.zip");
@@ -134,7 +136,7 @@ public class LocalSourceTests
     {
         var index = new LocalPackageIndex([Package("a.zip", "addons/plugin/", "1.5.0"), Package("b.zip", "addons/plugin/", "1.2.0")], [], 2, []);
         var service = new UpdateService(new Factory(), new SystemClock(), new MemoryStore());
-        var local = LocalDirectorySource.Versions(index, Target(), new());
+        var local = LocalDirectorySource.Versions(index, Target());
         var remote = await service.ListVersionsAsync(Target() with { UpdateUrl = "https://example.org/listed" }, new(), CancellationToken.None);
         var combined = UpdateService.MergeVersions(local, remote);
         Assertions.AssertArray(combined.Select(v => v.NewVersion).ToArray()).IsEqual(new[] { "2.0.0", "1.5.0", "1.2.0" });
@@ -170,7 +172,7 @@ public class LocalSourceTests
         var zip = Path.Combine(_root, "packages", "plugin.zip");
         Zip(zip, ("addons/plugin/plugin.cfg", Config("2.0.0")), ("addons/plugin/plugin.gd", "extends EditorPlugin"));
         var target = new PluginUpdateTarget("plugin", "Plugin", "1.0.0", null, installed);
-        var candidate = LocalDirectorySource.Versions(LocalPackageIndexer.Build([Path.GetDirectoryName(zip)!], CancellationToken.None), target, new()).Single();
+        var candidate = LocalDirectorySource.Versions(LocalPackageIndexer.Build([Path.GetDirectoryName(zip)!], CancellationToken.None), target).Single();
         var transaction = Path.Combine(_root, "transaction");
         var staged = (await new PackageFetcher(new UpdateHttp(), new GitRunner()).FetchAsync([candidate], [target], transaction, null, CancellationToken.None)).Packages;
         Assertions.AssertBool(staged.Single().IsValid).IsTrue();

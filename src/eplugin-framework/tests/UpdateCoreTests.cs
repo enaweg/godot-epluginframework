@@ -70,8 +70,13 @@ public class UpdateCoreTests
         Assertions.AssertBool(UpdateScheduler.ShouldCheck(now, now.AddHours(-19), true)).IsFalse();
         Assertions.AssertBool(UpdateScheduler.ShouldCheck(now, null, false)).IsFalse();
         var cache = new UpdateCache { Results = [Candidate("plugin", "2.0.0")] };
-        Assertions.AssertInt(UpdateScheduler.CurrentCached(cache, [Target("plugin", "3.0.0")], false).Count).IsEqual(0);
-        Assertions.AssertInt(UpdateScheduler.CurrentCached(cache, [Target("plugin", "1.0.0")], false).Count).IsEqual(1);
+        Assertions.AssertInt(UpdateScheduler.CurrentCached(cache, [Target("plugin", "3.0.0")]).Count).IsEqual(0);
+        Assertions.AssertInt(UpdateScheduler.CurrentCached(cache, [Target("plugin", "1.0.0")]).Count).IsEqual(1);
+        // A prerelease is an update of a prerelease only; a stable install gets it from the version list.
+        var beta = new UpdateCache { Results = [Candidate("plugin", "2.0.0-beta.1")] };
+        Assertions.AssertInt(UpdateScheduler.CurrentCached(beta, [Target("plugin", "1.0.0")]).Count).IsEqual(0);
+        Assertions.AssertInt(UpdateScheduler.CurrentCached(beta, [Target("plugin", "1.0.0-beta.3")]).Count).IsEqual(1);
+        Assertions.AssertInt(UpdateScheduler.CurrentCached(beta, [Target("plugin", "2.0.0-beta.1")]).Count).IsEqual(0);
     }
 
     [TestCase]
@@ -118,7 +123,7 @@ public class UpdateCoreTests
     {
         var service = new UpdateService(new Factory(), new SystemClock(), new MemoryStore());
         var versions = await service.ListVersionsAsync(Target("listed") with { UpdateUrl = "https://example.org/listed/releases" }, new(), CancellationToken.None);
-        Assertions.AssertArray(versions.Select(v => v.NewVersion).ToArray()).IsEqual(new[] { "2.0.0", "1.10.0", "1.2.0" });
+        Assertions.AssertArray(versions.Select(v => v.NewVersion).ToArray()).IsEqual(new[] { "3.0.0-beta.1", "2.0.0", "1.10.0", "1.2.0" });
         var refused = false;
         try { await service.ListVersionsAsync(Target("plain"), new(), CancellationToken.None); }
         catch (NotSupportedException) { refused = true; }
@@ -132,7 +137,7 @@ public class UpdateCoreTests
         var service = new UpdateService(new Factory(), new SystemClock(), store);
         var target = Target("listed", "1.5.0") with { UpdateUrl = "https://example.org/listed/releases" };
         await service.ListVersionsAsync(target, new(), CancellationToken.None);
-        var cached = UpdateScheduler.CurrentCached(store.State, [target], false).Single();
+        var cached = UpdateScheduler.CurrentCached(store.State, [target]).Single();
         Assertions.AssertString(cached.NewVersion).IsEqual("2.0.0");
         Assertions.AssertString(cached.InstalledVersion).IsEqual("1.5.0");
         Assertions.AssertObject(store.State.LastCheckUtc).IsNull();
@@ -145,10 +150,31 @@ public class UpdateCoreTests
         await service.ListVersionsAsync(target, new(), CancellationToken.None);
         Assertions.AssertString(store.State.Results.Single().NewVersion).IsEqual("2.0.0");
 
-        // Nothing newer than the installed version: the cache is left alone.
+        // Nothing newer than the installed version but a prerelease, which is no update of a stable install: the cache
+        // is left alone. A prerelease install caches it.
         store.State.Results = [];
         await service.ListVersionsAsync(target with { InstalledVersion = "2.0.0" }, new(), CancellationToken.None);
         Assertions.AssertInt(store.State.Results.Count).IsEqual(0);
+        await service.ListVersionsAsync(target with { InstalledVersion = "2.0.0-rc.1" }, new(), CancellationToken.None);
+        Assertions.AssertString(store.State.Results.Single().NewVersion).IsEqual("3.0.0-beta.1");
+    }
+
+    [TestCase]
+    public void UpdatesMoveToTheNextBetterVersionOfTheSameKind()
+    {
+        static bool IsUpdate(string installed, string version) =>
+            SemVer.TryParse(installed, out var i) && SemVer.TryParse(version, out var v) && UpdateService.IsUpdate(i, v);
+        // stable to stable only
+        Assertions.AssertBool(IsUpdate("1.0.0", "1.1.0")).IsTrue();
+        Assertions.AssertBool(IsUpdate("1.0.0", "2.0.0-beta.1")).IsFalse();
+        // a prerelease to a newer prerelease or to the release
+        Assertions.AssertBool(IsUpdate("1.0.0-beta.1", "1.0.0-beta.2")).IsTrue();
+        Assertions.AssertBool(IsUpdate("1.0.0-beta.2", "1.0.0")).IsTrue();
+        Assertions.AssertBool(IsUpdate("1.0.0-beta.2", "1.1.0-alpha")).IsTrue();
+        // never to an older or the same version
+        Assertions.AssertBool(IsUpdate("1.0.0-beta.2", "1.0.0-beta.1")).IsFalse();
+        Assertions.AssertBool(IsUpdate("1.0.0", "1.0.0")).IsFalse();
+        Assertions.AssertBool(IsUpdate("1.0.0", "0.9.0")).IsFalse();
     }
 
     private static PluginUpdateTarget Target(string slug, string installed = "1.0.0") => new(slug, slug, installed, "https://example.org/releases", "/unused");
@@ -162,7 +188,7 @@ public class UpdateCoreTests
     {
         public Task<UpdateCandidate?> CheckAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct) => Task.FromResult<UpdateCandidate?>(null);
         public Task<IReadOnlyList<UpdateCandidate>> ListAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyList<UpdateCandidate>>([Candidate(target.Slug, "1.2.0"), Candidate(target.Slug, "2.0.0"), Candidate(target.Slug, "1.10.0"), Candidate(target.Slug, "2.0.0"), Candidate(target.Slug, "bad")]);
+            Task.FromResult<IReadOnlyList<UpdateCandidate>>([Candidate(target.Slug, "1.2.0"), Candidate(target.Slug, "3.0.0-beta.1"), Candidate(target.Slug, "2.0.0"), Candidate(target.Slug, "1.10.0"), Candidate(target.Slug, "2.0.0"), Candidate(target.Slug, "bad")]);
     }
     private sealed class Source : IUpdateSource
     {

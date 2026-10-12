@@ -24,7 +24,6 @@ internal sealed partial class EGlobal
     public IReadOnlyList<UpdateCandidate> PendingUpdates => UpdateService.Merge(UpdateService.WithoutInstalled(_remoteUpdates, _updateCache?.State.Revisions), _localUpdates);
     internal DateTimeOffset? LastUpdateCheck => _updateCache?.State.LastCheckUtc;
     internal UpdateCache? UpdateCache => _updateCache?.State;
-    private static bool AllowPrerelease => ProjectSettings.GetSetting("eplugin/updates/allow_prerelease", false).AsBool();
 
     private void InitializeUpdates(EPluginPlugin plugin)
     {
@@ -33,7 +32,7 @@ internal sealed partial class EGlobal
         _updateService = new UpdateService(new UpdateSourceFactory(), new SystemClock(), _updateCache);
         InitializeUpdateSites();
         InitializeLocalSources();
-        _remoteUpdates = UpdateScheduler.CurrentCached(_updateCache.State, CollectUpdateTargets(), AllowPrerelease);
+        _remoteUpdates = UpdateScheduler.CurrentCached(_updateCache.State, CollectUpdateTargets());
         var check = _updateJournals?.Read().Any(j => j.IsActive) != true;
         var engine = Engine.GetSingleton("Engine");
         if (engine.HasMeta("eplugin_update_check_ran")) check = false;
@@ -52,8 +51,8 @@ internal sealed partial class EGlobal
     private void RefreshPendingUpdates()
     {
         var targets = CollectUpdateTargets();
-        if (_updateCache is not null) _remoteUpdates = UpdateScheduler.CurrentCached(_updateCache.State, targets, AllowPrerelease);
-        _localUpdates = UpdateService.CheckLocal(targets, LocalIndex, new(AllowPrerelease));
+        if (_updateCache is not null) _remoteUpdates = UpdateScheduler.CurrentCached(_updateCache.State, targets);
+        _localUpdates = UpdateService.CheckLocal(targets, LocalIndex);
     }
 
     /// <summary>
@@ -87,21 +86,20 @@ internal sealed partial class EGlobal
             // A manual check also finds ZIP files added to the local plugin directories since they were indexed.
             if (force) await RebuildLocalIndexAsync();
             var targets = CollectUpdateTargets();
-            var allow = AllowPrerelease;
             var enabled = ProjectSettings.GetSetting("eplugin/updates/check_enabled", true).AsBool();
             var interval = ProjectSettings.GetSetting("eplugin/updates/check_interval_hours", 20).AsDouble();
-            _localUpdates = UpdateService.CheckLocal(targets, LocalIndex, new(allow));
+            _localUpdates = UpdateService.CheckLocal(targets, LocalIndex);
             // Scheduled checks are off: nothing is fetched or logged, but the known updates stay what callers see.
             if (!force && !enabled) return new(PendingUpdates, [], LastUpdateCheck ?? DateTimeOffset.UtcNow);
             if (!force && !UpdateScheduler.ShouldCheck(DateTimeOffset.UtcNow, LastUpdateCheck, enabled, interval))
             {
-                _remoteUpdates = UpdateScheduler.CurrentCached(_updateCache.State, targets, allow);
+                _remoteUpdates = UpdateScheduler.CurrentCached(_updateCache.State, targets);
                 var cached = new UpdateCheckResult(PendingUpdates, [], LastUpdateCheck ?? DateTimeOffset.UtcNow);
                 PrintUpdates(cached, false);
                 return cached;
             }
             var service = _updateService;
-            var result = await Task.Run(() => service.CheckAsync(targets, new(allow), ct), ct).ConfigureAwait(false);
+            var result = await Task.Run(() => service.CheckAsync(targets, new(), ct), ct).ConfigureAwait(false);
             await OnEditorThread(() => { _remoteUpdates = result.Updates; result = result with { Updates = PendingUpdates }; PrintUpdates(result, force); }, ct).ConfigureAwait(false);
             return result;
         }
@@ -116,7 +114,7 @@ internal sealed partial class EGlobal
 
     /// <summary>The versions of an enabled plugin in the local plugin directories, newest first. Never touches the disk.</summary>
     internal IReadOnlyList<UpdateCandidate> ListLocalVersions(PluginUpdateTarget target) =>
-        LocalDirectorySource.Versions(LocalIndex, target, new(AllowPrerelease));
+        LocalDirectorySource.Versions(LocalIndex, target);
 
     /// <summary>
     /// All versions published at an enabled plugin's update_url, newest first. A newer version found this way becomes
@@ -125,9 +123,8 @@ internal sealed partial class EGlobal
     internal async Task<IReadOnlyList<UpdateCandidate>> ListRemoteVersionsAsync(PluginUpdateTarget target, CancellationToken ct)
     {
         var service = _updateService ?? throw new InvalidOperationException("Update system is not initialized.");
-        var allow = AllowPrerelease;
-        var versions = await Task.Run(() => service.ListVersionsAsync(target, new(allow), ct), ct);
-        await OnEditorThread(() => { if (_updateCache is not null) _remoteUpdates = UpdateScheduler.CurrentCached(_updateCache.State, CollectUpdateTargets(), allow); }, ct);
+        var versions = await Task.Run(() => service.ListVersionsAsync(target, new(), ct), ct);
+        await OnEditorThread(() => { if (_updateCache is not null) _remoteUpdates = UpdateScheduler.CurrentCached(_updateCache.State, CollectUpdateTargets()); }, ct);
         return versions;
     }
 

@@ -3,8 +3,12 @@
 # - url:  the git repository: GitHub, GitLab (also self-hosted) or any other git host. A repository's tag or release
 #         page works too. Outside GitHub and GitLab, give the URL ending in .git that the updater can read.
 # - slug: the add-on's folder in res://addons. It wins over the folder found in the release ZIP or the repository.
-# The add-on still needs a stable release or version tag (an optional "v", then 1.2 or 1.2.3), or it is left out.
+# The add-on still needs a release or version tag (an optional "v", then 1.2 or 1.2.3, optionally a prerelease suffix such
+# as "-beta.1"), or it is left out.
 
 global_asset_manager;https://github.com/sn1ks0h/Global-Asset-Manager
 # Its release ZIP ships a GDExtension, which ePlugin cannot update yet, so the generator leaves it out for now.
 rider-plugin;https://github.com/JetBrains/godot-support
+# Its release ZIP ships a GDExtension without a plugin.cfg, which ePlugin cannot update yet, so the generator leaves it
+# out for now.
+tweens_gd;https://github.com/outfox/tweens.gd

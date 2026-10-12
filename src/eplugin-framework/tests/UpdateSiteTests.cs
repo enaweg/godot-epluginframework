@@ -138,8 +138,8 @@ public class UpdateSiteTests
         Assertions.AssertString(versions.First().SourceUrl).IsEqual(Config);
         Assertions.AssertString(store.State.Results.Single().SourceUrl).IsEqual(Config);
         // a cached update counts for the plugin whichever of its sites it came from
-        Assertions.AssertInt(UpdateScheduler.CurrentCached(store.State, [target], false).Count).IsEqual(1);
-        Assertions.AssertInt(UpdateScheduler.CurrentCached(store.State, [Target(config: null, site: Site)], false).Count).IsEqual(0);
+        Assertions.AssertInt(UpdateScheduler.CurrentCached(store.State, [target]).Count).IsEqual(1);
+        Assertions.AssertInt(UpdateScheduler.CurrentCached(store.State, [Target(config: null, site: Site)]).Count).IsEqual(0);
     }
 
     [TestCase]
@@ -180,8 +180,8 @@ public class UpdateSiteTests
         var builtInOnly = await service.CheckAsync([Target(config: null, site: null) with { KnownUrl = known }], new(), CancellationToken.None);
         Assertions.AssertString(builtInOnly.Updates.Single().SourceUrl).IsEqual(known);
         var cache = new UpdateCache { Results = [Candidate(known)] };
-        Assertions.AssertInt(UpdateScheduler.CurrentCached(cache, [target], false).Count).IsEqual(1);
-        Assertions.AssertInt(UpdateScheduler.CurrentCached(cache, [target with { KnownUrl = null }], false).Count).IsEqual(0);
+        Assertions.AssertInt(UpdateScheduler.CurrentCached(cache, [target]).Count).IsEqual(1);
+        Assertions.AssertInt(UpdateScheduler.CurrentCached(cache, [target with { KnownUrl = null }]).Count).IsEqual(0);
     }
 
     [TestCase]
