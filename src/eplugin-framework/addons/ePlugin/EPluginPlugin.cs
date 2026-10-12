@@ -27,8 +27,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
     private LicenseDialog? _licenseDialog;
     private WelcomeDialog? _welcomeDialog;
     private EGlobal? _updateOwner;
-    // An update restarted the editor while the ePlugin Manager was open; it opens again while the progress window of
-    // that start is still shown, which closes once the manager had a few frames to draw.
+    // A resumed update keeps its progress window until startup finishes and the manager has a few frames to draw.
     private bool _reopenManager;
     private IDisposable? _reopenProgress;
     private int _reopenFrames;
@@ -294,6 +293,8 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         const string recoveryKey = "eplugin_early_update_recovery";
         if (!Engine.Singleton.HasMeta(recoveryKey))
         {
+            if (ActivationProgress.ResumeAfterRestart())
+                _reopenProgress = ActivationProgress.Begin("Finishing the plugin update...");
             Engine.Singleton.SetMeta(recoveryKey, false);
             var recovery = UpdateRecovery.RunIfNeeded(ProjectSettings.GlobalizePath("res://"), Logger,
                 () => new DotnetVersionManager(Logger, EnableDebugLogging).Create(Logger) is ICheckedDotnetCli cli && cli.TryBuild().ExitCode == 0,
@@ -301,7 +302,12 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
             if (recovery != UpdateRecovery.Outcome.Continue)
             {
                 Engine.Singleton.SetMeta(recoveryKey, true);
-                if (recovery == UpdateRecovery.Outcome.Restart) EditorInterface.Singleton.CallDeferred(EditorInterface.MethodName.RestartEditor, true);
+                if (recovery == UpdateRecovery.Outcome.Restart)
+                {
+                    ActivationProgress.PrepareForRestart();
+                    EditorInterface.Singleton.CallDeferred(EditorInterface.MethodName.RestartEditor, true);
+                }
+                ReleaseReopenProgress();
             }
         }
         return !Engine.Singleton.GetMeta(recoveryKey).AsBool();
@@ -320,16 +326,16 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         if (context is not null) context.Unloading += _ => { try { _updateLifetime.Cancel(); } catch (ObjectDisposedException) { } };
         UpdateSettings.Register();
         LicenseSettings.Register();
-        // An update restarted the editor while the ePlugin Manager was open. The progress window spans the whole start,
-        // so the manager is already shown when it closes.
-        var progress = ManagerReopen.IsSet ? ActivationProgress.Begin("Finishing the plugin update...") : null;
+        // A reconnected window spans recovery and initialization. If the manager was open, let it draw before closing.
+        var progress = _reopenProgress ?? (ManagerReopen.IsSet ? ActivationProgress.Begin("Finishing the plugin update...") : null);
+        _reopenProgress = null;
         try { EGlobal.Instance.Initialize(this, new GenericLoggerFactory(category => new GodotConsoleLogger(category))); }
         catch { progress?.Dispose(); throw; }
         if (progress is null) return;
         // Another restart follows, e.g. after the interim build: the manager opens after that one.
         if (EGlobal.Instance.IsRestartPending) { progress.Dispose(); return; }
         ReleaseReopenProgress();
-        _reopenProgress = progress; _reopenManager = true;
+        _reopenProgress = progress; _reopenManager = ManagerReopen.IsSet;
     }
 }
 #endif

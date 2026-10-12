@@ -8,7 +8,8 @@ namespace ActivationProgress;
 /// <c>--editor-window</c> (Windows) and <c>--editor-center</c> (native desktop coordinates, macOS and Linux) place the
 /// window over the editor instead of on the primary screen.
 /// Commands on stdin, one per line: <c>TEXT base64-utf8</c> replaces the label, <c>HEARTBEAT</c> restarts the
-/// lifetime, and <c>CLOSE</c> (or end of input) exits.
+/// lifetime, and <c>CLOSE</c> (or end of input) exits. With <c>--command-file PATH</c>, commands are
+/// appended to a file instead; end of file waits for more commands across editor restarts.
 /// </summary>
 internal static class Program
 {
@@ -53,6 +54,7 @@ internal static class Program
             ? parsedSeconds
             : DefaultMaxLifetimeSeconds;
         var maxLifetime = TimeSpan.FromSeconds(maxLifetimeSeconds);
+        var commandFile = Option(args, "--command-file", 1)?[0];
         // Not disposed: the reader thread may still restart it while the process exits.
         var lifetime = new Timer(_ => Environment.Exit(0), null, maxLifetime, Timeout.InfiniteTimeSpan);
 
@@ -60,11 +62,14 @@ internal static class Program
         {
             window.Run(Title, InitialText, ShowDelayMilliseconds, () =>
             {
-                var output = new StreamWriter(Console.OpenStandardOutput(), Encoding.ASCII) { AutoFlush = true };
-                output.WriteLine("READY");
+                if (commandFile is null)
+                {
+                    var output = new StreamWriter(Console.OpenStandardOutput(), Encoding.ASCII) { AutoFlush = true };
+                    output.WriteLine("READY");
+                }
 
                 // Reading a redirected console stream can block before its first await.
-                new Thread(() => ReadCommands(window, () => lifetime.Change(maxLifetime, Timeout.InfiniteTimeSpan)))
+                new Thread(() => ReadCommands(window, () => lifetime.Change(maxLifetime, Timeout.InfiniteTimeSpan), commandFile))
                 {
                     IsBackground = true
                 }.Start();
@@ -97,13 +102,15 @@ internal static class Program
             : null;
     }
 
-    private static void ReadCommands(IProgressWindow window, Action heartbeat)
+    private static void ReadCommands(IProgressWindow window, Action heartbeat, string? commandFile)
     {
         try
         {
-            using var input = new StreamReader(Console.OpenStandardInput(), Encoding.ASCII);
+            using var input = new StreamReader(commandFile is null ? Console.OpenStandardInput() :
+                new FileStream(commandFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete), Encoding.ASCII);
+            var pending = new StringBuilder();
             string? line;
-            while ((line = input.ReadLine()) is not null)
+            while ((line = commandFile is null ? input.ReadLine() : ReadAppendedLine(input, pending)) is not null)
             {
                 if (line == "CLOSE")
                 {
@@ -136,6 +143,23 @@ internal static class Program
 
         // The native UI loops own the main thread; exiting from here avoids per-platform shutdown plumbing.
         Environment.Exit(0);
+    }
+
+    private static string ReadAppendedLine(StreamReader input, StringBuilder pending)
+    {
+        // Keep incomplete lines until their newline is written. EOF is temporary while the editor restarts.
+        while (true)
+        {
+            var character = input.Read();
+            if (character < 0) { Thread.Sleep(50); continue; }
+            if (character == '\n')
+            {
+                var line = pending.ToString().TrimEnd('\r');
+                pending.Clear();
+                return line;
+            }
+            pending.Append((char)character);
+        }
     }
 }
 
