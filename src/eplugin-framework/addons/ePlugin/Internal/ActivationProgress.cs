@@ -1,7 +1,6 @@
 #if TOOLS
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -14,8 +13,8 @@ namespace Enaweg.Plugin.Internal;
 /// Nested editor callbacks share the same process.
 /// </summary>
 /// <remarks>
-/// The helper is never waited for: commands sit in the stdin pipe until it has started, a dead helper surfaces as a
-/// failed write, and an operation that ends before the helper shows its window never shows one.
+/// Startup never waits for the helper: commands are queued in a file until it has started. An operation that
+/// ends before the helper shows its window never shows one. Scheduled restarts hand the window to the next editor.
 /// </remarks>
 internal static class ActivationProgress
 {
@@ -26,14 +25,40 @@ internal static class ActivationProgress
     private static int _depth;
     private static IProgressHelper? _helper;
     private static IDisposable? _settingsDialog;
-    private static bool _closedForUpdate;
+    private static bool _restartPending;
 
     /// <summary>Starts a helper, or returns null when none can run. Tests replace it with a fake.</summary>
     internal static Func<IProgressHelper?> Launch { get; set; } = LaunchDefault;
+    internal static Func<IProgressHelper?> Resume { get; set; } = ResumeDefault;
 
     internal static Func<IDisposable?> HideSettingsDialog { get; set; } = ProjectSettingsDialog.TryHide;
 
     internal static IProgressHelper? LaunchDefault() => ProcessProgressHelper.TryStart(HelperPath);
+    internal static IProgressHelper? ResumeDefault() => ProgressSession.TryResume(ProjectSettings.GlobalizePath("res://.godot/eplugin/progress"));
+
+    /// <summary>Called once at editor startup, before recovery and recipe reconciliation.</summary>
+    internal static bool ResumeAfterRestart()
+    {
+        _restartPending = false;
+        if (_helper is not null) return false;
+        try { _helper = Resume(); }
+        catch (Exception) { _helper = null; }
+        return _helper is not null;
+    }
+
+    /// <summary>Hands the running window to the next editor process instead of closing it with this scope.</summary>
+    internal static void PrepareForRestart()
+    {
+        _restartPending = true;
+        SetText("Restarting the editor...");
+        Heartbeat();
+        try
+        {
+            _helper?.DetachForRestart();
+            _helper = null;
+        }
+        catch (Exception) { Stop(); }
+    }
 
     public static IDisposable Begin(string text)
     {
@@ -49,7 +74,7 @@ internal static class ActivationProgress
                 _settingsDialog = null;
             }
 
-            Start();
+            if (_helper is null && !_restartPending) Start();
         }
 
         SetText(text);
@@ -99,29 +124,6 @@ internal static class ActivationProgress
         }
     }
 
-    /// <summary>The helper runs from the framework folder, which a self-update is about to replace.</summary>
-    internal static void ForceCloseForUpdate()
-    {
-        Stop();
-        _closedForUpdate = _depth > 0;
-    }
-
-    /// <summary>
-    /// Shows the window again for the rest of an operation whose self-update closed it, e.g. the remaining groups of an
-    /// update batch. The helper then starts from the framework folder now in place.
-    /// </summary>
-    internal static void ReopenAfterUpdate(string text)
-    {
-        if (!_closedForUpdate || _depth == 0)
-        {
-            return;
-        }
-
-        _closedForUpdate = false;
-        Start();
-        SetText(text);
-    }
-
     private static void Stop()
     {
         var helper = _helper;
@@ -151,7 +153,6 @@ internal static class ActivationProgress
             if (--_depth == 0)
             {
                 Stop();
-                _closedForUpdate = false;
                 var settingsDialog = _settingsDialog;
                 _settingsDialog = null;
                 try
@@ -172,20 +173,14 @@ internal interface IProgressHelper : IDisposable
 {
     /// <summary>Sends one protocol line. Throws when the helper is gone.</summary>
     void Send(string command);
+    /// <summary>Persists the session and releases this host's handles without closing the window.</summary>
+    void DetachForRestart();
 }
 
 /// <summary>The published helper, run as <c>dotnet ActivationProgress.dll</c>.</summary>
-internal sealed class ProcessProgressHelper : IProgressHelper
+internal static class ProcessProgressHelper
 {
-    private const int ExitTimeoutMilliseconds = 500;
-    private readonly Process _process;
-
-    private ProcessProgressHelper(Process process)
-    {
-        _process = process;
-    }
-
-    public static ProcessProgressHelper? TryStart(string resourcePath)
+    public static IProgressHelper? TryStart(string resourcePath)
     {
         if (!HasDesktop())
         {
@@ -198,79 +193,7 @@ internal sealed class ProcessProgressHelper : IProgressHelper
             return null;
         }
 
-        // The helper is framework-dependent, so it runs on the same dotnet host the recipes use.
-        var startInfo = new ProcessStartInfo("dotnet")
-        {
-            UseShellExecute = false,
-            // dotnet is a console application; don't flash a console window next to the progress window.
-            CreateNoWindow = true,
-            RedirectStandardInput = true,
-            // Swallows the helper's READY line (only the smoke test reads it) instead of the editor console.
-            RedirectStandardOutput = true,
-            StandardInputEncoding = Encoding.ASCII,
-            StandardOutputEncoding = Encoding.ASCII
-        };
-        startInfo.ArgumentList.Add(path);
-        foreach (var argument in PlacementArguments())
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
-
-        var process = Process.Start(startInfo);
-        if (process is null)
-        {
-            return null;
-        }
-
-        process.StandardInput.AutoFlush = true;
-        return new ProcessProgressHelper(process);
-    }
-
-    public void Send(string command)
-    {
-        _process.StandardInput.WriteLine(command);
-    }
-
-    public void Dispose()
-    {
-        try
-        {
-            if (!_process.HasExited)
-            {
-                try
-                {
-                    _process.StandardInput.WriteLine("CLOSE");
-                    _process.StandardInput.Close();
-                }
-                catch (Exception)
-                {
-                    // The helper may already have closed its input pipe.
-                }
-
-                if (!_process.WaitForExit(ExitTimeoutMilliseconds))
-                {
-                    _process.Kill();
-                }
-            }
-        }
-        catch (Exception)
-        {
-            try
-            {
-                if (!_process.HasExited)
-                {
-                    _process.Kill();
-                }
-            }
-            catch (Exception)
-            {
-                // A failed helper must not affect activation or deactivation.
-            }
-        }
-        finally
-        {
-            _process.Dispose();
-        }
+        return ProgressSession.Start(path, ProjectSettings.GlobalizePath("res://.godot/eplugin/progress"), PlacementArguments());
     }
 
     private static bool HasDesktop()

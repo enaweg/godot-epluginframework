@@ -17,6 +17,8 @@ public class ActivationProgressTests
     {
         _launched.Clear();
         ActivationProgress.HideSettingsDialog = () => null;
+        ActivationProgress.Resume = () => null;
+        ActivationProgress.ResumeAfterRestart();
         ActivationProgress.Launch = () =>
         {
             var helper = new FakeHelper();
@@ -29,6 +31,7 @@ public class ActivationProgressTests
     public void Cleanup()
     {
         ActivationProgress.Launch = ActivationProgress.LaunchDefault;
+        ActivationProgress.Resume = ActivationProgress.ResumeDefault;
         ActivationProgress.HideSettingsDialog = ProjectSettingsDialog.TryHide;
     }
 
@@ -117,27 +120,54 @@ public class ActivationProgressTests
     }
 
     [TestCase]
-    public void SelfUpdateClosesHelperAndOnlyAnExplicitReopenStartsItAgain()
+    public void ProgressSurvivesTwoRestartsAndClosesAfterTheResumedWorkflow()
+    {
+        var window = new FakeHelper();
+        ActivationProgress.Launch = () => { _launched.Add(window); return window; };
+        ActivationProgress.Resume = () => window;
+        using (ActivationProgress.Begin("Updating plugins..."))
+        {
+            ActivationProgress.PrepareForRestart();
+            using (ActivationProgress.Begin("Shutdown callback...")) { }
+        }
+        Assertions.AssertBool(window.Disposed).IsFalse();
+        Assertions.AssertInt(window.DetachCount).IsEqual(1);
+        Assertions.AssertBool(ActivationProgress.ResumeAfterRestart()).IsTrue();
+        using (ActivationProgress.Begin("Reconciling updated recipes..."))
+        {
+            using (ActivationProgress.Begin("Building...")) { }
+            ActivationProgress.PrepareForRestart();
+        }
+        Assertions.AssertBool(window.Disposed).IsFalse();
+        Assertions.AssertInt(window.DetachCount).IsEqual(2);
+        Assertions.AssertBool(ActivationProgress.ResumeAfterRestart()).IsTrue();
+        using (ActivationProgress.Begin("Verifying plugins...")) { }
+        Assertions.AssertBool(window.Disposed).IsTrue();
+        Assertions.AssertInt(_launched.Count).IsEqual(1);
+        Assertions.AssertThat(window.Received).ContainsExactly("Updating plugins...", "Restarting the editor...",
+            "HEARTBEAT", "Reconciling updated recipes...", "Building...", "Restarting the editor...", "HEARTBEAT", "Verifying plugins...");
+    }
+
+    [TestCase]
+    public void UnavailableRestartSessionFallsBackToANewHelper()
+    {
+        ActivationProgress.Resume = () => throw new IOException("Session unavailable.");
+        Assertions.AssertBool(ActivationProgress.ResumeAfterRestart()).IsFalse();
+        using (ActivationProgress.Begin("Finishing update...")) { }
+        Assertions.AssertInt(_launched.Count).IsEqual(1);
+        Assertions.AssertBool(_launched[0].Disposed).IsTrue();
+    }
+
+    [TestCase]
+    public void FailedRestartHandoffDoesNotAffectOperation()
     {
         using (ActivationProgress.Begin("Updating plugins..."))
         {
-            ActivationProgress.ForceCloseForUpdate();
-            Assertions.AssertBool(_launched[0].Disposed).IsTrue();
-            using (ActivationProgress.Begin("Nested..."))
-            {
-            }
-
-            Assertions.AssertInt(_launched.Count).IsEqual(1);
-            ActivationProgress.ReopenAfterUpdate("Updating B...");
-            ActivationProgress.ReopenAfterUpdate("Updating C...");
-            Assertions.AssertInt(_launched.Count).IsEqual(2);
-            Assertions.AssertThat(_launched[1].Received).ContainsExactly("Updating B...");
+            _launched[0].CannotDetach = true;
+            ActivationProgress.PrepareForRestart();
         }
-
-        Assertions.AssertBool(_launched[1].Disposed).IsTrue();
-        // Outside an operation there is nothing to reopen.
-        ActivationProgress.ReopenAfterUpdate("Idle...");
-        Assertions.AssertInt(_launched.Count).IsEqual(2);
+        Assertions.AssertBool(_launched[0].Disposed).IsTrue();
+        Assertions.AssertBool(ActivationProgress.ResumeAfterRestart()).IsFalse();
     }
 
     [TestCase]
@@ -229,6 +259,14 @@ public class ActivationProgressTests
         public bool Dead { get; set; }
 
         public bool Disposed { get; private set; }
+        public bool CannotDetach { get; set; }
+        public int DetachCount { get; private set; }
+
+        public void DetachForRestart()
+        {
+            if (CannotDetach) throw new IOException("Cannot persist session.");
+            DetachCount++;
+        }
 
         public void Send(string command)
         {

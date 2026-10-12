@@ -93,7 +93,6 @@ internal sealed partial class EGlobal
             result =>
             {
                 if (result.Outcome is { } outcome) HandleUpdateOutcome(result.Directory, outcome);
-                if (groups.Count > 1 && result.Packages.Any(p => p.Candidate.Slug == "ePlugin")) ActivationProgress.ReopenAfterUpdate("Updating plugins...");
             }, askOnBuildFailure);
     }
 
@@ -143,6 +142,7 @@ internal sealed partial class EGlobal
         if (IsRestartPending) return;
         _ePluginContext?.Logger.Log("Restarting editor to load the updated assembly. If automatic launch fails, reopen the project to resume.");
         IsRestartPending = true;
+        ActivationProgress.PrepareForRestart();
         try { RestartRequested?.Invoke(); }
         catch (Exception ex) { _ePluginContext?.Logger.Log("Cannot prepare the editor restart: " + ex.Message); }
         EditorInterface.Singleton.CallDeferred(EditorInterface.MethodName.RestartEditor, true);
@@ -303,10 +303,6 @@ internal sealed partial class EGlobal
                 throw new InvalidOperationException("A working dotnet CLI is required for C# updates.");
         }
         public void PrepareJournal(UpdateJournal journal) => global.PrepareUpdateRecipes(journal);
-        public void BeforeSwap(UpdateJournal journal)
-        {
-            if (journal.Plugins.Any(p => p.Slug == "ePlugin")) ActivationProgress.ForceCloseForUpdate();
-        }
         public void Bridge(UpdateJournal journal, UpdatePluginJournal plugin)
         {
             if (!plugin.IsEPlugin || !journal.Recipes.TryGetValue(plugin.Slug, out var recipe)) return;
