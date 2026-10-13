@@ -278,7 +278,11 @@ recognizes disabled ePlugins by the `ScriptPathAttribute` of their compiled type
 additional Tools menu entries. Long-running actions (enabling/disabling, Retry failed, Check for updates,
 downloading and installing) show their progress through an `ActivationProgress` scope, not through the dialog: the
 dialog has no progress bar and only puts the outcome in its status line. An async scope reports from background threads
-via `CallDeferred`, because `ActivationProgress` is editor-thread only.
+via `CallDeferred`, because `ActivationProgress` is editor-thread only. A project has at most one progress helper
+(`ProgressSession`): next to its command file in `.godot/eplugin/progress` a `<token>.owned` file names the editor using
+it and `<token>.idle` marks it closed. `Acquire` reuses an idle helper (its window reopens with the next `TEXT`) or one
+whose editor is this process (lost to an assembly reload) or no longer runs, and shows no window while another running
+editor owns it. The helper claims `.idle` itself before it exits; both claims are atomic renames, so only one wins.
 
 ### Plugin licenses
 

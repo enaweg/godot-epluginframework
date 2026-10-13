@@ -14,11 +14,14 @@ namespace Enaweg.Plugin.Internal;
 /// </summary>
 /// <remarks>
 /// Startup never waits for the helper: commands are queued in a file until it has started. An operation that
-/// ends before the helper shows its window never shows one. Scheduled restarts hand the window to the next editor.
+/// ends before the helper shows its window never shows one. A project has at most one helper: the next operation
+/// reopens a closing or hidden window, one lost to an assembly reload is taken over, and scheduled restarts hand the
+/// window to the next editor (see <see cref="ProgressSession"/>).
 /// </remarks>
 internal static class ActivationProgress
 {
     private const string HelperPath = "res://addons/ePlugin/progress/ActivationProgress.dll";
+    internal const string SessionPath = "res://.godot/eplugin/progress";
 
     // Counts open scopes, not helper lifetimes: a helper that dies mid-operation is intentionally not restarted by
     // the nested scopes of that operation, only by the next top-level one.
@@ -27,16 +30,19 @@ internal static class ActivationProgress
     private static IDisposable? _settingsDialog;
     private static bool _restartPending;
 
-    /// <summary>Starts a helper, or returns null when none can run. Tests replace it with a fake.</summary>
+    /// <summary>Reuses or starts a helper, or returns null when none can run. Tests replace it with a fake.</summary>
     internal static Func<IProgressHelper?> Launch { get; set; } = LaunchDefault;
     internal static Func<IProgressHelper?> Resume { get; set; } = ResumeDefault;
 
     internal static Func<IDisposable?> HideSettingsDialog { get; set; } = ProjectSettingsDialog.TryHide;
 
     internal static IProgressHelper? LaunchDefault() => ProcessProgressHelper.TryStart(HelperPath);
-    internal static IProgressHelper? ResumeDefault() => ProgressSession.TryResume(ProjectSettings.GlobalizePath("res://.godot/eplugin/progress"));
+    internal static IProgressHelper? ResumeDefault() => ProgressSession.TryResume(ProjectSettings.GlobalizePath(SessionPath));
 
-    /// <summary>Called once at editor startup, before recovery and recipe reconciliation.</summary>
+    /// <summary>
+    /// Called once at editor startup, before recovery and recipe reconciliation. Returns whether a restart handed over
+    /// its window.
+    /// </summary>
     internal static bool ResumeAfterRestart()
     {
         _restartPending = false;
@@ -168,7 +174,7 @@ internal static class ActivationProgress
     }
 }
 
-/// <summary>A running progress helper. Disposing it closes the window.</summary>
+/// <summary>A running progress helper. Disposing it closes the window and lets the next operation reuse it.</summary>
 internal interface IProgressHelper : IDisposable
 {
     /// <summary>Sends one protocol line. Throws when the helper is gone.</summary>
@@ -193,7 +199,8 @@ internal static class ProcessProgressHelper
             return null;
         }
 
-        return ProgressSession.Start(path, ProjectSettings.GlobalizePath("res://.godot/eplugin/progress"), PlacementArguments());
+        var directory = ProjectSettings.GlobalizePath(ActivationProgress.SessionPath);
+        return ProgressSession.Acquire(directory, () => ProgressSession.Start(path, directory, PlacementArguments()));
     }
 
     private static bool HasDesktop()
