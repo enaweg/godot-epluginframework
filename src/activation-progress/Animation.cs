@@ -5,14 +5,14 @@ namespace ActivationProgress;
 /// <summary>
 /// The window's opening: the logo fades in, pauses, then its two parts move apart while the panel grows between
 /// them, and once the panel has its full size its controls fade in. Closing plays the same timeline backwards, from
-/// wherever the opening got to. Not thread-safe: each window uses it on its UI thread only.
+/// wherever the opening got to, skipping the logo pause. Not thread-safe: each window uses it on its UI thread only.
 /// </summary>
 internal sealed class Animation
 {
-    public const double FadeSeconds = 1.0;
+    public const double FadeSeconds = 0.5;
     public const double LogoPauseSeconds = 1.0;
     public const double SplitSeconds = 0.6;
-    public const double ControlsSeconds = 0.3;
+    public const double ControlsSeconds = 0.5;
     public const double TotalSeconds = FadeSeconds + LogoPauseSeconds + SplitSeconds + ControlsSeconds;
 
     /// <summary>How often a window redraws while animating, and for its own indeterminate progress bar.</summary>
@@ -27,7 +27,17 @@ internal sealed class Animation
     public bool Closed => _direction < 0 && Position <= 0;
 
     /// <summary>Seconds into the opening timeline.</summary>
-    public double Position => Math.Clamp(_from + _direction * (_clock.Elapsed.TotalSeconds - _since), 0, TotalSeconds);
+    public double Position
+    {
+        get
+        {
+            var position = _from + _direction * (_clock.Elapsed.TotalSeconds - _since);
+            // Closing moves straight from the joined logo to its fade-out.
+            var pauseEnd = FadeSeconds + LogoPauseSeconds;
+            if (_direction < 0 && _from > pauseEnd && position <= pauseEnd) position -= LogoPauseSeconds;
+            return Math.Clamp(position, 0, TotalSeconds);
+        }
+    }
 
     public Frame Frame => Frame.At(Position);
 
@@ -38,6 +48,8 @@ internal sealed class Animation
     private void Turn(int direction)
     {
         _from = Position;
+        // An opening interrupted during its pause should also begin fading out immediately.
+        if (direction < 0 && _from > FadeSeconds && _from <= FadeSeconds + LogoPauseSeconds) _from = FadeSeconds;
         _since = _clock.Elapsed.TotalSeconds;
         _direction = direction;
     }
