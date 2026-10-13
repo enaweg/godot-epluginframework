@@ -8,7 +8,7 @@ namespace ActivationProgress;
 /// <c>--editor-window</c> (Windows) and <c>--editor-center</c> (native desktop coordinates, macOS and Linux) place the
 /// window over the editor instead of on the primary screen.
 /// Commands on stdin, one per line: <c>TEXT base64-utf8</c> replaces the label, <c>HEARTBEAT</c> restarts the
-/// lifetime, and <c>CLOSE</c> (or end of input) exits. With <c>--command-file PATH</c>, commands are
+/// lifetime, and <c>CLOSE</c> (or end of input) closes the window and exits. With <c>--command-file PATH</c>, commands are
 /// appended to a file instead; end of file waits for more commands across editor restarts.
 /// </summary>
 internal static class Program
@@ -136,12 +136,15 @@ internal static class Program
                 }
             }
         }
-        catch (IOException)
+        catch (Exception)
         {
-            // The parent process closed the pipe.
+            // The parent process closed the pipe, or deleted the command file before the helper could open it.
         }
 
-        // The native UI loops own the main thread; exiting from here avoids per-platform shutdown plumbing.
+        // The window exits the process once its closing animation has played. The native UI loops own the main
+        // thread; exiting from here too avoids per-platform shutdown plumbing should a window never get there.
+        window.Close();
+        Thread.Sleep(TimeSpan.FromSeconds(Animation.TotalSeconds + 1));
         Environment.Exit(0);
     }
 
@@ -177,4 +180,10 @@ internal interface IProgressWindow
 
     /// <summary>Replaces the label text. Callable from any thread once <c>ready</c> has run.</summary>
     void SetText(string text);
+
+    /// <summary>
+    /// Plays the opening backwards from wherever it got to, then exits the process; exits at once if the window was
+    /// never shown. Callable from any thread once <c>ready</c> has run.
+    /// </summary>
+    void Close();
 }

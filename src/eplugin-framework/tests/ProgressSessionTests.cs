@@ -19,7 +19,12 @@ public class ProgressSessionTests
     [AfterTest]
     public void Cleanup()
     {
-        if (Directory.Exists(_root)) Directory.Delete(_root, true);
+        // A closed helper still plays its closing animation, and Windows keeps its runtime copy locked until it exits.
+        for (var attempt = 0; Directory.Exists(_root); attempt++)
+        {
+            try { Directory.Delete(_root, true); }
+            catch (Exception) when (attempt < 50) { System.Threading.Thread.Sleep(100); }
+        }
     }
 
     [TestCase]

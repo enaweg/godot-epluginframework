@@ -18,6 +18,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
-    <EmbeddedResource Include="../../design/icon-nobg_small.png" LogicalName="ActivationProgress.Logo.png" />
+    <EmbeddedResource Include="../../design/icon-head.png" LogicalName="ActivationProgress.LogoHead.png" />
+    <EmbeddedResource Include="../../design/icon-puzzle.png" LogicalName="ActivationProgress.LogoPuzzle.png" />
   </ItemGroup>
 </Project>
