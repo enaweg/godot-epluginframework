@@ -71,7 +71,8 @@ with tempfile.TemporaryDirectory() as directory:
         assert process.poll() is None
         with open(command_file, "a") as writer:
             writer.write("SE\n")
-        assert process.wait(timeout=5) == 0
+        # Without the editor's state files the helper exits once its closing animation has hidden the window.
+        assert process.wait(timeout=10) == 0
     finally:
         if process.poll() is None:
             process.kill()
@@ -84,6 +85,40 @@ with tempfile.TemporaryDirectory() as directory:
     )
     try:
         assert process.wait(timeout=10) == 0
+    finally:
+        if process.poll() is None:
+            process.kill()
+
+# CLOSE only hides the window while an editor owns the helper (<token>.owned), and the next TEXT shows it again.
+# Once the editor releases it (<token>.idle), the helper claims that file, exits and removes its files.
+with tempfile.TemporaryDirectory() as directory:
+    command_file = os.path.join(directory, "token.commands")
+    owned = os.path.join(directory, "token.owned")
+    idle = os.path.join(directory, "token.idle")
+    open(command_file, "w").close()
+    open(owned, "w").close()
+
+    def send(text):
+        with open(command_file, "a") as writer:
+            writer.write(text)
+
+    process = subprocess.Popen(
+        command + ["--command-file", command_file],
+        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+    try:
+        send("TEXT V29ya2luZy4uLg==\n")
+        time.sleep(1)
+        send("CLOSE\n")
+        # Longer than the closing animation and the time a hidden helper waits before it exits.
+        time.sleep(6)
+        assert process.poll() is None, "helper exited while an editor owns it"
+        send("TEXT V29ya2luZy4uLg==\n")
+        time.sleep(1)
+        send("CLOSE\n")
+        os.replace(owned, idle)
+        assert process.wait(timeout=10) == 0
+        assert sorted(os.listdir(directory)) == [], os.listdir(directory)
     finally:
         if process.poll() is None:
             process.kill()

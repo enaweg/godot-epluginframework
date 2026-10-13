@@ -17,11 +17,15 @@ internal sealed class CocoaProgressWindow : IProgressWindow
     private readonly DispatchFunction _ready;
     private readonly DispatchFunction _show;
     private readonly DispatchFunction _frame;
+    private readonly DispatchFunction _open;
     private readonly DispatchFunction _close;
     private readonly EditorCenter? _editorCenter;
     private readonly Animation _animation = new();
+    private readonly Visibility _visibility;
     private IntPtr _mainQueue;
     private Action? _onReady;
+    private Action? _onHidden;
+    private int _showDelay;
     private IntPtr _window;
     private IntPtr _panel;
     private IntPtr _head;
@@ -37,10 +41,15 @@ internal sealed class CocoaProgressWindow : IProgressWindow
     public CocoaProgressWindow(EditorCenter? editorCenter)
     {
         _editorCenter = editorCenter;
+        _visibility = new Visibility(_animation);
         _ready = _ => _onReady?.Invoke();
-        _show = _ =>
+        _show = generation =>
         {
-            _animation.Open();
+            if (!_visibility.Show((int)generation))
+            {
+                return;
+            }
+
             Update();
             // Ordered front without activating the helper, so the editor keeps focus.
             Send(_window, Sel("orderFrontRegardless"));
@@ -48,28 +57,27 @@ internal sealed class CocoaProgressWindow : IProgressWindow
         };
         _frame = _ =>
         {
-            if (_animation.Closed)
+            if (_visibility.Hide())
             {
-                Environment.Exit(0);
+                Send(_window, Sel("orderOut:"), IntPtr.Zero);
+                _onHidden?.Invoke();
+                return;
             }
 
             Update();
             ScheduleFrame();
         };
+        _open = _ => Schedule(_visibility.Open());
         _close = _ =>
         {
-            if (_animation.Started)
+            if (_visibility.Close())
             {
-                _animation.Close();
-            }
-            else
-            {
-                Environment.Exit(0);
+                _onHidden?.Invoke();
             }
         };
     }
 
-    public void Run(string title, string text, int showDelayMilliseconds, Action ready)
+    public void Run(string title, string text, int showDelayMilliseconds, Action ready, Action hidden)
     {
         NativeLibrary.Load(AppKit);
         // dispatch_get_main_queue() is a macro for the address of this symbol.
@@ -131,10 +139,11 @@ internal sealed class CocoaProgressWindow : IProgressWindow
         _head = ImageView(content, Logo.LoadHead());
         _puzzle = ImageView(content, Logo.LoadPuzzle());
 
-        dispatch_after_f(dispatch_time(DispatchTimeNow, showDelayMilliseconds * 1_000_000L), _mainQueue, IntPtr.Zero,
-            Marshal.GetFunctionPointerForDelegate(_show));
+        _showDelay = showDelayMilliseconds;
+        Schedule(_visibility.Open());
 
         _onReady = ready;
+        _onHidden = hidden;
         dispatch_async_f(_mainQueue, IntPtr.Zero, Marshal.GetFunctionPointerForDelegate(_ready));
         Send(app, Sel("run"));
     }
@@ -145,9 +154,24 @@ internal sealed class CocoaProgressWindow : IProgressWindow
         _text = text;
     }
 
+    public void Open()
+    {
+        dispatch_async_f(_mainQueue, IntPtr.Zero, Marshal.GetFunctionPointerForDelegate(_open));
+    }
+
     public void Close()
     {
         dispatch_async_f(_mainQueue, IntPtr.Zero, Marshal.GetFunctionPointerForDelegate(_close));
+    }
+
+    private void Schedule(int? generation)
+    {
+        // dispatch_after cannot be canceled; a show that is no longer wanted finds an outdated generation.
+        if (generation is { } value)
+        {
+            dispatch_after_f(dispatch_time(DispatchTimeNow, _showDelay * 1_000_000L), _mainQueue, (IntPtr)value,
+                Marshal.GetFunctionPointerForDelegate(_show));
+        }
     }
 
     private void ScheduleFrame()
