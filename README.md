@@ -25,7 +25,7 @@ The project targets `net8.0`. The current CI-tested setup is [Godot 4.7.2 .NET](
 
 Install [ePlugin Framework from the Godot Asset Store](https://store.godotengine.org/asset/enaweg/eplugin-framework/), or download a [release](https://github.com/enaweg/godot-epluginframework/releases) and copy its `addons/ePlugin` directory into your project's `addons` folder. Open the project in the Godot .NET editor, enable **ePlugin** under **Project > Project Settings > Plugins**, then enable the ePlugins you want to use.
 
-Release archives include a small shared progress helper (about 20 KB) that runs on the installed .NET runtime and draws its window with native UI. Source checkouts do not include the generated helper; activation still works without a progress window. Linux needs GTK 3 for that window. Asset Library distributions should use the release archive to include the helper.
+Release archives include a small shared progress helper (about 80 KB) that runs on the installed .NET runtime and draws its window with native UI. Source checkouts do not include the generated helper; activation still works without a progress window. Linux needs GTK 3 for that window. Asset Library distributions should use the release archive to include the helper.
 
 ## Features
 

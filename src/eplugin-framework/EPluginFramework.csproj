@@ -30,7 +30,7 @@
     <ActivationProgressPublishDir>$(MSBuildProjectDirectory)/addons/ePlugin/progress</ActivationProgressPublishDir>
   </PropertyGroup>
   <ItemGroup>
-    <ActivationProgressSources Include="$(ActivationProgressProjectDir)/*.cs;$(ActivationProgressProjectDir)/*.csproj;$(ActivationProgressProjectDir)/app.manifest;$(MSBuildProjectDirectory)/../../design/icon-nobg_small.png" />
+    <ActivationProgressSources Include="$(ActivationProgressProjectDir)/*.cs;$(ActivationProgressProjectDir)/*.csproj;$(ActivationProgressProjectDir)/app.manifest;$(MSBuildProjectDirectory)/../../design/icon-head.png;$(MSBuildProjectDirectory)/../../design/icon-puzzle.png" />
   </ItemGroup>
   <Target Name="PublishActivationProgress" BeforeTargets="Build" Condition="Exists('$(ActivationProgressProjectDir)/ActivationProgress.csproj')" Inputs="@(ActivationProgressSources)" Outputs="$(ActivationProgressPublishDir)/ActivationProgress.dll">
     <Exec Command="dotnet publish &quot;$(ActivationProgressProjectDir)/ActivationProgress.csproj&quot; --configuration Release -p:DebugType=None --output &quot;$(ActivationProgressPublishDir)&quot;" ContinueOnError="WarnAndContinue" />

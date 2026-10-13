@@ -135,11 +135,9 @@ internal sealed class ProgressSession : IProgressHelper
         if (_disposed) return;
         try
         {
-            if (!_process.HasExited)
-            {
-                Send("CLOSE");
-                if (!_process.WaitForExit(500)) _process.Kill();
-            }
+            // Not waited for: the helper plays its closing animation (about 2 s) and then exits on its own, also
+            // when it reads CLOSE only after the command file is deleted below.
+            if (!_process.HasExited) Send("CLOSE");
         }
         catch (Exception)
         {
