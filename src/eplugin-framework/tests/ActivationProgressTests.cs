@@ -52,6 +52,173 @@ public class ActivationProgressTests
     }
 
     [TestCase]
+    public async Task PublicScopesReportThroughIProgressAndIgnoreReportsAfterDisposal()
+    {
+        using (var outer = EPlugin.Progress.Begin("Importing assets..."))
+        {
+            var inner = EPlugin.Progress.Begin("Reading files...");
+            IProgress<string> report = inner;
+            await Task.Run(() => report.Report("Reading files... 50%"));
+            inner.Dispose();
+            inner.Dispose();
+            await Task.Run(() => report.Report("Ignored after disposal."));
+            outer.Report("Finishing...");
+            Assertions.AssertBool(_launched[0].Disposed).IsFalse();
+        }
+
+        var helper = _launched.Single();
+        Assertions.AssertThat(helper.Users).HasSize(1);
+        Assertions.AssertThat(helper.Of(helper.Users[0]))
+            .ContainsExactly("TEXT Importing assets...", "TEXT Reading files...", "TEXT Reading files... 50%",
+                "TEXT Finishing...", "END");
+        Assertions.AssertBool(helper.Disposed).IsTrue();
+        Assertions.AssertBool(_timer!.Disposed).IsTrue();
+    }
+
+    [TestCase]
+    public async Task PublicConcurrentOperationsKeepTheirOwnUsersAndHeartbeats()
+    {
+        var check = new TaskCompletionSource();
+        var import = new TaskCompletionSource();
+        var checking = PublicOperation("Checking assets...", check.Task, "Checked.");
+        var importing = PublicOperation("Importing assets...", import.Task, "Imported.");
+        _tick!();
+        check.SetResult();
+        await checking;
+        Assertions.AssertBool(_launched[0].Disposed).IsFalse();
+        import.SetResult();
+        await importing;
+
+        var helper = _launched.Single();
+        Assertions.AssertThat(helper.Users).HasSize(2);
+        Assertions.AssertThat(helper.Of(helper.Users[0]))
+            .ContainsExactly("TEXT Checking assets...", "HEARTBEAT", "TEXT Checked.", "END");
+        Assertions.AssertThat(helper.Of(helper.Users[1]))
+            .ContainsExactly("TEXT Importing assets...", "HEARTBEAT", "TEXT Imported.", "END");
+        Assertions.AssertBool(helper.Disposed).IsTrue();
+    }
+
+    private static async Task PublicOperation(string text, Task work, string done)
+    {
+        using var progress = EPlugin.Progress.Begin(text);
+        await work;
+        await Task.Run(() => progress.Report(done));
+    }
+
+    [TestCase]
+    public void PublicProgressLeavesProjectSettingsVisible()
+    {
+        var hideCount = 0;
+        ActivationProgress.HideSettingsDialog = () =>
+        {
+            hideCount++;
+            return new FakeDisposable();
+        };
+        using (EPlugin.Progress.Begin("Importing assets..."))
+        {
+            using (EPlugin.Progress.Begin("Reading files...")) { }
+        }
+
+        Assertions.AssertInt(hideCount).IsEqual(0);
+        Assertions.AssertBool(_launched.Single().Disposed).IsTrue();
+    }
+
+    [TestCase]
+    public void LifecycleWorkInsidePublicProgressStillHidesAndRestoresSettings()
+    {
+        var dialog = new FakeDisposable();
+        var hideCount = 0;
+        ActivationProgress.HideSettingsDialog = () =>
+        {
+            hideCount++;
+            return dialog;
+        };
+        using (EPlugin.Progress.Begin("Importing assets..."))
+        {
+            Assertions.AssertInt(hideCount).IsEqual(0);
+            using (ActivationProgress.Begin("Activating plugin..."))
+            {
+                using (ActivationProgress.Begin("Activating dependency...")) { }
+                Assertions.AssertInt(hideCount).IsEqual(1);
+            }
+
+            Assertions.AssertBool(dialog.Disposed).IsFalse();
+        }
+
+        Assertions.AssertBool(dialog.Disposed).IsTrue();
+        Assertions.AssertThat(_launched.Single().Users).HasSize(1);
+        // The next lifetime can hide settings again.
+        using (ActivationProgress.Begin("Deactivating plugin...")) { }
+        Assertions.AssertInt(hideCount).IsEqual(2);
+    }
+
+    [TestCase]
+    public void PublicProgressInsideLifecycleWorkDoesNotReopenSettingsEarly()
+    {
+        var dialog = new FakeDisposable();
+        var hideCount = 0;
+        ActivationProgress.HideSettingsDialog = () =>
+        {
+            hideCount++;
+            return dialog;
+        };
+        using (ActivationProgress.Begin("Activating plugin..."))
+        {
+            using (EPlugin.Progress.Begin("Reading assets...")) { }
+            Assertions.AssertInt(hideCount).IsEqual(1);
+            Assertions.AssertBool(dialog.Disposed).IsFalse();
+        }
+
+        Assertions.AssertBool(dialog.Disposed).IsTrue();
+    }
+
+    [TestCase]
+    public void PublicProgressRemainsUsableWithoutAHelper()
+    {
+        ActivationProgress.Launch = () => null;
+        using (var progress = EPlugin.Progress.Begin("Importing assets..."))
+        {
+            Assertions.AssertObject(progress).IsNotNull();
+            progress.Report("Reading files...");
+            _tick!();
+        }
+
+        ActivationProgress.Launch = () => throw new IOException("No helper available.");
+        using (var progress = EPlugin.Progress.Begin("Importing assets..."))
+        {
+            progress.Report("Reading files...");
+            _tick!();
+        }
+
+        Assertions.AssertBool(_timer!.Disposed).IsTrue();
+    }
+
+    [TestCase]
+    public async Task PublicScopeEndsOnCancellationAndExceptions()
+    {
+        try
+        {
+            using var progress = EPlugin.Progress.Begin("Importing assets...");
+            throw new InvalidOperationException("Import failed.");
+        }
+        catch (InvalidOperationException) { }
+        Assertions.AssertBool(_launched[0].Disposed).IsTrue();
+
+        using var cancellation = new System.Threading.CancellationTokenSource();
+        try
+        {
+            using var progress = EPlugin.Progress.Begin("Importing assets...");
+            cancellation.Cancel();
+            await Task.FromCanceled(cancellation.Token);
+        }
+        catch (OperationCanceledException) { }
+
+        Assertions.AssertBool(_launched[1].Disposed).IsTrue();
+        Assertions.AssertThat(_launched[1].Of(_launched[1].Users[0])).ContainsExactly("TEXT Importing assets...", "END");
+        Assertions.AssertBool(_timer!.Disposed).IsTrue();
+    }
+
+    [TestCase]
     public void NestedScopesAreOneUserThatEndsWithTheOutermostScope()
     {
         var outer = ActivationProgress.Begin("Activating A...");

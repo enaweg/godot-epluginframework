@@ -55,6 +55,7 @@ internal static class ActivationProgress
     private static User? _resumed;
     private static bool _restartPending;
     private static IDisposable? _settingsDialog;
+    private static bool _settingsDialogRequested;
 
     /// <summary>Connects to or starts a helper, or returns null when none can run. Tests replace it with a fake.</summary>
     internal static Func<IProgressHelper?> Launch { get; set; } = LaunchDefault;
@@ -140,22 +141,26 @@ internal static class ActivationProgress
         }
     }
 
-    public static Scope Begin(string text)
+    public static Scope Begin(string text, bool hideSettingsDialog = true)
     {
         var previous = Current.Value;
         User? user;
         lock (Gate)
         {
             user = previous is { Ended: false } ? previous : null;
-            if (user is null && !_restartPending)
+            if (user is not null || !_restartPending)
             {
-                user = _resumed ?? new User(Guid.NewGuid().ToString("N"));
-                _resumed = null;
-                if (Users.Count == 0) First();
-                Users.Add(user);
-            }
+                if (hideSettingsDialog) HideSettingsOnce();
+                if (user is null)
+                {
+                    user = _resumed ?? new User(Guid.NewGuid().ToString("N"));
+                    _resumed = null;
+                    if (Users.Count == 0) First();
+                    Users.Add(user);
+                }
 
-            if (user is not null) user.Depth++;
+                user.Depth++;
+            }
         }
 
         var scope = new Scope(user, previous);
@@ -192,12 +197,15 @@ internal static class ActivationProgress
             _resumed = null;
             _restartPending = false;
             _settingsDialog = null;
+            _settingsDialogRequested = false;
             Current.Value = null;
         }
     }
 
-    private static void First()
+    private static void HideSettingsOnce()
     {
+        if (_settingsDialogRequested) return;
+        _settingsDialogRequested = true;
         try
         {
             // Project Settings is editor UI; an operation started on another thread leaves it alone.
@@ -208,7 +216,10 @@ internal static class ActivationProgress
             // Editor UI feedback must not prevent plugin operations.
             _settingsDialog = null;
         }
+    }
 
+    private static void First()
+    {
         _mayStart = true;
         Connect();
         try { _heartbeat ??= StartHeartbeat(SendHeartbeats); }
@@ -223,6 +234,7 @@ internal static class ActivationProgress
         _helper = null;
         var settingsDialog = _settingsDialog;
         _settingsDialog = null;
+        _settingsDialogRequested = false;
         if (settingsDialog is null) return;
         try
         {
@@ -345,7 +357,7 @@ internal static class ActivationProgress
     }
 
     /// <summary>A progress scope; disposing the outermost scope of a user ends it.</summary>
-    public sealed class Scope : IDisposable
+    public sealed class Scope : IEPluginProgressScope
     {
         private readonly User? _user;
         private readonly User? _previous;
@@ -357,16 +369,25 @@ internal static class ActivationProgress
             _previous = previous;
         }
 
-        /// <summary>Sets this scope's text from any thread; ignored once the scope's user has ended.</summary>
+        /// <summary>Sets this scope's text from any thread; ignored after disposal or once its user has ended.</summary>
         public void SetText(string text)
         {
-            lock (Gate) Text(_user, text);
+            lock (Gate)
+            {
+                if (_disposed == 0) Text(_user, text);
+            }
         }
+
+        void IProgress<string>.Report(string value) => SetText(value);
 
         public void Dispose()
         {
-            if (Interlocked.Exchange(ref _disposed, 1) != 0 || _user is null) return;
-            End(_user, _previous);
+            lock (Gate)
+            {
+                if (_disposed != 0) return;
+                _disposed = 1;
+                if (_user is not null) End(_user, _previous);
+            }
         }
     }
 }
