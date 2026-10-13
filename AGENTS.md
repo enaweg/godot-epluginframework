@@ -51,3 +51,18 @@ dotnet test "src/eplugin-framework/EPluginFramework.sln" --filter "FullyQualifie
 - Preserve existing public API and plugin lifecycle behavior unless the task explicitly changes it.
 - Follow `.editorconfig` and existing C# style.
 - There is no separate lint command configured.
+
+## Commit and PR messages
+
+Release notes are generated from **PR titles** (`.github/workflows/ci-release.yml`), sorted by their
+Conventional Commits prefix, and `ci-pr-title.yml` fails PRs without one. See "Commit and PR
+messages" in `CLAUDE.md` for the details.
+
+- PR titles and commit subjects: `type(scope)!: description`, with a lowercase type from `build`, `chore`,
+  `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, `test`. Scope and `!` (breaking)
+  are optional. Write exactly one space after the colon, and start the description with a letter or digit.
+- `feat:` goes to Feature, `fix:` to Fix, and everything else, including titles without a prefix, to Other.
+- Write a short imperative description in lowercase, with no trailing period, e.g.
+  `fix: keep the ePlugin Manager open after a successful update`.
+- Keep GitHub's default merge-commit message. Direct pushes to `main` need a prefix too
+  (e.g. `chore: update version for next release`).

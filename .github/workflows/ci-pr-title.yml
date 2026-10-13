@@ -1,0 +1,29 @@
+name: CI-PR-Title
+
+# The release changelog (ci-release.yml) sorts each PR by its title's Conventional Commits prefix.
+# Keep this pattern in step with that workflow's label_extractor (see "Commit and PR messages" in CLAUDE.md).
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions: {}
+
+jobs:
+  pr-title:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR title prefix
+        shell: bash
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          pattern='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([A-Za-z0-9_.-]+\))?!?: [A-Za-z0-9]'
+          if [[ "$TITLE" =~ $pattern ]]; then
+            echo "PR title OK: $TITLE"
+            exit 0
+          fi
+          echo "::error title=PR title has no changelog prefix::'$TITLE' must look like 'type(scope)!: description'"
+          echo "Types: build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test (lowercase)."
+          echo "Scope and '!' are optional. Write one space after the colon and start the description with a letter or digit."
+          echo "Example: fix: keep the ePlugin Manager open after a successful update"
+          exit 1
