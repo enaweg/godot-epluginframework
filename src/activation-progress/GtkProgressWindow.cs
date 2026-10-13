@@ -20,6 +20,7 @@ internal sealed class GtkProgressWindow : IProgressWindow
     private readonly SourceFunc _ready;
     private readonly SourceFunc _show;
     private readonly SourceFunc _frame;
+    private readonly SourceFunc _open;
     private readonly SourceFunc _close;
     private readonly DrawCallback _draw;
     private readonly SignalCallback _destroy = (_, _) => gtk_main_quit();
@@ -27,7 +28,10 @@ internal sealed class GtkProgressWindow : IProgressWindow
     private readonly EventCallback _refuseDelete = (_, _, _) => true;
     private readonly EditorCenter? _editorCenter;
     private readonly Animation _animation = new();
+    private readonly Visibility _visibility;
     private Action? _onReady;
+    private Action? _onHidden;
+    private uint _showDelay;
     private IntPtr _window;
     private IntPtr _label;
     private IntPtr _progress;
@@ -41,6 +45,7 @@ internal sealed class GtkProgressWindow : IProgressWindow
     public GtkProgressWindow(EditorCenter? editorCenter)
     {
         _editorCenter = editorCenter;
+        _visibility = new Visibility(_animation);
         _ready = _ =>
         {
             _onReady?.Invoke();
@@ -48,32 +53,38 @@ internal sealed class GtkProgressWindow : IProgressWindow
         };
         _frame = _ =>
         {
-            if (_animation.Closed)
+            if (_visibility.Hide())
             {
-                gtk_main_quit();
+                gtk_widget_hide(_window);
+                _onHidden?.Invoke();
                 return false;
             }
 
             Update();
             return true;
         };
-        _show = _ =>
+        _show = generation =>
         {
-            _animation.Open();
+            if (!_visibility.Show((int)generation))
+            {
+                return false;
+            }
+
             Update();
             gtk_widget_show_all(_window);
             g_timeout_add(Animation.FrameMilliseconds, Marshal.GetFunctionPointerForDelegate(_frame), IntPtr.Zero);
             return false;
         };
+        _open = _ =>
+        {
+            Schedule(_visibility.Open());
+            return false;
+        };
         _close = _ =>
         {
-            if (_animation.Started)
+            if (_visibility.Close())
             {
-                _animation.Close();
-            }
-            else
-            {
-                gtk_main_quit();
+                _onHidden?.Invoke();
             }
 
             return false;
@@ -81,7 +92,7 @@ internal sealed class GtkProgressWindow : IProgressWindow
         _draw = Draw;
     }
 
-    public void Run(string title, string text, int showDelayMilliseconds, Action ready)
+    public void Run(string title, string text, int showDelayMilliseconds, Action ready, Action hidden)
     {
         if (!gtk_init_check(IntPtr.Zero, IntPtr.Zero))
         {
@@ -133,9 +144,10 @@ internal sealed class GtkProgressWindow : IProgressWindow
         g_signal_connect_data(window, "delete-event", Marshal.GetFunctionPointerForDelegate(_refuseDelete),
             IntPtr.Zero, IntPtr.Zero, 0);
         g_timeout_add(100, Marshal.GetFunctionPointerForDelegate(_pulse), _progress);
-        g_timeout_add((uint)showDelayMilliseconds, Marshal.GetFunctionPointerForDelegate(_show), IntPtr.Zero);
+        _showDelay = (uint)showDelayMilliseconds;
 
         _onReady = ready;
+        _onHidden = hidden;
         g_idle_add(Marshal.GetFunctionPointerForDelegate(_ready), IntPtr.Zero);
         gtk_main();
     }
@@ -146,10 +158,23 @@ internal sealed class GtkProgressWindow : IProgressWindow
         _text = text;
     }
 
-    public void Close()
+    public void Open()
     {
         // g_idle_add is thread-safe and runs the callback on the GTK main loop.
+        g_idle_add(Marshal.GetFunctionPointerForDelegate(_open), IntPtr.Zero);
+    }
+
+    public void Close()
+    {
         g_idle_add(Marshal.GetFunctionPointerForDelegate(_close), IntPtr.Zero);
+    }
+
+    private void Schedule(int? generation)
+    {
+        if (generation is { } value)
+        {
+            g_timeout_add(_showDelay, Marshal.GetFunctionPointerForDelegate(_show), (IntPtr)value);
+        }
     }
 
     /// <summary>Puts a control at its place, vertically centered at its natural height.</summary>
@@ -414,6 +439,9 @@ internal sealed class GtkProgressWindow : IProgressWindow
 
     [DllImport(Gtk)]
     private static extern void gtk_widget_show_all(IntPtr widget);
+
+    [DllImport(Gtk)]
+    private static extern void gtk_widget_hide(IntPtr widget);
 
     [DllImport(Gdk)]
     private static extern IntPtr gdk_screen_get_rgba_visual(IntPtr screen);

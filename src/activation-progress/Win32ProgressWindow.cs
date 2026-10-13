@@ -15,12 +15,14 @@ internal sealed class Win32ProgressWindow : IProgressWindow
     private const uint WmClose = 0x0010;
     private const uint WmTimer = 0x0113;
     private const uint WmCloseAnimated = 0x8000; // WM_APP
+    private const uint WmOpenAnimated = 0x8001;
     private const uint WsPopup = 0x80000000;
     private const uint WsExTopmost = 0x00000008;
     private const uint WsExToolWindow = 0x00000080;
     private const uint WsExLayered = 0x00080000;
     private const uint WsExNoActivate = 0x08000000;
     private const uint ActCtxFlagResourceNameValid = 0x08;
+    private const int SwHide = 0;
     private const int SwShowNoActivate = 4;
     private const int ColorBtnFace = 15;
     private const int ColorBtnText = 18;
@@ -41,6 +43,7 @@ internal sealed class Win32ProgressWindow : IProgressWindow
     private readonly WndProc _wndProc;
     private readonly IntPtr _editorWindow;
     private readonly Animation _animation = new();
+    private readonly Visibility _visibility;
     private readonly Stopwatch _marquee = Stopwatch.StartNew();
     private IntPtr _window;
     private double _scale;
@@ -57,15 +60,18 @@ internal sealed class Win32ProgressWindow : IProgressWindow
     private IntPtr _font;
     private IntPtr _theme;
     private volatile string _text = string.Empty;
+    private uint _showDelay;
+    private Action? _onHidden;
 
     /// <param name="editorWindow">The editor's window to center on, or zero for the primary screen.</param>
     public Win32ProgressWindow(IntPtr editorWindow)
     {
         _wndProc = WindowProc;
         _editorWindow = editorWindow;
+        _visibility = new Visibility(_animation);
     }
 
-    public void Run(string title, string text, int showDelayMilliseconds, Action ready)
+    public void Run(string title, string text, int showDelayMilliseconds, Action ready, Action hidden)
     {
         _text = text;
         EnableVisualStyles();
@@ -119,7 +125,8 @@ internal sealed class Win32ProgressWindow : IProgressWindow
         SelectObject(_controls.Dc, _font);
         _theme = OpenThemeData(_window, "PROGRESS");
 
-        SetTimer(_window, ShowTimerId, (uint)showDelayMilliseconds, IntPtr.Zero);
+        _showDelay = (uint)showDelayMilliseconds;
+        _onHidden = hidden;
         ready();
 
         while (GetMessageW(out var message, IntPtr.Zero, 0, 0) > 0)
@@ -142,9 +149,23 @@ internal sealed class Win32ProgressWindow : IProgressWindow
         _text = text;
     }
 
+    public void Open()
+    {
+        PostMessageW(_window, WmOpenAnimated, IntPtr.Zero, IntPtr.Zero);
+    }
+
     public void Close()
     {
         PostMessageW(_window, WmCloseAnimated, IntPtr.Zero, IntPtr.Zero);
+    }
+
+    private void Schedule(int? generation)
+    {
+        // A window timer fires once per id, and setting it again restarts it.
+        if (generation is not null)
+        {
+            SetTimer(_window, ShowTimerId, _showDelay, IntPtr.Zero);
+        }
     }
 
     private IntPtr WindowProc(IntPtr window, uint message, IntPtr wParam, IntPtr lParam)
@@ -153,28 +174,33 @@ internal sealed class Win32ProgressWindow : IProgressWindow
         {
             case WmTimer when wParam == (IntPtr)ShowTimerId:
                 KillTimer(window, ShowTimerId);
-                _animation.Open();
-                Draw();
-                ShowWindow(window, SwShowNoActivate);
-                SetTimer(window, FrameTimerId, Animation.FrameMilliseconds, IntPtr.Zero);
+                if (_visibility.Show(_visibility.Generation))
+                {
+                    Draw();
+                    ShowWindow(window, SwShowNoActivate);
+                    SetTimer(window, FrameTimerId, Animation.FrameMilliseconds, IntPtr.Zero);
+                }
+
                 return IntPtr.Zero;
             case WmTimer when wParam == (IntPtr)FrameTimerId:
-                if (_animation.Closed)
+                if (_visibility.Hide())
                 {
-                    DestroyWindow(window);
+                    KillTimer(window, FrameTimerId);
+                    ShowWindow(window, SwHide);
+                    _onHidden?.Invoke();
                     return IntPtr.Zero;
                 }
 
                 Draw();
                 return IntPtr.Zero;
+            case WmOpenAnimated:
+                Schedule(_visibility.Open());
+                return IntPtr.Zero;
             case WmCloseAnimated:
-                if (_animation.Started)
+                if (_visibility.Close())
                 {
-                    _animation.Close();
-                }
-                else
-                {
-                    DestroyWindow(window);
+                    KillTimer(window, ShowTimerId);
+                    _onHidden?.Invoke();
                 }
 
                 return IntPtr.Zero;
@@ -701,9 +727,6 @@ internal sealed class Win32ProgressWindow : IProgressWindow
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern IntPtr CreateWindowExW(uint exStyle, string className, string? windowName, uint style,
         int x, int y, int width, int height, IntPtr parent, IntPtr menu, IntPtr instance, IntPtr param);
-
-    [DllImport("user32.dll")]
-    private static extern bool DestroyWindow(IntPtr window);
 
     [DllImport("user32.dll")]
     private static extern bool UpdateLayeredWindow(IntPtr window, IntPtr screenDc, ref Point position, ref Size size,

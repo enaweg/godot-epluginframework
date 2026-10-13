@@ -23,14 +23,8 @@ internal sealed class Animation
     private double _since;
     private int _direction;
 
-    /// <summary>Whether the window has started to open, i.e. is visible.</summary>
-    public bool Started => _direction != 0;
-
     /// <summary>Whether the window has fully closed again.</summary>
     public bool Closed => _direction < 0 && Position <= 0;
-
-    /// <summary>Whether nothing moves anymore until <see cref="Close"/>.</summary>
-    public bool Opened => _direction > 0 && Position >= TotalSeconds;
 
     /// <summary>Seconds into the opening timeline.</summary>
     public double Position => Math.Clamp(_from + _direction * (_clock.Elapsed.TotalSeconds - _since), 0, TotalSeconds);
@@ -46,6 +40,67 @@ internal sealed class Animation
         _from = Position;
         _since = _clock.Elapsed.TotalSeconds;
         _direction = direction;
+    }
+}
+
+/// <summary>
+/// Whether the window is shown, and the delayed show it waits for. A closed window can be opened again: while it still
+/// plays its closing it turns back, once hidden it shows after the show delay like a new one. Not thread-safe: each
+/// window uses it on its UI thread only.
+/// </summary>
+internal sealed class Visibility(Animation animation)
+{
+    private bool _pending;
+
+    /// <summary>Whether the window is on screen, including while it plays its opening or closing.</summary>
+    public bool Visible { get; private set; }
+
+    /// <summary>Identifies the latest scheduled show, so an earlier one that was canceled does nothing.</summary>
+    public int Generation { get; private set; }
+
+    /// <summary>Returns the generation to show after the show delay, or null when nothing needs to be scheduled.</summary>
+    public int? Open()
+    {
+        if (Visible)
+        {
+            animation.Open();
+            return null;
+        }
+
+        if (_pending) return null;
+        _pending = true;
+        return ++Generation;
+    }
+
+    /// <summary>Whether the scheduled show of <paramref name="generation"/> should put the window on screen now.</summary>
+    public bool Show(int generation)
+    {
+        if (!_pending || generation != Generation) return false;
+        _pending = false;
+        Visible = true;
+        animation.Open();
+        return true;
+    }
+
+    /// <summary>Starts closing; returns true when the window is already hidden, e.g. closed before it was shown.</summary>
+    public bool Close()
+    {
+        if (Visible)
+        {
+            animation.Close();
+            return false;
+        }
+
+        _pending = false;
+        return true;
+    }
+
+    /// <summary>Called every frame: returns true once, when the closing has finished and the window should hide.</summary>
+    public bool Hide()
+    {
+        if (!Visible || !animation.Closed) return false;
+        Visible = false;
+        return true;
     }
 }
 

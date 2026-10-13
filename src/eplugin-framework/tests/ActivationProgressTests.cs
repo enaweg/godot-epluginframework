@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using Enaweg.Plugin.Internal;
 using GdUnit4;
 
@@ -11,14 +13,24 @@ namespace Enaweg.Plugin.Tests;
 public class ActivationProgressTests
 {
     private readonly List<FakeHelper> _launched = [];
+    private Action? _tick;
+    private FakeDisposable? _timer;
 
     [BeforeTest]
     public void Setup()
     {
+        ActivationProgress.Reset();
         _launched.Clear();
+        _tick = null;
+        _timer = null;
         ActivationProgress.HideSettingsDialog = () => null;
+        ActivationProgress.IsEditorThread = () => true;
         ActivationProgress.Resume = () => null;
-        ActivationProgress.ResumeAfterRestart();
+        ActivationProgress.StartHeartbeat = tick =>
+        {
+            _tick = tick;
+            return _timer = new FakeDisposable();
+        };
         ActivationProgress.Launch = () =>
         {
             var helper = new FakeHelper();
@@ -30,82 +42,111 @@ public class ActivationProgressTests
     [AfterTest]
     public void Cleanup()
     {
+        ActivationProgress.Reset();
         ActivationProgress.Launch = ActivationProgress.LaunchDefault;
         ActivationProgress.Resume = ActivationProgress.ResumeDefault;
         ActivationProgress.HideSettingsDialog = ProjectSettingsDialog.TryHide;
+        ActivationProgress.IsEditorThread = () => Godot.OS.GetThreadCallerId() == Godot.OS.GetMainThreadId();
+        ActivationProgress.StartHeartbeat = tick => new System.Threading.Timer(_ => tick(), null,
+            ActivationProgress.HeartbeatInterval, ActivationProgress.HeartbeatInterval);
     }
 
     [TestCase]
-    public void BeginLaunchesHelperAndSendsText()
+    public void NestedScopesAreOneUserThatEndsWithTheOutermostScope()
     {
-        using (ActivationProgress.Begin("Activating A..."))
+        var outer = ActivationProgress.Begin("Activating A...");
+        using (ActivationProgress.Begin("Activating dependency..."))
         {
             ActivationProgress.SetText("Refreshing...");
         }
 
-        Assertions.AssertInt(_launched.Count).IsEqual(1);
-        Assertions.AssertThat(_launched[0].Received).ContainsExactly("Activating A...", "Refreshing...");
-        Assertions.AssertBool(_launched[0].Disposed).IsTrue();
-    }
-
-    [TestCase]
-    public void HeartbeatIsSentToRunningHelper()
-    {
-        using (ActivationProgress.Begin("Activating A..."))
-        {
-            ActivationProgress.Heartbeat();
-            ActivationProgress.SetText("Activating B...");
-            ActivationProgress.Heartbeat();
-        }
-
-        Assertions.AssertThat(_launched[0].Received)
-            .ContainsExactly("Activating A...", "HEARTBEAT", "Activating B...", "HEARTBEAT");
-    }
-
-    [TestCase]
-    public void NestedScopesShareOneHelperUntilOutermostDisposed()
-    {
-        var outer = ActivationProgress.Begin("Activating A...");
-        using (ActivationProgress.Begin("Activating B..."))
-        {
-        }
-
-        Assertions.AssertInt(_launched.Count).IsEqual(1);
         Assertions.AssertBool(_launched[0].Disposed).IsFalse();
-
         outer.Dispose();
-
-        Assertions.AssertBool(_launched[0].Disposed).IsTrue();
-        Assertions.AssertThat(_launched[0].Received).ContainsExactly("Activating A...", "Activating B...");
+        outer.Dispose();
+        var helper = _launched.Single();
+        Assertions.AssertThat(helper.Users).HasSize(1);
+        Assertions.AssertThat(helper.Of(helper.Users[0]))
+            .ContainsExactly("TEXT Activating A...", "TEXT Activating dependency...", "TEXT Refreshing...", "END");
+        // The connection is released, the helper keeps running for other editors.
+        Assertions.AssertBool(helper.Disposed).IsTrue();
+        Assertions.AssertBool(_timer!.Disposed).IsTrue();
     }
 
     [TestCase]
-    public void DisposingScopeTwiceClosesOnlyOnce()
+    public async Task ConcurrentOperationsAreSeparateUsersOfOneHelper()
     {
-        var outer = ActivationProgress.Begin("Activating A...");
-        var inner = ActivationProgress.Begin("Activating B...");
-        inner.Dispose();
-        inner.Dispose();
+        var check = new TaskCompletionSource();
+        var download = new TaskCompletionSource();
+        var checking = Operation("Checking for updates...", check.Task, "Checked.");
+        var downloading = Operation("Downloading...", download.Task, "Downloaded.");
+        // A thread started outside any scope is a user of its own.
+        await Task.Run(() =>
+        {
+            using var progress = ActivationProgress.Begin("Indexing...");
+        });
 
+        check.SetResult();
+        await checking;
         Assertions.AssertBool(_launched[0].Disposed).IsFalse();
+        download.SetResult();
+        await downloading;
 
-        outer.Dispose();
+        var helper = _launched.Single();
+        Assertions.AssertThat(helper.Users).HasSize(3);
+        Assertions.AssertThat(helper.Of(helper.Users[0])).ContainsExactly("TEXT Checking for updates...", "TEXT Checked.", "END");
+        Assertions.AssertThat(helper.Of(helper.Users[1])).ContainsExactly("TEXT Downloading...", "TEXT Downloaded.", "END");
+        Assertions.AssertThat(helper.Of(helper.Users[2])).ContainsExactly("TEXT Indexing...", "END");
+        Assertions.AssertBool(helper.Disposed).IsTrue();
+    }
 
-        Assertions.AssertBool(_launched[0].Disposed).IsTrue();
+    private static async Task Operation(string text, Task work, string done)
+    {
+        using var progress = ActivationProgress.Begin(text);
+        await work;
+        // The async flow keeps its user, also when its continuation runs on another thread.
+        await Task.Run(() => ActivationProgress.SetText(done));
     }
 
     [TestCase]
-    public void DeadHelperIsNotRestartedWithinOperationButIsForTheNextOne()
+    public async Task ScopeReportsFromAnyThreadUntilItEnds()
+    {
+        var progress = ActivationProgress.Begin("Downloading...");
+        await Task.Run(() => progress.SetText("Downloading... 50%"));
+        progress.Dispose();
+        await Task.Run(() => progress.SetText("Downloading... 100%"));
+        var helper = _launched.Single();
+        Assertions.AssertThat(helper.Of(helper.Users[0])).ContainsExactly("TEXT Downloading...", "TEXT Downloading... 50%", "END");
+    }
+
+    [TestCase]
+    public async Task HeartbeatsAreSentForEveryActiveUser()
+    {
+        // Opened on other threads, so neither scope encloses the other.
+        var first = await Task.Run(() => ActivationProgress.Begin("Activating A..."));
+        var second = await Task.Run(() => ActivationProgress.Begin("Checking for updates..."));
+        _tick!();
+        first.Dispose();
+        _tick();
+        Assertions.AssertBool(_timer!.Disposed).IsFalse();
+        second.Dispose();
+        Assertions.AssertBool(_timer.Disposed).IsTrue();
+        var helper = _launched.Single();
+        Assertions.AssertThat(helper.Of(helper.Users[0])).ContainsExactly("TEXT Activating A...", "HEARTBEAT", "END");
+        Assertions.AssertThat(helper.Of(helper.Users[1]))
+            .ContainsExactly("TEXT Checking for updates...", "HEARTBEAT", "HEARTBEAT", "END");
+    }
+
+    [TestCase]
+    public void HelperThatFailedAtStartupIsStartedAgainOnlyByTheNextOperation()
     {
         using (ActivationProgress.Begin("Activating A..."))
         {
             _launched[0].Dead = true;
             ActivationProgress.SetText("Activating B...");
-
             Assertions.AssertBool(_launched[0].Disposed).IsTrue();
-
             using (ActivationProgress.Begin("Activating C..."))
             {
+                _tick!();
             }
 
             Assertions.AssertInt(_launched.Count).IsEqual(1);
@@ -116,36 +157,66 @@ public class ActivationProgressTests
         }
 
         Assertions.AssertInt(_launched.Count).IsEqual(2);
-        Assertions.AssertThat(_launched[1].Received).ContainsExactly("Deactivating A...");
+        Assertions.AssertThat(_launched[1].Of(_launched[1].Users[0])).ContainsExactly("TEXT Deactivating A...", "END");
     }
 
     [TestCase]
-    public void ProgressSurvivesTwoRestartsAndClosesAfterTheResumedWorkflow()
+    public void HelperThatExitedAfterRunningAWhileIsReplacedWithTheCurrentText()
+    {
+        using (ActivationProgress.Begin("Activating A..."))
+        {
+            _launched[0].Age = TimeSpan.FromMinutes(20);
+            _launched[0].Dead = true;
+            _tick!();
+            Assertions.AssertInt(_launched.Count).IsEqual(2);
+        }
+
+        var user = _launched[0].Users[0];
+        Assertions.AssertThat(_launched[1].Of(user)).ContainsExactly("TEXT Activating A...", "HEARTBEAT", "END");
+    }
+
+    [TestCase]
+    public async Task RestartHoldsTheWindowAndTheNextEditorContinuesTheUser()
     {
         var window = new FakeHelper();
-        ActivationProgress.Launch = () => { _launched.Add(window); return window; };
-        ActivationProgress.Resume = () => window;
+        ActivationProgress.Launch = () =>
+        {
+            _launched.Add(window);
+            return window;
+        };
         using (ActivationProgress.Begin("Updating plugins..."))
         {
             ActivationProgress.PrepareForRestart();
+            // The held user sends nothing more, so the helper keeps the hold; new operations show nothing.
             using (ActivationProgress.Begin("Shutdown callback...")) { }
+            _tick!();
+            await Task.Run(() =>
+            {
+                using var other = ActivationProgress.Begin("Checking for updates...");
+            });
         }
-        Assertions.AssertBool(window.Disposed).IsFalse();
-        Assertions.AssertInt(window.DetachCount).IsEqual(1);
+
+        var user = window.Users.Single();
+        Assertions.AssertThat(window.Of(user))
+            .ContainsExactly("TEXT Updating plugins...", "TEXT Restarting the editor...", "HOLD 300");
+        Assertions.AssertThat(window.HandedOver).ContainsExactly(user);
+
+        ActivationProgress.Resume = () => (window, user);
         Assertions.AssertBool(ActivationProgress.ResumeAfterRestart()).IsTrue();
         using (ActivationProgress.Begin("Reconciling updated recipes..."))
         {
             using (ActivationProgress.Begin("Building...")) { }
             ActivationProgress.PrepareForRestart();
         }
-        Assertions.AssertBool(window.Disposed).IsFalse();
-        Assertions.AssertInt(window.DetachCount).IsEqual(2);
+
         Assertions.AssertBool(ActivationProgress.ResumeAfterRestart()).IsTrue();
         using (ActivationProgress.Begin("Verifying plugins...")) { }
-        Assertions.AssertBool(window.Disposed).IsTrue();
         Assertions.AssertInt(_launched.Count).IsEqual(1);
-        Assertions.AssertThat(window.Received).ContainsExactly("Updating plugins...", "Restarting the editor...",
-            "HEARTBEAT", "Reconciling updated recipes...", "Building...", "Restarting the editor...", "HEARTBEAT", "Verifying plugins...");
+        Assertions.AssertThat(window.Users).ContainsExactly(user);
+        Assertions.AssertThat(window.Of(user)).ContainsExactly("TEXT Updating plugins...", "TEXT Restarting the editor...",
+            "HOLD 300", "HEARTBEAT", "TEXT Reconciling updated recipes...", "TEXT Building...", "TEXT Restarting the editor...",
+            "HOLD 300", "HEARTBEAT", "TEXT Verifying plugins...", "END");
+        Assertions.AssertThat(window.HandedOver).ContainsExactly(user, user);
     }
 
     [TestCase]
@@ -163,9 +234,10 @@ public class ActivationProgressTests
     {
         using (ActivationProgress.Begin("Updating plugins..."))
         {
-            _launched[0].CannotDetach = true;
+            _launched[0].CannotHandOver = true;
             ActivationProgress.PrepareForRestart();
         }
+
         Assertions.AssertBool(_launched[0].Disposed).IsTrue();
         Assertions.AssertBool(ActivationProgress.ResumeAfterRestart()).IsFalse();
     }
@@ -177,21 +249,22 @@ public class ActivationProgressTests
         using (ActivationProgress.Begin("Activating A..."))
         {
             ActivationProgress.SetText("Refreshing...");
-            ActivationProgress.Heartbeat();
+            _tick!();
         }
 
         ActivationProgress.Launch = () => throw new IOException("dotnet not found");
         using (ActivationProgress.Begin("Activating A..."))
         {
             ActivationProgress.SetText("Refreshing...");
-            ActivationProgress.Heartbeat();
+            _tick!();
+            ActivationProgress.PrepareForRestart();
         }
     }
 
     [TestCase]
     public void SettingsDialogIsHiddenOnceAndRestoredAfterNestedOperation()
     {
-        var dialog = new FakeHelper();
+        var dialog = new FakeDisposable();
         var hideCount = 0;
         ActivationProgress.HideSettingsDialog = () =>
         {
@@ -219,7 +292,7 @@ public class ActivationProgressTests
     [TestCase]
     public void SettingsDialogIsRestoredWhenOperationThrows()
     {
-        var dialog = new FakeHelper();
+        var dialog = new FakeDisposable();
         ActivationProgress.HideSettingsDialog = () => dialog;
         try
         {
@@ -231,6 +304,23 @@ public class ActivationProgressTests
         }
 
         Assertions.AssertBool(dialog.Disposed).IsTrue();
+    }
+
+    [TestCase]
+    public void SettingsDialogIsLeftAloneByOperationsOutsideTheEditorThread()
+    {
+        var hidden = false;
+        ActivationProgress.HideSettingsDialog = () =>
+        {
+            hidden = true;
+            return null;
+        };
+        ActivationProgress.IsEditorThread = () => false;
+        using (ActivationProgress.Begin("Indexing..."))
+        {
+        }
+
+        Assertions.AssertBool(hidden).IsFalse();
     }
 
     [TestCase]
@@ -248,41 +338,50 @@ public class ActivationProgressTests
     [RequireGodotRuntime]
     public void ProcessHelperIsNotStartedWhenAssemblyIsMissing()
     {
+        ActivationProgress.IsEditorThread = () => true;
         Assertions.AssertObject(ProcessProgressHelper.TryStart("res://addons/ePlugin/progress/Missing.dll")).IsNull();
+    }
+
+    private sealed class FakeDisposable : IDisposable
+    {
+        public bool Disposed { get; private set; }
+
+        public void Dispose() => Disposed = true;
     }
 
     private sealed class FakeHelper : IProgressHelper
     {
-        /// <summary>Decoded TEXT payloads; any other command verbatim.</summary>
-        public List<string> Received { get; } = [];
+        private readonly List<(string User, string Command)> _received = [];
 
+        /// <summary>The users in the order of their first command.</summary>
+        public List<string> Users => _received.Select(r => r.User).Distinct().ToList();
+
+        public List<string> HandedOver { get; } = [];
         public bool Dead { get; set; }
-
         public bool Disposed { get; private set; }
-        public bool CannotDetach { get; set; }
-        public int DetachCount { get; private set; }
+        public bool CannotHandOver { get; set; }
+        public TimeSpan Age { get; set; } = TimeSpan.FromSeconds(1);
 
-        public void DetachForRestart()
+        /// <summary>A user's commands, with TEXT payloads decoded.</summary>
+        public List<string> Of(string user)
         {
-            if (CannotDetach) throw new IOException("Cannot persist session.");
-            DetachCount++;
+            lock (_received) return _received.Where(r => r.User == user).Select(r => r.Command).ToList();
         }
 
-        public void Send(string command)
+        public void Send(string user, string command)
         {
-            if (Dead)
-            {
-                throw new IOException("The helper exited.");
-            }
-
-            Received.Add(command.StartsWith("TEXT ", StringComparison.Ordinal)
-                ? Encoding.UTF8.GetString(Convert.FromBase64String(command[5..]))
-                : command);
+            if (Dead) throw new IOException("The helper exited.");
+            if (command.StartsWith("TEXT ", StringComparison.Ordinal))
+                command = "TEXT " + Encoding.UTF8.GetString(Convert.FromBase64String(command[5..]));
+            lock (_received) _received.Add((user, command));
         }
 
-        public void Dispose()
+        public void HandOver(string user)
         {
-            Disposed = true;
+            if (CannotHandOver) throw new IOException("Cannot persist session.");
+            HandedOver.Add(user);
         }
+
+        public void Dispose() => Disposed = true;
     }
 }

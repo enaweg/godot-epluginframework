@@ -45,8 +45,9 @@ def find_by_title(dpy, title, timeout):
 def grab(window):
     geometry = window.get_geometry()
     raw = window.get_image(0, 0, geometry.width, geometry.height, X.ZPixmap, 0xFFFFFFFF)
+    # ARGB windows hold premultiplied alpha; reading it as straight alpha darkens anti-aliased edges.
     return Image.frombytes("RGBA", (geometry.width, geometry.height), raw.data, "raw",
-                           "BGRA" if geometry.depth == 32 else "BGRX")
+                           "BGRa" if geometry.depth == 32 else "BGRX")
 
 
 def client_offset(dpy, client, frame):

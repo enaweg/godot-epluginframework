@@ -4,40 +4,73 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 
 namespace Enaweg.Plugin.Internal;
 
 /// <summary>
-/// A file-backed command channel survives editor exits. Only scheduled restarts leave a reconnect marker;
-/// ordinary disposal sends CLOSE. The helper's heartbeat timeout bounds abandoned sessions.
+/// This editor's connection to the progress helper that all Godot editors of the OS user share, whatever project they
+/// have open. Editors append their commands to the helper's command file; see the helper's <c>Commands</c> for the
+/// protocol.
 /// </summary>
+/// <remarks>
+/// <para>
+/// A running helper is published in the shared directory as <c>&lt;token&gt;.helper</c> (protocol, process id, start
+/// time) next to its <c>&lt;token&gt;.commands</c>. <see cref="Acquire"/> connects to the oldest running helper that
+/// speaks this <see cref="Protocol"/>, and <see cref="Start"/> falls back to it when two editors started one at the
+/// same time, so all editors converge on one helper. Records of helpers that no longer run are discarded.
+/// </para>
+/// <para>
+/// A scheduled restart writes a handoff file into the project (<see cref="HandOver"/>), which the restarted editor
+/// reads with <see cref="TryResume"/> to continue as the same user.
+/// </para>
+/// </remarks>
 internal sealed class ProgressSession : IProgressHelper
 {
-    private static readonly TimeSpan MaxAge = TimeSpan.FromMinutes(15);
-    private readonly Process _process;
-    private readonly string _directory;
-    private readonly string _token;
-    private readonly StreamWriter _commands;
-    private readonly long _startedUtcTicks;
-    private bool _disposed;
-    private string Marker => Path.Combine(_directory, "restart");
-    private string CommandFile => Path.Combine(_directory, _token + ".commands");
+    /// <summary>Raised whenever the command protocol changes; editors only share a helper that speaks theirs.</summary>
+    internal const int Protocol = 2;
 
-    private ProgressSession(Process process, string directory, string token, StreamWriter commands, long? startedUtcTicks = null)
+    private const string Record = ".helper";
+    private const string Commands = ".commands";
+
+    /// <summary>Whether a process still runs. Tests replace it to simulate helpers.</summary>
+    internal static Func<ProcessIdentity, bool> IsRunning { get; set; } = ProcessIdentity.IsRunning;
+
+    private readonly string _token;
+    private readonly ProcessIdentity _helper;
+    private readonly string _handoff;
+    private readonly StreamWriter _commands;
+
+    private ProgressSession(string token, ProcessIdentity helper, string handoff, StreamWriter commands)
     {
-        _process = process;
-        _directory = directory;
         _token = token;
+        _helper = helper;
+        _handoff = handoff;
         _commands = commands;
-        _startedUtcTicks = startedUtcTicks ?? process.StartTime.ToUniversalTime().Ticks;
     }
 
-    private static StreamWriter OpenCommands(string path) => new(new FileStream(path, FileMode.Append,
-        FileAccess.Write, FileShare.Read | FileShare.Delete), Encoding.ASCII) { AutoFlush = true };
+    public TimeSpan Age => DateTime.UtcNow - new DateTime(_helper.StartUtcTicks, DateTimeKind.Utc);
 
-    public static ProgressSession? Start(string helperPath, string directory, IEnumerable<string> placement)
+    private static string PathOf(string directory, string token, string extension) => Path.Combine(directory, token + extension);
+
+    private static StreamWriter OpenCommands(string path) => new(new FileStream(path, FileMode.Append,
+        FileAccess.Write, FileShare.ReadWrite | FileShare.Delete), Encoding.ASCII) { AutoFlush = true };
+
+    /// <summary>Connects to the shared helper, or calls <paramref name="start"/> when none runs.</summary>
+    public static IProgressHelper? Acquire(string directory, string handoff, Func<IProgressHelper?> start)
+    {
+        Directory.CreateDirectory(directory);
+        foreach (var (token, helper) in Running(directory))
+        {
+            if (Connect(directory, token, helper, handoff) is { } session) return session;
+        }
+
+        return start();
+    }
+
+    public static ProgressSession? Start(string helperPath, string directory, string handoff, IEnumerable<string> arguments)
     {
         Directory.CreateDirectory(directory);
         // Windows locks loaded assemblies. Run an immutable copy so self-updates can replace the entire addon.
@@ -54,109 +87,200 @@ internal sealed class ProgressSession : IProgressHelper
         }
 
         var token = Guid.NewGuid().ToString("N");
-        var commandFile = Path.Combine(directory, token + ".commands");
+        var commandFile = PathOf(directory, token, Commands);
         var commands = OpenCommands(commandFile);
+        Process? process = null;
         try
         {
             var startInfo = new ProcessStartInfo("dotnet")
             {
                 UseShellExecute = false, CreateNoWindow = true,
-                // The helper emits READY only for the stdin smoke-test protocol.
-                RedirectStandardOutput = true
+                // The helper outlives the editor by up to its lifetime. Inheriting the editor's standard streams would
+                // keep whatever reads the editor's output (a terminal pipeline, a CI step) waiting for it that long.
+                RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true
             };
             startInfo.ArgumentList.Add(Path.Combine(runtime, Path.GetFileName(helperPath)));
             startInfo.ArgumentList.Add("--command-file");
             startInfo.ArgumentList.Add(commandFile);
-            foreach (var argument in placement) startInfo.ArgumentList.Add(argument);
-            var process = Process.Start(startInfo);
-            if (process is not null) return new(process, directory, token, commands);
+            foreach (var argument in arguments) startInfo.ArgumentList.Add(argument);
+            process = Process.Start(startInfo);
+            if (process is null)
+            {
+                commands.Dispose();
+                Discard(directory, token);
+                return null;
+            }
+
+            var helper = ProcessIdentity.Of(process);
+            Write(PathOf(directory, token, Record), [Protocol.ToString(CultureInfo.InvariantCulture), .. helper.Fields]);
+            // Another editor may have started one at the same time: everybody uses the oldest, and the other one exits
+            // before anybody wrote to it.
+            if (Running(directory).FirstOrDefault() is var (oldest, older) && oldest != token &&
+                Connect(directory, oldest, older, handoff) is { } shared)
+            {
+                commands.Dispose();
+                process.Kill();
+                Discard(directory, token);
+                return shared;
+            }
+
+            return new(token, helper, handoff, commands);
         }
         catch
         {
             commands.Dispose();
-            File.Delete(commandFile);
+            try { if (process is { HasExited: false }) process.Kill(); }
+            catch (Exception) { /* the helper exits on its own after its lifetime */ }
+            Discard(directory, token);
             throw;
-        }
-        commands.Dispose();
-        File.Delete(commandFile);
-        return null;
-    }
-
-    public static ProgressSession? TryResume(string directory)
-    {
-        var marker = Path.Combine(directory, "restart");
-        Process? process = null;
-        ProgressSession? session = null;
-        try
-        {
-            if (!File.Exists(marker)) return null;
-            var fields = File.ReadAllLines(marker);
-            if (DateTime.UtcNow - File.GetLastWriteTimeUtc(marker) >= MaxAge || fields.Length != 3 ||
-                !Guid.TryParseExact(fields[0], "N", out _) ||
-                !int.TryParse(fields[1], NumberStyles.None, CultureInfo.InvariantCulture, out var pid) ||
-                !long.TryParse(fields[2], NumberStyles.None, CultureInfo.InvariantCulture, out var start)) return null;
-            process = Process.GetProcessById(pid);
-            // Linux derives the boot time separately in each host, so StartTime can differ by a fraction of a
-            // second across processes. Keep checking the PID's age without requiring identical clock precision.
-            if (process.HasExited || Math.Abs(process.StartTime.ToUniversalTime().Ticks - start) > TimeSpan.TicksPerSecond) return null;
-            var commandFile = Path.Combine(directory, fields[0] + ".commands");
-            if (!File.Exists(commandFile)) return null;
-            session = new ProgressSession(process, directory, fields[0], OpenCommands(commandFile), start);
-            process = null;
-            session.Send("HEARTBEAT");
-            return session;
-        }
-        catch (Exception)
-        {
-            session?.Dispose();
-            return null;
-        }
-        finally { process?.Dispose(); }
-    }
-
-    public void Send(string command)
-    {
-        if (_process.HasExited) throw new IOException("The progress helper exited.");
-        _commands.WriteLine(command);
-    }
-
-    public void DetachForRestart()
-    {
-        File.WriteAllLines(Marker,
-        [
-            _token, _process.Id.ToString(CultureInfo.InvariantCulture),
-            _startedUtcTicks.ToString(CultureInfo.InvariantCulture)
-        ]);
-        Release();
-    }
-
-    public void Dispose()
-    {
-        if (_disposed) return;
-        try
-        {
-            // Not waited for: the helper plays its closing animation (about 2 s) and then exits on its own, also
-            // when it reads CLOSE only after the command file is deleted below.
-            if (!_process.HasExited) Send("CLOSE");
-        }
-        catch (Exception)
-        {
-            try { if (!_process.HasExited) _process.Kill(); }
-            catch (Exception) { /* feedback must not affect the operation */ }
         }
         finally
         {
-            Release();
-            try { File.Delete(CommandFile); File.Delete(Marker); }
-            catch (Exception) { /* stale state is ignored on the next startup */ }
+            process?.Dispose();
         }
     }
 
-    private void Release()
+    /// <summary>
+    /// Called once when the editor starts: continues the user whose window the editor before its restart handed over.
+    /// The handoff is read only once.
+    /// </summary>
+    public static (ProgressSession Session, string User)? TryResume(string handoff, string directory)
     {
-        _disposed = true;
-        try { _commands.Dispose(); }
-        finally { _process.Dispose(); }
+        try
+        {
+            CloseEarlierVersion(Path.GetDirectoryName(handoff)!);
+            if (!File.Exists(handoff)) return null;
+            string[] fields;
+            try { fields = File.ReadAllLines(handoff); }
+            finally { File.Delete(handoff); }
+            if (fields.Length != 5 || fields[0] != Protocol.ToString(CultureInfo.InvariantCulture) ||
+                !Guid.TryParseExact(fields[1], "N", out _) || !ProcessIdentity.TryParse(fields[2], fields[3], out var helper) ||
+                !Guid.TryParseExact(fields[4], "N", out _) || !IsRunning(helper)) return null;
+            return Connect(directory, fields[1], helper, handoff) is { } session ? (session, fields[4]) : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Earlier framework versions kept a per-project helper and wrote a <c>restart</c> marker (token, process id, start
+    /// time) next to its command file to hand it over. That helper does not understand users, so it is closed.
+    /// </summary>
+    private static void CloseEarlierVersion(string projectDirectory)
+    {
+        var marker = Path.Combine(projectDirectory, "restart");
+        if (!File.Exists(marker)) return;
+        try
+        {
+            var fields = File.ReadAllLines(marker);
+            var commandFile = fields.Length == 3 && Guid.TryParseExact(fields[0], "N", out _)
+                ? PathOf(projectDirectory, fields[0], Commands)
+                : null;
+            if (commandFile is not null && File.Exists(commandFile))
+            {
+                using var commands = OpenCommands(commandFile);
+                commands.WriteLine("CLOSE");
+            }
+        }
+        finally { File.Delete(marker); }
+    }
+
+    /// <summary>The running helpers of this protocol, oldest first; discards the records of helpers that exited.</summary>
+    private static List<(string Token, ProcessIdentity Helper)> Running(string directory)
+    {
+        var running = new List<(string Token, ProcessIdentity Helper)>();
+        foreach (var path in Directory.GetFiles(directory, "*" + Record))
+        {
+            var token = Path.GetFileNameWithoutExtension(path);
+            string[] fields;
+            try { fields = File.ReadAllLines(path); }
+            catch (Exception) { continue; }
+            if (fields.Length != 3 || !ProcessIdentity.TryParse(fields[1], fields[2], out var helper)) continue;
+            if (!IsRunning(helper)) Discard(directory, token);
+            else if (fields[0] == Protocol.ToString(CultureInfo.InvariantCulture)) running.Add((token, helper));
+        }
+
+        return running.OrderBy(h => h.Helper.StartUtcTicks).ThenBy(h => h.Token, StringComparer.Ordinal).ToList();
+    }
+
+    private static ProgressSession? Connect(string directory, string token, ProcessIdentity helper, string handoff)
+    {
+        var commandFile = PathOf(directory, token, Commands);
+        return File.Exists(commandFile) ? new ProgressSession(token, helper, handoff, OpenCommands(commandFile)) : null;
+    }
+
+    private static void Discard(string directory, string token)
+    {
+        foreach (var extension in new[] { Record, Commands, ".exiting" })
+        {
+            try { File.Delete(PathOf(directory, token, extension)); }
+            catch (Exception) { /* discarded again later */ }
+        }
+    }
+
+    /// <summary>Replaces the file in one step, so nobody reads it half-written.</summary>
+    private static void Write(string path, string[] lines)
+    {
+        var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        File.WriteAllLines(temporary, lines);
+        File.Move(temporary, path, true);
+    }
+
+    public void Send(string user, string command)
+    {
+        if (!IsRunning(_helper)) throw new IOException("The progress helper exited.");
+        // One write per line: appends of several editors to the same file do not interleave within a line.
+        _commands.Write(user + " " + command + "\n");
+    }
+
+    public void HandOver(string user)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(_handoff)!);
+        Write(_handoff, [Protocol.ToString(CultureInfo.InvariantCulture), _token, .. _helper.Fields, user]);
+    }
+
+    /// <summary>Releases the command file; the helper keeps running for other users.</summary>
+    public void Dispose() => _commands.Dispose();
+}
+
+/// <summary>A process, identified by its id and start time so that a reused id is not mistaken for it.</summary>
+internal readonly record struct ProcessIdentity(int Id, long StartUtcTicks)
+{
+    public string[] Fields =>
+        [Id.ToString(CultureInfo.InvariantCulture), StartUtcTicks.ToString(CultureInfo.InvariantCulture)];
+
+    public static ProcessIdentity Of(Process process) => new(process.Id, process.StartTime.ToUniversalTime().Ticks);
+
+    public static bool TryParse(string id, string ticks, out ProcessIdentity identity)
+    {
+        identity = default;
+        if (!int.TryParse(id, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedId) ||
+            !long.TryParse(ticks, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedTicks)) return false;
+        identity = new ProcessIdentity(parsedId, parsedTicks);
+        return true;
+    }
+
+    /// <summary>
+    /// Linux derives the boot time separately in each host, so a start time can differ by a fraction of a second
+    /// across processes.
+    /// </summary>
+    public bool Matches(ProcessIdentity other) =>
+        Id == other.Id && Math.Abs(StartUtcTicks - other.StartUtcTicks) <= TimeSpan.TicksPerSecond;
+
+    public static bool IsRunning(ProcessIdentity identity)
+    {
+        if (identity.Id <= 0) return false;
+        try
+        {
+            using var process = Process.GetProcessById(identity.Id);
+            return !process.HasExited && identity.Matches(Of(process));
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 }
 #endif

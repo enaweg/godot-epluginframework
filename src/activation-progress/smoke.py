@@ -71,7 +71,8 @@ with tempfile.TemporaryDirectory() as directory:
         assert process.poll() is None
         with open(command_file, "a") as writer:
             writer.write("SE\n")
-        assert process.wait(timeout=5) == 0
+        # CLOSE ends the anonymous user; the helper exits once its lifetime has passed since that last message.
+        assert process.wait(timeout=15) == 0
     finally:
         if process.poll() is None:
             process.kill()
@@ -84,6 +85,38 @@ with tempfile.TemporaryDirectory() as directory:
     )
     try:
         assert process.wait(timeout=10) == 0
+    finally:
+        if process.poll() is None:
+            process.kill()
+
+# Several users share one helper through its command file. The window follows them, but the helper keeps running until
+# no user has sent anything for its lifetime; then it withdraws its record (<token>.helper), exits and removes its files.
+with tempfile.TemporaryDirectory() as directory:
+    command_file = os.path.join(directory, "token.commands")
+    record = os.path.join(directory, "token.helper")
+    open(command_file, "w").close()
+    open(record, "w").close()
+
+    def send(text):
+        with open(command_file, "a") as writer:
+            writer.write(text)
+
+    process = subprocess.Popen(
+        command + ["--command-file", command_file, "--max-lifetime-seconds", "4", "--window-timeout-seconds", "1"],
+        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+    try:
+        send("first TEXT QQ==\nsecond TEXT Qg==\n")
+        for _ in range(3):
+            time.sleep(1)
+            send("first HEARTBEAT\nsecond HOLD 30\n")
+        send("first END\n")
+        # Both users are still known: the helper outlives the window until its lifetime has passed since the last message.
+        time.sleep(2)
+        assert process.poll() is None, "helper exited while a user holds it"
+        send("second END\n")
+        assert process.wait(timeout=15) == 0
+        assert sorted(os.listdir(directory)) == [], os.listdir(directory)
     finally:
         if process.poll() is None:
             process.kill()
