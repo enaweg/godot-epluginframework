@@ -145,7 +145,18 @@ Optional dependencies still take no part in the reverse-dependency scan in `Disa
 optional plugin removes the nested recipe but does not disable the plugin that declared it.
 
 Both hooks sit in `EnableEPlugin`/`DisableEPlugin`, which return early for plugins that do not implement
-`IEEditorPlugin`, so enabling or disabling a plain Godot plugin does not re-evaluate anything.
+`IEEditorPlugin`. Plain plugins (GDScript, or C# without a recipe) run no framework code when they are toggled, so
+`EGlobal.PlainPlugins.cs` notices them: `EPluginPlugin._Process` calls `ObservePluginToggles` every frame (the manager
+also right after its own toggle), which diffs `editor_plugins/enabled` against `PluginToggles` (pure, tested). The
+known set lives in Engine metadata, so a toggle between a build and its reload is not lost; disabling the framework
+removes it. A newly enabled plain plugin passes the license gate first (otherwise it is disabled again inside a
+progress scope, which reopens Project Settings, and the review is queued), then `ReevaluateOptionalDependencies`. A
+disabled one disables the activated ePlugins that require it (their optional snapshot is filled first, since the
+editor no longer has the plugin) and runs `UninstallOptionalDependenciesOn`, all in one transition: `_transitionHold`
+keeps `FinishTransition` from building in between. Toggles the framework makes itself go through `NotePluginToggle`;
+nothing reacts while a reload is pending or an update is active. A hard dependency on a plain plugin is enabled
+synchronously by `EnablePlainDependency`, because no `EnableEPlugin` callback would resume the dependant, and versions of
+plain plugins without a context are read from their `plugin.cfg`.
 
 `PluginContext` (`addons/ePlugin/Internal/PluginContext.cs`) is the per-plugin state bag: the `EditorPlugin`
 instance, its `IEEditorPlugin`/metadata/slug, its logger, its `IDotnetCli`, its recipe builder, its
