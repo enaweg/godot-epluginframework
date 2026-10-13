@@ -25,7 +25,7 @@ The project targets `net8.0`. The current CI-tested setup is [Godot 4.7.2 .NET](
 
 Install [ePlugin Framework from the Godot Asset Store](https://store.godotengine.org/asset/enaweg/eplugin-framework/), or download a [release](https://github.com/enaweg/godot-epluginframework/releases) and copy its `addons/ePlugin` directory into your project's `addons` folder. Open the project in the Godot .NET editor, enable **ePlugin** under **Project > Project Settings > Plugins**, then enable the ePlugins you want to use.
 
-Release archives include a small shared progress helper (about 80 KB) that runs on the installed .NET runtime and draws its window with native UI. Source checkouts do not include the generated helper; activation still works without a progress window. Linux needs GTK 3 for that window. Asset Library distributions should use the release archive to include the helper.
+Release archives include a small shared progress helper (about 80 KB) that runs on the installed .NET runtime and draws its window with native UI. Source checkouts generate the helper during a normal build. Linux needs GTK 3 for that window. Plugin operations continue if the helper is missing or fails. Asset Library distributions should use the release archive to include the helper.
 
 ## Features
 
@@ -61,6 +61,7 @@ Screenshots show the repository's sample plugins and example update packages.
 
 - [Create an ePlugin](docs/creating-plugins.md): starter code, recipe resources, dependencies, helpers, and initializers.
 - [ePlugin Manager](docs/eplugin-manager.md): inspect and control plugins, check updates, manage local sources and update sites, and retry failed work.
+- [Progress dialog](docs/progress-dialog.md): automatic progress feedback, shared windows, restarts, failure handling, and internal reporting.
 - [Updating plugins](docs/updating-plugins.md): configure update sources, project and built-in update sites, publish packages, and understand review, validation, builds, and recovery.
 - [Plugin state files](docs/plugin-state.md): checked-in state, per-user recovery state, and manual retry.
 - [Plugin licenses](docs/plugin-licenses.md): ask users to accept a plugin's license before it is enabled or updated.

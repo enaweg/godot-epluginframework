@@ -21,7 +21,13 @@ namespace Enaweg.Plugin.Internal;
 /// A running helper is published in the shared directory as <c>&lt;token&gt;.helper</c> (protocol, process id, start
 /// time) next to its <c>&lt;token&gt;.commands</c>. <see cref="Acquire"/> connects to the oldest running helper that
 /// speaks this <see cref="Protocol"/>, and <see cref="Start"/> falls back to it when two editors started one at the
-/// same time, so all editors converge on one helper. Records of helpers that no longer run are discarded.
+/// same time, so compatible editors converge on one helper. Missing or inaccessible command files are skipped.
+/// Records of helpers that no longer run are discarded.
+/// </para>
+/// <para>
+/// Protocol 3 writers acquire <c>eplugin-progress-&lt;token&gt;</c> with a 100 ms wait limit, seek to the file's end,
+/// and write each complete command without buffering before releasing the mutex. Earlier writers use a separate
+/// helper because their persistent append streams can overwrite other editors' commands.
 /// </para>
 /// <para>
 /// A scheduled restart writes a handoff file into the project (<see cref="HandOver"/>), which the restarted editor

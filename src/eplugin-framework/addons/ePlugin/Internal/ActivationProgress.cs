@@ -29,6 +29,11 @@ namespace Enaweg.Plugin.Internal;
 /// before the helper shows its window never shows one. A scheduled restart holds the window for
 /// <see cref="RestartHoldSeconds"/> and hands its user to the next editor (see <see cref="ProgressSession"/>).
 /// </para>
+/// <para>
+/// Helper failures do not fail plugin work. Recovery has at most two connection/send attempts per command, including
+/// replaying active users' text. A helper at least 30 seconds old may be replaced immediately; early failures or a
+/// failed replacement suppress retries until all current users end and another operation begins.
+/// </para>
 /// </remarks>
 internal static class ActivationProgress
 {
@@ -372,7 +377,7 @@ internal interface IProgressHelper : IDisposable
     /// <summary>How long the helper process has been running.</summary>
     TimeSpan Age { get; }
 
-    /// <summary>Sends one protocol command of a user. Throws when the helper is gone.</summary>
+    /// <summary>Sends one protocol command of a user. Throws when the helper is unavailable or the send fails.</summary>
     void Send(string user, string command);
 
     /// <summary>Records the user so that the editor a restart starts can continue it.</summary>

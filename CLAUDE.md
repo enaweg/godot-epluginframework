@@ -287,9 +287,24 @@ Settings, and only the editor thread starts a helper, because both need Godot AP
 `Unloading` hook stops it (a running timer would keep the collectible assembly loaded). The helper (`src/activation-progress`,
 protocol in its `Commands`) shows the newest text of the active users, closes the window after 15 s without a message
 from any of them (a user's `HOLD` extends that once, used for restarts) and exits 15 minutes after the last message.
-All editors of the OS user share one helper: `ProgressSession` publishes it as `<token>.helper` in Godot's editor data
-directory (`eplugin/progress`) and connects to the oldest running one of its `Protocol`; raise `Protocol` whenever the
-command protocol changes. The helper runs with redirected standard streams, so it never keeps the editor's output open.
+Editors of the OS user using the same `ProgressSession.Protocol` share one helper: it is published as
+`<token>.helper` in Godot's editor data directory (`eplugin/progress`), next to `<token>.commands`. Editors connect to
+the oldest running compatible helper whose command file they can open; missing or inaccessible command files are
+skipped. Raise `Protocol` whenever the command protocol or transport coordination changes. Protocol 3 requires every
+writer to acquire the helper's named mutex (`eplugin-progress-<token>`, with a 100 ms wait limit), seek to the end,
+and write a complete command without buffering before releasing it. `FileMode.Append` on a persistent stream alone
+can overwrite another editor's commands. Older writers use a separate helper. The helper runs with redirected
+standard streams, so it never keeps the editor's output open.
+
+Progress feedback is best effort: launch, send, handoff and cleanup failures do not fail plugin work. A helper lost
+before it is 30 s old is retried only after all current users end and another operation begins. An older helper may
+be replaced immediately, replaying the active users' text. Recovery uses at most two connection/send attempts per
+command; replay sends directly instead of recursively entering recovery. If the replacement also fails, retries
+stop until all current users end and another operation begins. Failure to read the helper's age still disposes the
+connection. `ActivationProgressTests` and `ProgressSessionTests` cover recovery, concurrent writes, inaccessible
+helpers and restart handoff.
+
+`docs/progress-dialog.md` documents user behavior, timing, failure handling, internal scope usage and transport rules.
 
 ### Plugin licenses
 
