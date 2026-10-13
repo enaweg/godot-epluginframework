@@ -344,6 +344,54 @@ plugin source that should stay inert until the plugin is activated. A recipe may
 A directory already in the wanted state is left alone, one missing in both forms is only logged as a warning, and only
 both forms existing at once fails, because neither can be renamed onto the other.
 
+## Commit and PR messages
+
+The release notes are generated, so message prefixes decide where a change appears in them. Pushing a `v*` tag runs
+`.github/workflows/ci-release.yml`, whose `mikepenz/release-changelog-builder-action` (`mode: HYBRID`) drafts the
+GitHub release from everything merged since the previous semver tag. Each **pull request becomes one entry, and the
+entry is its title**. The commits inside the PR and the `Merge pull request #N from …` commit never appear. In HYBRID mode a
+commit pushed straight to `main` without a PR can also be listed, by its subject line. A regex on
+that title gives the entry its category:
+
+```
+^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\(scope\))?(!)?: <description>
+```
+
+| Prefix | Section |
+|---|---|
+| `feat:` | Feature |
+| `fix:` | Fix |
+| `build:` `chore:` `ci:` `docs:` `perf:` `refactor:` `revert:` `style:` `test:`, or no prefix | Other |
+
+A GitHub label `feat`/`feature` or `fix`/`bug` on the PR does the same, and `ignore` leaves it out. A title the regex
+does not match lands in Other. That is why many past releases had to be re-sorted by hand.
+`.github/workflows/ci-pr-title.yml` fails a PR whose title does not follow the rules below (re-run on every title edit);
+keep its pattern in step with the release workflow's `label_extractor`. Rules:
+
+- **PR title**: always use a prefix. Use `feat:` for new user-visible behavior, `fix:` for a bug fix, and the other
+  types for anything users won't notice. If a PR does both, prefix by the change users care about most. The whole
+  PR is a single entry under that one prefix, so don't open a PR that mixes unrelated features and fixes.
+- Write the type in lowercase, follow it with `: ` (colon and exactly one space), and start the description with a
+  letter or digit. The regex is case-sensitive and requires a word character right after the space, so
+  `Fix: …`, `fix:…` and ``fix: `Foo` …`` all fall into Other. Write a short imperative description in lowercase, with
+  no trailing period. The entry reads as a sentence on its own, e.g. `fix: keep the ePlugin Manager open after a
+  successful update`.
+- Scope is optional and may only contain letters, digits, `_`, `-` and `.` (`feat(manager): …`). Mark breaking
+  public-API changes with `!` (`feat!: …`). There is no separate breaking-changes section, so also say what breaks
+  in the PR description.
+- Only these eleven types are recognized. Others (`tools:`, `update:`) fall into Other, so map them instead.
+  Tooling goes under `chore:` or `build:`, workflows under `ci:`, README and `docs/` under `docs:`, and dependency
+  bumps under `chore(deps):`, which is Dependabot's prefix.
+- **Commits** use the same format (`type(scope)!: description`), so a branch can be squash-merged or pushed
+  directly without losing its category. Any direct push to `main` (version bumps, store images) still needs a
+  prefix, e.g. `chore: update version for next release`.
+- **Merge commits**: keep GitHub's default `Merge pull request #N from …` message. It is ignored, and the PR title
+  is what counts. Merge PRs with a merge commit, as the history does. If you squash instead, keep the PR title
+  (with its prefix) as the squash commit's subject.
+
+`.github/release.yml` (labels `enhancement`, `breaking-change`, `ignore-for-release`) is only used by GitHub's own
+"Generate release notes" button, not by the release workflow.
+
 ## Known constraints (see README for full list)
 
 - Activating/deactivating an ePlugin freezes the Godot editor UI for the duration of the install/uninstall.
