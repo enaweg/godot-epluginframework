@@ -59,7 +59,7 @@ public partial class SamplePlugin : EditorPlugin, IEEditorPlugin
 
 Deactivation reverses the recipe. Removing a NuGet package, project reference, or solution entry that is already gone, for example because it was removed by hand, is reported as a warning and counts as done.
 
-Optional dependencies are re-evaluated when either ePlugin-managed plugin is enabled or disabled, so activation order does not matter. Disabling the optional plugin removes the nested recipe while leaving the declaring plugin active. Nested recipes receive `IEEditorPluginRecipeBuilder`, which supports resources but cannot declare dependencies of its own.
+Optional dependencies are re-evaluated when either plugin is enabled or disabled, also when the optional plugin is a GDScript plugin toggled in **Project Settings > Plugins**, so activation order does not matter. Disabling the optional plugin removes the nested recipe while leaving the declaring plugin active. Nested recipes receive `IEEditorPluginRecipeBuilder`, which supports resources but cannot declare dependencies of its own.
 
 ```csharp
 builder.AddOptionalPluginDependency("other-plugin", ">1.0.0", optional => optional

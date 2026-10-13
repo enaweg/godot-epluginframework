@@ -545,7 +545,12 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         if (!IsInitialized) return;
         // Also covers plain plugins; an ePlugin's own activation shares this window.
         using var progress = ActivationProgress.Begin((enable ? "Enabling " : "Disabling ") + name + "...");
-        try { EditorInterface.Singleton.SetPluginEnabled(slug, enable); }
+        try
+        {
+            EditorInterface.Singleton.SetPluginEnabled(slug, enable);
+            // a plain plugin's dependants and optional recipes, before the list below shows them
+            _global.ObservePluginToggles();
+        }
         catch (Exception ex) { GD.PushError($"Cannot {(enable ? "enable" : "disable")} {slug}: {ex.Message}"); }
         finally
         {
