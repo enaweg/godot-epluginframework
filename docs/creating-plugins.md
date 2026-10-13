@@ -2,6 +2,8 @@
 
 An ePlugin is a Godot `EditorPlugin` that also implements `IEEditorPlugin`. Its `CreateRecipe` method declares project changes, and `EnableEPlugin` / `DisableEPlugin` connect those declarations to the plugin lifecycle.
 
+GDScript plugins get updates, licenses, welcome pages and links through `plugin.cfg` alone; see [GDScript plugins](gdscript-plugins.md).
+
 ## Starter plugin
 
 ```csharp
