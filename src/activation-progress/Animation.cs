@@ -3,16 +3,17 @@ using System.Diagnostics;
 namespace ActivationProgress;
 
 /// <summary>
-/// The window's opening: the logo fades in, its two parts move apart while the panel grows between them, and
-/// once the panel has its full size its controls fade in. Closing plays the same timeline backwards, from
+/// The window's opening: the logo fades in, pauses, then its two parts move apart while the panel grows between
+/// them, and once the panel has its full size its controls fade in. Closing plays the same timeline backwards, from
 /// wherever the opening got to. Not thread-safe: each window uses it on its UI thread only.
 /// </summary>
 internal sealed class Animation
 {
     public const double FadeSeconds = 1.0;
+    public const double LogoPauseSeconds = 1.0;
     public const double SplitSeconds = 0.6;
     public const double ControlsSeconds = 0.3;
-    public const double TotalSeconds = FadeSeconds + SplitSeconds + ControlsSeconds;
+    public const double TotalSeconds = FadeSeconds + LogoPauseSeconds + SplitSeconds + ControlsSeconds;
 
     /// <summary>How often a window redraws while animating, and for its own indeterminate progress bar.</summary>
     public const int FrameMilliseconds = 16;
@@ -57,8 +58,8 @@ internal readonly record struct Frame(double Opacity, double Split, double Contr
     {
         return new Frame(
             Ease(position / Animation.FadeSeconds),
-            Ease((position - Animation.FadeSeconds) / Animation.SplitSeconds),
-            Ease((position - Animation.FadeSeconds - Animation.SplitSeconds) / Animation.ControlsSeconds));
+            Ease((position - Animation.FadeSeconds - Animation.LogoPauseSeconds) / Animation.SplitSeconds),
+            Ease((position - Animation.FadeSeconds - Animation.LogoPauseSeconds - Animation.SplitSeconds) / Animation.ControlsSeconds));
     }
 
     private static double Ease(double t)
@@ -85,15 +86,15 @@ internal readonly record struct Box(double X, double Y, double Width, double Hei
 /// </summary>
 internal static class Layout
 {
-    public const double PanelWidth = 300;
-    public const double PanelHeight = 76;
-    public const double PanelRadius = 8;
-    public const double Padding = 14;
-    public const double LabelHeight = 20;
-    public const double BarHeight = 18;
+    public const double PanelWidth = 600;
+    public const double PanelHeight = PanelWidth * 9 / 32;
+    public const double PanelRadius = 16;
+    public const double Padding = 28;
+    public const double LabelHeight = 40;
+    public const double BarHeight = 36;
 
     // Room for anti-aliased edges and, on macOS, the shadow.
-    private const double Margin = 8;
+    private const double Margin = 16;
 
     // The panel's center line, in logo coordinates: through the puzzle's left knob and the head's notch for it.
     private const double PanelCenterY = 0.62 * Logo.Size;
