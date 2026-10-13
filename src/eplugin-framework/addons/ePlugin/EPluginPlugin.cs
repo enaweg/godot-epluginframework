@@ -29,7 +29,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
     private EGlobal? _updateOwner;
     // A resumed update keeps its progress window until startup finishes and the manager has a few frames to draw.
     private bool _reopenManager;
-    private IDisposable? _reopenProgress;
+    private ActivationProgress.Scope? _reopenProgress;
     private int _reopenFrames;
     private CancellationTokenSource _updateLifetime = new();
     internal CancellationToken UpdateLifetime => _updateLifetime.Token;
@@ -82,7 +82,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         if (!_reopenManager || !_managerUiAdded) return;
         _reopenManager = false;
         ManagerReopen.Take();
-        ActivationProgress.SetText("Opening the ePlugin Manager...");
+        _reopenProgress?.SetText("Opening the ePlugin Manager...");
         try { OpenManager(); }
         catch (Exception ex) { Logger.Error($"Cannot reopen the ePlugin Manager: {ex.Message}"); }
     }

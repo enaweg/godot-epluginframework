@@ -3,139 +3,292 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
+using System.Runtime.Loader;
 using System.Text;
+using System.Threading;
 using Godot;
 
 namespace Enaweg.Plugin.Internal;
 
 /// <summary>
-/// Best-effort feedback in a separate process while Godot's synchronous plugin work blocks its UI.
-/// Nested editor callbacks share the same process.
+/// Best-effort feedback in a separate process while Godot's synchronous plugin work blocks its UI. Thread-safe: async
+/// operations and background threads can report progress too.
 /// </summary>
 /// <remarks>
-/// Startup never waits for the helper: commands are queued in a file until it has started. An operation that
-/// ends before the helper shows its window never shows one. A project has at most one helper: the next operation
-/// reopens a closing or hidden window, one lost to an assembly reload is taken over, and scheduled restarts hand the
-/// window to the next editor (see <see cref="ProgressSession"/>).
+/// <para>
+/// Each <see cref="Begin"/> without an enclosing scope starts a user of the shared progress window; scopes opened
+/// inside it, also by Godot callbacks and in the async flow that opened it, belong to the same user and change its
+/// text. The window shows the most recent text of the users that are still active, so concurrent operations can share
+/// it, also with other Godot editors. While a user is active a timer sends a heartbeat every
+/// <see cref="HeartbeatInterval"/>, also while Godot's main thread is blocked; the helper closes the window when no
+/// user has sent anything for 15 seconds, and exits 15 minutes after the last message.
+/// </para>
+/// <para>
+/// Startup never waits for the helper: commands are queued in a file until it has started. An operation that ends
+/// before the helper shows its window never shows one. A scheduled restart holds the window for
+/// <see cref="RestartHoldSeconds"/> and hands its user to the next editor (see <see cref="ProgressSession"/>).
+/// </para>
 /// </remarks>
 internal static class ActivationProgress
 {
     private const string HelperPath = "res://addons/ePlugin/progress/ActivationProgress.dll";
-    internal const string SessionPath = "res://.godot/eplugin/progress";
+    internal const string HandoffPath = "res://.godot/eplugin/progress/handoff";
+    internal const int RestartHoldSeconds = 300;
+    internal static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(5);
 
-    // Counts open scopes, not helper lifetimes: a helper that dies mid-operation is intentionally not restarted by
-    // the nested scopes of that operation, only by the next top-level one.
-    private static int _depth;
+    // A helper that exits sooner after it started cannot run here (e.g. no GTK 3); it is started again only by the next
+    // operation. One that ran longer, e.g. one that exited after its lifetime just as this editor connected, is replaced.
+    private static readonly TimeSpan ReplaceAfter = TimeSpan.FromSeconds(30);
+
+    private static readonly object Gate = new();
+    private static readonly AsyncLocal<User?> Current = new();
+    private static readonly List<User> Users = [];
     private static IProgressHelper? _helper;
-    private static IDisposable? _settingsDialog;
+    private static bool _mayStart;
+    private static IDisposable? _heartbeat;
+    private static User? _resumed;
     private static bool _restartPending;
+    private static IDisposable? _settingsDialog;
 
-    /// <summary>Reuses or starts a helper, or returns null when none can run. Tests replace it with a fake.</summary>
+    /// <summary>Connects to or starts a helper, or returns null when none can run. Tests replace it with a fake.</summary>
     internal static Func<IProgressHelper?> Launch { get; set; } = LaunchDefault;
-    internal static Func<IProgressHelper?> Resume { get; set; } = ResumeDefault;
-
+    internal static Func<(IProgressHelper Helper, string User)?> Resume { get; set; } = ResumeDefault;
     internal static Func<IDisposable?> HideSettingsDialog { get; set; } = ProjectSettingsDialog.TryHide;
+    internal static Func<bool> IsEditorThread { get; set; } = () => OS.GetThreadCallerId() == OS.GetMainThreadId();
+
+    /// <summary>Starts the timer that calls <see cref="SendHeartbeats"/>. Tests replace it and call that themselves.</summary>
+    internal static Func<Action, IDisposable> StartHeartbeat { get; set; } =
+        tick => new System.Threading.Timer(_ => tick(), null, HeartbeatInterval, HeartbeatInterval);
 
     internal static IProgressHelper? LaunchDefault() => ProcessProgressHelper.TryStart(HelperPath);
-    internal static IProgressHelper? ResumeDefault() => ProgressSession.TryResume(ProjectSettings.GlobalizePath(SessionPath));
+
+    internal static (IProgressHelper Helper, string User)? ResumeDefault() =>
+        ProcessProgressHelper.SharedDirectory() is { } directory &&
+        ProgressSession.TryResume(ProjectSettings.GlobalizePath(HandoffPath), directory) is (var session, var user)
+            ? (session, user)
+            : null;
+
+    static ActivationProgress()
+    {
+        // A running timer keeps the collectible assembly loaded, so it stops when the assembly is reloaded. Users of
+        // the unloaded assembly stop sending, and the helper closes their window after its timeout. A scope that spans
+        // frames on the editor thread leaves its user in that thread's execution context, which would keep it loaded too.
+        var context = AssemblyLoadContext.GetLoadContext(typeof(ActivationProgress).Assembly);
+        if (context is not null)
+        {
+            context.Unloading += _ =>
+            {
+                StopHeartbeat();
+                Current.Value = null;
+            };
+        }
+    }
 
     /// <summary>
     /// Called once at editor startup, before recovery and recipe reconciliation. Returns whether a restart handed over
-    /// its window.
+    /// its window; the next <see cref="Begin"/> then continues that user.
     /// </summary>
     internal static bool ResumeAfterRestart()
     {
-        _restartPending = false;
-        if (_helper is not null) return false;
-        try { _helper = Resume(); }
-        catch (Exception) { _helper = null; }
-        return _helper is not null;
-    }
-
-    /// <summary>Hands the running window to the next editor process instead of closing it with this scope.</summary>
-    internal static void PrepareForRestart()
-    {
-        _restartPending = true;
-        SetText("Restarting the editor...");
-        Heartbeat();
-        try
+        lock (Gate)
         {
-            _helper?.DetachForRestart();
-            _helper = null;
+            _restartPending = false;
+            if (_helper is not null || Users.Count > 0) return false;
+            (IProgressHelper Helper, string User)? resumed;
+            try { resumed = Resume(); }
+            catch (Exception) { resumed = null; }
+            if (resumed is not (var helper, var user)) return false;
+            _helper = helper;
+            _resumed = new User(user);
+            // Ends the hold: from now on the window closes when this user stops sending.
+            Send(_resumed, "HEARTBEAT");
+            if (_helper is not null) return true;
+            _resumed = null;
+            return false;
         }
-        catch (Exception) { Stop(); }
-    }
-
-    public static IDisposable Begin(string text)
-    {
-        if (_depth++ == 0)
-        {
-            try
-            {
-                _settingsDialog = HideSettingsDialog();
-            }
-            catch (Exception)
-            {
-                // Editor UI feedback must not prevent plugin operations.
-                _settingsDialog = null;
-            }
-
-            if (_helper is null && !_restartPending) Start();
-        }
-
-        SetText(text);
-        return new Scope();
-    }
-
-    public static void SetText(string text)
-    {
-        Send($"TEXT {Convert.ToBase64String(Encoding.UTF8.GetBytes(text))}");
     }
 
     /// <summary>
-    /// Restarts the helper's lifetime (15 minutes), which otherwise closes the window on its own. Sent whenever a
-    /// plugin starts installing or uninstalling, so a long chain of dependencies keeps its window until done.
+    /// Holds the window of the current user while the editor restarts and hands the user over to the next editor
+    /// process. Until then no new operation shows a window, and the held user sends nothing more.
     /// </summary>
-    public static void Heartbeat()
+    internal static void PrepareForRestart()
     {
-        Send("HEARTBEAT");
+        lock (Gate)
+        {
+            _restartPending = true;
+            var user = Current.Value is { Ended: false, Held: false } current ? current : Users.LastOrDefault(u => !u.Held);
+            if (user is null) return;
+            Text(user, "Restarting the editor...");
+            Send(user, $"HOLD {RestartHoldSeconds}");
+            if (_helper is null) return;
+            try
+            {
+                _helper.HandOver(user.Id);
+                user.Held = true;
+            }
+            catch (Exception)
+            {
+                Lost();
+            }
+        }
     }
 
-    private static void Send(string command)
+    public static Scope Begin(string text)
     {
-        if (_helper is null)
+        var previous = Current.Value;
+        User? user;
+        lock (Gate)
         {
-            return;
+            user = previous is { Ended: false } ? previous : null;
+            if (user is null && !_restartPending)
+            {
+                user = _resumed ?? new User(Guid.NewGuid().ToString("N"));
+                _resumed = null;
+                if (Users.Count == 0) First();
+                Users.Add(user);
+            }
+
+            if (user is not null) user.Depth++;
         }
 
-        try
+        var scope = new Scope(user, previous);
+        if (user is not null) Current.Value = user;
+        scope.SetText(text);
+        return scope;
+    }
+
+    /// <summary>Sets the text of the current scope's user; does nothing outside a scope.</summary>
+    public static void SetText(string text)
+    {
+        lock (Gate) Text(Current.Value, text);
+    }
+
+    /// <summary>Sends a heartbeat for every active user. Called by the timer, from a thread pool thread.</summary>
+    internal static void SendHeartbeats()
+    {
+        lock (Gate)
         {
-            _helper.Send(command);
-        }
-        catch (Exception)
-        {
-            Stop();
+            foreach (var user in Users.ToArray()) Send(user, "HEARTBEAT");
         }
     }
 
-    private static void Start()
+    /// <summary>Forgets every user and the helper. For tests.</summary>
+    internal static void Reset()
     {
-        try
+        lock (Gate)
         {
-            _helper = Launch();
-        }
-        catch (Exception)
-        {
+            StopHeartbeat();
+            try { _helper?.Dispose(); }
+            catch (Exception) { /* feedback cleanup must not fail */ }
             _helper = null;
+            Users.Clear();
+            _resumed = null;
+            _restartPending = false;
+            _settingsDialog = null;
+            Current.Value = null;
         }
     }
 
-    private static void Stop()
+    private static void First()
+    {
+        try
+        {
+            // Project Settings is editor UI; an operation started on another thread leaves it alone.
+            if (IsEditorThread()) _settingsDialog = HideSettingsDialog();
+        }
+        catch (Exception)
+        {
+            // Editor UI feedback must not prevent plugin operations.
+            _settingsDialog = null;
+        }
+
+        _mayStart = true;
+        Connect();
+        try { _heartbeat ??= StartHeartbeat(SendHeartbeats); }
+        catch (Exception) { _heartbeat = null; }
+    }
+
+    private static void Last()
+    {
+        StopHeartbeat();
+        try { _helper?.Dispose(); }
+        catch (Exception) { /* the helper keeps running for other editors */ }
+        _helper = null;
+        var settingsDialog = _settingsDialog;
+        _settingsDialog = null;
+        if (settingsDialog is null) return;
+        try
+        {
+            if (IsEditorThread()) settingsDialog.Dispose();
+            else EGlobal.Post(settingsDialog.Dispose);
+        }
+        catch (Exception)
+        {
+            // Restoring editor UI must not change the plugin operation's result.
+        }
+    }
+
+    private static void StopHeartbeat()
+    {
+        lock (Gate)
+        {
+            try { _heartbeat?.Dispose(); }
+            catch (Exception) { /* already stopped */ }
+            _heartbeat = null;
+        }
+    }
+
+    /// <summary>Connects when there is no helper and one may be started; then repeats every user's text.</summary>
+    private static void Connect()
+    {
+        if (_helper is not null || !_mayStart) return;
+        _mayStart = false;
+        try { _helper = Launch(); }
+        catch (Exception) { _helper = null; }
+        foreach (var user in Users.ToArray())
+        {
+            if (user.Text is { } text) Send(user, Encode(text));
+        }
+    }
+
+    private static void Text(User? user, string text)
+    {
+        if (user is null || user.Ended) return;
+        user.Text = text;
+        Send(user, Encode(text));
+    }
+
+    private static string Encode(string text) => "TEXT " + Convert.ToBase64String(Encoding.UTF8.GetBytes(text));
+
+    private static void Send(User user, string command)
+    {
+        if (user.Held) return;
+        // A helper that may be replaced is replaced right away, and the command goes to the new one.
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            Connect();
+            if (_helper is null) return;
+            try
+            {
+                _helper.Send(user.Id, command);
+                return;
+            }
+            catch (Exception)
+            {
+                Lost();
+            }
+        }
+    }
+
+    private static void Lost()
     {
         var helper = _helper;
         _helper = null;
         try
         {
+            _mayStart = helper?.Age >= ReplaceAfter;
             helper?.Dispose();
         }
         catch (Exception)
@@ -144,63 +297,112 @@ internal static class ActivationProgress
         }
     }
 
-    private sealed class Scope : IDisposable
+    private static void End(User user, User? previous)
     {
-        private bool _disposed;
+        if (Current.Value == user) Current.Value = previous;
+        lock (Gate)
+        {
+            if (--user.Depth > 0) return;
+            Send(user, "END");
+            user.Ended = true;
+            Users.Remove(user);
+            if (Users.Count == 0) Last();
+        }
+    }
+
+    /// <summary>One operation using the window: its id, text and nesting depth. Guarded by <see cref="Gate"/>.</summary>
+    internal sealed class User(string id)
+    {
+        public string Id { get; } = id;
+        public int Depth { get; set; }
+        public string? Text { get; set; }
+        public bool Ended { get; set; }
+
+        /// <summary>Handed over to the next editor process: sends nothing, so the helper keeps its hold.</summary>
+        public bool Held { get; set; }
+    }
+
+    /// <summary>A progress scope; disposing the outermost scope of a user ends it.</summary>
+    public sealed class Scope : IDisposable
+    {
+        private readonly User? _user;
+        private readonly User? _previous;
+        private int _disposed;
+
+        internal Scope(User? user, User? previous)
+        {
+            _user = user;
+            _previous = previous;
+        }
+
+        /// <summary>Sets this scope's text from any thread; ignored once the scope's user has ended.</summary>
+        public void SetText(string text)
+        {
+            lock (Gate) Text(_user, text);
+        }
 
         public void Dispose()
         {
-            if (_disposed)
-            {
-                return;
-            }
-
-            _disposed = true;
-            if (--_depth == 0)
-            {
-                Stop();
-                var settingsDialog = _settingsDialog;
-                _settingsDialog = null;
-                try
-                {
-                    settingsDialog?.Dispose();
-                }
-                catch (Exception)
-                {
-                    // Restoring editor UI must not change the plugin operation's result.
-                }
-            }
+            if (Interlocked.Exchange(ref _disposed, 1) != 0 || _user is null) return;
+            End(_user, _previous);
         }
     }
 }
 
-/// <summary>A running progress helper. Disposing it closes the window and lets the next operation reuse it.</summary>
+/// <summary>A running progress helper that this editor writes to.</summary>
 internal interface IProgressHelper : IDisposable
 {
-    /// <summary>Sends one protocol line. Throws when the helper is gone.</summary>
-    void Send(string command);
-    /// <summary>Persists the session and releases this host's handles without closing the window.</summary>
-    void DetachForRestart();
+    /// <summary>How long the helper process has been running.</summary>
+    TimeSpan Age { get; }
+
+    /// <summary>Sends one protocol command of a user. Throws when the helper is gone.</summary>
+    void Send(string user, string command);
+
+    /// <summary>Records the user so that the editor a restart starts can continue it.</summary>
+    void HandOver(string user);
 }
 
 /// <summary>The published helper, run as <c>dotnet ActivationProgress.dll</c>.</summary>
 internal static class ProcessProgressHelper
 {
+    private static string? _directory;
+    private static string? _handoff;
+
+    /// <summary>
+    /// Connects to the helper all editors share, or starts it. Godot's display server and editor paths are only used on
+    /// the editor thread: another thread connects to a running helper, if the editor thread already found where.
+    /// </summary>
     public static IProgressHelper? TryStart(string resourcePath)
     {
-        if (!HasDesktop())
+        var editorThread = ActivationProgress.IsEditorThread();
+        if (editorThread && !HasDesktop())
         {
             return null;
         }
 
         var path = ProjectSettings.GlobalizePath(resourcePath);
-        if (!File.Exists(path))
+        if (!File.Exists(path) || SharedDirectory() is not { } directory)
         {
             return null;
         }
 
-        var directory = ProjectSettings.GlobalizePath(ActivationProgress.SessionPath);
-        return ProgressSession.Acquire(directory, () => ProgressSession.Start(path, directory, PlacementArguments()));
+        var handoff = _handoff ??= ProjectSettings.GlobalizePath(ActivationProgress.HandoffPath);
+        return ProgressSession.Acquire(directory, handoff,
+            () => editorThread ? ProgressSession.Start(path, directory, handoff, PlacementArguments()) : null);
+    }
+
+    /// <summary>
+    /// Godot's per-user editor data directory, shared by all editors of the OS user (unless self-contained). Null when
+    /// first asked outside the editor thread.
+    /// </summary>
+    internal static string? SharedDirectory()
+    {
+        if (_directory is null && ActivationProgress.IsEditorThread())
+        {
+            _directory = Path.Combine(EditorInterface.Singleton.GetEditorPaths().GetDataDir(), "eplugin", "progress");
+        }
+
+        return _directory;
     }
 
     private static bool HasDesktop()

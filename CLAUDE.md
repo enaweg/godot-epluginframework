@@ -247,7 +247,7 @@ NuGet, project or directory and the bridge kept no old files (`UpdateApplier.Cha
 `restart_policy=always` keeps them. Engine
 metadata prevents scheduled checks and early recovery counters from repeating after assembly reloads.
 `EPluginPlugin` invokes `UpdateRecovery` before touching EGlobal; this reader is deliberately independent of
-EGlobal and recipe execution. Self-update closes ActivationProgress before the folder swap and always rolls
+EGlobal and recipe execution. Self-update holds the ActivationProgress window across the folder swap and always rolls
 back failures. Two unhealthy starts restore backups, project settings and directory visibility, force a build,
 then clear the marker. A health marker is written only after verification. Keep journal readers additive and
 backward compatible across framework versions; unknown/newer schemas need manual repair.
@@ -277,12 +277,19 @@ recognizes disabled ePlugins by the `ScriptPathAttribute` of their compiled type
 (rows, update selection, BBCode details) and unit-tested. New user-facing actions belong in this dialog, not in
 additional Tools menu entries. Long-running actions (enabling/disabling, Retry failed, Check for updates,
 downloading and installing) show their progress through an `ActivationProgress` scope, not through the dialog: the
-dialog has no progress bar and only puts the outcome in its status line. An async scope reports from background threads
-via `CallDeferred`, because `ActivationProgress` is editor-thread only. A project has at most one progress helper
-(`ProgressSession`): next to its command file in `.godot/eplugin/progress` a `<token>.owned` file names the editor using
-it and `<token>.idle` marks it closed. `Acquire` reuses an idle helper (its window reopens with the next `TEXT`) or one
-whose editor is this process (lost to an assembly reload) or no longer runs, and shows no window while another running
-editor owns it. The helper claims `.idle` itself before it exits; both claims are atomic renames, so only one wins.
+dialog has no progress bar and only puts the outcome in its status line.
+
+`ActivationProgress` is thread-safe. A `Begin` outside any scope starts a *user* of the progress window; nested scopes,
+Godot callbacks inside it and its async flow (tracked with an `AsyncLocal`) belong to the same user, and a
+`Scope.SetText` may come from any thread (downloads report that way). Only `Begin` on the editor thread hides Project
+Settings, and only the editor thread starts a helper, because both need Godot APIs. While users are active a
+`System.Threading.Timer` sends a heartbeat for each every 5 s, also while the main thread is blocked; the assembly's
+`Unloading` hook stops it (a running timer would keep the collectible assembly loaded). The helper (`src/activation-progress`,
+protocol in its `Commands`) shows the newest text of the active users, closes the window after 15 s without a message
+from any of them (a user's `HOLD` extends that once, used for restarts) and exits 15 minutes after the last message.
+All editors of the OS user share one helper: `ProgressSession` publishes it as `<token>.helper` in Godot's editor data
+directory (`eplugin/progress`) and connects to the oldest running one of its `Protocol`; raise `Protocol` whenever the
+command protocol changes. The helper runs with redirected standard streams, so it never keeps the editor's output open.
 
 ### Plugin licenses
 

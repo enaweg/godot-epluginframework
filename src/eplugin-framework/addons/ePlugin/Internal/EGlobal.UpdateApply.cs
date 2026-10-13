@@ -88,7 +88,6 @@ internal sealed partial class EGlobal
             {
                 if (groups.Count == 1) return;
                 ActivationProgress.SetText($"Updating {GroupNames(group)} ({index + 1} of {groups.Count})...");
-                ActivationProgress.Heartbeat();
             },
             result =>
             {

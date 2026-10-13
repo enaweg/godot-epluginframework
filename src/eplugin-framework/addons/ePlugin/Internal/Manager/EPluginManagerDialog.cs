@@ -659,16 +659,14 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
                 (IReadOnlyList<ValidatedPackage> Packages, IReadOnlyList<RefusedPackage> Refused, string Directory) staged;
                 using (var progress = ActivationProgress.Begin(text))
                 {
-                    // Reported from the download thread; a report arriving after the scope ended must not relabel another operation.
-                    var active = true; var shown = -1;
-                    var relay = new InlineProgress(value => EGlobal.Post(() =>
+                    // Reported from the download thread; the scope ignores a report that arrives after it ended.
+                    var shown = -1;
+                    var relay = new InlineProgress(value =>
                     {
                         var percent = (int)(value * 100);
-                        if (!active || percent == shown) return;
-                        shown = percent; ActivationProgress.SetText($"{text} {percent}%");
-                    }));
-                    try { staged = await _global.StageUpdatesAsync(batch, relay, _cancel.Token, allowDowngrade, allowReinstall); }
-                    finally { active = false; }
+                        if (Interlocked.Exchange(ref shown, percent) != percent) progress.SetText($"{text} {percent}%");
+                    });
+                    staged = await _global.StageUpdatesAsync(batch, relay, _cancel.Token, allowDowngrade, allowReinstall);
                 }
                 _staged = staged.Packages; _refused = staged.Refused; _directory = staged.Directory;
                 if (_lifetime.IsCancellationRequested || !GodotObject.IsInstanceValid(this) || !IsInsideTree()) { ClearStaging(); return; }

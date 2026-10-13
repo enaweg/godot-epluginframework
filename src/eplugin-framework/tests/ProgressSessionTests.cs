@@ -1,11 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 using Enaweg.Plugin.Internal;
 using GdUnit4;
 using Godot;
@@ -15,17 +12,21 @@ namespace Enaweg.Plugin.Tests;
 [TestSuite]
 public class ProgressSessionTests
 {
-    private static readonly ProcessIdentity Editor = new(1_000_000, 7);
-    private static readonly ProcessIdentity OtherEditor = new(1_000_001, 7);
-    private static readonly ProcessIdentity Helper = new(1_000_002, 7);
+    private const string User = "0123456789abcdef0123456789abcdef";
     private readonly HashSet<ProcessIdentity> _running = [];
     private string _root = null!;
+    private string _shared = null!;
+    private string _handoff = null!;
     private int _started;
 
     [BeforeTest]
     public void Setup()
     {
         _root = Path.Combine(Path.GetTempPath(), "eplugin-progress-" + Guid.NewGuid().ToString("N"));
+        _shared = Path.Combine(_root, "shared");
+        _handoff = Path.Combine(_root, "project", "handoff");
+        Directory.CreateDirectory(_shared);
+        Directory.CreateDirectory(Path.GetDirectoryName(_handoff)!);
         _running.Clear();
         _started = 0;
     }
@@ -34,8 +35,7 @@ public class ProgressSessionTests
     public void Cleanup()
     {
         ProgressSession.IsRunning = ProcessIdentity.IsRunning;
-        ProgressSession.Self = ProcessIdentity.Current();
-        // A closed helper still plays its closing animation, and Windows keeps its runtime copy locked until it exits.
+        // Windows keeps the helper's runtime copy locked until it exits.
         for (var attempt = 0; Directory.Exists(_root); attempt++)
         {
             try { Directory.Delete(_root, true); }
@@ -45,192 +45,126 @@ public class ProgressSessionTests
 
     [TestCase]
     [RequireGodotRuntime]
-    public void SameProcessSurvivesAddonReplacementHandoffsAndTheNextOperation()
+    public void EditorsShareOneHelperThatOutlivesRestartsAndExitsAfterItsLifetime()
     {
         var addon = Path.Combine(_root, "addon");
         Directory.CreateDirectory(addon);
         foreach (var name in new[] { "ActivationProgress.dll", "ActivationProgress.runtimeconfig.json" })
             File.Copy(ProjectSettings.GlobalizePath("res://addons/ePlugin/progress/" + name), Path.Combine(addon, name));
-        var directory = Path.Combine(_root, "session");
-        IProgressHelper? session = ProgressSession.Start(Path.Combine(addon, "ActivationProgress.dll"), directory, []);
+        var session = ProgressSession.Start(Path.Combine(addon, "ActivationProgress.dll"), _shared, _handoff,
+            ["--max-lifetime-seconds", "3"]);
         Assertions.AssertObject(session).IsNotNull();
-        try
+        session!.Send(User, "TEXT V29ya2luZy4uLg==");
+        // Another editor connects to the running helper instead of starting a second one.
+        using (var other = ProgressSession.Acquire(_shared, _handoff, () => throw new InvalidOperationException("A second helper was started.")))
         {
-            session!.Send("HEARTBEAT");
-            session.DetachForRestart();
-            session = null;
-            var state = Directory.GetFiles(directory, "*.owned").Single();
-            var original = File.ReadAllLines(state);
-            // The running helper must no longer lock any file in the framework's addon directory.
-            Directory.Delete(addon, true);
-            for (var restart = 0; restart < 2; restart++)
-            {
-                var fields = File.ReadAllLines(state);
-                // Linux reports slightly different start timestamps from different editor hosts.
-                fields[1] = (long.Parse(fields[1], CultureInfo.InvariantCulture) + TimeSpan.TicksPerMillisecond * 10)
-                    .ToString(CultureInfo.InvariantCulture);
-                File.WriteAllLines(state, fields);
-                session = ProgressSession.TryResume(directory);
-                Assertions.AssertObject(session).IsNotNull();
-                session!.Send("TEXT V29ya2luZy4uLg==");
-                session.DetachForRestart();
-                session = null;
-                Assertions.AssertString(File.ReadAllLines(state)[0]).IsEqual(original[0]);
-            }
-
-            session = ProgressSession.TryResume(directory);
-            Assertions.AssertObject(session).IsNotNull();
-            session!.Dispose();
-            // The next operation reopens the closing window instead of starting a second helper.
-            session = ProgressSession.Acquire(directory, () => throw new InvalidOperationException("A second helper was started."));
-            Assertions.AssertObject(session).IsNotNull();
-            session!.Send("TEXT V29ya2luZy4uLg==");
-            session.Dispose();
-            session = null;
-            // Unused, the helper exits on its own once its window is hidden, and removes its files.
-            var deadline = DateTime.UtcNow.AddSeconds(20);
-            while (Directory.GetFiles(directory).Length > 0 && DateTime.UtcNow < deadline) System.Threading.Thread.Sleep(100);
-            Assertions.AssertThat(Directory.GetFiles(directory).Select(Path.GetFileName).ToArray()).IsEmpty();
+            other!.Send("fedcba9876543210fedcba9876543210", "TEXT Q2hlY2tpbmcuLi4=");
+            other.Send("fedcba9876543210fedcba9876543210", "END");
         }
-        finally
-        {
-            session?.Dispose();
-        }
-    }
 
-    [TestCase]
-    public void ClosedHelperIsReusedInsteadOfStartingAnother()
-    {
-        Simulate(Editor, Helper);
-        var commands = WriteState("idle", Helper, OtherEditor, false);
-        var session = ProgressSession.Acquire(_root, Start);
-        Assertions.AssertObject(session).IsNotNull();
-        Assertions.AssertInt(_started).IsEqual(0);
-        Assertions.AssertBool(File.Exists(StatePath("idle"))).IsFalse();
-        Assertions.AssertThat(File.ReadAllLines(StatePath("owned"))).ContainsExactly(Lines(Helper, Editor, false));
-        session!.Send("TEXT V29ya2luZy4uLg==");
+        session.Send(User, "HOLD 300");
+        session.HandOver(User);
         session.Dispose();
-        // Closed again, the helper can be reused by the next operation, or claim the file to exit.
-        Assertions.AssertBool(File.Exists(StatePath("owned"))).IsFalse();
-        Assertions.AssertBool(File.Exists(StatePath("idle"))).IsTrue();
-        Assertions.AssertThat(File.ReadAllLines(commands)).ContainsExactly("HEARTBEAT", "TEXT V29ya2luZy4uLg==", "CLOSE");
+        // The running helper must no longer lock any file in the framework's addon directory.
+        Directory.Delete(addon, true);
+        var resumed = ProgressSession.TryResume(_handoff, _shared);
+        Assertions.AssertObject(resumed).IsNotNull();
+        Assertions.AssertString(resumed!.Value.User).IsEqual(User);
+        Assertions.AssertBool(File.Exists(_handoff)).IsFalse();
+        resumed.Value.Session.Send(User, "END");
+        resumed.Value.Session.Dispose();
+
+        // Its lifetime counts from the last message; then it withdraws its record and removes its files.
+        var deadline = DateTime.UtcNow.AddSeconds(20);
+        while (Directory.GetFiles(_shared).Length > 0 && DateTime.UtcNow < deadline) System.Threading.Thread.Sleep(100);
+        Assertions.AssertThat(Directory.GetFiles(_shared).Select(Path.GetFileName).ToArray()).IsEmpty();
     }
 
     [TestCase]
-    public void HelperLostToAnAssemblyReloadIsTakenOver()
+    public void EditorsConnectToTheOldestRunningHelperOfTheirProtocol()
     {
-        Simulate(Editor, Helper);
-        WriteState("owned", Helper, Editor, false);
-        Assertions.AssertObject(ProgressSession.Acquire(_root, Start)).IsNotNull();
+        var oldest = Helper("oldest", new ProcessIdentity(1_000_001, 10));
+        Helper("newer", new ProcessIdentity(1_000_002, 20));
+        Helper("other-protocol", new ProcessIdentity(1_000_003, 5), protocol: "1");
+        Helper("exited", new ProcessIdentity(1_000_004, 1), running: false);
+        using (var session = ProgressSession.Acquire(_shared, _handoff, Start))
+        {
+            session!.Send(User, "HEARTBEAT");
+        }
+
         Assertions.AssertInt(_started).IsEqual(0);
+        Assertions.AssertThat(File.ReadAllLines(oldest)).ContainsExactly(User + " HEARTBEAT");
+        // A helper of another framework version is left alone; the files of one that exited are removed.
+        Assertions.AssertBool(File.Exists(PathOf("other-protocol", ".helper"))).IsTrue();
+        Assertions.AssertBool(File.Exists(PathOf("exited", ".helper"))).IsFalse();
+        Assertions.AssertBool(File.Exists(PathOf("exited", ".commands"))).IsFalse();
     }
 
     [TestCase]
-    public void RestartHandoffThatNeverRestartedIsTakenOverAfterAReload()
+    public void HelperIsStartedWhenNoneRuns()
     {
-        Simulate(Editor, Helper);
-        WriteState("owned", Helper, Editor, true);
-        Assertions.AssertObject(ProgressSession.Acquire(_root, Start)).IsNotNull();
-        Assertions.AssertInt(_started).IsEqual(0);
-        Assertions.AssertThat(File.ReadAllLines(StatePath("owned"))).ContainsExactly(Lines(Helper, Editor, false));
-    }
-
-    [TestCase]
-    public void HelperOfAnEditorThatEndedIsTakenOver()
-    {
-        Simulate(Editor, Helper);
-        WriteState("owned", Helper, OtherEditor, false);
-        Assertions.AssertObject(ProgressSession.Acquire(_root, Start)).IsNotNull();
-        Assertions.AssertInt(_started).IsEqual(0);
-        Assertions.AssertThat(File.ReadAllLines(StatePath("owned"))).ContainsExactly(Lines(Helper, Editor, false));
-    }
-
-    [TestCase]
-    public void WindowOfAnotherRunningEditorIsLeftAlone()
-    {
-        Simulate(Editor, OtherEditor, Helper);
-        var commands = WriteState("owned", Helper, OtherEditor, false);
-        Assertions.AssertObject(ProgressSession.Acquire(_root, Start)).IsNull();
-        Assertions.AssertInt(_started).IsEqual(0);
-        Assertions.AssertThat(File.ReadAllLines(StatePath("owned"))).ContainsExactly(Lines(Helper, OtherEditor, false));
-        Assertions.AssertString(File.ReadAllText(commands)).IsEmpty();
-    }
-
-    [TestCase]
-    public void ExitedHelperIsDiscardedAndAnotherStarted()
-    {
-        Simulate(Editor);
-        WriteState("idle", Helper, Editor, false);
-        WriteState("owned", new ProcessIdentity(1_000_011, 7), Editor, false, "other");
-        Assertions.AssertObject(ProgressSession.Acquire(_root, Start)).IsNull();
+        Helper("exited", new ProcessIdentity(1_000_004, 1), running: false);
+        File.WriteAllText(PathOf("malformed", ".helper"), "invalid");
+        Assertions.AssertObject(ProgressSession.Acquire(_shared, _handoff, Start)).IsNull();
         Assertions.AssertInt(_started).IsEqual(1);
-        Assertions.AssertThat(Directory.GetFiles(_root)).IsEmpty();
     }
 
     [TestCase]
-    public void MalformedStateIsIgnored()
+    public void SendFailsOnceTheHelperExited()
     {
-        Simulate(Editor, Helper);
-        Directory.CreateDirectory(_root);
-        File.WriteAllText(StatePath("owned"), "invalid");
-        File.WriteAllText(StatePath("commands"), "");
-        Assertions.AssertObject(ProgressSession.Acquire(_root, Start)).IsNull();
-        Assertions.AssertInt(_started).IsEqual(1);
-        Assertions.AssertObject(ProgressSession.TryResume(_root)).IsNull();
+        var helper = new ProcessIdentity(1_000_001, 10);
+        Helper("helper", helper);
+        using var session = ProgressSession.Acquire(_shared, _handoff, Start);
+        _running.Remove(helper);
+        Assertions.AssertThrown(() => session!.Send(User, "HEARTBEAT")).IsInstanceOf<IOException>();
     }
 
     [TestCase]
-    public void StartupResumesTheRestartHandoffAndClosesAbandonedWindows()
+    public void RestartedEditorContinuesTheHandedOverUserOnce()
     {
-        Simulate(Editor, OtherEditor, Helper);
-        var abandoned = new ProcessIdentity(1_000_011, 7);
-        _running.Add(abandoned);
-        // The editor that restarted may still be shutting down.
-        var handedOver = WriteState("owned", Helper, OtherEditor, true);
-        var crashed = WriteState("owned", abandoned, new ProcessIdentity(1_000_010, 7), false, "crashed");
-        var session = ProgressSession.TryResume(_root);
-        Assertions.AssertObject(session).IsNotNull();
-        Assertions.AssertThat(File.ReadAllLines(StatePath("owned"))).ContainsExactly(Lines(Helper, Editor, false));
-        Assertions.AssertThat(File.ReadAllLines(handedOver)).ContainsExactly("HEARTBEAT");
-        Assertions.AssertThat(File.ReadAllLines(crashed)).ContainsExactly("HEARTBEAT", "CLOSE");
-        Assertions.AssertBool(File.Exists(StatePath("idle", "crashed"))).IsTrue();
-        session!.Dispose();
+        var commands = Helper("helper", new ProcessIdentity(1_000_001, 10));
+        using (var session = ProgressSession.Acquire(_shared, _handoff, Start))
+        {
+            session!.HandOver(User);
+        }
+
+        var resumed = ProgressSession.TryResume(_handoff, _shared);
+        Assertions.AssertObject(resumed).IsNotNull();
+        Assertions.AssertString(resumed!.Value.User).IsEqual(User);
+        resumed.Value.Session.Send(User, "HEARTBEAT");
+        resumed.Value.Session.Dispose();
+        Assertions.AssertThat(File.ReadAllLines(commands)).ContainsExactly(User + " HEARTBEAT");
+        Assertions.AssertObject(ProgressSession.TryResume(_handoff, _shared)).IsNull();
     }
 
     [TestCase]
-    public void RestartMarkerOfEarlierVersionsIsResumed()
+    public void HandoffOfAHelperThatExitedIsDropped()
     {
-        Simulate(Editor, Helper);
-        Directory.CreateDirectory(_root);
-        File.WriteAllText(StatePath("commands"), "");
-        File.WriteAllLines(Path.Combine(_root, "restart"),
-            [Token(), Helper.Id.ToString(CultureInfo.InvariantCulture), Helper.StartUtcTicks.ToString(CultureInfo.InvariantCulture)]);
-        Assertions.AssertObject(ProgressSession.TryResume(_root)).IsNotNull();
-        Assertions.AssertBool(File.Exists(Path.Combine(_root, "restart"))).IsFalse();
-        Assertions.AssertThat(File.ReadAllLines(StatePath("owned"))).ContainsExactly(Lines(Helper, Editor, false));
+        var helper = new ProcessIdentity(1_000_001, 10);
+        Helper("helper", helper);
+        using (var session = ProgressSession.Acquire(_shared, _handoff, Start))
+        {
+            session!.HandOver(User);
+        }
+
+        _running.Remove(helper);
+        Assertions.AssertObject(ProgressSession.TryResume(_handoff, _shared)).IsNull();
+        Assertions.AssertBool(File.Exists(_handoff)).IsFalse();
+        File.WriteAllText(_handoff, "invalid");
+        Assertions.AssertObject(ProgressSession.TryResume(_handoff, _shared)).IsNull();
     }
 
     [TestCase]
-    public void StaleMarkerCannotAttachToAnUnrelatedProcess()
+    public void HelperOfAnEarlierVersionIsClosedOnStartup()
     {
-        Directory.CreateDirectory(_root);
-        using var process = Process.GetCurrentProcess();
-        File.WriteAllText(StatePath("commands"), "");
-        File.WriteAllLines(Path.Combine(_root, "restart"),
-        [
-            Token(), process.Id.ToString(CultureInfo.InvariantCulture),
-            (process.StartTime.ToUniversalTime().Ticks - TimeSpan.TicksPerMinute).ToString(CultureInfo.InvariantCulture)
-        ]);
-        Assertions.AssertObject(ProgressSession.TryResume(_root)).IsNull();
-        Assertions.AssertThat(Directory.GetFiles(_root, "*.owned")).IsEmpty();
-    }
-
-    private void Simulate(ProcessIdentity self, params ProcessIdentity[] running)
-    {
-        ProgressSession.Self = self;
-        _running.Add(self);
-        foreach (var identity in running) _running.Add(identity);
-        ProgressSession.IsRunning = _running.Contains;
+        var project = Path.GetDirectoryName(_handoff)!;
+        var token = Guid.NewGuid().ToString("N");
+        var commands = Path.Combine(project, token + ".commands");
+        File.WriteAllText(commands, "");
+        File.WriteAllLines(Path.Combine(project, "restart"), [token, "1000001", "10"]);
+        Assertions.AssertObject(ProgressSession.TryResume(_handoff, _shared)).IsNull();
+        Assertions.AssertThat(File.ReadAllLines(commands)).ContainsExactly("CLOSE");
+        Assertions.AssertBool(File.Exists(Path.Combine(project, "restart"))).IsFalse();
     }
 
     private IProgressHelper? Start()
@@ -239,26 +173,20 @@ public class ProgressSessionTests
         return null;
     }
 
-    /// <summary>A helper's token (32 hex digits), derived from a readable name.</summary>
-    private static string Token(string name = "helper") =>
-        Convert.ToHexString(MD5.HashData(Encoding.UTF8.GetBytes(name))).ToLowerInvariant();
+    private string PathOf(string name, string extension) => Path.Combine(_shared, Token(name) + extension);
 
-    private string StatePath(string extension, string name = "helper") => Path.Combine(_root, Token(name) + "." + extension);
+    private static string Token(string name) =>
+        Convert.ToHexString(System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(name))).ToLowerInvariant();
 
-    /// <summary>Writes a helper's state file and an empty command file, and returns the command file.</summary>
-    private string WriteState(string extension, ProcessIdentity helper, ProcessIdentity owner, bool restart, string name = "helper")
+    /// <summary>Publishes a simulated helper and returns its command file.</summary>
+    private string Helper(string name, ProcessIdentity helper, string protocol = "2", bool running = true)
     {
-        Directory.CreateDirectory(_root);
-        File.WriteAllLines(StatePath(extension, name), Lines(helper, owner, restart));
-        var commands = StatePath("commands", name);
+        if (running) _running.Add(helper);
+        ProgressSession.IsRunning = _running.Contains;
+        File.WriteAllLines(PathOf(name, ".helper"),
+            [protocol, helper.Id.ToString(CultureInfo.InvariantCulture), helper.StartUtcTicks.ToString(CultureInfo.InvariantCulture)]);
+        var commands = PathOf(name, ".commands");
         File.WriteAllText(commands, "");
         return commands;
     }
-
-    private static string[] Lines(ProcessIdentity helper, ProcessIdentity owner, bool restart) =>
-    [
-        helper.Id.ToString(CultureInfo.InvariantCulture), helper.StartUtcTicks.ToString(CultureInfo.InvariantCulture),
-        owner.Id.ToString(CultureInfo.InvariantCulture), owner.StartUtcTicks.ToString(CultureInfo.InvariantCulture),
-        restart ? "1" : "0"
-    ];
 }
