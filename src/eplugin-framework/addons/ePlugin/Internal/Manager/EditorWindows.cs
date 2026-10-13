@@ -72,9 +72,24 @@ internal static class EditorWindows
             return;
         }
 
+        // Godot reparents its progress UI into the active modal window and leaves it there after hiding it.
+        // EditorNode still owns that UI through a raw pointer: freeing it with this window crashes the next scan.
+        // Hide first so this window cannot become the host of another progress task while it waits to be freed.
+        PreserveProgressDialog(window, window.GetTree().Root);
+
         // A native method callable rather than a C# delegate, so it still runs after an assembly reload.
         window.GetTree().CreateTimer(ReleaseDelaySeconds)
             .Connect(SceneTreeTimer.SignalName.Timeout, new Callable(window, Node.MethodName.QueueFree));
+    }
+
+    private static void PreserveProgressDialog(Node parent, Node destination)
+    {
+        foreach (var child in parent.GetChildren(true))
+        {
+            // ProgressDialog is an internal engine class, so its C# wrapper has only its public base type.
+            if (child.GetClass() == "ProgressDialog") child.Reparent(destination);
+            else PreserveProgressDialog(child, destination);
+        }
     }
 
     /// <summary>The logo rendered large and centered on a square, as title bar icons are square.</summary>

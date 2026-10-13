@@ -11,6 +11,33 @@ namespace Enaweg.Plugin.Tests;
 public class PluginManagerViewModelTests
 {
     [TestCase]
+    public void APluginOperationRejectsAnotherClickUntilReloadCreatesANewDialog()
+    {
+        var gate = new PluginOperationGate();
+        Assertions.AssertBool(gate.TryBegin()).IsTrue();
+        Assertions.AssertBool(gate.TryBegin()).IsFalse();
+        gate.Complete(reloadPending: true);
+        Assertions.AssertBool(gate.IsRunning).IsFalse();
+        Assertions.AssertBool(gate.IsAwaitingReload).IsTrue();
+        Assertions.AssertBool(gate.TryBegin()).IsFalse();
+        // A late duplicate completion or a timestamp poll timing out must not reopen the old UI.
+        gate.Complete(reloadPending: false);
+        Assertions.AssertBool(gate.IsBusy).IsTrue();
+        Assertions.AssertBool(new PluginOperationGate().TryBegin()).IsTrue();
+    }
+
+    [TestCase]
+    public void AnOperationThatNeedsNoReloadReleasesTheManager()
+    {
+        var gate = new PluginOperationGate();
+        Assertions.AssertBool(gate.TryBegin()).IsTrue();
+        // Plain plugin toggles, failed builds and declined licenses can finish without a newer assembly.
+        gate.Complete(reloadPending: false);
+        Assertions.AssertBool(gate.IsBusy).IsFalse();
+        Assertions.AssertBool(gate.TryBegin()).IsTrue();
+    }
+
+    [TestCase]
     public void BlockedAndFailedVersionsAreNotPreselected()
     {
         var cache = new UpdateCache(); cache.FailedUpdates["failed"] = [new("2.0", "build failed", DateTimeOffset.UtcNow)];
