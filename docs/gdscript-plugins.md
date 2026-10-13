@@ -76,7 +76,7 @@ Every key below `script` is optional. Leave out what the plugin does not need: w
 
 The [ePlugin Manager](eplugin-manager.md) lists every plugin below `res://addons`, enabled or not. A plugin whose `script` ends in `.gd` has the type *GDScript plugin*. Its details show the author, version, description, license, welcome page, documentation and source links, update site and any earlier failures.
 
-Enabling or disabling it in the manager shows the [progress window](progress-dialog.md) like for an ePlugin, and asks for a required license before the plugin is enabled.
+Enabling or disabling it, in the manager or in **Project Settings > Plugins**, is handled like for an ePlugin: a required [license](#license) is asked for first, ePlugins that require it are disabled with it, and optional recipes that depend on it are installed or removed (see [Using a GDScript plugin from an ePlugin](#using-a-gdscript-plugin-from-an-eplugin)). Longer work shows the [progress window](progress-dialog.md).
 
 ## Updates
 
@@ -149,7 +149,9 @@ license_file="docs/EULA.txt"
 
 The path is relative to the plugin folder. The license is shown as [BBCode](https://docs.godotengine.org/en/stable/tutorials/ui/bbcode_in_richtextlabel.html); plain text works too.
 
-Set `license_required=true` to have users accept the license. When the plugin is enabled in the ePlugin Manager, the license dialog opens first, and declining leaves the plugin disabled. A GDScript plugin enabled directly in **Project Settings > Plugins** is enabled at once, because it does not run ePlugin code: the license is asked for at the next editor start or C# assembly reload, and declining then disables the plugin. Enable it from the manager to be asked beforehand.
+Set `license_required=true` to have users accept the license before the plugin is enabled, from the ePlugin Manager or from **Project Settings > Plugins**. Declining, or closing the dialog, leaves the plugin disabled; accepting enables it.
+
+The manager asks before it enables the plugin. Project Settings enables a GDScript plugin before ePlugin can step in, so the framework disables it again in the next frame and shows the license then. The plugin's `_enable_plugin` and `_disable_plugin` therefore run once before the license is accepted; keep them free of work that should wait for the license.
 
 An acceptance is recorded once per project and stays valid while the license comes from the same file path. To have users accept a changed license, ship it under a new name, such as `LICENSE-2.0.md`. An update that names a new license file, or requires a license for the first time, shows it before installation. See [Plugin licenses](plugin-licenses.md).
 
@@ -169,7 +171,7 @@ Open the [i]My Tool[/i] dock on the right to start.
 [url=https://github.com/owner/my_tool#readme]Documentation[/url]
 ```
 
-Updates never show a welcome page. The page can be read again from the plugin details. See [Plugin welcome pages](plugin-welcome.md).
+A plugin that asks for its license shows its welcome page once the license is accepted. Updates never show a welcome page. The page can be read again from the plugin details. See [Plugin welcome pages](plugin-welcome.md).
 
 ## Documentation and source links
 
@@ -193,10 +195,10 @@ builder.AddOptionalPluginDependency("my_tool", ">1.0", optional => optional
     .AddDirectory($"{this.GetPluginDirectory()}/.my-tool-integration"));
 ```
 
-A GDScript plugin runs no ePlugin code when it is toggled, so two things differ from dependencies between ePlugins:
+A GDScript plugin runs no ePlugin code itself, so the framework watches for it being enabled or disabled, in the ePlugin Manager or in **Project Settings > Plugins**:
 
-- Disabling the GDScript plugin does not disable the ePlugins that require it. Disable those first.
-- Enabling or disabling the GDScript plugin does not apply or remove optional recipes that depend on it. They are evaluated again when an ePlugin is enabled or disabled.
+- Disabling the GDScript plugin also disables the ePlugins that require it, and removes the optional recipes of other ePlugins that depend on it. The project is built once for all of them.
+- Enabling it installs the optional recipes of enabled ePlugins that it satisfies now, so it does not matter whether the ePlugin or the GDScript plugin is enabled first.
 
 Updates of plugins that depend on each other are installed together, also when one of them is a GDScript plugin. See [Create an ePlugin](creating-plugins.md#recipe-resources).
 

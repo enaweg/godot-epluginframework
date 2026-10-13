@@ -49,7 +49,7 @@ The license dialog opens when a plugin with `license_required=true` is enabled f
 - **Accept** enables the plugin.
 - **Decline**, or closing the dialog, leaves the plugin disabled. Nothing is installed.
 
-The plugin shows as disabled in **Project Settings > Plugins** while the dialog is open.
+The plugin shows as disabled in **Project Settings > Plugins** while the dialog is open. A GDScript plugin, or a C# plugin that is not an ePlugin, enabled in Project Settings has already been started by Godot when the framework notices it: the framework disables it again and shows the dialog in the next frame, so the plugin's own enable and disable callbacks run once before the license is accepted.
 
 When enabling a plugin also enables disabled dependencies that ask for a license, all of these licenses are collected into one dialog. The list on the left shows each plugin and whether its license was accepted or declined. **Accept all** accepts every license that is not decided yet. A plugin is enabled only if all the licenses it needs are accepted. Declining a dependency's license leaves the plugin that needs it disabled as well.
 
@@ -63,7 +63,7 @@ A license is accepted once per project. Disabling and enabling the plugin again 
 
 A license stays accepted while it comes from the same place: the same license file path, the same `res://` path set by the recipe, or, for a license text set by the recipe, the same text. The contents of a file are not compared. Plugin authors who want an updated license file to be accepted again should therefore ship it under a new name, such as `LICENSE-2.0.md`.
 
-At startup and after C# assembly reloads, the framework also checks the enabled plugins that require a license. A plugin whose license is not accepted as it is now asks for it again: accepting keeps the plugin enabled, declining disables it. This happens when an update changed the license its recipe sets, when a plain plugin was enabled directly in **Project Settings > Plugins**, or when a plugin was enabled before its acceptance was recorded.
+At startup and after C# assembly reloads, the framework also checks the enabled plugins that require a license. A plugin whose license is not accepted as it is now asks for it again: accepting keeps the plugin enabled, declining disables it. This happens when an update changed the license its recipe sets, or when a plugin was enabled before its acceptance was recorded, for example while ePlugin Framework itself was disabled.
 
 ## Updates
 

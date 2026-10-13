@@ -45,6 +45,8 @@ internal sealed partial class EGlobal
     private readonly Queue<IInitialize> _toInitialize = new();
     private PluginTransition? _transition;
     private bool _transitionFailed;
+    // While above zero the transition stays open, so several plugins toggled one after another are built once.
+    private int _transitionHold;
 
     private sealed class PluginTransition(Guid attemptId)
     {
@@ -89,6 +91,7 @@ internal sealed partial class EGlobal
             slug => _updateJournals?.OwnedSlugs.Contains(slug) == true,
             plugin.Logger);
         RefreshPlainPlugins();
+        InitializePluginToggles();
 
         if (_toCheckEnable.Any())
         {
@@ -508,7 +511,7 @@ internal sealed partial class EGlobal
             return !_transitionFailed;
         }
 
-        if (_toCheckEnable.Count > 0 || _toCheckDisable.Count > 0)
+        if (_toCheckEnable.Count > 0 || _toCheckDisable.Count > 0 || _transitionHold > 0)
         {
             return false;
         }
@@ -662,15 +665,27 @@ internal sealed partial class EGlobal
 
             if (!EditorInterface.Singleton.IsPluginEnabled(dependency.Slug))
             {
-                _toCheckEnable.Push(context);
-                EditorInterface.Singleton.SetPluginEnabled(dependency.Slug, true);
-                return; // EnableEPlugin will be called by newly enabled plugin, stop here
+                if (IsManagedPlugin(dependency.Slug))
+                {
+                    _toCheckEnable.Push(context);
+                    EditorInterface.Singleton.SetPluginEnabled(dependency.Slug, true);
+                    return; // EnableEPlugin will be called by newly enabled plugin, stop here
+                }
+
+                // A plain plugin runs no framework code when it is enabled, so nothing would resume this plugin. It is
+                // enabled right away instead, and so are the optional recipes of other plugins that it satisfies.
+                if (!EnablePlainDependency(context, dependency.Slug))
+                {
+                    return;
+                }
             }
 
             if (dependency.Version is not null)
             {
                 var dependencyContext = _contexts.FirstOrDefault(c => c.Slug == dependency.Slug);
-                if (dependencyContext is null)
+                // a plain plugin enabled in this session has no context
+                var dependencyVersion = dependencyContext?.Metadata?.Version ?? InstalledVersion(dependency.Slug);
+                if (dependencyVersion is null)
                 {
                     context.Logger?.Warn($"Plugin {dependency.Slug} not found!");
                     _toCheckEnable.Push(context);
@@ -678,11 +693,9 @@ internal sealed partial class EGlobal
                     return;
                 }
 
-                var dependencyVersion = dependencyContext.Metadata?.Version ?? "0.0";
-
                 if (MatchesVersion(dependencyVersion, dependency.Version, context.Logger))
                 {
-                    if (dependencyContext.State is EEditorPluginState.Deactivated or EEditorPluginState.Error)
+                    if (dependencyContext?.State is EEditorPluginState.Deactivated or EEditorPluginState.Error)
                     {
                         context.Logger?.Warn(
                             $"Plugin dependency {dependency.Slug} not ready but needed by {context.Slug}!");
@@ -742,7 +755,7 @@ internal sealed partial class EGlobal
             // this plugin may satisfy optional dependencies of plugins that were activated before it
             try
             {
-                ReevaluateOptionalDependencies(context);
+                ReevaluateOptionalDependencies(context.Slug);
             }
             catch (Exception ex)
             {
@@ -768,6 +781,42 @@ internal sealed partial class EGlobal
             }
         }
     }
+
+    /// <summary>
+    /// Enables a plain plugin that <paramref name="context"/> requires. Returns false when it cannot be enabled, which
+    /// fails the activation like a missing dependency.
+    /// </summary>
+    private bool EnablePlainDependency(PluginContext context, string slug)
+    {
+        _contexts.RemoveAll(c => c.Slug == slug && c.Plugin is null);
+        EditorInterface.Singleton.SetPluginEnabled(slug, true);
+        if (!EditorInterface.Singleton.IsPluginEnabled(slug))
+        {
+            context.Logger?.Warn($"Plugin {slug} cannot be enabled!");
+            _toCheckEnable.Push(context);
+            FailAllUncheckedPluginsAndRefresh($"Plugin dependency {slug} cannot be enabled!");
+            return false;
+        }
+
+        // its license was reviewed with the plugin that requires it
+        NotePluginToggle(slug, true);
+        try
+        {
+            ReevaluateOptionalDependencies(slug);
+        }
+        catch (Exception ex)
+        {
+            context.State = EEditorPluginState.Error;
+            context.ErrorDetail = ex;
+            FailTransition("optional_recipe_failed");
+            return false;
+        }
+
+        return true;
+    }
+
+    private static string? InstalledVersion(string slug) =>
+        EditorPluginExtensions.ReadMetadata($"res://addons/{slug}/plugin.cfg")?.Version;
 
     private void FailAllUncheckedPluginsAndRefresh(string reason)
     {
@@ -834,7 +883,8 @@ internal sealed partial class EGlobal
             if (optional.Version is not null)
             {
                 var optionalContext = _contexts.FirstOrDefault(c => c.Slug == optional.Slug);
-                var optionalVersion = optionalContext?.Metadata?.Version ?? "0.0";
+                // a plain plugin enabled in this session has no context
+                var optionalVersion = optionalContext?.Metadata?.Version ?? InstalledVersion(optional.Slug) ?? "0.0";
 
                 if (!MatchesVersion(optionalVersion, optional.Version, context.Logger))
                 {
@@ -852,16 +902,16 @@ internal sealed partial class EGlobal
     }
 
     /// <summary>
-    /// Re-checks the optional dependencies of every other installed plugin now that
-    /// <paramref name="enabledContext"/> is available, and installs the nested recipes that became
+    /// Re-checks the optional dependencies of every other installed plugin now that the plugin
+    /// <paramref name="enabledSlug"/> is available, and installs the nested recipes that became
     /// satisfied. This makes activation order irrelevant: a plugin that was activated before its optional
     /// dependency still picks it up once that dependency is enabled.
     /// </summary>
-    private void ReevaluateOptionalDependencies(PluginContext enabledContext)
+    private void ReevaluateOptionalDependencies(string enabledSlug)
     {
         foreach (var other in _contexts.ToArray())
         {
-            if (other == enabledContext || other.Plugin is null)
+            if (other.Slug == enabledSlug || other.Plugin is null)
             {
                 continue;
             }
@@ -871,7 +921,7 @@ internal sealed partial class EGlobal
                 continue;
             }
 
-            var otherRecipe = GetInstalledOptionalRecipeOrNull(other, enabledContext.Slug);
+            var otherRecipe = GetInstalledOptionalRecipeOrNull(other, enabledSlug);
             if (otherRecipe is null)
             {
                 continue;
@@ -881,7 +931,7 @@ internal sealed partial class EGlobal
             // was already satisfied before this plugin appeared is installed. Applied entries stay in the
             // snapshot even when they are no longer satisfied, so uninstall still reverses them.
             var applied = new List<EEditorPluginRecipe.OptionalPlugin>(other.AppliedOptionalDependencies ??
-                ResolveOptionalRecipes(other, otherRecipe, ignoreSlug: enabledContext.Slug));
+                ResolveOptionalRecipes(other, otherRecipe, ignoreSlug: enabledSlug));
             other.AppliedOptionalDependencies = applied;
 
             foreach (var optional in ResolveOptionalRecipes(other, otherRecipe, requireReady: true))
@@ -892,7 +942,7 @@ internal sealed partial class EGlobal
                 }
 
                 other.Logger?.Log(
-                    $"Installing optional recipe of {other.Slug} that became satisfied by {enabledContext.Slug}.");
+                    $"Installing optional recipe of {other.Slug} that became satisfied by {enabledSlug}.");
 
                 if (!JoinTransition(other, PersistedPluginState.Activated))
                 {
@@ -911,15 +961,15 @@ internal sealed partial class EGlobal
     }
 
     /// <summary>
-    /// Reverses the nested recipes that other installed plugins got because
-    /// <paramref name="disabledContext"/> was available. Without this their code would keep referencing a
+    /// Reverses the nested recipes that other installed plugins got because the plugin
+    /// <paramref name="disabledSlug"/> was available. Without this their code would keep referencing a
     /// plugin that is no longer installed and the project would stop compiling.
     /// </summary>
-    private void UninstallOptionalDependenciesOn(PluginContext disabledContext)
+    private void UninstallOptionalDependenciesOn(string disabledSlug)
     {
         foreach (var other in _contexts.ToArray())
         {
-            if (other == disabledContext || other.Plugin is null)
+            if (other.Slug == disabledSlug || other.Plugin is null)
             {
                 continue;
             }
@@ -929,7 +979,7 @@ internal sealed partial class EGlobal
                 continue;
             }
 
-            var otherRecipe = GetInstalledOptionalRecipeOrNull(other, disabledContext.Slug);
+            var otherRecipe = GetInstalledOptionalRecipeOrNull(other, disabledSlug);
             if (otherRecipe is null)
             {
                 continue;
@@ -938,13 +988,13 @@ internal sealed partial class EGlobal
             // without a snapshot (the context was rebuilt after an assembly reload) reconstruct what was
             // installed while the plugin being disabled was still available.
             var applied = other.AppliedOptionalDependencies ??
-                          ResolveOptionalRecipes(other, otherRecipe, assumeEnabledSlug: disabledContext.Slug);
+                          ResolveOptionalRecipes(other, otherRecipe, assumeEnabledSlug: disabledSlug);
             other.AppliedOptionalDependencies = applied;
 
-            foreach (var optional in applied.Where(o => o.Slug == disabledContext.Slug).ToArray())
+            foreach (var optional in applied.Where(o => o.Slug == disabledSlug).ToArray())
             {
                 other.Logger?.Log(
-                    $"Removing optional recipe of {other.Slug} that depended on {disabledContext.Slug}.");
+                    $"Removing optional recipe of {other.Slug} that depended on {disabledSlug}.");
 
                 if (!JoinTransition(other, PersistedPluginState.Activated))
                 {
@@ -1146,7 +1196,7 @@ internal sealed partial class EGlobal
             UninstallEPlugin(context, context.Builder.PluginRecipe);
 
             // other plugins may have installed code that depends on this one via an optional dependency
-            UninstallOptionalDependenciesOn(context);
+            UninstallOptionalDependenciesOn(context.Slug);
         }
         catch (Exception ex)
         {

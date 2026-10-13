@@ -67,6 +67,9 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         }
 
         EGlobal.RunPosted();
+        // Plain plugins enabled or disabled in Project Settings run no framework code; their licenses, dependants and
+        // optional recipes are handled here, before the dialogs below look at them.
+        if (EGlobal.Instance.IsValid()) EGlobal.Instance.ObservePluginToggles();
 
         ReopenManager();
         ShowLicenseReview();
@@ -144,6 +147,8 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
     {
         RemoveManagerUi();
         EGlobal.Instance.RecordFrameworkDisabled(this);
+        // plugins toggled while the framework is disabled are not handled when it is enabled again
+        EGlobal.ForgetPluginToggles();
 
         base._DisablePlugin();
     }
