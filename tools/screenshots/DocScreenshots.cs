@@ -178,8 +178,9 @@ public partial class DocScreenshots : Node
         using (ActivationProgress.Begin("Enabling Sample Dependant Plugin..."))
         {
             ActivationProgress.SetText("Activating Sample Dependant Plugin...");
-            // The helper is a separate process that shows its window after a short delay.
-            await Seconds(3);
+            // The helper is a separate process that shows its window after a short delay, then plays its opening
+            // (about 3 s) before the label and progress bar are fully visible.
+            await Seconds(6);
             Capture("activation-progress", "", "--title", "ePlugin Framework");
         }
     }
