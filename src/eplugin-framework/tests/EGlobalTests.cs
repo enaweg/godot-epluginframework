@@ -119,6 +119,45 @@ public class EGlobalTests
     }
 
     [TestCase]
+    public void HeldTransitionStaysOpenUntilReleased()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "eplugin-hold-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new PluginStateStore(Path.Combine(directory, "state.json"), new NullLogger());
+            store.Load();
+            store.TryCreateBaseline([]);
+            var global = (EGlobal)Activator.CreateInstance(typeof(EGlobal), nonPublic: true)!;
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            typeof(EGlobal).GetField("_stateStore", flags)!.SetValue(global, store);
+            var hold = typeof(EGlobal).GetField("_transitionHold", flags)!;
+            var finish = typeof(EGlobal).GetMethod("FinishTransition", flags)!;
+            var dependant = new PluginContext(null, CreatePluginBase(), new NullLogger())
+            {
+                Slug = "dependant", Metadata = new EEditorPluginMetadata { Version = "1.0.0" },
+                State = EEditorPluginState.Activated
+            };
+
+            // A plain plugin was disabled: its dependant is disabled while further plugins may still join.
+            hold.SetValue(global, 1);
+            typeof(EGlobal).GetMethod("JoinTransition", flags)!.Invoke(global,
+                [dependant, PersistedPluginState.Deactivated, false]);
+            dependant.State = EEditorPluginState.Deactivated;
+            Assertions.AssertBool((bool)finish.Invoke(global, [])!).IsFalse();
+            Assertions.AssertString(store.GetLocal("dependant")!.Reason).IsEqual("attempt_in_progress");
+
+            hold.SetValue(global, 0);
+            Assertions.AssertBool((bool)finish.Invoke(global, [])!).IsTrue();
+            Assertions.AssertObject(store.GetLocal("dependant")).IsNull();
+            Assertions.AssertObject(store.GetShared("dependant")!.State).IsEqual(PersistedPluginState.Deactivated);
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+        }
+    }
+
+    [TestCase]
     public void BaselineIncludesPlainContextsAndExcludesBlockedAndInvalidVersions()
     {
         var directory = Path.Combine(Path.GetTempPath(), "eplugin-baseline-" + Guid.NewGuid().ToString("N"));
