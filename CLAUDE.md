@@ -281,15 +281,38 @@ dialog has no progress bar and only puts the outcome in its status line.
 
 `ActivationProgress` is thread-safe. A `Begin` outside any scope starts a *user* of the progress window; nested scopes,
 Godot callbacks inside it and its async flow (tracked with an `AsyncLocal`) belong to the same user, and a
-`Scope.SetText` may come from any thread (downloads report that way). Only `Begin` on the editor thread hides Project
-Settings, and only the editor thread starts a helper, because both need Godot APIs. While users are active a
+`Scope.SetText` may come from any thread (downloads report that way). Internal `Begin` calls request hiding Project
+Settings once per active progress lifetime, on the editor thread; public scopes leave it visible. A lifecycle scope
+can still hide it when public progress is already active. Only the editor thread starts a helper, because both UI
+operations need Godot APIs. While users are active a
 `System.Threading.Timer` sends a heartbeat for each every 5 s, also while the main thread is blocked; the assembly's
 `Unloading` hook stops it (a running timer would keep the collectible assembly loaded). The helper (`src/activation-progress`,
 protocol in its `Commands`) shows the newest text of the active users, closes the window after 15 s without a message
 from any of them (a user's `HOLD` extends that once, used for restarts) and exits 15 minutes after the last message.
-All editors of the OS user share one helper: `ProgressSession` publishes it as `<token>.helper` in Godot's editor data
-directory (`eplugin/progress`) and connects to the oldest running one of its `Protocol`; raise `Protocol` whenever the
-command protocol changes. The helper runs with redirected standard streams, so it never keeps the editor's output open.
+Editors of the OS user using the same `ProgressSession.Protocol` share one helper: it is published as
+`<token>.helper` in Godot's editor data directory (`eplugin/progress`), next to `<token>.commands`. Editors connect to
+the oldest running compatible helper whose command file they can open; missing or inaccessible command files are
+skipped. Raise `Protocol` whenever the command protocol or transport coordination changes. Protocol 3 requires every
+writer to acquire the helper's named mutex (`eplugin-progress-<token>`, with a 100 ms wait limit), seek to the end,
+and write a complete command without buffering before releasing it. `FileMode.Append` on a persistent stream alone
+can overwrite another editor's commands. Older writers use a separate helper. The helper runs with redirected
+standard streams, so it never keeps the editor's output open.
+
+Progress feedback is best effort: launch, send, handoff and cleanup failures do not fail plugin work. A helper lost
+before it is 30 s old is retried only after all current users end and another operation begins. An older helper may
+be replaced immediately, replaying the active users' text. Recovery uses at most two connection/send attempts per
+command; replay sends directly instead of recursively entering recovery. If the replacement also fails, retries
+stop until all current users end and another operation begins. Failure to read the helper's age still disposes the
+connection. `ActivationProgressTests` and `ProgressSessionTests` cover recovery, concurrent writes, inaccessible
+helpers and restart handoff.
+
+`EPlugin.Progress` exposes `IEPluginProgress.Begin(string)` to other C# editor plugins without looking up the editor
+node. Its `IEPluginProgressScope` implements `IProgress<string>` and `IDisposable`; the internal adapter uses
+`ActivationProgress.Begin(text, hideSettingsDialog: false)`. Reports are synchronous and thread-safe, disposal is
+idempotent, and reports after disposal are ignored even when the enclosing user is still active. A missing helper
+still returns a usable scope. Cancellation belongs to the operation; restart handoff remains internal. Consumers
+can inject `IEPluginProgress` for tests. `docs/progress-dialog.md` documents the public API, user behavior, timing,
+failure handling, internal scope usage and transport rules.
 
 ### Plugin licenses
 

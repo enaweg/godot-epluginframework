@@ -7,20 +7,27 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 
 namespace Enaweg.Plugin.Internal;
 
 /// <summary>
 /// This editor's connection to the progress helper that all Godot editors of the OS user share, whatever project they
-/// have open. Editors append their commands to the helper's command file; see the helper's <c>Commands</c> for the
-/// protocol.
+/// have open. Editors serialize appends to the helper's command file with a named mutex; see the helper's
+/// <c>Commands</c> for the protocol.
 /// </summary>
 /// <remarks>
 /// <para>
 /// A running helper is published in the shared directory as <c>&lt;token&gt;.helper</c> (protocol, process id, start
 /// time) next to its <c>&lt;token&gt;.commands</c>. <see cref="Acquire"/> connects to the oldest running helper that
 /// speaks this <see cref="Protocol"/>, and <see cref="Start"/> falls back to it when two editors started one at the
-/// same time, so all editors converge on one helper. Records of helpers that no longer run are discarded.
+/// same time, so compatible editors converge on one helper. Missing or inaccessible command files are skipped.
+/// Records of helpers that no longer run are discarded.
+/// </para>
+/// <para>
+/// Protocol 3 writers acquire <c>eplugin-progress-&lt;token&gt;</c> with a 100 ms wait limit, seek to the file's end,
+/// and write each complete command without buffering before releasing the mutex. Earlier writers use a separate
+/// helper because their persistent append streams can overwrite other editors' commands.
 /// </para>
 /// <para>
 /// A scheduled restart writes a handoff file into the project (<see cref="HandOver"/>), which the restarted editor
@@ -29,8 +36,9 @@ namespace Enaweg.Plugin.Internal;
 /// </remarks>
 internal sealed class ProgressSession : IProgressHelper
 {
-    /// <summary>Raised whenever the command protocol changes; editors only share a helper that speaks theirs.</summary>
-    internal const int Protocol = 2;
+    /// <summary>Raised whenever the transport or command protocol changes; editors only share a compatible helper.</summary>
+    // Version 3 serializes append positions with a named mutex. Older writers would overwrite these commands.
+    internal const int Protocol = 3;
 
     private const string Record = ".helper";
     private const string Commands = ".commands";
@@ -41,22 +49,34 @@ internal sealed class ProgressSession : IProgressHelper
     private readonly string _token;
     private readonly ProcessIdentity _helper;
     private readonly string _handoff;
-    private readonly StreamWriter _commands;
+    private readonly FileStream _commands;
+    private readonly Mutex _writeMutex;
 
-    private ProgressSession(string token, ProcessIdentity helper, string handoff, StreamWriter commands)
+    private ProgressSession(string token, ProcessIdentity helper, string handoff, FileStream commands)
     {
         _token = token;
         _helper = helper;
         _handoff = handoff;
         _commands = commands;
+        try { _writeMutex = new Mutex(false, "eplugin-progress-" + token); }
+        catch
+        {
+            commands.Dispose();
+            throw;
+        }
     }
 
     public TimeSpan Age => DateTime.UtcNow - new DateTime(_helper.StartUtcTicks, DateTimeKind.Utc);
 
     private static string PathOf(string directory, string token, string extension) => Path.Combine(directory, token + extension);
 
-    private static StreamWriter OpenCommands(string path) => new(new FileStream(path, FileMode.Append,
-        FileAccess.Write, FileShare.ReadWrite | FileShare.Delete), Encoding.ASCII) { AutoFlush = true };
+    private static FileStream OpenCommands(string path, bool create = false)
+    {
+        var stream = new FileStream(path, create ? FileMode.CreateNew : FileMode.Open,
+            FileAccess.Write, FileShare.ReadWrite | FileShare.Delete, bufferSize: 1);
+        stream.Seek(0, SeekOrigin.End);
+        return stream;
+    }
 
     /// <summary>Connects to the shared helper, or calls <paramref name="start"/> when none runs.</summary>
     public static IProgressHelper? Acquire(string directory, string handoff, Func<IProgressHelper?> start)
@@ -88,7 +108,7 @@ internal sealed class ProgressSession : IProgressHelper
 
         var token = Guid.NewGuid().ToString("N");
         var commandFile = PathOf(directory, token, Commands);
-        var commands = OpenCommands(commandFile);
+        var commands = OpenCommands(commandFile, create: true);
         Process? process = null;
         try
         {
@@ -181,7 +201,7 @@ internal sealed class ProgressSession : IProgressHelper
             if (commandFile is not null && File.Exists(commandFile))
             {
                 using var commands = OpenCommands(commandFile);
-                commands.WriteLine("CLOSE");
+                commands.Write(Encoding.ASCII.GetBytes("CLOSE\n"));
             }
         }
         finally { File.Delete(marker); }
@@ -208,7 +228,9 @@ internal sealed class ProgressSession : IProgressHelper
     private static ProgressSession? Connect(string directory, string token, ProcessIdentity helper, string handoff)
     {
         var commandFile = PathOf(directory, token, Commands);
-        return File.Exists(commandFile) ? new ProgressSession(token, helper, handoff, OpenCommands(commandFile)) : null;
+        try { return new ProgressSession(token, helper, handoff, OpenCommands(commandFile)); }
+        catch (IOException) { return null; }
+        catch (UnauthorizedAccessException) { return null; }
     }
 
     private static void Discard(string directory, string token)
@@ -230,9 +252,25 @@ internal sealed class ProgressSession : IProgressHelper
 
     public void Send(string user, string command)
     {
-        if (!IsRunning(_helper)) throw new IOException("The progress helper exited.");
-        // One write per line: appends of several editors to the same file do not interleave within a line.
-        _commands.Write(user + " " + command + "\n");
+        // FileMode.Append only seeks to the end when opened. Each editor's persistent stream otherwise overwrites
+        // commands written by the others. Bound the wait so feedback cannot stall a plugin operation.
+        try
+        {
+            if (!_writeMutex.WaitOne(TimeSpan.FromMilliseconds(100)))
+                throw new IOException("The progress command file is busy.");
+        }
+        catch (AbandonedMutexException)
+        {
+            // The writer exited while holding it; this thread now owns it.
+        }
+
+        try
+        {
+            if (!IsRunning(_helper)) throw new IOException("The progress helper exited.");
+            _commands.Seek(0, SeekOrigin.End);
+            _commands.Write(Encoding.ASCII.GetBytes(user + " " + command + "\n"));
+        }
+        finally { _writeMutex.ReleaseMutex(); }
     }
 
     public void HandOver(string user)
@@ -242,7 +280,11 @@ internal sealed class ProgressSession : IProgressHelper
     }
 
     /// <summary>Releases the command file; the helper keeps running for other users.</summary>
-    public void Dispose() => _commands.Dispose();
+    public void Dispose()
+    {
+        try { _commands.Dispose(); }
+        finally { _writeMutex.Dispose(); }
+    }
 }
 
 /// <summary>A process, identified by its id and start time so that a reused id is not mistaken for it.</summary>

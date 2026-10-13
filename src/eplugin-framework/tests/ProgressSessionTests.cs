@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Enaweg.Plugin.Internal;
 using GdUnit4;
 using Godot;
@@ -85,7 +86,7 @@ public class ProgressSessionTests
     {
         var oldest = Helper("oldest", new ProcessIdentity(1_000_001, 10));
         Helper("newer", new ProcessIdentity(1_000_002, 20));
-        Helper("other-protocol", new ProcessIdentity(1_000_003, 5), protocol: "1");
+        Helper("other-protocol", new ProcessIdentity(1_000_003, 5), protocol: 1);
         Helper("exited", new ProcessIdentity(1_000_004, 1), running: false);
         using (var session = ProgressSession.Acquire(_shared, _handoff, Start))
         {
@@ -117,6 +118,57 @@ public class ProgressSessionTests
         using var session = ProgressSession.Acquire(_shared, _handoff, Start);
         _running.Remove(helper);
         Assertions.AssertThrown(() => session!.Send(User, "HEARTBEAT")).IsInstanceOf<IOException>();
+    }
+
+    [TestCase]
+    public void EditorsAppendWithoutOverwritingEachOthersCommands()
+    {
+        var commands = Helper("helper", new ProcessIdentity(1_000_001, 10));
+        using var first = ProgressSession.Acquire(_shared, _handoff, Start);
+        using var second = ProgressSession.Acquire(_shared, _handoff, Start);
+        first!.Send(User, "TEXT QQ==");
+        second!.Send(User, "TEXT Qg==");
+        first.Send(User, "END");
+
+        Assertions.AssertThat(File.ReadAllLines(commands))
+            .ContainsExactly(User + " TEXT QQ==", User + " TEXT Qg==", User + " END");
+    }
+
+    [TestCase]
+    public void InaccessibleHelperDoesNotPreventConnectingToAnotherOne()
+    {
+        var blocked = Helper("oldest", new ProcessIdentity(1_000_001, 10));
+        using var locked = new FileStream(blocked, FileMode.Open, System.IO.FileAccess.ReadWrite, FileShare.None);
+        var commands = Helper("newer", new ProcessIdentity(1_000_002, 20));
+        using var session = ProgressSession.Acquire(_shared, _handoff, Start);
+        session!.Send(User, "HEARTBEAT");
+
+        Assertions.AssertInt(_started).IsEqual(0);
+        Assertions.AssertThat(File.ReadAllLines(commands)).ContainsExactly(User + " HEARTBEAT");
+    }
+
+    [TestCase]
+    public async Task ConcurrentWritersKeepEveryCompleteCommand()
+    {
+        var commands = Helper("helper", new ProcessIdentity(1_000_001, 10));
+        var sessions = Enumerable.Range(0, 4).Select(_ => ProgressSession.Acquire(_shared, _handoff, Start)!).ToArray();
+        var expected = Enumerable.Range(0, 4).SelectMany(writer => Enumerable.Range(0, 50)
+            .Select(index => writer + " TEXT " + index + new string('A', 16_384))).ToArray();
+        try
+        {
+            await Task.WhenAll(sessions.Select((session, writer) => Task.Run(() =>
+            {
+                for (var index = 0; index < 50; index++)
+                    session.Send(writer.ToString(CultureInfo.InvariantCulture), "TEXT " + index + new string('A', 16_384));
+            })));
+        }
+        finally
+        {
+            foreach (var session in sessions) session.Dispose();
+        }
+
+        Assertions.AssertThat(File.ReadAllLines(commands).OrderBy(line => line, StringComparer.Ordinal).ToArray())
+            .ContainsExactly(expected.OrderBy(line => line, StringComparer.Ordinal).ToArray());
     }
 
     [TestCase]
@@ -179,12 +231,12 @@ public class ProgressSessionTests
         Convert.ToHexString(System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(name))).ToLowerInvariant();
 
     /// <summary>Publishes a simulated helper and returns its command file.</summary>
-    private string Helper(string name, ProcessIdentity helper, string protocol = "2", bool running = true)
+    private string Helper(string name, ProcessIdentity helper, int protocol = ProgressSession.Protocol, bool running = true)
     {
         if (running) _running.Add(helper);
         ProgressSession.IsRunning = _running.Contains;
         File.WriteAllLines(PathOf(name, ".helper"),
-            [protocol, helper.Id.ToString(CultureInfo.InvariantCulture), helper.StartUtcTicks.ToString(CultureInfo.InvariantCulture)]);
+            [protocol.ToString(CultureInfo.InvariantCulture), helper.Id.ToString(CultureInfo.InvariantCulture), helper.StartUtcTicks.ToString(CultureInfo.InvariantCulture)]);
         var commands = PathOf(name, ".commands");
         File.WriteAllText(commands, "");
         return commands;
