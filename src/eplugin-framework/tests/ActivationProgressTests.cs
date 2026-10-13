@@ -176,6 +176,52 @@ public class ActivationProgressTests
     }
 
     [TestCase]
+    public void RepeatedReplacementFailuresAreBoundedUntilTheNextOperation()
+    {
+        using (ActivationProgress.Begin("Activating A..."))
+        {
+            _launched[0].Age = TimeSpan.FromMinutes(20);
+            _launched[0].Dead = true;
+            ActivationProgress.Launch = () =>
+            {
+                // Stop the old recursive recovery path before it overflows the test process's stack.
+                if (_launched.Count >= 5) return null;
+                var helper = new FakeHelper { Age = TimeSpan.FromMinutes(20), Dead = true };
+                _launched.Add(helper);
+                return helper;
+            };
+            _tick!();
+            _tick();
+            ActivationProgress.SetText("Building...");
+            Assertions.AssertInt(_launched.Count).IsEqual(2);
+            Assertions.AssertBool(_launched.All(h => h.Disposed)).IsTrue();
+        }
+
+        ActivationProgress.Launch = () =>
+        {
+            var helper = new FakeHelper();
+            _launched.Add(helper);
+            return helper;
+        };
+        using (ActivationProgress.Begin("Activating B...")) { }
+        Assertions.AssertInt(_launched.Count).IsEqual(3);
+        Assertions.AssertThat(_launched[2].Of(_launched[2].Users[0])).ContainsExactly("TEXT Activating B...", "END");
+    }
+
+    [TestCase]
+    public void FailedAgeCheckStillDisposesTheHelper()
+    {
+        using (ActivationProgress.Begin("Activating A..."))
+        {
+            _launched[0].Dead = true;
+            _launched[0].CannotCheckAge = true;
+            _tick!();
+            Assertions.AssertBool(_launched[0].Disposed).IsTrue();
+            Assertions.AssertInt(_launched.Count).IsEqual(1);
+        }
+    }
+
+    [TestCase]
     public async Task RestartHoldsTheWindowAndTheNextEditorContinuesTheUser()
     {
         var window = new FakeHelper();
@@ -360,7 +406,13 @@ public class ActivationProgressTests
         public bool Dead { get; set; }
         public bool Disposed { get; private set; }
         public bool CannotHandOver { get; set; }
-        public TimeSpan Age { get; set; } = TimeSpan.FromSeconds(1);
+        public bool CannotCheckAge { get; set; }
+        private TimeSpan _age = TimeSpan.FromSeconds(1);
+        public TimeSpan Age
+        {
+            get => CannotCheckAge ? throw new IOException("Process unavailable.") : _age;
+            set => _age = value;
+        }
 
         /// <summary>A user's commands, with TEXT payloads decoded.</summary>
         public List<string> Of(string user)

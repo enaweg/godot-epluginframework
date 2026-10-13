@@ -247,9 +247,17 @@ internal static class ActivationProgress
         _mayStart = false;
         try { _helper = Launch(); }
         catch (Exception) { _helper = null; }
-        foreach (var user in Users.ToArray())
+        try
         {
-            if (user.Text is { } text) Send(user, Encode(text));
+            foreach (var user in Users)
+            {
+                if (!user.Held && !user.Ended && user.Text is { } text) _helper?.Send(user.Id, Encode(text));
+            }
+        }
+        catch (Exception)
+        {
+            // Replay must not call Send: another failed connection would recursively replay the same users.
+            Lost();
         }
     }
 
@@ -269,7 +277,11 @@ internal static class ActivationProgress
         for (var attempt = 0; attempt < 2; attempt++)
         {
             Connect();
-            if (_helper is null) return;
+            if (_helper is null)
+            {
+                if (!_mayStart) return;
+                continue;
+            }
             try
             {
                 _helper.Send(user.Id, command);
@@ -280,15 +292,20 @@ internal static class ActivationProgress
                 Lost();
             }
         }
+
+        // A replacement that also fails must not keep reconnecting on every heartbeat. The next operation retries.
+        _mayStart = false;
     }
 
     private static void Lost()
     {
         var helper = _helper;
         _helper = null;
+        _mayStart = false;
+        try { _mayStart = helper?.Age >= ReplaceAfter; }
+        catch (Exception) { /* an unavailable process cannot be checked */ }
         try
         {
-            _mayStart = helper?.Age >= ReplaceAfter;
             helper?.Dispose();
         }
         catch (Exception)
