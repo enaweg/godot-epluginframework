@@ -60,6 +60,7 @@ Screenshots show the repository's sample plugins and example update packages.
 ## Documentation
 
 - [Create an ePlugin](docs/creating-plugins.md): starter code, recipe resources, dependencies, helpers, and initializers.
+- [GDScript plugins](docs/gdscript-plugins.md): what ePlugin offers a GDScript plugin without code (updates, licenses, welcome pages, links, dependencies) and how to set it up.
 - [ePlugin Manager](docs/eplugin-manager.md): inspect and control plugins, check updates, manage local sources and update sites, and retry failed work.
 - [Progress dialog](docs/progress-dialog.md): automatic progress feedback, the public reporting API, shared windows, restarts, and failure handling.
 - [Updating plugins](docs/updating-plugins.md): configure update sources, project and built-in update sites, publish packages, and understand review, validation, builds, and recovery.

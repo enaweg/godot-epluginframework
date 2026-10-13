@@ -10,7 +10,9 @@ The window opens automatically for enabling and disabling plugins, **Retry faile
 
 The window displays an animated progress bar and the current step. The bar indicates that work is running; download steps can also show a percentage in their text. It appears without taking keyboard focus from the editor and has no close or cancel button. Use the manager's **Cancel** action when it is available, such as during update downloads. The window closes automatically when the operations using it finish.
 
-Opening starts with the ePlugin logo fading in and splitting apart around the progress panel. Closing reverses that animation. Short operations that finish before the 0.3-second show delay display no window. An operation that starts while the window is closing reverses it back into its opening animation.
+Opening starts with the ePlugin logo fading in, then splitting apart as the progress panel grows between its parts. The step text and progress bar then fade in. Closing reverses the animation from its current position without pausing on the joined logo. If work finishes while the logo is paused during opening, it starts fading out immediately.
+
+Short operations can finish without displaying a window. An operation that starts while the window is closing reverses it back into its opening animation.
 
 The helper is initially placed over the editor that starts it, with a screen-center fallback when placement information is unavailable. A shared helper keeps that placement while it serves other editors.
 
@@ -37,13 +39,12 @@ Godot editors using the same editor data directory and compatible progress trans
 
 | Timing | Behavior |
 |---|---|
-| 0.3-second show delay | Avoids opening a window for short operations |
 | Heartbeat every 5 seconds | Keeps each active user's progress alive while the editor thread is blocked |
 | 15 seconds without a report | An unheld user stops keeping the window open |
 | Restart hold of up to 5 minutes | Keeps the restarting operation active while its editor is replaced |
 | 15 minutes since the last message | The idle helper exits after a brief drain for late messages |
 
-The window starts closing as soon as all users end; it does not wait for the 15-second timeout. The helper normally remains available in the background so later operations can reuse it without starting another process.
+The window starts its closing animation as soon as all users end; it does not wait for the 15-second timeout. It hides when that animation finishes. The helper normally remains available in the background so later operations can reuse it without starting another process.
 
 During an update restart, the editor holds its current progress user and writes a handoff marker under `.godot/eplugin/progress/`. A restarted editor with a compatible helper reads that marker once and resumes the same user. Its first message restores the normal timeout. If another restart is needed, the framework can hold and hand over the user again.
 
