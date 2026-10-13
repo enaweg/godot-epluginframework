@@ -140,7 +140,6 @@ internal sealed class CocoaProgressWindow : IProgressWindow
         _puzzle = ImageView(content, Logo.LoadPuzzle());
 
         _showDelay = showDelayMilliseconds;
-        Schedule(_visibility.Open());
 
         _onReady = ready;
         _onHidden = hidden;

@@ -127,7 +127,6 @@ internal sealed class Win32ProgressWindow : IProgressWindow
 
         _showDelay = (uint)showDelayMilliseconds;
         _onHidden = hidden;
-        Schedule(_visibility.Open());
         ready();
 
         while (GetMessageW(out var message, IntPtr.Zero, 0, 0) > 0)

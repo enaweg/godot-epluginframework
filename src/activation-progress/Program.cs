@@ -4,26 +4,27 @@ using System.Text;
 namespace ActivationProgress;
 
 /// <summary>
-/// Usage: <c>dotnet ActivationProgress.dll [--editor-window HWND | --editor-center X Y] [--max-lifetime-seconds N]</c>.
+/// Usage: <c>dotnet ActivationProgress.dll [--command-file PATH] [--editor-window HWND | --editor-center X Y]
+/// [--max-lifetime-seconds N] [--window-timeout-seconds N]</c>.
 /// <c>--editor-window</c> (Windows) and <c>--editor-center</c> (native desktop coordinates, macOS and Linux) place the
 /// window over the editor instead of on the primary screen.
-/// Commands on stdin, one per line: <c>TEXT base64-utf8</c> replaces the label, <c>HEARTBEAT</c> restarts the
-/// lifetime, and <c>CLOSE</c> (or end of input) closes the window and exits. With <c>--command-file PATH</c>, commands are
-/// appended to a file instead; end of file waits for more commands across editor restarts, <c>CLOSE</c> only hides the
-/// window and <c>TEXT</c> shows it again, so the next operation reuses it. See <see cref="Commands"/> for when that helper
-/// exits.
+/// Commands arrive one per line, on stdin or, with <c>--command-file</c>, appended to a file that several editor
+/// processes and threads share. See <see cref="Commands"/> for the protocol. With stdin, <c>CLOSE</c> (or end of input)
+/// also closes the window and exits.
 /// </summary>
 internal static class Program
 {
     private const string Title = "ePlugin Framework";
     private const string InitialText = "Working...";
 
-    // Operations that finish sooner close the helper before its window ever appears.
+    // Operations that finish sooner never show the window.
     private const int ShowDelayMilliseconds = 300;
 
-    // The window has no close button, so a host that hangs or never sends CLOSE cannot leave it up forever.
-    // Each HEARTBEAT restarts it.
+    // The helper exits this long after the last message of any user.
     private const int DefaultMaxLifetimeSeconds = 15 * 60;
+
+    // The window has no close button: it closes once no user has sent anything for this long.
+    private const int DefaultWindowTimeoutSeconds = 15;
 
     [STAThread]
     private static int Main(string[] args)
@@ -50,16 +51,10 @@ internal static class Program
             return 1;
         }
 
-        var maxLifetimeSeconds = Option(args, "--max-lifetime-seconds", 1) is [var seconds] &&
-                                 int.TryParse(seconds, NumberStyles.Integer, CultureInfo.InvariantCulture,
-                                     out var parsedSeconds) && parsedSeconds > 0
-            ? parsedSeconds
-            : DefaultMaxLifetimeSeconds;
-        var maxLifetime = TimeSpan.FromSeconds(maxLifetimeSeconds);
         var commandFile = Option(args, "--command-file", 1)?[0];
-        // Not disposed: the reader thread may still restart it while the process exits.
-        var lifetime = new Timer(_ => Environment.Exit(0), null, maxLifetime, Timeout.InfiniteTimeSpan);
-        var commands = new Commands(window, () => lifetime.Change(maxLifetime, Timeout.InfiniteTimeSpan), commandFile);
+        var commands = new Commands(window, commandFile, InitialText,
+            TimeSpan.FromSeconds(Seconds(args, "--window-timeout-seconds", DefaultWindowTimeoutSeconds)),
+            TimeSpan.FromSeconds(Seconds(args, "--max-lifetime-seconds", DefaultMaxLifetimeSeconds)));
 
         try
         {
@@ -71,8 +66,7 @@ internal static class Program
                     output.WriteLine("READY");
                 }
 
-                // Reading a redirected console stream can block before its first await.
-                new Thread(commands.Read) { IsBackground = true }.Start();
+                commands.Start();
             }, commands.Hidden);
         }
         catch (Exception)
@@ -81,9 +75,15 @@ internal static class Program
             return 1;
         }
 
-        // A timer nothing references can be collected before it fires.
-        GC.KeepAlive(lifetime);
         return 0;
+    }
+
+    private static int Seconds(string[] args, string name, int fallback)
+    {
+        return Option(args, name, 1) is [var seconds] &&
+               int.TryParse(seconds, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) && parsed > 0
+            ? parsed
+            : fallback;
     }
 
     /// <summary>Returns the <paramref name="count"/> values after <paramref name="name"/>, or null if absent.</summary>
@@ -104,37 +104,68 @@ internal static class Program
 }
 
 /// <summary>
-/// Applies the host's commands to the window and decides when the helper exits.
+/// Applies the commands of every user to the window and decides when the helper exits.
 /// </summary>
 /// <remarks>
-/// With a command file the editor keeps a state file next to it, named after the same token: <c>.owned</c> while an
-/// editor uses the window, <c>.idle</c> while none does. Once <c>CLOSE</c> has hidden the window, the helper waits
-/// <see cref="LingerMilliseconds"/> and then claims <c>.idle</c> by renaming it to <c>.exiting</c> before it exits. An
-/// editor that wants to reuse the window renames <c>.idle</c> to <c>.owned</c> instead; whichever rename succeeds wins,
-/// so an editor never writes to a helper that is about to exit, and a helper never exits under an editor that uses it.
-/// Without either file (an older editor, or a test) the helper exits once the window is hidden.
+/// <para>
+/// A command line is <c>USER COMMAND [ARGUMENT]</c>, where <c>USER</c> is an id without spaces that the sender chooses for
+/// each of its operations; a line without one belongs to an anonymous user. <c>TEXT base64-utf8</c> sets the user's
+/// text, <c>HEARTBEAT</c> only says it is still working, <c>END</c> (or <c>CLOSE</c>) ends it, and <c>HOLD SECONDS</c>
+/// keeps it active that long without messages, e.g. while its editor restarts; its next message restores the window
+/// timeout.
+/// </para>
+/// <para>
+/// The window is shown while any user is active, i.e. has not ended and sent something within the window timeout (or
+/// its hold), and shows the text of the active user that set one most recently. A user is forgotten once it has been
+/// silent for the maximum lifetime, and the helper exits when that applies to all of them.
+/// </para>
+/// <para>
+/// With a command file the editor publishes the helper in a record next to it (<c>.helper</c>, same token), which
+/// is how other editors find it. Before exiting, the helper renames the record to <c>.exiting</c>, so no editor
+/// connects anymore, and keeps reading for a moment: a message that arrives meanwhile, from an editor that connected
+/// just before, restores the record and keeps the helper running.
+/// </para>
 /// </remarks>
-internal sealed class Commands(IProgressWindow window, Action heartbeat, string? commandFile)
+internal sealed class Commands(IProgressWindow window, string? commandFile, string initialText, TimeSpan windowTimeout,
+    TimeSpan lifetime)
 {
-    private const int LingerMilliseconds = 1000;
+    private const int TickMilliseconds = 100;
+    private const int ExitDrainMilliseconds = 1000;
+    private static readonly string[] Keywords = ["TEXT", "HEARTBEAT", "END", "CLOSE", "HOLD"];
 
-    // When the window was hidden after the last CLOSE; -1 while it is wanted. Written on the UI thread.
-    private long _hiddenAt = -1;
-    private bool _closed;
-    private long _nextAttempt;
+    private readonly object _gate = new();
+    private readonly Dictionary<string, User> _users = new(StringComparer.Ordinal);
+    private long _lastMessage = Environment.TickCount64;
+    private long _sequence;
+    private bool _shown;
+    private string? _text;
+    private long _exitAt = -1;
+    private volatile bool _quitting;
+
+    public void Start()
+    {
+        // Reading a redirected console stream can block before its first await.
+        new Thread(Read) { IsBackground = true }.Start();
+        new Thread(() =>
+        {
+            while (true)
+            {
+                Thread.Sleep(TickMilliseconds);
+                lock (_gate) Update();
+            }
+        }) { IsBackground = true }.Start();
+    }
 
     /// <summary>Called on the UI thread whenever <see cref="IProgressWindow.Close"/> has hidden the window.</summary>
     public void Hidden()
     {
-        if (commandFile is null)
+        if (_quitting)
         {
             Environment.Exit(0);
         }
-
-        Volatile.Write(ref _hiddenAt, Environment.TickCount64);
     }
 
-    public void Read()
+    private void Read()
     {
         try
         {
@@ -144,39 +175,15 @@ internal sealed class Commands(IProgressWindow window, Action heartbeat, string?
             string? line;
             while ((line = commandFile is null ? input.ReadLine() : ReadAppendedLine(input, pending)) is not null)
             {
-                if (line == "CLOSE")
+                if (commandFile is null && line == "CLOSE")
                 {
-                    if (commandFile is null)
-                    {
-                        break;
-                    }
-
-                    _closed = true;
-                    Volatile.Write(ref _hiddenAt, -1);
-                    window.Close();
-                    continue;
+                    break;
                 }
 
-                if (line == "HEARTBEAT")
+                lock (_gate)
                 {
-                    heartbeat();
-                    continue;
-                }
-
-                if (line.StartsWith("TEXT ", StringComparison.Ordinal))
-                {
-                    try
-                    {
-                        window.SetText(Encoding.UTF8.GetString(Convert.FromBase64String(line[5..])));
-                    }
-                    catch (FormatException)
-                    {
-                        // Ignore malformed optional text updates.
-                    }
-
-                    // Every operation starts with its text, also one that reuses a closed window.
-                    _closed = false;
-                    window.Open();
+                    Apply(line);
+                    Update();
                 }
             }
         }
@@ -187,20 +194,24 @@ internal sealed class Commands(IProgressWindow window, Action heartbeat, string?
 
         // The window exits the process once its closing animation has played. The native UI loops own the main
         // thread; exiting from here too avoids per-platform shutdown plumbing should a window never get there.
-        window.Close();
+        lock (_gate)
+        {
+            _quitting = true;
+            window.Close();
+        }
+
         Thread.Sleep(TimeSpan.FromSeconds(Animation.TotalSeconds + 1));
         Environment.Exit(0);
     }
 
-    private string ReadAppendedLine(StreamReader input, StringBuilder pending)
+    private static string ReadAppendedLine(StreamReader input, StringBuilder pending)
     {
-        // Keep incomplete lines until their newline is written. EOF is temporary while the editor restarts.
+        // Keep incomplete lines until their newline is written. EOF is temporary while editors restart.
         while (true)
         {
             var character = input.Read();
             if (character < 0)
             {
-                if (pending.Length == 0) ExitIfUnused();
                 Thread.Sleep(50);
                 continue;
             }
@@ -215,34 +226,127 @@ internal sealed class Commands(IProgressWindow window, Action heartbeat, string?
         }
     }
 
-    private void ExitIfUnused()
+    private void Apply(string line)
     {
-        var hiddenAt = Volatile.Read(ref _hiddenAt);
         var now = Environment.TickCount64;
-        if (!_closed || hiddenAt < 0 || now - hiddenAt < LingerMilliseconds || now < _nextAttempt) return;
-        // An editor that owns the window will write to it; try again later in case it releases it without a command.
-        _nextAttempt = now + LingerMilliseconds;
-        var exiting = Path.ChangeExtension(commandFile!, ".exiting");
-        try
+        _lastMessage = now;
+        if (_exitAt >= 0)
         {
-            File.Move(Path.ChangeExtension(commandFile!, ".idle"), exiting);
-        }
-        catch (Exception)
-        {
-            if (File.Exists(Path.ChangeExtension(commandFile!, ".owned"))) return;
+            // An editor connected just before the helper withdrew its record.
+            _exitAt = -1;
+            try { File.Move(Path.ChangeExtension(commandFile!, ".exiting"), Path.ChangeExtension(commandFile!, ".helper")); }
+            catch (Exception) { /* the editor that wrote this finds the helper by its command file */ }
         }
 
+        var parts = line.Split(' ');
+        var offset = Keywords.Contains(parts[0]) ? 0 : 1;
+        if (parts.Length <= offset) return;
+        var key = offset == 0 ? string.Empty : parts[0];
+        var argument = parts.Length > offset + 1 ? parts[offset + 1] : null;
+        if (!_users.TryGetValue(key, out var user))
+        {
+            _users[key] = user = new User();
+        }
+
+        user.LastMessage = now;
+        user.Timeout = (long)windowTimeout.TotalMilliseconds;
+        switch (parts[offset])
+        {
+            case "TEXT" when argument is not null:
+                try
+                {
+                    user.Text = Encoding.UTF8.GetString(Convert.FromBase64String(argument));
+                    user.Sequence = ++_sequence;
+                    user.Ended = false;
+                }
+                catch (FormatException)
+                {
+                    // Ignore malformed optional text updates.
+                }
+
+                break;
+            case "END" or "CLOSE":
+                user.Ended = true;
+                break;
+            case "HOLD" when int.TryParse(argument, NumberStyles.None, CultureInfo.InvariantCulture, out var seconds):
+                user.Timeout = seconds * 1000L;
+                break;
+        }
+    }
+
+    private void Update()
+    {
+        if (_quitting) return;
+        var now = Environment.TickCount64;
+        var forget = (long)lifetime.TotalMilliseconds;
+        User? latest = null;
+        var active = false;
+        foreach (var (key, user) in _users.ToArray())
+        {
+            if (now - user.LastMessage >= forget)
+            {
+                _users.Remove(key);
+                continue;
+            }
+
+            if (user.Ended || now - user.LastMessage >= user.Timeout) continue;
+            active = true;
+            if (user.Text is not null && (latest is null || user.Sequence > latest.Sequence)) latest = user;
+        }
+
+        if (active)
+        {
+            var text = latest?.Text ?? initialText;
+            if (text != _text)
+            {
+                _text = text;
+                window.SetText(text);
+            }
+
+            if (!_shown)
+            {
+                _shown = true;
+                window.Open();
+            }
+        }
+        else if (_shown)
+        {
+            _shown = false;
+            window.Close();
+        }
+
+        if (now - _lastMessage < forget) return;
+        if (commandFile is null) Environment.Exit(0);
+        var exiting = Path.ChangeExtension(commandFile, ".exiting");
+        if (_exitAt < 0)
+        {
+            _exitAt = now + ExitDrainMilliseconds;
+            try { File.Move(Path.ChangeExtension(commandFile, ".helper"), exiting); }
+            catch (Exception) { /* not published, e.g. in a test */ }
+            return;
+        }
+
+        if (now < _exitAt) return;
         try
         {
             File.Delete(exiting);
-            File.Delete(commandFile!);
+            File.Delete(commandFile);
         }
         catch (Exception)
         {
-            // The editor discards the files of a helper that is no longer running.
+            // Editors discard the files of a helper that is no longer running.
         }
 
         Environment.Exit(0);
+    }
+
+    private sealed class User
+    {
+        public long LastMessage;
+        public long Timeout;
+        public string? Text;
+        public long Sequence;
+        public bool Ended;
     }
 }
 

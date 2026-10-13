@@ -145,7 +145,6 @@ internal sealed class GtkProgressWindow : IProgressWindow
             IntPtr.Zero, IntPtr.Zero, 0);
         g_timeout_add(100, Marshal.GetFunctionPointerForDelegate(_pulse), _progress);
         _showDelay = (uint)showDelayMilliseconds;
-        Schedule(_visibility.Open());
 
         _onReady = ready;
         _onHidden = hidden;
