@@ -281,8 +281,10 @@ dialog has no progress bar and only puts the outcome in its status line.
 
 `ActivationProgress` is thread-safe. A `Begin` outside any scope starts a *user* of the progress window; nested scopes,
 Godot callbacks inside it and its async flow (tracked with an `AsyncLocal`) belong to the same user, and a
-`Scope.SetText` may come from any thread (downloads report that way). Only `Begin` on the editor thread hides Project
-Settings, and only the editor thread starts a helper, because both need Godot APIs. While users are active a
+`Scope.SetText` may come from any thread (downloads report that way). Internal `Begin` calls request hiding Project
+Settings once per active progress lifetime, on the editor thread; public scopes leave it visible. A lifecycle scope
+can still hide it when public progress is already active. Only the editor thread starts a helper, because both UI
+operations need Godot APIs. While users are active a
 `System.Threading.Timer` sends a heartbeat for each every 5 s, also while the main thread is blocked; the assembly's
 `Unloading` hook stops it (a running timer would keep the collectible assembly loaded). The helper (`src/activation-progress`,
 protocol in its `Commands`) shows the newest text of the active users, closes the window after 15 s without a message
@@ -304,7 +306,13 @@ stop until all current users end and another operation begins. Failure to read t
 connection. `ActivationProgressTests` and `ProgressSessionTests` cover recovery, concurrent writes, inaccessible
 helpers and restart handoff.
 
-`docs/progress-dialog.md` documents user behavior, timing, failure handling, internal scope usage and transport rules.
+`EPlugin.Progress` exposes `IEPluginProgress.Begin(string)` to other C# editor plugins without looking up the editor
+node. Its `IEPluginProgressScope` implements `IProgress<string>` and `IDisposable`; the internal adapter uses
+`ActivationProgress.Begin(text, hideSettingsDialog: false)`. Reports are synchronous and thread-safe, disposal is
+idempotent, and reports after disposal are ignored even when the enclosing user is still active. A missing helper
+still returns a usable scope. Cancellation belongs to the operation; restart handoff remains internal. Consumers
+can inject `IEPluginProgress` for tests. `docs/progress-dialog.md` documents the public API, user behavior, timing,
+failure handling, internal scope usage and transport rules.
 
 ### Plugin licenses
 

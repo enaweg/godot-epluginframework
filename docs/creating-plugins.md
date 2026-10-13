@@ -40,6 +40,8 @@ public partial class SamplePlugin : EditorPlugin, IEEditorPlugin
 
 `CreateRecipe` should be deterministic and side-effect free. The framework calls it to determine what to install and remove, including when it reconciles an enabled plugin after an update. Keep the plugin's root code compilable with only Godot and ePlugin; put code that requires a new NuGet package or project reference in a managed directory or project declared by the recipe.
 
+`EnableEPlugin()` and `DisableEPlugin()` report lifecycle progress automatically. For custom editor work, use `EPlugin.Progress.Begin(...)` and report through the returned disposable `IProgress<string>` scope. See [Progress dialog](progress-dialog.md#reporting-progress-from-a-c-editor-plugin) for examples and the public interfaces. Keep recipe creation free of progress side effects.
+
 ## Recipe resources
 
 `IEEditorPluginBuilder` supports these declarations:

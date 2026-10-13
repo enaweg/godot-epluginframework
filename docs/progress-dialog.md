@@ -6,7 +6,7 @@ ePlugin Framework shows progress in a separate native window while plugin work r
 
 ## Using the dialog
 
-The window opens automatically for enabling and disabling plugins, **Retry failed**, **Check for updates**, downloading and validating update packages, and installing updates. Start these actions in the [ePlugin Manager](eplugin-manager.md); enabling or disabling an ePlugin from Godot's Project Settings also reports progress through the framework's lifecycle helpers.
+The window opens automatically for enabling and disabling plugins, **Retry failed**, **Check for updates**, downloading and validating update packages, and installing updates. Start these actions in the [ePlugin Manager](eplugin-manager.md); enabling or disabling an ePlugin from Godot's Project Settings also reports progress through the framework's lifecycle helpers. Other C# editor tools can report their own work through `EPlugin.Progress`.
 
 The window displays an animated progress bar and the current step. The bar indicates that work is running; download steps can also show a percentage in their text. It appears without taking keyboard focus from the editor and has no close or cancel button. Use the manager's **Cancel** action when it is available, such as during update downloads. The window closes automatically when the operations using it finish.
 
@@ -59,9 +59,60 @@ If a connection fails after its helper has run for at least 30 seconds, the fram
 
 During a C# assembly reload, the old assembly stops its heartbeat timer. Users left behind stop keeping the window open after the normal timeout. A restart hold can keep a user active longer. The helper itself has a bounded idle lifetime, so an abandoned editor does not leave it running indefinitely.
 
+## Reporting progress from a C# editor plugin
+
+Use `EPlugin.Progress` from the public `Enaweg.Plugin` namespace. The service implements `IEPluginProgress`; `Begin` returns an `IEPluginProgressScope`, which implements `IProgress<string>` and `IDisposable`. These types are available in editor builds (`#if TOOLS`) and can be used by separately compiled plugins that reference ePlugin Framework. The service does not look up the framework's editor node and does not require the caller to implement `IEEditorPlugin`.
+
+Begin on the editor thread so the framework can launch a native helper if needed. Keep the scope alive until all work finishes, including awaited work, and pass it directly to methods accepting `IProgress<string>`:
+
+```csharp
+using Enaweg.Plugin;
+
+using var progress = EPlugin.Progress.Begin("Importing assets...");
+progress.Report("Reading files...");
+await ImportAsync(progress, cancellationToken);
+progress.Report("Finishing...");
+```
+
+`Report` updates the step text synchronously and is safe to call from any thread. It does not post through Godot's synchronization context, so feedback can update while the editor thread is blocked. It accepts text; format a percentage into that text when your operation can measure one. The animated bar remains indeterminate.
+
+`Begin` always returns a non-null scope, including when the native helper is unavailable. Dispose it with `using` so it ends on success, exceptions, or cancellation. Disposal is idempotent, and reports after disposal are ignored, even if a surrounding scope is still active. The operation owns its cancellation token and result; the progress service does not cancel work or restart the editor.
+
+Nested `Begin` calls, including calls in inherited async execution flows, belong to the enclosing progress user. Each independent operation gets its own user of the shared window. An inner scope ending leaves the outer user active and keeps the latest text instead of restoring an older step. Await child work before ending its scope. Obtain new scopes for new operations after an assembly reload.
+
+Custom scopes leave Project Settings visible. If plugin lifecycle work runs inside or alongside a custom scope, that lifecycle work can still hide Project Settings; the framework restores it once all active progress users finish.
+
+For services that should be testable independently of the editor, inject `IEPluginProgress` and pass `EPlugin.Progress` from the editor entry point:
+
+```csharp
+#if TOOLS
+using System.Threading;
+using System.Threading.Tasks;
+using Enaweg.Plugin;
+
+public static class AssetImporter
+{
+    public static async Task ImportAsync(
+        IEPluginProgress progressService, CancellationToken cancellationToken)
+    {
+        using var progress = progressService.Begin("Importing assets...");
+        await Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            progress.Report("Reading files...");
+            // Import assets here, checking cancellation as work proceeds.
+        }, cancellationToken);
+        progress.Report("Finishing...");
+    }
+}
+#endif
+```
+
+A test can supply a fake or mock `IEPluginProgress` and scope without starting a helper process. The real service uses the same heartbeats, window sharing, timeouts, and failure recovery as framework operations.
+
 ## Reporting progress inside the framework
 
-`ActivationProgress` is an internal framework API under `Enaweg.Plugin.Internal`, compiled for editor use with `#if TOOLS`. Consumer plugins get lifecycle progress by calling `EnableEPlugin()` and `DisableEPlugin()`; the examples below are for framework maintainers and do not introduce a public plugin API.
+`ActivationProgress` is the internal implementation under `Enaweg.Plugin.Internal`, compiled for editor use with `#if TOOLS`. Consumer plugins get lifecycle progress by calling `EnableEPlugin()` and `DisableEPlugin()` and use `EPlugin.Progress` for custom work. The examples below are for framework maintainers.
 
 Keep a scope alive for the full operation and dispose it on success, failure, or cancellation:
 
@@ -83,7 +134,7 @@ await Task.Run(() => progress.SetText("Downloading plugins... 50%"));
 // Await the remaining work before disposing the scope.
 ```
 
-`Scope.SetText` is thread-safe and ignored after its user ends. The first active user starts the heartbeat timer, and the last one releases the connection and stops it. Beginning on the editor thread can hide an open Project Settings dialog until all users finish. Beginning on a worker thread leaves editor UI alone and can connect to an existing helper once the editor thread has located the shared directory; only the editor thread launches a helper.
+`Scope.SetText` is thread-safe and ignored after disposal or once its user ends. The first active user starts the heartbeat timer, and the last one releases the connection and stops it. Internal scopes request hiding an open Project Settings dialog on the editor thread; the public adapter begins with `hideSettingsDialog: false`. A later internal scope can still hide it, including when nested inside custom work. Beginning on a worker thread leaves editor UI alone and can connect to an existing helper once the editor thread has located the shared directory; only the editor thread launches a helper.
 
 Restart integration calls `PrepareForRestart()` inside the operation's scope before scheduling the editor restart, then `ResumeAfterRestart()` during startup before recovery and reconciliation. Held users send no further messages from the old editor. The framework's existing update workflow owns these calls.
 

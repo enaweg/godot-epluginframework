@@ -61,7 +61,7 @@ Screenshots show the repository's sample plugins and example update packages.
 
 - [Create an ePlugin](docs/creating-plugins.md): starter code, recipe resources, dependencies, helpers, and initializers.
 - [ePlugin Manager](docs/eplugin-manager.md): inspect and control plugins, check updates, manage local sources and update sites, and retry failed work.
-- [Progress dialog](docs/progress-dialog.md): automatic progress feedback, shared windows, restarts, failure handling, and internal reporting.
+- [Progress dialog](docs/progress-dialog.md): automatic progress feedback, the public reporting API, shared windows, restarts, and failure handling.
 - [Updating plugins](docs/updating-plugins.md): configure update sources, project and built-in update sites, publish packages, and understand review, validation, builds, and recovery.
 - [Plugin state files](docs/plugin-state.md): checked-in state, per-user recovery state, and manual retry.
 - [Plugin licenses](docs/plugin-licenses.md): ask users to accept a plugin's license before it is enabled or updated.
