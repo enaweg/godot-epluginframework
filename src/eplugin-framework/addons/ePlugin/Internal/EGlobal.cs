@@ -48,6 +48,9 @@ internal sealed partial class EGlobal
     // While above zero the transition stays open, so several plugins toggled one after another are built once.
     private int _transitionHold;
 
+    internal bool IsChangingPlugins => _transition is not null || _toCheckEnable.Count > 0 ||
+        _toCheckDisable.Count > 0 || _transitionHold > 0;
+
     private sealed class PluginTransition(Guid attemptId)
     {
         public Guid AttemptId { get; } = attemptId;

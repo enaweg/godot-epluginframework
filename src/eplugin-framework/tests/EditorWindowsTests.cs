@@ -14,6 +14,9 @@ public class EditorWindowsTests
     {
         var tree = (SceneTree)Engine.GetMainLoop();
         var window = new Window { Visible = false };
+        // A framework control with this name is not the engine's internal ProgressDialog class.
+        var child = new Control { Name = "ProgressDialog" };
+        window.AddChild(child);
         tree.Root.AddChild(window);
 
         EditorWindows.Release(window);
@@ -26,6 +29,7 @@ public class EditorWindowsTests
         await tree.ToSignal(tree.CreateTimer(0.5), SceneTreeTimer.SignalName.Timeout);
         await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
         Assertions.AssertBool(GodotObject.IsInstanceValid(window)).IsFalse();
+        Assertions.AssertBool(GodotObject.IsInstanceValid(child)).IsFalse();
     }
 
     [TestCase]
