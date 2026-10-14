@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using Enaweg.Plugin.Internal;
 using Enaweg.Plugin.Logging;
 using GdUnit4;
@@ -261,6 +262,52 @@ public class PluginStateStoreTests
         var local = File.ReadAllText(path + ".user");
         Assertions.AssertString(local).Contains("\"host\": \"pc-1\"");
         Assertions.AssertString(local).Contains("\"note\": 3");
+    }
+
+    [TestCase]
+    public void FilesOf090AreReadAndWrittenBackInAFormItCanRead()
+    {
+        // 0.9.0 rejects every field it does not know, and a self-update to a broken version rolls back to it
+        var (_, path) = NewStore();
+        var lifecycle = Guid.NewGuid();
+        File.WriteAllText(path, $$"""
+            {
+              "schemaVersion": 1,
+              "lastCompletedAttemptId": "{{lifecycle}}",
+              "plugins": [
+                { "slug": "a", "version": "1.0", "state": "activated" },
+                { "slug": "b", "version": "2.0", "state": "deactivated" }
+              ],
+              "licenses": [ { "slug": "a", "license": "LICENSE", "version": "1.0", "acceptedUtc": "2026-10-01T10:00:00+00:00", "automatic": false } ],
+              "welcomes": [ { "slug": "a", "version": "1.0", "shownUtc": "2026-10-01T10:00:00+00:00" } ]
+            }
+            """);
+        File.WriteAllText(path + ".user", """
+            { "schemaVersion": 1, "attempts": [ { "attemptId": "2b0e4fb2-a7c4-4bd5-9c4b-7a0c7c1d3e10", "slug": "c",
+              "installedVersion": "3.0", "targetState": "activated", "state": "failed", "reason": "recipe_operation_failed" } ] }
+            """);
+
+        var store = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(store.Load()).IsTrue();
+        Assertions.AssertObject(store.LastCompletedAttemptId).IsEqual(lifecycle);
+        Assertions.AssertBool(store.IsLicenseAccepted("a", "LICENSE") && store.IsWelcomeShown("a") && store.IsBlocked("c")).IsTrue();
+        store.TryBeginAttempt("b", "2.0", PersistedPluginState.Activated, out var id);
+        Assertions.AssertBool(store.TryComplete(id, [new("b", "2.0", PersistedPluginState.Activated)])).IsTrue();
+
+        static IEnumerable<string> Names(JsonElement element) => element.ValueKind switch
+        {
+            JsonValueKind.Object => element.EnumerateObject().SelectMany(p => Names(p.Value).Prepend(p.Name)),
+            JsonValueKind.Array => element.EnumerateArray().SelectMany(Names),
+            _ => []
+        };
+        string[] known090 = ["schemaVersion", "lastCompletedAttemptId", "plugins", "slug", "version", "state", "licenses",
+            "license", "acceptedUtc", "automatic", "welcomes", "shownUtc", "attempts", "attemptId", "installedVersion",
+            "targetState", "reason"];
+        foreach (var file in new[] { path, path + ".user" })
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(file));
+            Assertions.AssertArray(Names(document.RootElement).Except(known090).ToArray()).IsEmpty();
+        }
     }
 
     [TestCase]

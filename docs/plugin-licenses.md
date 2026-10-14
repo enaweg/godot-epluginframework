@@ -88,4 +88,4 @@ It is mainly meant for headless editors, such as CI exports, where no dialog can
 
 Accepted licenses are recorded in the `licenses` list of `res://addons/eplugin-state.json`, the [plugin state file](plugin-state.md), next to the plugin states. Each entry holds the plugin slug, where the license came from, the plugin version, the time, and whether it was accepted automatically. Commit the file with the addon files.
 
-The `licenses` list is left out while no license has been accepted, so the file stays readable by framework versions without license support. Once it holds licenses, framework versions 0.9.0 and earlier cannot read the file; later versions read fields they do not know and keep them. If the file cannot be read or changed on disk in the meantime, licenses accepted in that state are remembered until the editor restarts and are asked for again afterwards.
+The `licenses` list is left out while no license has been accepted. Every released framework version reads it. If the file cannot be read or changed on disk in the meantime, licenses accepted in that state are remembered until the editor restarts and are asked for again afterwards.

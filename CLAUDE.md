@@ -362,10 +362,11 @@ acceptance, because that has to be known without running plugin code (e.g. for s
 is pure and unit-tested: `PluginLicense` resolves/reads it and gives it a *source* (relative file, `res://` path, or
 `text:<hash>` for recipe text; file contents are never compared), and `LicenseReview` holds per-license decisions
 (declining a dependency's license cancels and skips its dependants). Acceptances live in the optional `licenses` list
-of the shared `eplugin-state.json` (`PluginStateStore.TryRecordLicenses`). It is omitted while empty because readers
-up to 0.9.0 disallow unmapped members, so those versions can still read such files. Later readers skip unknown fields
-and write them back (`JsonExtensionData`); a missing `plugins`/`attempts` list or another `schemaVersion` still makes
-the store read-only. Only an update's acknowledgement sets `lastCompletedAttemptId` (recovery and rollback compare
+of the shared `eplugin-state.json` (`PluginStateStore.TryRecordLicenses`), omitted while empty. The 0.9.0 reader
+disallows unmapped members, and a failed self-update rolls back to it, so never write a field 0.9.0 does not know
+without raising `schemaVersion` (`PluginStateStoreTests.FilesOf090AreReadAndWrittenBackInAFormItCanRead` lists them).
+Later readers skip unknown fields and write them back (`JsonExtensionData`); a missing `plugins`/`attempts` list or
+another `schemaVersion` still makes the store read-only. Only an update's acknowledgement sets `lastCompletedAttemptId` (recovery and rollback compare
 it with the journal); lifecycle completions keep it and skip writing the shared file when no entry changed, because
 the file is committed and shared by the team.
 `EGlobal.Licenses.cs` gates `EnableEPlugin` before `JoinTransition` (skipped for manual retries and update reconciles)
