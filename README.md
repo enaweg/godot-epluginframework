@@ -80,15 +80,16 @@ Updates replace whole addon folders. They do not install missing plugins or reso
 
 ## Testing
 
-The current CI configuration builds and tests pull requests with Godot 4.7.2 and .NET 8. Other tested combinations are Godot 4.6.2, 4.5.1, or 4.4.1 with .NET 10.
+CI tests pull requests with Godot 4.7.2 and both the .NET 8 and the .NET 10 SDK, which use different dotnet command forms, and builds the framework against the Godot 4.6.2, 4.5.1 and 4.4.1 SDKs. Running it on those older Godot versions is tested by hand.
 
 ```bash
 cd src/eplugin-framework
 dotnet build "EPluginFramework.sln" --configuration Debug
 dotnet test "EPluginFramework.sln" --configuration Debug --settings .runsettings
+dotnet test ../activation-progress.Tests/ActivationProgress.Tests.csproj
 ```
 
-Tests require a Godot .NET editor executable. See the [CI workflow](https://github.com/enaweg/godot-epluginframework/blob/main/.github/workflows/ci-pr.yml) for its headless setup. Godot 4.5 and newer have an [EditorPlugin regression](https://github.com/godotengine/godot/issues/110971), so the framework uses an interface-based plugin API.
+The framework tests require a Godot .NET editor executable in `GODOT_BIN`. They drive the plugin lifecycle through a fake editor, because gdUnit4 cannot run inside the Godot editor. The progress helper's tests need only .NET. See the [CI workflow](https://github.com/enaweg/godot-epluginframework/blob/main/.github/workflows/ci-pr.yml) for the headless setup. Godot 4.5 and newer have an [EditorPlugin regression](https://github.com/godotengine/godot/issues/110971), so the framework uses an interface-based plugin API.
 
 ## Plugins using ePlugin Framework
 

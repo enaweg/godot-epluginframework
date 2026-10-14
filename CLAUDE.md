@@ -46,14 +46,22 @@ dotnet test "src/eplugin-framework/EPluginFramework.sln" --settings "src/eplugin
 ```
 Run a single test:
 ```
-dotnet test "src/eplugin-framework/EPluginFramework.sln" --filter "FullyQualifiedName~IDotnetCliTests.VersionTest"
+dotnet test "src/eplugin-framework/EPluginFramework.sln" --settings "src/eplugin-framework/.runsettings" --filter "FullyQualifiedName~IDotnetCliTests.VersionTest"
+```
+The progress helper's command handling has plain xUnit tests that need no Godot:
+```
+dotnet test "src/activation-progress.Tests/ActivationProgress.Tests.csproj"
 ```
 Alternative: gdUnit4's own CLI runner (`src/eplugin-framework/addons/gdUnit4/runtest.cmd` /
 `runtest.sh`), which takes `--godot_binary <path>` or the same `GODOT_BIN` env var.
 
 Note: gdUnit4 editor tests are not currently possible in Godot (upstream
 [gdUnit4#911](https://github.com/MikeSchulze/gdUnit4/issues/911)), so tests exercise framework internals
-directly (e.g. `EGlobal`) with a mocked `EPluginPlugin` (Moq) rather than driving the real editor UI.
+directly. `EGlobal` reaches the editor only through `IEditorHost` (`Internal/EditorHost.cs`); the lifecycle tests use
+`tests/LifecycleFixture.cs`, whose `FakeEditorHost` runs a plugin's enable/disable callback inside the toggle like
+Godot, with plugins in a temporary addons folder, a `RecordingCli` and real state files. Tests are compiled into the
+project assembly, so they use `internal` members; don't reach private ones through reflection. Known failures on
+Windows: two `ProgressSessionTests` read a command file another handle keeps open.
 
 There is no lint command configured beyond the `.editorconfig` (UTF-8 charset only).
 
@@ -92,6 +100,15 @@ enable/disable state machine (`EEditorPluginState`: `Created → Activated`/`Dea
 plugin dependencies (enabling/version-checking them before the dependent plugin), and applies/reverses each
 plugin's install recipe.
 
+Lifecycle code calls the editor only through `IEditorHost` (toggling plugins, the enabled list, plugin directories,
+whether a slug is an ePlugin and the recipe of a disabled one, autoloads, filesystem scans, whether dialogs can show);
+keep new lifecycle code behind it so it stays testable. Recipes are created through `TryEnsureRecipe`, which puts the
+plugin in error and discards a half-built recipe when `CreateRecipe` throws. `FindDependencyCycle` fails an activation
+whose hard dependencies lead back to the plugin (otherwise it waits for itself forever). Godot frees a plugin's instance
+on disable, so `AddContext` replaces a deactivated or freed context of the same slug. The compiled plugin types are read
+once per assembly load (`PluginTypes`). `Initialize` leaves `EGlobal` invalid when it throws; `EPluginPlugin` logs it
+and tries again after 10 s. One failing `IInitialize` does not stop the others.
+
 ### Authoring contract (public API surface)
 
 A consumer plugin implements `IEEditorPlugin.CreateRecipe(IEEditorPluginBuilder builder)` and calls the
@@ -121,6 +138,11 @@ interface forwarders for the base-typed variants.
 (records for `Nuget`, `Project`, `Autoload`, plugin `Plugin` dependencies, `OptionalPlugin` dependencies,
 plus a directory list); `EEditorPluginSubRecipeBuilder` is the `IEEditorPluginRecipeBuilder` impl used for the
 nested recipe of an optional dependency (a bare `EEditorPluginRecipe` — no implicit ePlugin self-dependency).
+Both add entries through `RecipeEntries`, which throws `ArgumentException` for invalid names, ids, paths, slugs and
+version constraints and for contradicting declarations, and ignores an identical declaration made twice (a recipe that
+throws can no longer be uninstalled, so don't make formerly accepted input throw). Version constraints
+(`VersionConstraint`) read versions with `SemVer` and compare only their numbers: exact, or `>=`/`>` for a minimum.
+Overloads must stay unambiguous for every call form the docs show; `EEditorPluginBuilderTests` compiles them.
 `EGlobal` applies a recipe in `InstallEPlugin`/`ApplyRecipe` (add NuGets → add/reference solution projects →
 show managed directories → add autoloads) and reverses it in `UninstallEPlugin`/`ReverseRecipe` in roughly
 opposite order. Recipe application always goes through `PluginContext.Cli` (an `IDotnetCli`), never raw
@@ -177,9 +199,13 @@ removing the last managed entry leaves nothing else in the file.
 
 `DotnetVersionManager` detects the installed `dotnet --version` and hands out either `DotnetCli10` or
 `DotnetCli9` (both `DotnetCliBase : ExecuteCliBase, IDotnetCli`) — the two dotnet CLI generations differ
-enough in `sln`/`nuget`/reference command behavior to need separate implementations. `ExecuteCliBase` does
-the actual process execution. Any new dotnet CLI operation needs a corresponding abstract member on
-`DotnetCliBase`/`IDotnetCli` implemented in both `DotnetCli9` and `DotnetCli10`.
+enough in `sln`/`nuget`/reference command behavior to need separate implementations. `ExecuteCliBase` runs commands
+through an `IProcessRunner` (`GodotProcessRunner` uses `OS.Execute`); tests record the arguments instead. The
+`dotnet --version` probe is cached until the assembly reloads. Any new dotnet CLI operation needs a corresponding
+abstract member on `DotnetCliBase`/`IDotnetCli` implemented in both `DotnetCli9` and `DotnetCli10`, with its arguments
+checked in `IDotnetCliTests`. Pass arguments one per element and unquoted (`OS.Execute` quotes them), and project
+paths through `ProjectFile`, which accepts `res://`, project-relative and absolute paths and returns an absolute one, so
+nothing depends on the editor's working directory. `IDotnetCli.Execute(command, args)` runs `dotnet <command> <args>`.
 
 Removals are idempotent: the CLI fails to remove a package, project reference or solution entry that is already gone,
 although that is the state the caller wants. Both CLIs therefore first ask `DotnetCliBase.Check*Removal`, which reads
@@ -336,8 +362,12 @@ acceptance, because that has to be known without running plugin code (e.g. for s
 is pure and unit-tested: `PluginLicense` resolves/reads it and gives it a *source* (relative file, `res://` path, or
 `text:<hash>` for recipe text; file contents are never compared), and `LicenseReview` holds per-license decisions
 (declining a dependency's license cancels and skips its dependants). Acceptances live in the optional `licenses` list
-of the shared `eplugin-state.json` (`PluginStateStore.TryRecordLicenses`). It is omitted while empty because the
-store's reader disallows unmapped members, so older framework versions can still read such files.
+of the shared `eplugin-state.json` (`PluginStateStore.TryRecordLicenses`). It is omitted while empty because readers
+up to 0.9.0 disallow unmapped members, so those versions can still read such files. Later readers skip unknown fields
+and write them back (`JsonExtensionData`); a missing `plugins`/`attempts` list or another `schemaVersion` still makes
+the store read-only. Only an update's acknowledgement sets `lastCompletedAttemptId` (recovery and rollback compare
+it with the journal); lifecycle completions keep it and skip writing the shared file when no entry changed, because
+the file is committed and shared by the team.
 `EGlobal.Licenses.cs` gates `EnableEPlugin` before `JoinTransition` (skipped for manual retries and update reconciles)
 over the plugin and every disabled hard dependency it would enable; a disabled ePlugin's recipe comes from a
 throw-away instance of its compiled script type. With pending licenses the plugin is disabled again (deferred: Godot is
@@ -368,8 +398,10 @@ the updated plugins as shown, so updates never show a page. The ePlugin Manager 
 
 `ILogger`/`ILoggerFactory` are pluggable (`GodotConsoleLogger`, `NullLogger`, `GenericLoggerFactory`).
 `EGlobal.SwitchLogging` lets a dependent plugin (e.g. an external logging plugin) take over ePlugin's own
-console logging at runtime — this is why logger wiring goes through the factory rather than being
-constructed once and cached globally. `GD.PushError`/`PushWarning` always report their direct caller, so
+console logging at runtime: it replaces the framework's logger and every context's logger and CLI — this is why
+logger wiring goes through the factory rather than being constructed once and cached globally. The project setting
+`eplugin/logging/debug` (`LoggingSettings`, read at start) turns on `EnableDebugLogging`, which logs every dotnet
+command. `GD.PushError`/`PushWarning` always report their direct caller, so
 `GodotConsoleLogger` binds GodotSharp's internal `NativeFuncs.godotsharp_err_print_error` and passes the first frame
 outside any `ILogger` (or `[StackTraceHidden]` method) as the location; without that binding it falls back to `GD.Push*`.
 
