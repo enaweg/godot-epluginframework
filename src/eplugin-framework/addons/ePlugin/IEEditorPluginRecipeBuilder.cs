@@ -50,7 +50,7 @@ public interface IEEditorPluginRecipeBuilder
     /// Godot <c>.csproj</c> in addition to the solution entry.
     /// </param>
     /// <returns>The builder itself.</returns>
-    IEEditorPluginRecipeBuilder AddProject(string path, string? virtualFolderName = null, bool addReference = true);
+    IEEditorPluginRecipeBuilder AddProject(string path, string? virtualFolderName, bool addReference = true);
 
     /// <summary>
     /// Adds one or more NuGet packages at their latest stable version to the main Godot project.

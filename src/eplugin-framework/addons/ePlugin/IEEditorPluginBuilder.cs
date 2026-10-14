@@ -26,7 +26,7 @@ public interface IEEditorPluginBuilder : IEEditorPluginRecipeBuilder
     new IEEditorPluginBuilder AddProject(string path, bool addReference = true);
 
     /// <inheritdoc cref="IEEditorPluginRecipeBuilder.AddProject(string, string, bool)"/>
-    new IEEditorPluginBuilder AddProject(string path, string? virtualFolderName = null, bool addReference = true);
+    new IEEditorPluginBuilder AddProject(string path, string? virtualFolderName, bool addReference = true);
 
     /// <inheritdoc cref="IEEditorPluginRecipeBuilder.AddNugets"/>
     new IEEditorPluginBuilder AddNugets(params string[] nugetNames);

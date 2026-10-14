@@ -71,7 +71,7 @@ internal sealed class EEditorPluginBuilder : IEEditorPluginBuilder
         return this;
     }
 
-    public IEEditorPluginBuilder AddProject(string path, string? virtualFolderName = null,
+    public IEEditorPluginBuilder AddProject(string path, string? virtualFolderName,
         bool addReference = true)
     {
         PluginRecipe.Projects.Add(new EEditorPluginRecipe.Project(path, virtualFolderName, addReference));

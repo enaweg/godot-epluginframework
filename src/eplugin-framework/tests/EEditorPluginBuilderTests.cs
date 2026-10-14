@@ -79,6 +79,35 @@ public class EEditorPluginBuilderTests
 
     [TestCase]
     [RequireGodotRuntime]
+    public void EveryDocumentedAddProjectFormCompiles()
+    {
+        // Compiling this test is the check: one argument was ambiguous between both overloads (CS0121).
+        IEEditorPluginBuilder root = EEditorPluginBuilder.Create();
+        root.AddProject("a.csproj")
+            .AddProject("b.csproj", false)
+            .AddProject("c.csproj", "Folder")
+            .AddProject("d.csproj", null)
+            .AddProject("e.csproj", "Folder", false)
+            .AddOptionalPluginDependency("other", null, optional => optional
+                .AddProject("f.csproj")
+                .AddProject("g.csproj", false)
+                .AddProject("h.csproj", "Folder"));
+
+        var recipe = ((EEditorPluginBuilder)root).PluginRecipe;
+        Assertions.AssertThat(recipe.Projects).ContainsExactly(
+            new EEditorPluginRecipe.Project("a.csproj", null, true),
+            new EEditorPluginRecipe.Project("b.csproj", null, false),
+            new EEditorPluginRecipe.Project("c.csproj", "Folder", true),
+            new EEditorPluginRecipe.Project("d.csproj", null, true),
+            new EEditorPluginRecipe.Project("e.csproj", "Folder", false));
+        Assertions.AssertThat(recipe.OptionalPluginDependencies[0].Recipe.Projects).ContainsExactly(
+            new EEditorPluginRecipe.Project("f.csproj", null, true),
+            new EEditorPluginRecipe.Project("g.csproj", null, false),
+            new EEditorPluginRecipe.Project("h.csproj", "Folder", true));
+    }
+
+    [TestCase]
+    [RequireGodotRuntime]
     public void AddNugetParamsAddsEachPackageWithoutVersionOrSource()
     {
         var builder = EEditorPluginBuilder.Create();
