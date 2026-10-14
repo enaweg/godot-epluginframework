@@ -77,7 +77,7 @@ internal sealed class DotnetCli10(ILogger? logger, bool enableDebugLogging, IPro
         if (!installSuccess)
         {
             // the command's output is logged with its exit code
-            logger?.Error(version is not null ? $"Installing {nugetName} v{version} failed!" : $"Installing {nugetName} failed!");
+            Logger?.Error(version is not null ? $"Installing {nugetName} v{version} failed!" : $"Installing {nugetName} failed!");
         }
 
         return installSuccess;
