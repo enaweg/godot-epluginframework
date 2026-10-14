@@ -23,6 +23,9 @@ public sealed class GodotConsoleLogger(string prefix) : ILogger
     // (a changed signature in another Godot version) messages fall back to GD.PushError.
     private static readonly ErrPrintError? Printer = Bind();
 
+    /// <summary>Whether errors and warnings name the code that logged them; without it they name this logger.</summary>
+    internal static bool NamesCallers => Printer is not null;
+
     [StackTraceHidden]
     public void Log(string message)
     {

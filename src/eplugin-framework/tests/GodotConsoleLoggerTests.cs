@@ -1,4 +1,3 @@
-using System.Reflection;
 using Enaweg.Plugin.Logging;
 using GdUnit4;
 
@@ -11,7 +10,6 @@ public class GodotConsoleLoggerTests
     public void ErrorPrinterBindsSoMessagesNameTheirCaller()
     {
         // Without it errors still print, but at GodotConsoleLogger instead of the code that logged them.
-        var printer = typeof(GodotConsoleLogger).GetField("Printer", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null);
-        Assertions.AssertObject(printer).IsNotNull();
+        Assertions.AssertBool(GodotConsoleLogger.NamesCallers).IsTrue();
     }
 }
