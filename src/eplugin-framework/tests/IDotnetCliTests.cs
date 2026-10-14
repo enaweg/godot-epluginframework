@@ -153,6 +153,78 @@ public class IDotnetCliTests
         }
     }
 
+    [TestCase]
+    public static void TheVoidFormsRunTheSameCommandsAndDebugLoggingShowsThem()
+    {
+        var project = Path.Combine(ProjectRoot, "EPluginFramework.csproj");
+        var solution = Path.Combine(ProjectRoot, "EPluginFramework.sln");
+        var absolute = Path.Combine(ProjectRoot, "addons", "other", "Other.csproj");
+        foreach (var generation in new[] { 9, 10 })
+        {
+            var log = new List<string>();
+            var runner = new RecordingRunner();
+            DotnetCliBase cli = generation == 9
+                ? new DotnetCli9(new RecordingLogger(log, "cli"), true, runner)
+                : new DotnetCli10(new RecordingLogger(log, "cli"), true, runner);
+
+            cli.RebuildSolution();
+            cli.AddProjectToSolution("addons/other/Other.csproj");
+            cli.AddProjectReference("addons/other/Other.csproj");
+            cli.RemoveNugetFromProject("ZLogger");
+            // not referenced: settled without the CLI
+            cli.RemoveProjectReference("addons/other/Other.csproj");
+            cli.RemoveProjectFromSolution("addons/other/Other.csproj");
+            cli.AddNugetToProject("Some.Package", prerelease: true);
+
+            Assertions.AssertInt(runner.Calls.Count).IsEqual(5);
+            Assertions.AssertThat(runner.Calls[0]).ContainsExactly("dotnet", "build", solution, "--no-incremental");
+            Assertions.AssertThat(runner.Calls[1]).ContainsExactly("dotnet", "sln", solution, "add", absolute);
+            Assertions.AssertBool(runner.Calls[2].Contains(absolute) && runner.Calls[2].Contains(project)).IsTrue();
+            Assertions.AssertBool(runner.Calls[3].Contains("ZLogger") && runner.Calls[3].Contains("remove")).IsTrue();
+            Assertions.AssertString(runner.Calls[4][^1]).IsEqual("--prerelease");
+            Assertions.AssertString(log[0]).IsEqual($"log: cli: Using {cli.GetType().Name} for dotnet commands.");
+            // the project directory is shortened in the log
+            Assertions.AssertBool(log.Any(l => l.StartsWith("log: cli: Executing: dotnet build <project>", System.StringComparison.Ordinal))).IsTrue();
+            Assertions.AssertInt(log.Count(l => l.StartsWith("warn:", System.StringComparison.Ordinal))).IsEqual(2);
+        }
+    }
+
+    [TestCase]
+    public static void RemovingSomethingThatIsNotAProjectFileFailsWithoutTheCli()
+    {
+        foreach (var generation in new[] { 9, 10 })
+        {
+            var log = new List<string>();
+            var runner = new RecordingRunner();
+            DotnetCliBase cli = generation == 9
+                ? new DotnetCli9(new RecordingLogger(log, "cli"), false, runner)
+                : new DotnetCli10(new RecordingLogger(log, "cli"), false, runner);
+
+            Assertions.AssertBool(cli.TryRemoveProjectReference("addons/other/readme.txt")).IsFalse();
+            Assertions.AssertBool(cli.TryRemoveProjectFromSolution("addons/other/readme.txt")).IsFalse();
+
+            Assertions.AssertInt(runner.Calls.Count).IsEqual(0);
+            Assertions.AssertInt(log.Count(l => l.StartsWith("error:", System.StringComparison.Ordinal) && l.Contains("not a project file path"))).IsEqual(2);
+        }
+    }
+
+    [TestCase]
+    public static void ARunnerThatThrowsIsReportedAsAFailedCommand()
+    {
+        var log = new List<string>();
+        var cli = new DotnetCli10(new RecordingLogger(log, "cli"), false, new ThrowingRunner());
+
+        Assertions.AssertInt(cli.Execute("restore", []).Item1).IsEqual(-1);
+        Assertions.AssertBool(cli.TryRebuildSolution()).IsFalse();
+        Assertions.AssertBool(log.Contains("error: cli: dotnet is not installed")).IsTrue();
+    }
+
+    private sealed class ThrowingRunner : IProcessRunner
+    {
+        public (int ExitCode, string[] Output) Run(string command, string[] arguments) =>
+            throw new IOException("dotnet is not installed");
+    }
+
     [TestCase(Timeout = 120000)]
     public static void BothGenerationsChangeARealProjectAndUndoIt()
     {

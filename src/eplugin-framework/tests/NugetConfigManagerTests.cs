@@ -1,6 +1,8 @@
 #if TOOLS
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Enaweg.Plugin.Internal.Dotnet;
 using Enaweg.Plugin.Logging;
 using GdUnit4;
@@ -112,6 +114,72 @@ public class NugetConfigManagerTests
 
         var content = File.ReadAllText(ConfigPath);
         Assertions.AssertThat(content).Contains(url);
+    }
+
+    [TestCase]
+    [RequireGodotRuntime]
+    public static void SourcesOutsideTheProjectAreNotTracked()
+    {
+        var log = new List<string>();
+        var outside = Path.Combine(Path.GetTempPath(), "eplugin-feed");
+
+        Assertions.AssertBool(NugetConfigManager.RegisterSource("sample_plugin", outside, new RecordingLogger(log, "nuget"))).IsTrue();
+        Assertions.AssertBool(NugetConfigManager.RegisterSource("sample_plugin", " ", new RecordingLogger(log, "nuget"))).IsTrue();
+        Assertions.AssertBool(NugetConfigManager.UnregisterSource("sample_plugin", outside, new RecordingLogger(log, "nuget"))).IsTrue();
+
+        Assertions.AssertBool(File.Exists(ConfigPath)).IsFalse();
+        Assertions.AssertInt(log.Count(l => l.Contains("is outside the project"))).IsEqual(2);
+    }
+
+    [TestCase]
+    [RequireGodotRuntime]
+    public static void UnregisteringASourceThatIsNotListedLeavesTheFileAlone()
+    {
+        Assertions.AssertBool(NugetConfigManager.UnregisterSource("sample_plugin", "https://example.com/feed/index.json", new NullLogger())).IsTrue();
+        Assertions.AssertBool(File.Exists(ConfigPath)).IsFalse();
+
+        const string config = "<configuration><packageSources><add key=\"nuget.org\" value=\"https://api.nuget.org/v3/index.json\" /></packageSources></configuration>";
+        File.WriteAllText(ConfigPath, config);
+        Assertions.AssertBool(NugetConfigManager.UnregisterSource("sample_plugin", "https://example.com/feed/index.json", new NullLogger())).IsTrue();
+        Assertions.AssertString(File.ReadAllText(ConfigPath)).IsEqual(config);
+    }
+
+    [TestCase]
+    [RequireGodotRuntime]
+    public static void AMalformedFileIsReportedAndKept()
+    {
+        var log = new List<string>();
+        File.WriteAllText(ConfigPath, "<configuration><packageSources>");
+
+        Assertions.AssertBool(NugetConfigManager.RegisterSource("sample_plugin", "https://example.com/feed/index.json", new RecordingLogger(log, "nuget"))).IsFalse();
+        Assertions.AssertBool(NugetConfigManager.UnregisterSource("sample_plugin", "https://example.com/feed/index.json", new RecordingLogger(log, "nuget"))).IsFalse();
+
+        Assertions.AssertString(File.ReadAllText(ConfigPath)).IsEqual("<configuration><packageSources>");
+        Assertions.AssertBool(log.Any(l => l.StartsWith("error: nuget: Failed to update nuget.config for source", StringComparison.Ordinal))).IsTrue();
+        Assertions.AssertBool(log.Any(l => l.StartsWith("error: nuget: Failed to update nuget.config while removing source", StringComparison.Ordinal))).IsTrue();
+    }
+
+    [TestCase]
+    [RequireGodotRuntime]
+    public static void AManagedEntryWhoseCommentWasEditedGetsItsMarkerBack()
+    {
+        const string url = "https://example.com/feed/index.json";
+        NugetConfigManager.RegisterSource("plugin_a", url, new NullLogger());
+        // someone removed the marker comment, or replaced it with their own
+        foreach (var replacement in new[] { "", "<!-- reviewed by the team -->" })
+        {
+            var content = File.ReadAllText(ConfigPath);
+            var start = content.IndexOf("<!--", StringComparison.Ordinal);
+            var end = content.IndexOf("-->", start, StringComparison.Ordinal) + 3;
+            File.WriteAllText(ConfigPath, content[..start] + replacement + content[end..]);
+
+            NugetConfigManager.RegisterSource("plugin_b", url, new NullLogger());
+
+            content = File.ReadAllText(ConfigPath);
+            Assertions.AssertInt(CountOccurrences(content, "<add key=\"ePlugin-")).IsEqual(1);
+            Assertions.AssertThat(content).Contains("used-by=\"plugin_b\"");
+            Assertions.AssertThat(content).NotContains("plugin_a");
+        }
     }
 
     private static int CountOccurrences(string haystack, string needle)
