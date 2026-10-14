@@ -45,5 +45,14 @@ public class EditorThreadQueueTests
         Assertions.AssertBool(ran).IsFalse();
         Assertions.AssertBool(task.IsCanceled).IsTrue();
     }
+
+    [TestCase]
+    public static void AnExceptionOfTheWorkFaultsItsTask()
+    {
+        var task = EGlobal.OnEditorThread(() => throw new System.InvalidOperationException("broken"), CancellationToken.None);
+        EGlobal.RunPosted();
+        Assertions.AssertBool(task.IsFaulted).IsTrue();
+        Assertions.AssertString(task.Exception!.InnerException!.Message).IsEqual("broken");
+    }
 }
 #endif

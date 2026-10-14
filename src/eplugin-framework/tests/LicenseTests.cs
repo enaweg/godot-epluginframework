@@ -6,6 +6,7 @@ using System.Linq;
 using Enaweg.Plugin.Internal;
 using Enaweg.Plugin.Internal.Licenses;
 using Enaweg.Plugin.Internal.Manager;
+using Enaweg.Plugin.Internal.Welcomes;
 using Enaweg.Plugin.Logging;
 using GdUnit4;
 
@@ -247,6 +248,24 @@ public class LicenseTests
         merged.DeclineRemaining();
         Assertions.AssertArray(merged.Approved.Select(a => a.Slug).ToArray()).ContainsExactly("one");
         Assertions.AssertArray(merged.Canceled.Select(a => a.Slug).ToArray()).ContainsExactly("two");
+    }
+
+    [TestCase]
+    public void OversizedFilesAndPathsLeavingThePluginAreReported()
+    {
+        var directory = TempDirectory();
+        var license = Path.Combine(directory, "LICENSE");
+        File.WriteAllBytes(license, new byte[PluginLicense.MaximumSize + 1]);
+        var welcome = Path.Combine(directory, "README.md");
+        File.WriteAllBytes(welcome, new byte[PluginWelcome.MaximumSize + 1]);
+
+        Assertions.AssertString(PluginLicense.FromFile("plugin", "Plugin", "1.0.0", "LICENSE", license).Problem!).Contains("is larger than 1024 KiB");
+        Assertions.AssertString(PluginWelcome.FromFile("plugin", "Plugin", "1.0.0", "README.md", welcome).Problem!).Contains("is larger than 1024 KiB");
+        // a recipe path that leaves the plugin directory keeps its res:// form as the source
+        Assertions.AssertString(PluginLicense.SourceOfPath("plugin", "res://addons/plugin/../other/LICENSE")).IsEqual("res://addons/plugin/../other/LICENSE");
+        Assertions.AssertBool(PluginLicense.IsTrue(" TRUE ")).IsTrue();
+        Assertions.AssertBool(PluginLicense.IsTrue("yes")).IsFalse();
+        Assertions.AssertBool(PluginLicense.IsTrue(null)).IsFalse();
     }
 }
 #endif

@@ -125,11 +125,13 @@ public class ProgressSessionTests
     public void EditorsAppendWithoutOverwritingEachOthersCommands()
     {
         var commands = Helper("helper", new ProcessIdentity(1_000_001, 10));
-        using var first = ProgressSession.Acquire(_shared, _handoff, Start);
-        using var second = ProgressSession.Acquire(_shared, _handoff, Start);
-        first!.Send(User, "TEXT QQ==");
-        second!.Send(User, "TEXT Qg==");
-        first.Send(User, "END");
+        using (var first = ProgressSession.Acquire(_shared, _handoff, Start))
+        using (var second = ProgressSession.Acquire(_shared, _handoff, Start))
+        {
+            first!.Send(User, "TEXT QQ==");
+            second!.Send(User, "TEXT Qg==");
+            first.Send(User, "END");
+        }
 
         Assertions.AssertThat(File.ReadAllLines(commands))
             .ContainsExactly(User + " TEXT QQ==", User + " TEXT Qg==", User + " END");
@@ -141,8 +143,10 @@ public class ProgressSessionTests
         var blocked = Helper("oldest", new ProcessIdentity(1_000_001, 10));
         using var locked = new FileStream(blocked, FileMode.Open, System.IO.FileAccess.ReadWrite, FileShare.None);
         var commands = Helper("newer", new ProcessIdentity(1_000_002, 20));
-        using var session = ProgressSession.Acquire(_shared, _handoff, Start);
-        session!.Send(User, "HEARTBEAT");
+        using (var session = ProgressSession.Acquire(_shared, _handoff, Start))
+        {
+            session!.Send(User, "HEARTBEAT");
+        }
 
         Assertions.AssertInt(_started).IsEqual(0);
         Assertions.AssertThat(File.ReadAllLines(commands)).ContainsExactly(User + " HEARTBEAT");

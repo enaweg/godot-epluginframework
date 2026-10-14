@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -274,6 +275,129 @@ public class UpdateSourceTests
         finally { Directory.Delete(root, true); }
     }
 
+    [TestCase]
+    public static async Task DownloadedAndGitPackagesAreStagedAndUnfitOnesAreRefusedAlone()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "fetch-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var installed = Path.Combine(root, "installed");
+            Directory.CreateDirectory(installed);
+            File.WriteAllText(Path.Combine(installed, "plugin.cfg"), "[plugin]\nname=\"Plugin\"\nversion=\"1.0.0\"\nscript=\"plugin.gd\"\n");
+            var archive = Path.Combine(root, "plugin.zip");
+            using (var zip = ZipFile.Open(archive, ZipArchiveMode.Create))
+            {
+                foreach (var (name, text) in new[] { ("addons/plugin/plugin.cfg", "[plugin]\nname=\"Plugin\"\nversion=\"2.0.0\"\nscript=\"plugin.gd\"\n"), ("addons/plugin/plugin.gd", "extends EditorPlugin") })
+                {
+                    using var writer = new StreamWriter(zip.CreateEntry(name).Open());
+                    writer.Write(text);
+                }
+            }
+            var requested = new List<string>();
+            using var client = new HttpClient(new Handler(request =>
+            {
+                requested.Add(request.RequestUri!.ToString());
+                return new(HttpStatusCode.OK) { Content = new ByteArrayContent(File.ReadAllBytes(archive)) };
+            }));
+            var zipped = new UpdateCandidate("plugin", "Plugin", "1.0.0", "2.0.0", "https://example.org/releases", null, null, new ZipPackageRef("https://example.org/plugin.zip", "plugin"));
+            var git = new UpdateCandidate("git", "Git", "1.0.0", "2.0.0", "https://host/repo.git?path=addon", null, FakeGit.Commit, new GitPackageRef("https://host/repo.git", "addon", FakeGit.Commit));
+            var unknown = git with { Slug = "unknown", Package = new OtherPackageRef() };
+            var forged = git with { Slug = "forged", SourceUrl = "https://host/other.git?path=addon" };
+            UpdateCandidate[] candidates = [zipped, git, unknown, forged];
+            var targets = candidates.Select(c => new PluginUpdateTarget(c.Slug, c.PluginName, "1.0.0", null, installed)).ToArray();
+            var progress = new List<double>();
+
+            var batch = await new PackageFetcher(new UpdateHttp(client), new FakeGit()).FetchAsync(candidates, targets,
+                Path.Combine(root, "transaction"), new InlineProgress(progress.Add), CancellationToken.None);
+
+            Assertions.AssertString(batch.Packages.Single().Candidate.Slug).IsEqual("plugin");
+            Assertions.AssertBool(File.Exists(Path.Combine(batch.Packages[0].StagingDir, "plugin.gd"))).IsTrue();
+            Assertions.AssertThat(requested).ContainsExactly("https://example.org/plugin.zip");
+            Assertions.AssertBool(File.Exists(Path.Combine(root, "transaction", "download.tmp"))).IsFalse();
+            var reasons = batch.Refused.ToDictionary(r => r.Candidate.Slug, r => r.Reason);
+            // the fake repository's plugin.cfg has a version only, so validation refuses what git staged
+            Assertions.AssertString(reasons["git"]).StartsWith("Package for 'git' was refused:");
+            Assertions.AssertString(reasons["unknown"]).Contains("Unsupported package reference.");
+            Assertions.AssertString(reasons["forged"]).Contains("Git package does not match its declared source.");
+            Assertions.AssertBool(Directory.Exists(Path.Combine(root, "transaction", "staging", "git"))).IsFalse();
+            Assertions.AssertBool(Math.Abs(progress[^1] - 1.0) < 1e-9).IsTrue();
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [TestCase]
+    public static async Task GitLabBranchChecksReadTheRawPluginCfg()
+    {
+        var requested = new List<string>();
+        using var client = new HttpClient(new Handler(request =>
+        {
+            requested.Add(request.RequestUri!.ToString());
+            return Json("[plugin]\nversion=\"2.0.0\"\n");
+        }));
+        var git = new FakeGit();
+
+        var candidate = await new GitSource(new(client), git, new("https://gitlab.com/group/project.git", "addon", "main"))
+            .CheckAsync(Target(), new(), CancellationToken.None);
+
+        Assertions.AssertString(candidate!.NewVersion).IsEqual("2.0.0");
+        Assertions.AssertThat(requested).ContainsExactly($"https://gitlab.com/group/project/-/raw/{FakeGit.Commit}/addon/plugin.cfg");
+        Assertions.AssertBool(git.Calls.Any(c => c.Contains("fetch"))).IsFalse();
+    }
+
+    [TestCase]
+    public static async Task GitServersWithoutUsableCommitsOrPartialFetchAreRefused()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "git-refused-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var package = new GitPackageRef("https://host/repo.git", "addon", FakeGit.Commit);
+            foreach (var (fake, message) in new[]
+                     {
+                         (new FakeGit(capabilities: ""), "does not advertise partial-fetch support"),
+                         (new FakeGit(fetchError: "warning: filtering not recognized by server, ignoring"), "ignored the partial-fetch filter")
+                     })
+            {
+                try
+                {
+                    await new GitSource(new(), fake, new("https://host/repo.git", "addon", null)).FetchAsync(package, "plugin", Path.Combine(root, "staged"), CancellationToken.None);
+                    throw new InvalidOperationException("A full repository download was accepted.");
+                }
+                catch (IOException ex) { Assertions.AssertString(ex.Message).Contains(message); }
+            }
+
+            // a repository without version tags whose HEAD cannot be resolved
+            try
+            {
+                await new GitSource(new(), new FakeGit(refs: ""), new("https://host/repo.git", "addon", null)).CheckAsync(Target(), new(), CancellationToken.None);
+                throw new InvalidOperationException("A repository without a commit was checked.");
+            }
+            catch (IOException ex) { Assertions.AssertString(ex.Message).Contains("no usable commit"); }
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [TestCase]
+    public static async Task TheGitRunnerReportsOutputErrorsAndExitCodes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "git-runner-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var runner = new GitRunner();
+            var version = await runner.RunAsync(root, ["--version"], CancellationToken.None, trace: true);
+            Assertions.AssertInt(version.ExitCode).IsEqual(0);
+            Assertions.AssertString(version.Output).StartsWith("git version");
+
+            // not a repository
+            var failed = await runner.RunAsync(root, ["rev-parse", "HEAD"], CancellationToken.None);
+            Assertions.AssertInt(failed.ExitCode).IsNotEqual(0);
+            Assertions.AssertString(failed.Error).IsNotEmpty();
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
     private static PluginUpdateTarget Target() => new("plugin", "Plugin", "1.0.0", "https://github.com/owner/repo/releases", "/unused");
     private static HttpResponseMessage Json(string text) => new(HttpStatusCode.OK) { Content = new StringContent(text) };
     private static HttpResponseMessage Redirect(string url)
@@ -287,7 +411,10 @@ public class UpdateSourceTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) => Task.FromResult(handle(request));
     }
     /// <summary>A repository with one plugin in <paramref name="folder"/> ("" at its root) next to a project.godot.</summary>
-    private sealed class FakeGit(string folder = "addon", string? refs = null, string? tree = null, string version = "2.0.0") : IGitRunner
+    private sealed record OtherPackageRef : UpdatePackageRef;
+    /// <param name="capabilities">What ls-remote reports with packet tracing; without "filter" partial fetches are refused.</param>
+    private sealed class FakeGit(string folder = "addon", string? refs = null, string? tree = null, string version = "2.0.0",
+        string capabilities = "fetch=shallow filter", string fetchError = "") : IGitRunner
     {
         public const string Commit = "0123456789012345678901234567890123456789";
         public List<IReadOnlyList<string>> Calls { get; } = [];
@@ -307,7 +434,7 @@ public class UpdateSourceTests
                 : args.Contains("ls-remote") ? refs ?? $"{Commit}\trefs/heads/main\n{Commit}\trefs/tags/v2.0.0\n"
                 : args.Contains("ls-tree") ? tree ?? $"project.godot\0{prefix}plugin.cfg\0{prefix}plugin.gd\0"
                 : args.Contains("show") ? config : "";
-            return Task.FromResult(new GitOutcome(0, output, trace ? "fetch=shallow filter" : ""));
+            return Task.FromResult(new GitOutcome(0, output, trace ? capabilities : args.Contains("fetch") ? fetchError : ""));
         }
     }
 }
