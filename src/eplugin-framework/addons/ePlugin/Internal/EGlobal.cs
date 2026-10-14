@@ -1381,48 +1381,15 @@ internal sealed partial class EGlobal
         }
     }
 
-    internal bool MatchesVersion(string givenVersion, string condition, ILogger? logger)
+    internal static bool MatchesVersion(string? givenVersion, string condition, ILogger? logger)
     {
-        if (string.IsNullOrWhiteSpace(givenVersion) || string.IsNullOrWhiteSpace(condition))
-            return false;
-
-        // clean to support semver postfixes by just ignoring them
-        var index = givenVersion.IndexOf('-');
-        if (index > 0)
+        var matches = VersionConstraint.Matches(givenVersion, condition, out var error);
+        if (error is not null)
         {
-            givenVersion = givenVersion[..index];
+            logger?.Warn($"Dependency version cannot be checked: {error}.");
         }
 
-        if (!Version.TryParse(givenVersion, out var version))
-        {
-            logger?.Warn(
-                $"Dependency version is in wrong format! (was: {givenVersion} needed: [major].[minor].[patch])");
-            return false;
-        }
-
-        if (condition.AsSpan().StartsWith(">"))
-        {
-            var conditionVersionStr = condition.AsSpan()[1..];
-            if (!Version.TryParse(conditionVersionStr, out var checkVersion))
-            {
-                logger?.Warn(
-                    $"Dependency version is in wrong format! (was: {givenVersion} needed: >[major].[minor].[patch])");
-                return false;
-            }
-
-            return version >= checkVersion;
-        }
-        else
-        {
-            if (!Version.TryParse(condition, out var checkVersion))
-            {
-                logger?.Warn(
-                    $"Dependency version is in wrong format! (was: {givenVersion} needed: [major].[minor].[patch])");
-                return false;
-            }
-
-            return version == checkVersion;
-        }
+        return matches;
     }
 
     public void AddInitializer(IInitialize initializer)
