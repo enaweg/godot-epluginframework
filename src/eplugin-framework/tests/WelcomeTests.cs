@@ -1,3 +1,4 @@
+#if TOOLS
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -168,3 +169,4 @@ public class WelcomeTests
         finally { dialog.Free(); }
     }
 }
+#endif

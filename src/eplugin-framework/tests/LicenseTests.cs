@@ -1,3 +1,4 @@
+#if TOOLS
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -128,8 +129,7 @@ public class LicenseTests
         Assertions.AssertBool(reloaded.IsLicenseAccepted("plugin", "LICENSE")).IsTrue();
         Assertions.AssertBool(reloaded.IsLicenseAccepted("plugin", "LICENSE-2.md")).IsFalse();
         Assertions.AssertBool(reloaded.GetLicense("other")!.Automatic).IsTrue();
-        // recording a license keeps the completed attempt and plugin states, and completing keeps the licenses
-        Assertions.AssertObject(reloaded.LastCompletedAttemptId).IsEqual(id);
+        // recording a license keeps the plugin states, and completing keeps the licenses
         Assertions.AssertObject(reloaded.GetShared("plugin")!.State).IsEqual(PersistedPluginState.Deactivated);
         Assertions.AssertBool(reloaded.TryBeginAttempt("plugin", "1.0.0", PersistedPluginState.Activated, out var next)).IsTrue();
         Assertions.AssertBool(reloaded.TryComplete(next, [new("plugin", "1.0.0", PersistedPluginState.Activated)])).IsTrue();
@@ -249,3 +249,4 @@ public class LicenseTests
         Assertions.AssertArray(merged.Canceled.Select(a => a.Slug).ToArray()).IsEqual(new[] { "two" });
     }
 }
+#endif

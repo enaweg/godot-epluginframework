@@ -24,28 +24,29 @@ internal sealed class EEditorPluginSubRecipeBuilder : IEEditorPluginRecipeBuilde
 
     public IEEditorPluginRecipeBuilder AddAutoload(string name, string path)
     {
-        PluginRecipe.Autoloads.Add(new EEditorPluginRecipe.Autoload(name, path));
+        RecipeEntries.AddAutoload(PluginRecipe, name, path);
         return this;
     }
 
     public IEEditorPluginRecipeBuilder AddProject(string path, bool addReference = true)
     {
-        PluginRecipe.Projects.Add(new EEditorPluginRecipe.Project(path, null, addReference));
+        RecipeEntries.AddProject(PluginRecipe, path, null, addReference);
         return this;
     }
 
-    public IEEditorPluginRecipeBuilder AddProject(string path, string? virtualFolderName = null,
+    public IEEditorPluginRecipeBuilder AddProject(string path, string? virtualFolderName,
         bool addReference = true)
     {
-        PluginRecipe.Projects.Add(new EEditorPluginRecipe.Project(path, virtualFolderName, addReference));
+        RecipeEntries.AddProject(PluginRecipe, path, virtualFolderName, addReference);
         return this;
     }
 
     public IEEditorPluginRecipeBuilder AddNugets(params string[] nugetNames)
     {
+        System.ArgumentNullException.ThrowIfNull(nugetNames);
         foreach (var nugetName in nugetNames)
         {
-            PluginRecipe.Nugets.Add(new EEditorPluginRecipe.Nuget(nugetName, null, null));
+            RecipeEntries.AddNuget(PluginRecipe, nugetName, null, null);
         }
 
         return this;
@@ -53,13 +54,13 @@ internal sealed class EEditorPluginSubRecipeBuilder : IEEditorPluginRecipeBuilde
 
     public IEEditorPluginRecipeBuilder AddNuget(string nugetName, string? version = null, string? source = null)
     {
-        PluginRecipe.Nugets.Add(new EEditorPluginRecipe.Nuget(nugetName, version, source));
+        RecipeEntries.AddNuget(PluginRecipe, nugetName, version, source);
         return this;
     }
 
     public IEEditorPluginRecipeBuilder AddDirectory(string path)
     {
-        PluginRecipe.Directories.Add(path);
+        RecipeEntries.AddDirectory(PluginRecipe, path);
         return this;
     }
 }

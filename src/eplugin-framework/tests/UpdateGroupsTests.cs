@@ -1,3 +1,4 @@
+#if TOOLS
 using System.Collections.Generic;
 using System.Linq;
 using Enaweg.Plugin.Internal.Update;
@@ -44,3 +45,4 @@ public class UpdateGroupsTests
         UpdateGroups.Plan(batch, dependencies.ToDictionary(p => p.Key, p => (IReadOnlyCollection<string>)p.Value), "ePlugin")
             .Select(g => string.Join(",", g)).ToArray();
 }
+#endif

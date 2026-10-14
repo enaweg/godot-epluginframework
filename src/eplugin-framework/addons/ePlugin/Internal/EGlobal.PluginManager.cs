@@ -18,7 +18,7 @@ internal sealed partial class EGlobal
         RefreshPlainPlugins();
         ReloadUpdateSites();
         var enabled = GetEnabledPluginSlugs();
-        var types = typeof(EGlobal).Assembly.GetTypes();
+        var types = PluginTypes.All;
         var framework = _ePluginContext?.GetPluginSlug() ?? "ePlugin";
         var plugins = new List<PluginInfo>();
         using var addons = DirAccess.Open("res://addons");

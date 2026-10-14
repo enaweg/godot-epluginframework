@@ -1,3 +1,4 @@
+#if TOOLS
 using System.Collections.Generic;
 using Enaweg.Plugin.Internal;
 using GdUnit4;
@@ -58,3 +59,4 @@ public class PluginTogglesTests
 
     private static HashSet<string> Set(params string[] slugs) => [.. slugs];
 }
+#endif

@@ -50,7 +50,13 @@ internal sealed record LocalPluginAttempt(
 /// </summary>
 /// <remarks>
 /// <c>licenses</c> and <c>welcomes</c> are left out while they are empty, so such files stay readable by framework
-/// versions that do not know them.
+/// versions that do not know them. Fields this version does not know, written by a newer one, are kept when the file is
+/// written again; only another <c>schemaVersion</c> makes the files read-only.
+/// <para>
+/// The shared file is committed and edited by everyone on the project, so it changes only with its content:
+/// <c>lastCompletedAttemptId</c> names the last acknowledged update, which recovery needs; enabling and disabling plugins
+/// leave it alone, and an attempt that changes no entry does not write the file at all.
+/// </para>
 /// </remarks>
 internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
 {
@@ -59,7 +65,6 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
-        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false) }
     };
 
@@ -71,6 +76,9 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
     private Dictionary<string, ShownWelcome> _welcomes = new(StringComparer.Ordinal);
     private byte[]? _sharedBytes;
     private Guid? _lastCompletedAttemptId;
+    // Fields a newer framework version wrote, by document and by entry slug, kept when the files are written again.
+    private Extras _sharedExtras = new();
+    private Extras _localExtras = new();
 
     public Guid? LastCompletedAttemptId => _lastCompletedAttemptId;
     public Guid? GetAttemptId(string slug) => GetLocal(slug)?.AttemptId;
@@ -142,11 +150,11 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
             _sharedBytes = File.Exists(_sharedPath) ? File.ReadAllBytes(_sharedPath) : null;
             var localBytes = File.Exists(_localPath) ? File.ReadAllBytes(_localPath) : null;
             var shared = _sharedBytes is null
-                ? new SharedDocument { SchemaVersion = SchemaVersion }
+                ? new SharedDocument { SchemaVersion = SchemaVersion, Plugins = [] }
                 : JsonSerializer.Deserialize<SharedDocument>(_sharedBytes, JsonOptions)
                   ?? throw new InvalidDataException("Shared plugin state is null.");
             var local = localBytes is null
-                ? new LocalDocument { SchemaVersion = SchemaVersion }
+                ? new LocalDocument { SchemaVersion = SchemaVersion, Attempts = [] }
                 : JsonSerializer.Deserialize<LocalDocument>(localBytes, JsonOptions)
                   ?? throw new InvalidDataException("Local plugin state is null.");
             Validate(shared, local);
@@ -161,6 +169,14 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
             _welcomes = (shared.Welcomes ?? []).ToDictionary(x => x.Slug!, x =>
                 new ShownWelcome(x.Slug!, x.Version ?? "", x.ShownUtc ?? default), StringComparer.Ordinal);
             _lastCompletedAttemptId = shared.LastCompletedAttemptId;
+            _sharedExtras = new Extras
+            {
+                Document = shared.Unknown,
+                Plugins = Unknown(shared.Plugins, x => x.Slug, x => x.Unknown),
+                Licenses = Unknown(shared.Licenses, x => x.Slug, x => x.Unknown),
+                Welcomes = Unknown(shared.Welcomes, x => x.Slug, x => x.Unknown)
+            };
+            _localExtras = new Extras { Document = local.Unknown, Plugins = Unknown(local.Attempts, x => x.Slug, x => x.Unknown) };
             IsReadOnly = false;
 
             if (_lastCompletedAttemptId is Guid completed)
@@ -361,7 +377,18 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
                 : entry.Version };
         }
 
-        if (!SaveShared(next, attemptId))
+        // Recovery asks whether an update was acknowledged, so only an acknowledgement records its attempt. Enabling and
+        // disabling keep the committed file as it is when no entry changed, so teammates do not get a needless change.
+        var unchanged = next.Count == _shared.Count && next.All(x => _shared.TryGetValue(x.Key, out var y) && y == x.Value);
+        if (!acknowledgeVersions && unchanged)
+        {
+            if (!EqualBytes(File.Exists(_sharedPath) ? File.ReadAllBytes(_sharedPath) : null, _sharedBytes))
+            {
+                logger?.Error($"Plugin state changed on disk at {_sharedPath}; refusing to overwrite it.");
+                return false;
+            }
+        }
+        else if (!SaveShared(next, acknowledgeVersions ? attemptId : _lastCompletedAttemptId))
         {
             return false;
         }
@@ -372,7 +399,7 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
             remaining.Remove(participant.Slug);
         }
 
-        _local = remaining; // the shared attempt ID also makes a failed cleanup harmless on reload
+        _local = remaining; // for an update, the shared attempt ID also makes a failed cleanup harmless on reload
         if (!SaveLocal(remaining))
         {
             logger?.Warn($"Completed plugin state was saved, but {_localPath} could not be cleaned.");
@@ -402,17 +429,23 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
                 Plugins = states.Values.OrderBy(x => x.Slug, StringComparer.Ordinal)
                     .Select(x => new SharedEntry
                     {
-                        Slug = x.Slug, Version = x.Version, State = x.State
+                        Slug = x.Slug, Version = x.Version, State = x.State,
+                        Unknown = _sharedExtras.Plugins.GetValueOrDefault(x.Slug)
                     }).ToList(),
                 Licenses = licenses.Count == 0 ? null : licenses.Values.OrderBy(x => x.Slug, StringComparer.Ordinal)
                     .Select(x => new LicenseDocumentEntry
                     {
                         Slug = x.Slug, License = x.License, Version = x.Version, AcceptedUtc = x.AcceptedUtc,
-                        Automatic = x.Automatic
+                        Automatic = x.Automatic, Unknown = _sharedExtras.Licenses.GetValueOrDefault(x.Slug)
                     }).ToList(),
                 Welcomes = welcomes.Count == 0 ? null : welcomes.Values.OrderBy(x => x.Slug, StringComparer.Ordinal)
-                    .Select(x => new WelcomeDocumentEntry { Slug = x.Slug, Version = x.Version, ShownUtc = x.ShownUtc })
-                    .ToList()
+                    .Select(x => new WelcomeDocumentEntry
+                    {
+                        Slug = x.Slug, Version = x.Version, ShownUtc = x.ShownUtc,
+                        Unknown = _sharedExtras.Welcomes.GetValueOrDefault(x.Slug)
+                    })
+                    .ToList(),
+                Unknown = _sharedExtras.Document
             };
             var bytes = Serialize(document);
             AtomicWrite(_sharedPath, bytes);
@@ -455,8 +488,10 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
                         InstalledVersion = x.InstalledVersion,
                         TargetState = x.TargetState,
                         State = x.State,
-                        Reason = x.Reason
-                    }).ToList()
+                        Reason = x.Reason,
+                        Unknown = _localExtras.Plugins.GetValueOrDefault(x.Slug)
+                    }).ToList(),
+                Unknown = _localExtras.Document
             };
             AtomicWrite(_localPath, Serialize(document));
             return true;
@@ -573,11 +608,33 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
     private static bool EqualBytes(byte[]? first, byte[]? second) =>
         first is null ? second is null : second is not null && first.SequenceEqual(second);
 
-    private sealed class SharedDocument
+    private static Dictionary<string, Dictionary<string, JsonElement>> Unknown<T>(IEnumerable<T>? entries,
+        Func<T, string?> slug, Func<T, Dictionary<string, JsonElement>?> unknown) =>
+        (entries ?? []).Where(x => unknown(x) is { Count: > 0 })
+            .ToDictionary(x => slug(x)!, x => unknown(x)!, StringComparer.Ordinal);
+
+    /// <summary>The fields of a file this version does not know: of the document, and of its entries by slug.</summary>
+    private sealed class Extras
+    {
+        public Dictionary<string, JsonElement>? Document { get; init; }
+        public Dictionary<string, Dictionary<string, JsonElement>> Plugins { get; init; } = new(StringComparer.Ordinal);
+        public Dictionary<string, Dictionary<string, JsonElement>> Licenses { get; init; } = new(StringComparer.Ordinal);
+        public Dictionary<string, Dictionary<string, JsonElement>> Welcomes { get; init; } = new(StringComparer.Ordinal);
+    }
+
+    /// <summary>Fields a newer framework version wrote; serialized back as they were.</summary>
+    private abstract class Extensible
+    {
+        [JsonExtensionData]
+        public Dictionary<string, JsonElement>? Unknown { get; set; }
+    }
+
+    private sealed class SharedDocument : Extensible
     {
         public int SchemaVersion { get; set; }
         public Guid? LastCompletedAttemptId { get; set; }
-        public List<SharedEntry>? Plugins { get; set; } = [];
+        // required: a misspelled key must not read as no plugins
+        public List<SharedEntry>? Plugins { get; set; }
 
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<LicenseDocumentEntry>? Licenses { get; set; }
@@ -586,14 +643,14 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
         public List<WelcomeDocumentEntry>? Welcomes { get; set; }
     }
 
-    private sealed class WelcomeDocumentEntry
+    private sealed class WelcomeDocumentEntry : Extensible
     {
         public string? Slug { get; set; }
         public string? Version { get; set; }
         public DateTimeOffset? ShownUtc { get; set; }
     }
 
-    private sealed class LicenseDocumentEntry
+    private sealed class LicenseDocumentEntry : Extensible
     {
         public string? Slug { get; set; }
         public string? License { get; set; }
@@ -602,20 +659,20 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
         public bool Automatic { get; set; }
     }
 
-    private sealed class SharedEntry
+    private sealed class SharedEntry : Extensible
     {
         public string? Slug { get; set; }
         public string? Version { get; set; }
         public PersistedPluginState? State { get; set; }
     }
 
-    private sealed class LocalDocument
+    private sealed class LocalDocument : Extensible
     {
         public int SchemaVersion { get; set; }
-        public List<LocalEntry>? Attempts { get; set; } = [];
+        public List<LocalEntry>? Attempts { get; set; }
     }
 
-    private sealed class LocalEntry
+    private sealed class LocalEntry : Extensible
     {
         public Guid? AttemptId { get; set; }
         public string? Slug { get; set; }

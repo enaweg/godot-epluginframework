@@ -1,3 +1,4 @@
+#if TOOLS
 using System;
 using System.IO;
 using System.Linq;
@@ -107,3 +108,4 @@ public class RecipeReconcilerTests
         Assertions.AssertInt(RecipeReconciler.Plan(snapshot, loaded).Count).IsEqual(0);
     }
 }
+#endif

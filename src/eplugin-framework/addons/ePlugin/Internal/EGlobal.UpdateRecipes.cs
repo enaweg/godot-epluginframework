@@ -90,7 +90,7 @@ internal sealed partial class EGlobal
         try
         {
             var untouched = UntouchedRecipes(journal);
-            foreach (var context in _contexts) context.RefreshMetadata();
+            foreach (var context in _contexts) context.RefreshMetadata(ReadInstalledMetadata(context.Slug));
             foreach (var entry in journal.Recipes.ToArray())
             {
                 var record = entry.Value;
@@ -177,7 +177,7 @@ internal sealed partial class EGlobal
                 {
                     var context = _contexts.FirstOrDefault(c => c.Slug == entry.Key);
                     if (context is not null) context.State = EEditorPluginState.Deactivated;
-                    if (EditorInterface.Singleton.IsPluginEnabled(entry.Key)) EditorInterface.Singleton.SetPluginEnabled(entry.Key, false);
+                    if (_host.IsPluginEnabled(entry.Key)) _host.SetPluginEnabled(entry.Key, false);
                 }
             }
             else

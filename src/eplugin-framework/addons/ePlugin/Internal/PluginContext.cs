@@ -15,24 +15,27 @@ internal sealed class PluginContext(IEEditorPlugin? plugin, EditorPlugin pluginB
 
     public EEditorPluginMetadata? Metadata { get; set; } = pluginBase.ReadMetadata();
 
-    public void RefreshMetadata()
+    /// <summary>Takes the plugin.cfg read again, e.g. after it was repaired or updated.</summary>
+    public void RefreshMetadata(EEditorPluginMetadata? metadata)
     {
-        Metadata = EditorPluginExtensions.ReadMetadata($"res://addons/{Slug}/plugin.cfg");
+        Metadata = metadata;
         Name = Metadata?.Name ?? Slug;
     }
 
     public string? Directory { get; init; } = pluginBase.GetPluginDirectory();
 
-    public ILogger? Logger { get; init; } = logger;
+    public ILogger? Logger { get; set; } = logger;
 
     public IEEditorPlugin? Plugin { get; init; } = plugin;
 
     public EditorPlugin PluginBase { get; init; } = pluginBase;
 
-    public IDotnetCli? Cli { get; set; } = EGlobal.Instance.GetCli(logger);
+    /// <summary>Set by <see cref="EGlobal"/>, which knows the installed dotnet CLI.</summary>
+    public IDotnetCli? Cli { get; set; }
 
     public EEditorPluginState State { get; set; } = EEditorPluginState.Created;
-    public EEditorPluginBuilder Builder { get; init; } = EEditorPluginBuilder.Create();
+    /// <summary>Replaced by an empty one when creating the recipe failed, so a retry does not add to a half recipe.</summary>
+    public EEditorPluginBuilder Builder { get; set; } = EEditorPluginBuilder.Create();
 
     public bool IsRecipeCreated { get; set; } = false;
 

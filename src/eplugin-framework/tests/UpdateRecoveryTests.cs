@@ -1,3 +1,4 @@
+#if TOOLS
 using System;
 using System.IO;
 using System.Text.Json.Nodes;
@@ -92,3 +93,4 @@ public class UpdateRecoveryTests
         Assertions.AssertObject(Recover()).IsEqual(UpdateRecovery.Outcome.Restart);
     }
 }
+#endif

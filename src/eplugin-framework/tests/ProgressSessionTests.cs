@@ -1,3 +1,4 @@
+#if TOOLS
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -242,3 +243,4 @@ public class ProgressSessionTests
         return commands;
     }
 }
+#endif

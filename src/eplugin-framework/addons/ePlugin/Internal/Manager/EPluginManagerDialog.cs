@@ -47,11 +47,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private ConfirmationDialog _versionConfirm = null!;
     private LocalSourcesDialog _localSources = null!;
     private UpdateSitesDialog _updateSites = null!;
-    // Versions published at each update_url, loaded on demand and kept until Check for updates. Local versions come from
-    // the in-memory index on every render, so a new index never fetches these again.
-    private readonly Dictionary<string, IReadOnlyList<UpdateCandidate>> _remoteVersions = [];
-    private readonly Dictionary<string, string> _remoteVersionErrors = [];
-    private readonly HashSet<string> _loadingVersions = [];
+    // Checking, loading versions, staging and installing; this dialog shows what they report.
+    private UpdateFlow _updates = null!;
     private IReadOnlyList<PluginUpdateTarget> _targets = [];
     private IReadOnlyList<VersionOption> _versionOptions = [];
     /// <summary>A note under the version choice when nothing more specific is shown, e.g. why remote versions are missing.</summary>
@@ -66,15 +63,6 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private Texture2D? _logo;
     private Texture2D? _updateIcon;
     private PluginManagerViewModel _model = null!;
-    private IReadOnlyList<ValidatedPackage>? _staged;
-    // Packages of the staged batch that were refused; the others are installed without them.
-    private IReadOnlyList<RefusedPackage> _refused = [];
-    // What is being staged/installed: the checked updates, or one explicitly chosen version.
-    private IReadOnlyList<UpdateCandidate> _batch = [];
-    private bool _versionInstall;
-    private bool _allowDowngrade;
-    private bool _allowReinstall;
-    private string? _directory;
     private string? _selectedSlug;
     private bool _working;
     private bool _swapping;
@@ -108,6 +96,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private void Initialize(EGlobal global, CancellationToken lifetime)
     {
         _global = global; _lifetime = lifetime;
+        _updates = new UpdateFlow(global, ReviewLicenses, text => ActivationProgress.Begin(text));
         _tree = GetNode<Tree>("%PluginTree"); _status = GetNode<Label>("%Status");
         _check = GetNode<Button>("%CheckButton"); _retry = GetNode<Button>("%RetryButton"); _release = GetNode<Button>("%ReleaseButton");
         _trust = GetNode<CheckBox>("%TrustCheck");
@@ -144,7 +133,10 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _signals.Connect(_disableFrameworkConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(DisableFramework));
         _signals.Connect(_versionSelect, OptionButton.SignalName.ItemSelected, Callable.From<long>(_ => VersionButtons()));
         _signals.Connect(_installVersion, BaseButton.SignalName.Pressed, Callable.From(ConfirmVersion));
-        _signals.Connect(_versionConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(() => { if (_pendingVersion is { } version) Install([version], true, _pendingDowngrade, _pendingReinstall); }));
+        _signals.Connect(_versionConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(() =>
+        {
+            if (_pendingVersion is { } version) Install(new([version], true, _pendingDowngrade, _pendingReinstall));
+        }));
         _signals.Connect(_tree, Tree.SignalName.ItemSelected, Callable.From(() => ShowDetails(SlugOf(_tree.GetSelected()))));
         _signals.Connect(_tree, Tree.SignalName.ItemActivated, Callable.From(OpenRelease));
         _signals.Connect(_tree, Tree.SignalName.ButtonClicked, Callable.From<TreeItem, long, long, long>((item, _, _, _) => item.Select(NameColumn)));
@@ -184,7 +176,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     public void Refresh()
     {
         if (_working) return;
-        ClearStaging();
+        _updates.Clear();
         _licenses.Clear(); _welcomes.Clear();
         var plugins = _global.CollectPlugins();
         _targets = _global.CollectUpdateTargets();
@@ -197,7 +189,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     {
         _tree.Clear(); var root = _tree.CreateItem();
         TreeItem? selected = null;
-        var editable = !Busy && _staged is null;
+        var editable = !Busy && _updates.Staged is null;
         foreach (var row in _model.Plugins)
         {
             var plugin = row.Plugin;
@@ -293,7 +285,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         var row = slug is null ? null : _model.Find(slug);
         _detailsIcon.Texture = row?.IsEPlugin == true ? _logo : null;
         _detailsName.Text = row?.Plugin.Name ?? "No plugin selected";
-        var reviewed = _versionInstall ? _staged?.FirstOrDefault(p => p.Candidate.Slug == slug)?.Findings : null;
+        var reviewed = _updates.Request?.VersionInstall == true ? _updates.Staged?.FirstOrDefault(p => p.Candidate.Slug == slug)?.Findings : null;
         _detailsText.Text = row is null ? "Select a plugin to see its details." : PluginManagerViewModel.Describe(row, reviewed, LicenseOf(row), WelcomeOf(row));
         _release.Visible = IsSafeUrl(row?.Update?.Candidate.ReleaseUrl);
         _locationRow.Visible = row is not null;
@@ -351,16 +343,16 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         else
         {
             var local = _global.ListLocalVersions(target);
-            var remote = _remoteVersions.GetValueOrDefault(target.Slug) ?? [];
+            var remote = _updates.RemoteVersions.GetValueOrDefault(target.Slug) ?? [];
             string? missing = null;
-            if (target.UpdateUrls.Count > 0 && !_remoteVersions.ContainsKey(target.Slug))
+            if (target.UpdateUrls.Count > 0 && !_updates.RemoteVersions.ContainsKey(target.Slug))
             {
-                if (_remoteVersionErrors.TryGetValue(target.Slug, out var error)) missing = "Versions from the update site are unavailable: " + error;
-                else { missing = "Loading versions from the update site..."; LoadVersions(target); }
+                if (_updates.RemoteVersionErrors.TryGetValue(target.Slug, out var error)) missing = "Versions from the update site are unavailable: " + error;
+                else { missing = "Loading versions from the update site..."; Run(LoadVersionsAsync(target), "Loading versions"); }
             }
             if (local.Count == 0 && missing is not null)
             {
-                var loading = _loadingVersions.Contains(target.Slug);
+                var loading = _updates.IsLoadingVersions(target.Slug);
                 SetVersionPlaceholder(loading ? "Loading versions..." : row.Plugin.Version + " (installed)", loading ? null : missing);
             }
             else
@@ -387,21 +379,22 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _versionNote = note;
     }
 
-    private async void LoadVersions(PluginUpdateTarget target)
+    private async Task LoadVersionsAsync(PluginUpdateTarget target)
     {
+        if (!await _updates.LoadVersionsAsync(target, _lifetime) || !IsShown) return;
         var slug = target.Slug;
-        if (!_loadingVersions.Add(slug)) return;
-        try { _remoteVersions[slug] = await _global.ListRemoteVersionsAsync(target, _lifetime); }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { return; }
-        catch (Exception ex) { _remoteVersionErrors[slug] = ex.Message; }
-        finally { _loadingVersions.Remove(slug); }
-        if (!GodotObject.IsInstanceValid(this) || !IsInsideTree()) return;
         // A newer listed version is now a pending update; read the list again so the plugin shows it. Never discard a
         // staged batch awaiting review or interrupt work.
         var pending = _global.PendingUpdates.FirstOrDefault(c => c.Slug == slug);
-        if (!_working && _staged is null && pending?.NewVersion != _model.Find(slug)?.Update?.Candidate.NewVersion) Refresh();
+        if (!_working && _updates.Staged is null && pending?.NewVersion != _model.Find(slug)?.Update?.Candidate.NewVersion) Refresh();
         else if (_selectedSlug == slug) RenderVersions(_model.Find(slug));
     }
+
+    /// <summary>The dialog still exists in the editor; asynchronous work that finishes after it was closed shows nothing.</summary>
+    private bool IsShown => GodotObject.IsInstanceValid(this) && IsInsideTree();
+
+    /// <summary>Starts asynchronous work from a signal; an unexpected failure is logged instead of crashing the editor.</summary>
+    private static void Run(Task task, string what) => ObservedTask.Run(task, ex => GD.PushError($"{what} failed: {ex.Message}"));
 
     private VersionOption? SelectedVersion()
     {
@@ -417,7 +410,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         if (row is null || option is null) { _installVersion.Disabled = true; _installVersion.Text = "Update"; ShowVersionHint(_versionNote); return; }
         var blocked = PluginManagerViewModel.VersionChangeBlocked(row, option);
         _installVersion.Text = option.Action;
-        _installVersion.Disabled = blocked is not null || Busy || _staged is not null;
+        _installVersion.Disabled = blocked is not null || Busy || _updates.Staged is not null;
         _installVersion.TooltipText = blocked ?? (option.IsReinstall
             ? $"Install version {option.Version} of {row.Plugin.Name} again, replacing its files."
             : $"Install version {option.Version} of {row.Plugin.Name}.");
@@ -456,7 +449,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         var busy = Busy;
         // Set native input state before queuing the operation. It remains locked even while C# state is reloaded.
         GuiDisableInput = _pluginOperation.IsBusy || _global.IsChangingPlugins || _reloadPending;
-        var editable = !busy && _staged is null;
+        var staged = _updates.Staged is not null;
+        var editable = !busy && !staged;
         for (var item = _tree.GetRoot()?.GetFirstChild(); item is not null; item = item.GetNext())
         {
             var row = SlugOf(item) is { } slug ? _model.Find(slug) : null;
@@ -467,19 +461,19 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         GetNode<Button>("%UpdateSitesButton").Disabled = busy;
         _trust.Disabled = busy;
         _versionSelect.Disabled = busy || _versionOptions.Count < 2;
-        GetOkButton().Text = _staged is null ? _model.OkText : _versionInstall ? "Install reviewed version" : "Install reviewed updates";
+        GetOkButton().Text = !staged ? _model.OkText : _updates.Request?.VersionInstall == true ? "Install reviewed version" : "Install reviewed updates";
         GetOkButton().Disabled = busy || !CanProceed;
-        GetOkButton().Visible = _model.Updates.Count > 0 || _staged is not null;
+        GetOkButton().Visible = _model.Updates.Count > 0 || staged;
         GetCancelButton().Disabled = _swapping || _pluginOperation.IsBusy || _global.IsChangingPlugins || _reloadPending;
         GetCancelButton().Text = _working && !_swapping ? "Cancel" : "Close";
         _trust.Visible = NeedsTrust;
-        _check.Disabled = busy || _staged is not null;
-        _retry.Disabled = busy || _staged is not null || !_model.CanRetry;
+        _check.Disabled = busy || staged;
+        _retry.Disabled = busy || staged || !_model.CanRetry;
         VersionButtons();
     }
 
-    private bool NeedsTrust => _staged is not null ? _staged.Any(p => p.Findings.Any(f => f.RequiresTrust)) : _model.RequiresTrust;
-    private bool CanProceed => _staged is not null ? !NeedsTrust || _model.TrustChangedSource : _model.CanApply;
+    private bool NeedsTrust => _updates.Staged is not null ? _updates.StagedNeedsTrust : _model.RequiresTrust;
+    private bool CanProceed => _updates.Staged is not null ? !NeedsTrust || _model.TrustChangedSource : _model.CanApply;
 
     private static string? SlugOf(TreeItem? item) =>
         item?.GetMetadata(NameColumn).VariantType == Variant.Type.String ? item.GetMetadata(NameColumn).AsString() : null;
@@ -490,7 +484,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         var item = _tree.GetEdited();
         var row = SlugOf(item) is { } slug ? _model.Find(slug) : null;
         if (item is null || row is null) return;
-        if (Busy || _staged is not null)
+        if (Busy || _updates.Staged is not null)
         {
             // Undo the click; the tree is rebuilt outside its own edit signal.
             if (_reloadPending) _status.Text = ReloadNotice;
@@ -626,7 +620,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private void LocalIndexChanged()
     {
         // Never discard a staged batch awaiting review or interrupt work; those refresh when they finish.
-        if (!GodotObject.IsInstanceValid(this) || !IsInsideTree() || !Visible || _working || _staged is not null) return;
+        if (!IsShown || !Visible || _working || _updates.Staged is not null) return;
         if (_global.IsIndexingLocalSources) Render();
         else Refresh();
     }
@@ -637,14 +631,14 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     /// </summary>
     private void UpdateSitesChanged()
     {
-        _remoteVersions.Clear(); _remoteVersionErrors.Clear();
-        if (!GodotObject.IsInstanceValid(this) || !IsInsideTree() || _working || _staged is not null) return;
+        _updates.ClearVersions();
+        if (!IsShown || _working || _updates.Staged is not null) return;
         Refresh();
     }
 
     private void RetryFailed()
     {
-        if (_staged is not null || !BeginPluginOperation()) return;
+        if (_updates.Staged is not null || !BeginPluginOperation()) return;
         try
         {
             using (ActivationProgress.Begin("Retrying failed plugins...")) _global.RetryFailedPlugins();
@@ -652,161 +646,80 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         finally { CompletePluginOperation(); }
     }
 
-    private async void CheckNow()
+    private void CheckNow() => Run(CheckAsync(), "Checking for updates");
+
+    private async Task CheckAsync()
     {
         if (Busy) return;
         _operationNotice = null;
-        ClearStaging(); _remoteVersions.Clear(); _remoteVersionErrors.Clear();
         _working = true; Buttons(); _status.Text = "Checking for updates...";
         // Remote sites and local ZIPs can take a while; the scope ends after the list is read again.
         using var progress = ActivationProgress.Begin("Checking for updates...");
-        string? failure = null, notice = null;
-        try
-        {
-            var result = await _global.CheckForUpdatesAsync(true);
-            if (result.Failures.Count > 0) failure = string.Join("; ", result.Failures.Select(f => $"{f.Slug}: {f.Message}"));
-            if (result.Fallbacks is { Count: > 0 } fallbacks)
-                notice = "The update site of " + string.Join(", ", fallbacks.Select(f => f.Slug)) + " did not work; plugin.cfg's update_url was used (see the output log).";
-        }
-        catch (Exception ex) { failure = ex.Message; }
-        finally
-        {
-            _working = false;
-            if (GodotObject.IsInstanceValid(this) && IsInsideTree())
-            {
-                if (failure is not null)
-                {
-                    _operationNotice = "Update check failed: " + failure;
-                    GD.PushError(_operationNotice);
-                }
-                else _operationNotice = notice;
-                Refresh();
-            }
-        }
+        CheckOutcome outcome;
+        try { outcome = await _updates.CheckAsync(); }
+        finally { _working = false; }
+        if (!IsShown) return;
+        _operationNotice = outcome.Notice;
+        if (outcome.IsError) GD.PushError(outcome.Notice);
+        Refresh();
     }
 
     private void Confirm()
     {
-        if (_staged is not null) Install(_batch, _versionInstall, _allowDowngrade, _allowReinstall);
-        else if (_model.CanApply) Install(_model.Selected, false, false, false);
+        if (_updates is { Staged: not null, Request: { } staged }) Install(staged);
+        else if (_model.CanApply) Install(new InstallRequest(_model.Selected));
     }
+
+    private void Install(InstallRequest request) => Run(InstallAsync(request), "Installing updates");
 
     /// <summary>
     /// Stages and validates the batch, stops for review when the packages carry warnings, then installs. A second call
     /// with the batch already staged continues with the installation.
     /// </summary>
-    private async void Install(IReadOnlyList<UpdateCandidate> batch, bool versionInstall, bool allowDowngrade, bool allowReinstall)
+    private async Task InstallAsync(InstallRequest request)
     {
-        if (Busy || batch.Count == 0) return;
+        if (Busy || request.Batch.Count == 0) return;
         _operationNotice = null;
-        _batch = batch; _versionInstall = versionInstall; _allowDowngrade = allowDowngrade; _allowReinstall = allowReinstall;
         _working = true; _cancel?.Dispose(); _cancel = CancellationTokenSource.CreateLinkedTokenSource(_lifetime);
         Render();
-        var refresh = false;
+        InstallOutcome outcome;
         try
         {
-            if (_staged is null)
+            outcome = await _updates.InstallAsync(request, _model.TrustChangedSource, new InstallView
             {
-                var text = versionInstall ? $"Downloading and validating {batch[0].PluginName} {batch[0].NewVersion}..." : "Downloading and validating selected addons...";
-                _status.Text = text;
-                (IReadOnlyList<ValidatedPackage> Packages, IReadOnlyList<RefusedPackage> Refused, string Directory) staged;
-                using (var progress = ActivationProgress.Begin(text))
+                Alive = () => !_lifetime.IsCancellationRequested && IsShown,
+                Status = text => _status.Text = text,
+                Staged = (packages, refused) =>
                 {
-                    // Reported from the download thread; the scope ignores a report that arrives after it ended.
-                    var shown = -1;
-                    var relay = new InlineProgress(value =>
-                    {
-                        var percent = (int)(value * 100);
-                        if (Interlocked.Exchange(ref shown, percent) != percent) progress.SetText($"{text} {percent}%");
-                    });
-                    staged = await _global.StageUpdatesAsync(batch, relay, _cancel.Token, allowDowngrade, allowReinstall);
-                }
-                _staged = staged.Packages; _refused = staged.Refused; _directory = staged.Directory;
-                if (_lifetime.IsCancellationRequested || !GodotObject.IsInstanceValid(this) || !IsInsideTree()) { ClearStaging(); return; }
-                if (!versionInstall)
-                {
-                    foreach (var package in _staged)
-                        _model.Updates.First(r => r.Candidate.Slug == package.Candidate.Slug).Findings.AddRange(package.Findings);
+                    if (request.VersionInstall) return; // the details show the reviewed package of a chosen version
+                    foreach (var package in packages)
+                        _model.Updates.FirstOrDefault(r => r.Candidate.Slug == package.Candidate.Slug)?.Findings.AddRange(package.Findings);
                     // A refused package stays out of this batch; its details say why.
-                    foreach (var refused in _refused)
-                        _model.Updates.First(r => r.Candidate.Slug == refused.Candidate.Slug).Findings.Add(new("refused", FindingSeverity.Error, refused.Reason));
-                }
-                // Warnings discovered inside the package are reviewed before the first project side effect.
-                if (_staged.Any(p => p.Findings.Any(f => f.Severity == FindingSeverity.Warning)) || NeedsTrust && !_model.TrustChangedSource)
-                {
-                    _working = false;
-                    _operationNotice = PluginManagerViewModel.RefusedSummary(_refused) + "Review package warnings in the details, then confirm installation.";
-                    return;
-                }
-            }
-            _cancel.Token.ThrowIfCancellationRequested();
-            if (!CanProceed) return;
-            var selected = _staged.Where(p => batch.Any(c => c.Slug == p.Candidate.Slug)).ToArray();
-            // An update that keeps the accepted license file is not asked about again; a changed or new one is.
-            if (_global.ReviewUpdateLicenses(selected) is { } licenses)
-            {
-                _status.Text = "Review the licenses of the updates.";
-                var decided = await ReviewLicenses(licenses);
-                _global.RecordLicenses(decided);
-                var declined = decided.Canceled.Select(a => a.Slug).ToHashSet(StringComparer.Ordinal);
-                selected = selected.Where(p => !declined.Contains(p.Candidate.Slug)).ToArray();
-                if (_lifetime.IsCancellationRequested || !GodotObject.IsInstanceValid(this) || !IsInsideTree()) { ClearStaging(); return; }
-                if (selected.Length == 0)
-                {
-                    _operationNotice = PluginManagerViewModel.RefusedSummary(_refused) + "Update canceled: its license was declined. Addon files were not changed.";
-                    ClearStaging();
-                    return;
-                }
-                _cancel.Token.ThrowIfCancellationRequested();
-            }
-            _swapping = true; Buttons(); _status.Text = versionInstall ? "Installing the selected version..." : "Installing selected addons...";
-            // Independent groups are installed one after another; a failing group is rolled back without the others.
-            // Only an update started from the plugin's details asks whether to keep a version that does not build.
-            var results = await _global.ApplyUpdatesAsync(selected, _directory!, _model.TrustChangedSource, askOnBuildFailure: versionInstall);
-            var skipped = _refused;
-            _directory = null; _staged = null; _refused = [];
-            // The build-failure dialog takes over the decision.
-            if (results.Any(r => r.Outcome == UpdateOutcome.AwaitingDecision)) Hide();
-            // Stays open: an update that needs no restart is finished here, and a restart reopens the manager.
-            else
-            {
-                _operationNotice = PluginManagerViewModel.UpdateSummary(results, _global.IsRestartPending, skipped);
-                if (PluginManagerViewModel.AnyUpdateFailed(results) || skipped.Count > 0) GD.PushError(_operationNotice);
-            }
-            // Installed versions changed, so the list is read again rather than only redrawn.
-            refresh = results.Any(r => r.Outcome is not (UpdateOutcome.AwaitingReload or UpdateOutcome.AwaitingDecision));
+                    foreach (var package in refused)
+                        _model.Updates.FirstOrDefault(r => r.Candidate.Slug == package.Candidate.Slug)?.Findings.Add(new("refused", FindingSeverity.Error, package.Reason));
+                },
+                Swapping = () => { _swapping = true; Buttons(); }
+            }, _cancel.Token);
         }
-        catch (OperationCanceledException) { _operationNotice = "Download canceled. Addon files were not changed."; ClearStaging(); }
-        catch (Exception ex)
+        finally { _working = false; _swapping = false; }
+        if (!IsShown || outcome.Step == InstallStep.Abandoned) return;
+        // The build-failure dialog takes over the decision. Otherwise the manager stays open: an update that needs no
+        // restart is finished here, and a restart reopens it.
+        if (outcome.Step == InstallStep.AwaitingDecision) Hide();
+        else
         {
-            _operationNotice = "Update failed: " + ex.Message;
-            GD.PushError(_operationNotice);
-            // A refusal before the transaction leaves no journal; keeping the staged batch would lock the selection and make
-            // every later Update retry it. ClearStaging keeps a directory that already has a journal.
-            ClearStaging();
+            _operationNotice = outcome.Notice;
+            if (outcome.IsError) GD.PushError(outcome.Notice);
         }
-        finally
-        {
-            _working = false; _swapping = false;
-            if (GodotObject.IsInstanceValid(this) && IsInsideTree())
-            {
-                if (refresh) Refresh(); else Render();
-            }
-        }
+        if (outcome.Refresh) Refresh(); else Render();
     }
 
     private void Cancel()
     {
         if (_swapping || _pluginOperation.IsBusy || _global.IsChangingPlugins || AssemblyReload.IsPending) return;
         _cancel?.Cancel();
-        if (!_working) ClearStaging();
+        if (!_working) _updates.Clear();
         Hide();
-    }
-
-    private void ClearStaging()
-    {
-        if (_directory is not null && !File.Exists(Path.Combine(_directory, "journal.json")) && Directory.Exists(_directory)) Directory.Delete(_directory, true);
-        _directory = null; _staged = null; _refused = []; _batch = []; _versionInstall = false; _allowDowngrade = false; _allowReinstall = false;
     }
 
     private static Color ThemeColor(string name, string type, Color fallback)
@@ -829,7 +742,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         if (pending == _reloadPending && locked == GuiDisableInput) return;
         _reloadPending = pending;
         // Not while staging or installing: those render their own progress and refresh when done.
-        if (_working || _staged is not null) Buttons();
+        if (_working || _updates.Staged is not null) Buttons();
         else Render();
     }
 
@@ -866,7 +779,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     public override void _ExitTree()
     {
         ReleaseCallbacks();
-        if (!_swapping) ClearStaging();
+        if (!_swapping) _updates?.Clear();
         base._ExitTree();
     }
 }

@@ -1,3 +1,4 @@
+#if TOOLS
 using System;
 using System.Linq;
 using Enaweg.Plugin.Internal;
@@ -262,3 +263,4 @@ public class PluginManagerViewModelTests
         new(slug, slug, kind, enabled) { Version = "1.0.0", UpdateUrl = updateUrl };
     private static UpdateCandidate Candidate(string slug) => new(slug, slug, "1.0.0", "2.0.0", "https://example.org/releases", null, null, new ZipPackageRef("https://example.org/plugin.zip", slug));
 }
+#endif

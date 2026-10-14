@@ -1,3 +1,4 @@
+#if TOOLS
 using System.Threading.Tasks;
 using Enaweg.Plugin.Internal.Manager;
 using GdUnit4;
@@ -40,3 +41,4 @@ public class EditorWindowsTests
         Assertions.AssertBool(window.IsQueuedForDeletion()).IsTrue();
     }
 }
+#endif

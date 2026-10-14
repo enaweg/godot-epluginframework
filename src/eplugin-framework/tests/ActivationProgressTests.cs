@@ -1,3 +1,4 @@
+#if TOOLS
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -604,3 +605,4 @@ public class ActivationProgressTests
         public void Dispose() => Disposed = true;
     }
 }
+#endif

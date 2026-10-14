@@ -19,13 +19,15 @@ The Godot project and solution are under `src/eplugin-framework/`.
 
 ```text
 dotnet build "src/eplugin-framework/EPluginFramework.sln"
-dotnet test "src/eplugin-framework/EPluginFramework.sln"
+dotnet test "src/eplugin-framework/EPluginFramework.sln" --settings "src/eplugin-framework/.runsettings"
+dotnet test "src/activation-progress.Tests/ActivationProgress.Tests.csproj"
 ```
 
-Tests require `GODOT_BIN` to point to a Godot .NET/Mono editor executable. To run one test:
+The framework tests require `GODOT_BIN` to point to a Godot .NET/Mono editor executable; the progress helper's tests
+need only .NET. To run one test:
 
 ```text
-dotnet test "src/eplugin-framework/EPluginFramework.sln" --filter "FullyQualifiedName~IDotnetCliTests.VersionTest"
+dotnet test "src/eplugin-framework/EPluginFramework.sln" --settings "src/eplugin-framework/.runsettings" --filter "FullyQualifiedName~IDotnetCliTests.VersionTest"
 ```
 
 ## Architecture notes
@@ -42,7 +44,11 @@ dotnet test "src/eplugin-framework/EPluginFramework.sln" --filter "FullyQualifie
   satisfied recipes, disabling one reverses the recipes that depended on it), so activation order does
   not matter. They never enable a plugin, never fail an activation, and never cascade a disable.
 - Recipe changes should go through the `IDotnetCli` abstraction; new CLI operations must be
-  implemented for both .NET 9 and .NET 10 CLI implementations.
+  implemented for both .NET 9 and .NET 10 CLI implementations. Pass arguments unquoted and project paths as
+  absolute paths.
+- Read `docs/internals/update-system.md` before changing the update system under `Internal/Update/`.
+- `EGlobal` reaches the editor only through `IEditorHost`; lifecycle tests use `tests/LifecycleFixture.cs` with a fake
+  editor. Tests use `internal` members, not reflection.
 - Keep `IEEditorPlugin` as an interface; this works around Godot 4.5+ `EditorPlugin` regressions.
 
 ## Change conventions

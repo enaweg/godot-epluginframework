@@ -184,14 +184,14 @@ An ePlugin can require a GDScript plugin. Enabling the ePlugin then enables the 
 ```csharp
 public void CreateRecipe(IEEditorPluginBuilder builder)
 {
-    builder.AddPluginDependency("my_tool", ">1.2.0"); // 1.2.0 or higher
+    builder.AddPluginDependency("my_tool", ">=1.2.0"); // 1.2.0 or higher
 }
 ```
 
 An ePlugin can also declare an optional dependency on a GDScript plugin. Its nested recipe is applied when the ePlugin is enabled while the GDScript plugin is enabled and matches the version:
 
 ```csharp
-builder.AddOptionalPluginDependency("my_tool", ">1.0", optional => optional
+builder.AddOptionalPluginDependency("my_tool", ">=1.0", optional => optional
     .AddDirectory($"{this.GetPluginDirectory()}/.my-tool-integration"));
 ```
 
@@ -229,7 +229,7 @@ public partial class MyToolDotnetPlugin : EditorPlugin, IEEditorPlugin
     public void CreateRecipe(IEEditorPluginBuilder builder)
     {
         builder
-            .AddPluginDependency("my_tool", ">1.2.0")
+            .AddPluginDependency("my_tool", ">=1.2.0")
             .AddNuget("Newtonsoft.Json", "13.0.3")
             .AddDirectory($"{this.GetPluginDirectory()}/.src");
     }

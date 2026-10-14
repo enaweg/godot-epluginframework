@@ -1,3 +1,4 @@
+#if TOOLS
 using System;
 using System.IO;
 using Enaweg.Plugin.Internal.Dotnet;
@@ -103,3 +104,4 @@ public class ProjectReferencesTests
         return path;
     }
 }
+#endif

@@ -6,7 +6,9 @@ namespace Enaweg.Plugin;
 /// NuGet packages, and project references from editor tooling.
 /// </summary>
 /// <remarks>
-/// All operations target the resolved solution and the main <c>.csproj</c> with the same filename.
+/// All operations target the resolved solution and the main <c>.csproj</c> with the same filename. Project paths may be
+/// relative to the Godot project root, <c>res://</c> paths or absolute paths. Arguments are passed to the process one
+/// per element and must not be quoted, also when they contain spaces.
 /// This interface is only available in editor builds.
 /// </remarks>
 public interface IDotnetCli
@@ -17,7 +19,7 @@ public interface IDotnetCli
     void RebuildSolution();
 
     /// <summary>
-    /// Runs all tests in the solution.
+    /// Runs all tests in the solution (<c>dotnet test</c> on the solution).
     /// </summary>
     void RunTests();
 
@@ -25,7 +27,7 @@ public interface IDotnetCli
     /// Removes a project from the solution file.
     /// </summary>
     /// <param name="projectPath">
-    /// Path to the <c>.csproj</c> file to remove, relative to the Godot project root (<c>res://</c>).
+    /// Path to the <c>.csproj</c> file to remove, relative to the Godot project root or as a <c>res://</c> path.
     /// </param>
     void RemoveProjectFromSolution(string projectPath);
 
@@ -33,7 +35,7 @@ public interface IDotnetCli
     /// Adds a project to the solution file.
     /// </summary>
     /// <param name="projectPath">
-    /// Path to the <c>.csproj</c> file to add, relative to the Godot project root (<c>res://</c>).
+    /// Path to the <c>.csproj</c> file to add, relative to the Godot project root or as a <c>res://</c> path.
     /// </param>
     /// <param name="virtualFolderName">
     /// Optional solution folder to place the project under.
@@ -70,22 +72,26 @@ public interface IDotnetCli
     /// <summary>
     /// Adds a project-to-project reference to the Godot project.
     /// </summary>
-    /// <param name="projectReference">Path to the referenced <c>.csproj</c> file.</param>
+    /// <param name="projectReference">
+    /// Path to the referenced <c>.csproj</c> file, relative to the Godot project root or as a <c>res://</c> path.
+    /// </param>
     void AddProjectReference(string projectReference);
 
     /// <summary>
     /// Removes a project-to-project reference from the Godot project.
     /// </summary>
-    /// <param name="projectReference">Path to the referenced <c>.csproj</c> file to remove.</param>
+    /// <param name="projectReference">
+    /// Path to the referenced <c>.csproj</c> file to remove, relative to the Godot project root or as a <c>res://</c> path.
+    /// </param>
     void RemoveProjectReference(string projectReference);
 
     /// <summary>
-    /// Executes an arbitrary <c>dotnet</c> sub-command directly.
+    /// Executes an arbitrary <c>dotnet</c> sub-command directly: <c>dotnet &lt;command&gt; &lt;args&gt;</c>.
     /// </summary>
     /// <param name="command">
-    /// The dotnet sub-command to run (e.g. <c>"build"</c>, <c>"test"</c>).
+    /// The dotnet sub-command to run (e.g. <c>"build"</c>, <c>"test"</c>), without <c>dotnet</c> itself.
     /// </param>
-    /// <param name="args">Additional arguments appended after the command.</param>
+    /// <param name="args">Additional arguments appended after the command, one per element and unquoted.</param>
     /// <returns>
     /// A tuple of <c>(exitCode, outputLines)</c> where <c>exitCode</c> is the process exit code
     /// and <c>outputLines</c> contains the captured standard output lines.

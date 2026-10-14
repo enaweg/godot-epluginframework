@@ -22,7 +22,7 @@ internal sealed class EEditorPluginBuilder : IEEditorPluginBuilder
 
     public IEEditorPluginBuilder AddAutoload(string name, string path)
     {
-        PluginRecipe.Autoloads.Add(new EEditorPluginRecipe.Autoload(name, path));
+        RecipeEntries.AddAutoload(PluginRecipe, name, path);
         return this;
     }
 
@@ -48,7 +48,7 @@ internal sealed class EEditorPluginBuilder : IEEditorPluginBuilder
 
     public IEEditorPluginBuilder AddPluginDependency(string pluginSlug, string? version = null)
     {
-        PluginRecipe.PluginDependencies.Add(new EEditorPluginRecipe.Plugin(pluginSlug, version));
+        RecipeEntries.AddPluginDependency(PluginRecipe, pluginSlug, version);
         return this;
     }
 
@@ -60,29 +60,29 @@ internal sealed class EEditorPluginBuilder : IEEditorPluginBuilder
         var subBuilder = EEditorPluginSubRecipeBuilder.Create();
         optionalRecipe(subBuilder);
 
-        PluginRecipe.OptionalPluginDependencies.Add(
-            new EEditorPluginRecipe.OptionalPlugin(pluginSlug, version, subBuilder.PluginRecipe));
+        RecipeEntries.AddOptionalPluginDependency(PluginRecipe, pluginSlug, version, subBuilder.PluginRecipe);
         return this;
     }
 
     public IEEditorPluginBuilder AddProject(string path, bool addReference = true)
     {
-        PluginRecipe.Projects.Add(new EEditorPluginRecipe.Project(path, null, addReference));
+        RecipeEntries.AddProject(PluginRecipe, path, null, addReference);
         return this;
     }
 
-    public IEEditorPluginBuilder AddProject(string path, string? virtualFolderName = null,
+    public IEEditorPluginBuilder AddProject(string path, string? virtualFolderName,
         bool addReference = true)
     {
-        PluginRecipe.Projects.Add(new EEditorPluginRecipe.Project(path, virtualFolderName, addReference));
+        RecipeEntries.AddProject(PluginRecipe, path, virtualFolderName, addReference);
         return this;
     }
 
     public IEEditorPluginBuilder AddNugets(params string[] nugetNames)
     {
+        ArgumentNullException.ThrowIfNull(nugetNames);
         foreach (var nugetName in nugetNames)
         {
-            PluginRecipe.Nugets.Add(new EEditorPluginRecipe.Nuget(nugetName, null, null));
+            RecipeEntries.AddNuget(PluginRecipe, nugetName, null, null);
         }
 
         return this;
@@ -90,13 +90,13 @@ internal sealed class EEditorPluginBuilder : IEEditorPluginBuilder
 
     public IEEditorPluginBuilder AddNuget(string nugetName, string? version = null, string? source = null)
     {
-        PluginRecipe.Nugets.Add(new EEditorPluginRecipe.Nuget(nugetName, version, source));
+        RecipeEntries.AddNuget(PluginRecipe, nugetName, version, source);
         return this;
     }
 
     public IEEditorPluginBuilder AddDirectory(string path)
     {
-        PluginRecipe.Directories.Add(path);
+        RecipeEntries.AddDirectory(PluginRecipe, path);
         return this;
     }
 

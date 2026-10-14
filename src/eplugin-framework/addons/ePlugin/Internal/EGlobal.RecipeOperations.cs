@@ -47,16 +47,15 @@ internal sealed partial class EGlobal
         if (project.Reference && !cli.TryRemoveProjectReference(project.Path)) throw new InvalidOperationException($"Removing project reference {project.Path} failed.");
         if (!cli.TryRemoveProjectFromSolution(project.Path)) throw new InvalidOperationException($"Removing project {project.Path} from the solution failed.");
     }
-    private static void ApplyAutoload(PluginContext context, EEditorPluginRecipe.Autoload autoload)
+    private void ApplyAutoload(PluginContext context, EEditorPluginRecipe.Autoload autoload)
     {
-        if (ProjectSettings.GetSetting("autoload/" + autoload.Name, "").AsString().TrimStart('*') != autoload.Path)
-            context.PluginBase.AddAutoloadSingleton(autoload.Name, autoload.Path);
-        if (!ProjectSettings.HasSetting("autoload/" + autoload.Name)) throw new InvalidOperationException($"Adding autoload {autoload.Name} failed.");
+        if (_host.GetAutoload(autoload.Name) != autoload.Path) _host.AddAutoload(context.PluginBase, autoload.Name, autoload.Path);
+        if (_host.GetAutoload(autoload.Name) is null) throw new InvalidOperationException($"Adding autoload {autoload.Name} failed.");
     }
-    private static void ReverseAutoload(PluginContext context, EEditorPluginRecipe.Autoload autoload)
+    private void ReverseAutoload(PluginContext context, EEditorPluginRecipe.Autoload autoload)
     {
-        if (ProjectSettings.HasSetting("autoload/" + autoload.Name)) context.PluginBase.RemoveAutoloadSingleton(autoload.Name);
-        if (ProjectSettings.HasSetting("autoload/" + autoload.Name)) throw new InvalidOperationException($"Removing autoload {autoload.Name} failed.");
+        if (_host.GetAutoload(autoload.Name) is not null) _host.RemoveAutoload(context.PluginBase, autoload.Name);
+        if (_host.GetAutoload(autoload.Name) is not null) throw new InvalidOperationException($"Removing autoload {autoload.Name} failed.");
     }
     private void TrackRecipeOperation(PluginContext context, RecipeOperation operation, Action execute)
     {
@@ -81,15 +80,15 @@ internal sealed partial class EGlobal
     }
     private void EnsureUpdateDependency(EEditorPluginRecipe.Plugin dependency)
     {
-        var metadata = EditorPluginExtensions.ReadMetadata($"res://addons/{dependency.Slug}/plugin.cfg") ?? throw new InvalidOperationException($"Plugin now requires missing dependency {dependency.Slug}.");
+        var metadata = ReadInstalledMetadata(dependency.Slug) ?? throw new InvalidOperationException($"Plugin now requires missing dependency {dependency.Slug}.");
         if (dependency.Version is not null && !MatchesVersion(metadata.Version, dependency.Version, _ePluginContext?.Logger))
             throw new InvalidOperationException($"Dependency {dependency.Slug} {metadata.Version} does not match {dependency.Version}.");
-        if (EditorInterface.Singleton.IsPluginEnabled(dependency.Slug)) return;
+        if (_host.IsPluginEnabled(dependency.Slug)) return;
         RegisterUpdateParticipant(dependency.Slug, metadata.Version);
-        EditorInterface.Singleton.SetPluginEnabled(dependency.Slug, true);
+        _host.SetPluginEnabled(dependency.Slug, true);
         var context = _contexts.FirstOrDefault(c => c.Slug == dependency.Slug && c.Plugin is not null);
         if (context is not null && context.State != EEditorPluginState.Activated) EnableEPlugin(context, false, true);
-        if (!EditorInterface.Singleton.IsPluginEnabled(dependency.Slug) || context?.State == EEditorPluginState.Error || _toCheckEnable.Count > 0)
+        if (!_host.IsPluginEnabled(dependency.Slug) || context?.State == EEditorPluginState.Error || _toCheckEnable.Count > 0)
             throw new InvalidOperationException($"Dependency {dependency.Slug} could not be activated.");
     }
 }

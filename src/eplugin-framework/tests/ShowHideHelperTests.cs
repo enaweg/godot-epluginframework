@@ -1,3 +1,4 @@
+#if TOOLS
 using System;
 using System.IO;
 using Enaweg.Plugin.Internal;
@@ -70,3 +71,4 @@ public class ShowHideHelperTests
         Assertions.AssertBool(Directory.Exists(Path.Combine(_root, ".src")) && Directory.Exists(Path.Combine(_root, "src"))).IsTrue();
     }
 }
+#endif
