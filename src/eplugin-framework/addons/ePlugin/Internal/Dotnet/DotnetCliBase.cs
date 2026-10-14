@@ -7,11 +7,16 @@ namespace Enaweg.Plugin.Internal.Dotnet;
 
 internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotnetCli
 {
-    protected readonly string SolutionPath;
-    protected readonly string GodotProjectPath;
+    /// <summary>The solution the CLI changes and builds.</summary>
+    internal string SolutionPath { get; }
+
+    /// <summary>The main Godot project, next to the solution and named like it.</summary>
+    internal string GodotProjectPath { get; }
+
     protected readonly ILogger? Logger;
 
-    protected DotnetCliBase(ILogger? logger, bool enableDebugLogging) : base(logger, enableDebugLogging)
+    protected DotnetCliBase(ILogger? logger, bool enableDebugLogging, IProcessRunner? runner = null)
+        : base(logger, enableDebugLogging, runner)
     {
         Logger = logger;
         var pathToSolution = ProjectSettings.GlobalizePath("res://");
@@ -82,7 +87,24 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
         return true;
     }
 
-    private static string ProjectFile(string path) => Path.GetFullPath(Path.Combine(ProjectSettings.GlobalizePath("res://"), path));
+    /// <summary>
+    /// The absolute path of a project a recipe names: relative to the Godot project directory, as a <c>res://</c> path,
+    /// or absolute.
+    /// </summary>
+    internal static string ProjectFile(string path) =>
+        Path.GetFullPath(path.StartsWith("res://", System.StringComparison.Ordinal)
+            ? ProjectSettings.GlobalizePath(path)
+            : Path.Combine(ProjectSettings.GlobalizePath("res://"), path));
+
+    /// <summary>
+    /// A referenced project relative to the main project's directory, the form the CLI writes into the project and finds
+    /// again when it is removed. The editor runs in that directory.
+    /// </summary>
+    internal string ReferencePath(string path) =>
+        Path.GetRelativePath(Path.GetDirectoryName(GodotProjectPath)!, ProjectFile(path));
+
+    /// <summary>A NuGet source as the CLI takes it: <c>res://</c> and <c>user://</c> paths made absolute, URLs unchanged.</summary>
+    internal static string NugetSource(string source) => ProjectSettings.GlobalizePath(source);
 
     public abstract void RebuildSolution();
     public abstract void RunTests();
