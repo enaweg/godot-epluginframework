@@ -1,7 +1,7 @@
 {
- "commit": "7cfc8b29f72977d4323e61f7ffb55d0aaa2dc2dd",
- "date": "2026-10-14T16:29:48Z",
- "covered": 6106,
+ "commit": "b7e2f25c6bde4f431377ff0e97157f6ef01d0a92",
+ "date": "2026-10-14T17:59:12Z",
+ "covered": 6749,
  "coverable": 8788,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
@@ -37,15 +37,15 @@
    18
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetCli10.cs": [
-   58,
+   76,
    76
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetCli9.cs": [
-   55,
+   76,
    76
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetCliBase.cs": [
-   40,
+   49,
    52
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetVersionManager.cs": [
@@ -53,7 +53,7 @@
    41
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/ExecuteCliBase.cs": [
-   22,
+   32,
    32
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/ICheckedDotnetCli.cs": [
@@ -61,7 +61,7 @@
    1
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/NugetConfigManager.cs": [
-   118,
+   147,
    150
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/ProjectReferences.cs": [
@@ -81,7 +81,7 @@
    35
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Licenses.cs": [
-   146,
+   227,
    233
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.LocalSources.cs": [
@@ -89,7 +89,7 @@
    57
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.PlainPlugins.cs": [
-   97,
+   127,
    145
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.PluginManager.cs": [
@@ -97,15 +97,15 @@
    39
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.RecipeOperations.cs": [
-   35,
+   61,
    69
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateApply.cs": [
-   24,
+   31,
    237
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateRecipes.cs": [
-   0,
+   184,
    186
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateSites.cs": [
@@ -117,15 +117,15 @@
    7
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Updates.cs": [
-   79,
+   80,
    113
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Welcomes.cs": [
-   62,
+   67,
    72
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.cs": [
-   738,
+   850,
    996
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EPluginProgress.cs": [
@@ -145,7 +145,7 @@
    9
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Licenses/PluginLicense.cs": [
-   38,
+   41,
    45
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/LoggingSettings.cs": [
@@ -209,7 +209,7 @@
    61
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PlainPluginObserver.cs": [
-   57,
+   67,
    69
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PluginContext.cs": [
@@ -217,7 +217,7 @@
    14
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PluginStateStore.cs": [
-   379,
+   412,
    417
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PluginToggles.cs": [
@@ -249,7 +249,7 @@
    93
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/GitSource.cs": [
-   171,
+   197,
    199
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/InterimBridge.cs": [
@@ -277,7 +277,7 @@
    46
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/PackageFetcher.cs": [
-   46,
+   61,
    61
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/PackageFiles.cs": [
@@ -285,7 +285,7 @@
    104
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/RecipeReconciler.cs": [
-   43,
+   50,
    51
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/RecipeSnapshot.cs": [
@@ -317,7 +317,7 @@
    20
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateHttp.cs": [
-   56,
+   71,
    72
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateJournal.cs": [
@@ -353,7 +353,7 @@
    25
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Welcomes/PluginWelcome.cs": [
-   28,
+   29,
    33
   ],
   "src/eplugin-framework/addons/ePlugin/Logging/GenericLoggerFactory.cs": [
