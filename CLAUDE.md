@@ -105,7 +105,9 @@ whether a slug is an ePlugin and the recipe of a disabled one, autoloads, filesy
 keep new lifecycle code behind it so it stays testable. Recipes are created through `TryEnsureRecipe`, which puts the
 plugin in error and discards a half-built recipe when `CreateRecipe` throws. `FindDependencyCycle` fails an activation
 whose hard dependencies lead back to the plugin (otherwise it waits for itself forever). Godot frees a plugin's instance
-on disable, so `AddContext` replaces a deactivated or freed context of the same slug. The compiled plugin types are read
+on disable, so `AddContext` replaces a deactivated or freed context of the same slug. That includes the framework
+itself: its `_DisablePlugin` calls `EGlobal.Detach`, which drops the singleton, so the instance created when it is
+enabled again initializes like after an assembly reload instead of using the freed one. The compiled plugin types are read
 once per assembly load (`PluginTypes`). `Initialize` leaves `EGlobal` invalid when it throws; `EPluginPlugin` logs it
 and tries again after 10 s. One failing `IInitialize` does not stop the others.
 
