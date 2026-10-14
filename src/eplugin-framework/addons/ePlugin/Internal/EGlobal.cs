@@ -265,6 +265,19 @@ internal sealed partial class EGlobal
         ]);
     }
 
+    /// <summary>
+    /// Drops the state of a framework that is being disabled. Godot frees its instance and creates another when it is
+    /// enabled again, without an assembly reload: kept, this state would stay valid with the freed instance, so the new
+    /// one would never initialize. Like after a reload, the next <see cref="Instance"/> starts empty.
+    /// </summary>
+    internal static void Detach(EPluginPlugin plugin)
+    {
+        if (_instance is null || !ReferenceEquals(_instance._ePluginContext, plugin)) return;
+        // work still posted by the old instance finds it invalid instead of using the freed plugin
+        _instance._ePluginContext = null;
+        _instance = null;
+    }
+
     private void RecordFrameworkEnabled(EPluginPlugin plugin)
     {
         if (_stateStore is null || _stateStore.IsReadOnly)
