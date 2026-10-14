@@ -10,6 +10,8 @@
 [![Static analysis](https://github.com/enaweg/godot-epluginframework/actions/workflows/ci-analysis.yml/badge.svg?branch=main)](https://github.com/enaweg/godot-epluginframework/actions/workflows/ci-analysis.yml)
 [![CodeQL](https://github.com/enaweg/godot-epluginframework/actions/workflows/ci-codeql.yml/badge.svg?branch=main)](https://github.com/enaweg/godot-epluginframework/actions/workflows/ci-codeql.yml)
 [![Coverage](https://raw.githubusercontent.com/enaweg/godot-epluginframework/coverage/badge.svg)](https://github.com/enaweg/godot-epluginframework/tree/coverage)
+
+
 ![Godot 4.4](https://img.shields.io/badge/Godot-v4.4-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
 ![Godot 4.5](https://img.shields.io/badge/Godot-v4.5-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
 ![Godot 4.6](https://img.shields.io/badge/Godot-v4.6-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
