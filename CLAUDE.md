@@ -48,6 +48,13 @@ Run a single test:
 ```
 dotnet test "src/eplugin-framework/EPluginFramework.sln" --settings "src/eplugin-framework/.runsettings" --filter "FullyQualifiedName~IDotnetCliTests.VersionTest"
 ```
+Run the same tests with line coverage of `addons/ePlugin` (Cobertura report; needs `dotnet-coverage` on PATH, after a
+Debug build). Godot loads the assembly from memory, so `dotnet test --collect` sees none of it; the script instruments
+the built DLL on disk and restores it afterwards. CI reports it per PR and on the `coverage` branch
+(`docs/code-coverage.md`):
+```
+tools/coverage.sh coverage.cobertura.xml
+```
 The progress helper's command handling has plain xUnit tests that need no Godot:
 ```
 dotnet test "src/activation-progress.Tests/ActivationProgress.Tests.csproj"
