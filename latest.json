@@ -1,0 +1,372 @@
+{
+ "commit": "659bbaa6769ba1db6a0da1e7bee266b2158f5e74",
+ "date": "2026-10-14T16:07:17Z",
+ "covered": 6109,
+ "coverable": 8790,
+ "files": {
+  "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
+   4,
+   4
+  ],
+  "src/eplugin-framework/addons/ePlugin/EPlugin.cs": [
+   4,
+   9
+  ],
+  "src/eplugin-framework/addons/ePlugin/EPluginPlugin.cs": [
+   157,
+   252
+  ],
+  "src/eplugin-framework/addons/ePlugin/EditorPluginExtensions.cs": [
+   46,
+   61
+  ],
+  "src/eplugin-framework/addons/ePlugin/IEEditorPluginExtensions.cs": [
+   0,
+   15
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/ActivationProgress.cs": [
+   241,
+   292
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/AssemblyReload.cs": [
+   24,
+   28
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/AssemblyUnloadCleanup.cs": [
+   7,
+   18
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetCli10.cs": [
+   58,
+   76
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetCli9.cs": [
+   55,
+   76
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetCliBase.cs": [
+   40,
+   52
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetVersionManager.cs": [
+   41,
+   41
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/ExecuteCliBase.cs": [
+   22,
+   32
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/ICheckedDotnetCli.cs": [
+   1,
+   1
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/NugetConfigManager.cs": [
+   118,
+   150
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/ProjectReferences.cs": [
+   38,
+   40
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/EEditorPluginBuilder.cs": [
+   63,
+   69
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/EEditorPluginRecipe.cs": [
+   13,
+   13
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/EEditorPluginSubRecipeBuilder.cs": [
+   33,
+   35
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Licenses.cs": [
+   146,
+   233
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.LocalSources.cs": [
+   31,
+   57
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.PlainPlugins.cs": [
+   97,
+   145
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.PluginManager.cs": [
+   0,
+   39
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.RecipeOperations.cs": [
+   35,
+   69
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateApply.cs": [
+   24,
+   237
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateRecipes.cs": [
+   0,
+   186
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateSites.cs": [
+   9,
+   19
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateWorkflow.cs": [
+   0,
+   7
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Updates.cs": [
+   79,
+   113
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Welcomes.cs": [
+   62,
+   72
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.cs": [
+   742,
+   1000
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/EPluginProgress.cs": [
+   1,
+   1
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/EditorHost.cs": [
+   9,
+   42
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Licenses/LicenseReview.cs": [
+   47,
+   47
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Licenses/LicenseSettings.cs": [
+   9,
+   9
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Licenses/PluginLicense.cs": [
+   38,
+   45
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/LoggingSettings.cs": [
+   9,
+   9
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.cs": [
+   51,
+   580
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Manager/EditorIcons.cs": [
+   22,
+   25
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Manager/EditorSignalConnections.cs": [
+   12,
+   12
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Manager/EditorWindows.cs": [
+   18,
+   54
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Manager/LicenseDialog.cs": [
+   12,
+   161
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Manager/LocalSourcesDialog.cs": [
+   16,
+   89
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Manager/ManagerReopenMarker.cs": [
+   16,
+   17
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Manager/ObservedTask.cs": [
+   4,
+   4
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Manager/PluginCatalog.cs": [
+   23,
+   25
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Manager/PluginManagerViewModel.cs": [
+   218,
+   227
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateFailureDialog.cs": [
+   0,
+   50
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateFlow.cs": [
+   144,
+   147
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateSitesDialog.cs": [
+   16,
+   194
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Manager/WelcomeDialog.cs": [
+   11,
+   61
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/PlainPluginObserver.cs": [
+   57,
+   69
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/PluginContext.cs": [
+   17,
+   17
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/PluginStateStore.cs": [
+   379,
+   417
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/PluginToggles.cs": [
+   13,
+   13
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/PluginTypes.cs": [
+   13,
+   18
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/ProgressSession.cs": [
+   153,
+   188
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/ProjectSettingsDialog.cs": [
+   5,
+   53
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/RecipeEntries.cs": [
+   69,
+   69
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/ShowHideHelper.cs": [
+   47,
+   47
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/AddonPackageValidator.cs": [
+   92,
+   93
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/GitSource.cs": [
+   171,
+   198
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/InterimBridge.cs": [
+   41,
+   44
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/KnownPlugins.Data.cs": [
+   764,
+   764
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/KnownPlugins.cs": [
+   6,
+   6
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/LocalIndexCache.cs": [
+   24,
+   25
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/LocalPackageIndex.cs": [
+   74,
+   76
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/LocalSourceSettings.cs": [
+   46,
+   46
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/PackageFetcher.cs": [
+   46,
+   61
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/PackageFiles.cs": [
+   94,
+   104
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/RecipeReconciler.cs": [
+   43,
+   51
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/RecipeSnapshot.cs": [
+   25,
+   26
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/ReleaseSources.cs": [
+   85,
+   86
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/SafeZipExtractor.cs": [
+   57,
+   60
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/SemVer.cs": [
+   36,
+   36
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/UidMap.cs": [
+   10,
+   10
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateApplier.cs": [
+   278,
+   329
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateGroups.cs": [
+   20,
+   20
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateHttp.cs": [
+   56,
+   72
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateJournal.cs": [
+   54,
+   57
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateModels.cs": [
+   34,
+   35
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateRecovery.cs": [
+   143,
+   147
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateService.cs": [
+   88,
+   94
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateSettings.cs": [
+   17,
+   17
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateSiteSettings.cs": [
+   50,
+   50
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateStateStore.cs": [
+   37,
+   38
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/VersionConstraint.cs": [
+   25,
+   25
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Welcomes/PluginWelcome.cs": [
+   28,
+   33
+  ],
+  "src/eplugin-framework/addons/ePlugin/Logging/GenericLoggerFactory.cs": [
+   7,
+   7
+  ],
+  "src/eplugin-framework/addons/ePlugin/Logging/GodotConsoleLogger.cs": [
+   33,
+   43
+  ],
+  "src/eplugin-framework/addons/ePlugin/Logging/NullLogger.cs": [
+   6,
+   6
+  ]
+ }
+}
