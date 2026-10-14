@@ -193,7 +193,12 @@ internal sealed partial class EGlobal
 
         CliService = new DotnetVersionManager(_ePluginContext.Logger, _ePluginContext.EnableDebugLogging);
 
-        ReloadContexts(_loggerFactory, false);
+        // every plugin logs through the new factory too, also the dotnet commands run for it
+        foreach (var context in _contexts)
+        {
+            context.Logger = _loggerFactory.CreateLogger(context.PluginBase.GetType().FullName ?? "UNKNOWN");
+            context.Cli = GetCli(context.Logger);
+        }
     }
 
     /// <summary>

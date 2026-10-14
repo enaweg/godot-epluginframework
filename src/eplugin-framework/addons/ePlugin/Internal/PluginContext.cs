@@ -24,7 +24,7 @@ internal sealed class PluginContext(IEEditorPlugin? plugin, EditorPlugin pluginB
 
     public string? Directory { get; init; } = pluginBase.GetPluginDirectory();
 
-    public ILogger? Logger { get; init; } = logger;
+    public ILogger? Logger { get; set; } = logger;
 
     public IEEditorPlugin? Plugin { get; init; } = plugin;
 

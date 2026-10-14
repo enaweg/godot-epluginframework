@@ -202,6 +202,25 @@ public class EGlobalTests
     }
 
     [TestCase]
+    public void SwitchingLoggingMovesTheFrameworkAndEveryPluginToTheNewLoggers()
+    {
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"));
+        _fixture.Enable("app");
+        var switched = new List<string>();
+
+        _fixture.Global.SwitchLogging(new GenericLoggerFactory(category => new RecordingLogger(switched, category)));
+        _fixture.Context("app")!.Logger!.Log("from app");
+
+        Assertions.AssertBool(switched.Any(l => l.EndsWith("from app"))).IsTrue();
+        Assertions.AssertBool(_fixture.Log.Any(l => l.EndsWith("from app"))).IsFalse();
+        // the dotnet CLI logs through the new logger as well, so it was created again
+        Assertions.AssertObject(_fixture.Context("app")!.Cli).IsNotInstanceOf<RecordingCli>();
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Activated);
+        Assertions.AssertThrown(() => new EGlobal(_fixture.Host).SwitchLogging(new GenericLoggerFactory(null)))
+            .IsInstanceOf<InvalidOperationException>();
+    }
+
+    [TestCase]
     public void OrderRetriesPutsFailedDependencyBeforeItsDependant()
     {
         var dependant = new Mock<IEEditorPlugin>();
