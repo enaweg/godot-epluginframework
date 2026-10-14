@@ -228,4 +228,95 @@ public class PluginStateStoreTests
         Assertions.AssertObject(replaced.State).IsEqual(PersistedPluginState.Invalid);
         Assertions.AssertString(replaced.Reason).IsEqual("invalid_plugin_version");
     }
+
+    [TestCase]
+    public void FieldsOfANewerVersionAreReadAndKeptWhenTheFilesAreWritten()
+    {
+        var (_, path) = NewStore();
+        File.WriteAllText(path, """
+            {
+              "schemaVersion": 1,
+              "lastCompletedAttemptId": null,
+              "plugins": [ { "slug": "sample_plugin", "version": "1.0", "state": "deactivated", "pinned": true } ],
+              "licenses": [ { "slug": "sample_plugin", "license": "LICENSE", "reviewer": "someone" } ],
+              "future": { "kept": [1, 2] }
+            }
+            """);
+        File.WriteAllText(path + ".user", """
+            { "schemaVersion": 1, "attempts": [ { "attemptId": "2b0e4fb2-a7c4-4bd5-9c4b-7a0c7c1d3e10", "slug": "other",
+              "targetState": "activated", "state": "failed", "reason": "attempt_in_progress", "host": "pc-1" } ], "note": 3 }
+            """);
+
+        var store = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(store.Load()).IsTrue();
+        Assertions.AssertBool(store.IsBlocked("other")).IsTrue();
+        Assertions.AssertBool(store.TryBeginAttempt("sample_plugin", "1.0", PersistedPluginState.Activated, out var id)).IsTrue();
+        Assertions.AssertBool(store.TryComplete(id, [new("sample_plugin", "1.0", PersistedPluginState.Activated)])).IsTrue();
+
+        var shared = File.ReadAllText(path);
+        Assertions.AssertString(shared).Contains("\"state\": \"activated\"");
+        Assertions.AssertString(shared).Contains("\"pinned\": true");
+        Assertions.AssertString(shared).Contains("\"reviewer\": \"someone\"");
+        Assertions.AssertString(shared).Contains("\"future\"");
+        var local = File.ReadAllText(path + ".user");
+        Assertions.AssertString(local).Contains("\"host\": \"pc-1\"");
+        Assertions.AssertString(local).Contains("\"note\": 3");
+    }
+
+    [TestCase]
+    public void AMisspelledOrNewerSchemaMakesTheFilesReadOnly()
+    {
+        foreach (var content in new[] { """{ "schemaVersion": 1, "plugin": [] }""", """{ "schemaVersion": 2, "plugins": [] }""" })
+        {
+            var (_, path) = NewStore();
+            File.WriteAllText(path, content);
+
+            var store = new PluginStateStore(path, new NullLogger());
+            Assertions.AssertBool(store.Load()).IsFalse();
+            Assertions.AssertBool(store.IsReadOnly).IsTrue();
+        }
+    }
+
+    [TestCase]
+    public void EnablingAndDisablingWriteTheSharedFileOnlyWhenAnEntryChanges()
+    {
+        var (store, path) = NewStore();
+        Assertions.AssertBool(store.TryCreateBaseline([
+            new SharedPluginState("sample_plugin", "1.0", PersistedPluginState.Activated)
+        ])).IsTrue();
+        var baseline = File.ReadAllBytes(path);
+
+        // e.g. an optional recipe installed for a plugin that stays activated
+        Assertions.AssertBool(store.TryBeginAttempt("sample_plugin", "1.0", PersistedPluginState.Activated, out var same)).IsTrue();
+        Assertions.AssertBool(store.TryComplete(same, [new("sample_plugin", "1.0", PersistedPluginState.Activated)])).IsTrue();
+        Assertions.AssertBool(baseline.SequenceEqual(File.ReadAllBytes(path))).IsTrue();
+        Assertions.AssertBool(File.Exists(path + ".user")).IsFalse();
+
+        Assertions.AssertBool(store.TryBeginAttempt("sample_plugin", "1.0", PersistedPluginState.Deactivated, out var off)).IsTrue();
+        Assertions.AssertBool(store.TryComplete(off, [new("sample_plugin", "1.0", PersistedPluginState.Deactivated)])).IsTrue();
+        Assertions.AssertObject(store.LastCompletedAttemptId).IsNull();
+        Assertions.AssertString(File.ReadAllText(path)).Contains("\"lastCompletedAttemptId\": null");
+
+        // only an update's acknowledgement records its attempt, which recovery looks for
+        Assertions.AssertBool(store.TryBeginAttempt("sample_plugin", "1.0", PersistedPluginState.Deactivated, out var update)).IsTrue();
+        Assertions.AssertBool(store.TryAcknowledgeVersions(update, new Dictionary<string, string> { ["sample_plugin"] = "2.0" })).IsTrue();
+        var reloaded = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(reloaded.Load()).IsTrue();
+        Assertions.AssertObject(reloaded.LastCompletedAttemptId).IsEqual(update);
+        Assertions.AssertString(reloaded.GetShared("sample_plugin")!.Version).IsEqual("2.0");
+    }
+
+    [TestCase]
+    public void AnUnchangedCompletionStillRefusesAFileEditedOnDisk()
+    {
+        var (store, path) = NewStore();
+        Assertions.AssertBool(store.TryCreateBaseline([
+            new SharedPluginState("sample_plugin", "1.0", PersistedPluginState.Activated)
+        ])).IsTrue();
+        Assertions.AssertBool(store.TryBeginAttempt("sample_plugin", "1.0", PersistedPluginState.Activated, out var id)).IsTrue();
+        File.AppendAllText(path, " ");
+
+        Assertions.AssertBool(store.TryComplete(id, [new("sample_plugin", "1.0", PersistedPluginState.Activated)])).IsFalse();
+        Assertions.AssertBool(store.IsBlocked("sample_plugin")).IsTrue();
+    }
 }
