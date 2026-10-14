@@ -153,6 +153,8 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         EGlobal.Instance.RecordFrameworkDisabled(this);
         // plugins toggled while the framework is disabled are not handled when it is enabled again
         EGlobal.ForgetPluginToggles();
+        // Godot frees this instance; the one it creates when the framework is enabled again initializes it anew.
+        EGlobal.Detach(this);
 
         base._DisablePlugin();
     }
