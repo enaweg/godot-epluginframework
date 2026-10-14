@@ -93,9 +93,9 @@ internal sealed partial class EGlobal
     /// The welcome page of a plugin: the one its recipe sets, else the welcome_file of its plugin.cfg, else its README.
     /// Null when it has none or plugin.cfg cannot be read.
     /// </summary>
-    private static WelcomeEntry? ReadInstalledWelcome(string slug, EEditorPluginRecipe? recipe)
+    private WelcomeEntry? ReadInstalledWelcome(string slug, EEditorPluginRecipe? recipe)
     {
-        var directory = $"res://addons/{slug}";
+        var directory = _host.PluginDirectory(slug);
         using var config = new ConfigFile();
         if (config.Load(directory + "/plugin.cfg") != Error.Ok)
         {

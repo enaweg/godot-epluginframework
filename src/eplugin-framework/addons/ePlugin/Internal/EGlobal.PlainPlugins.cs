@@ -14,7 +14,7 @@ internal sealed partial class EGlobal
     private PluginToggles? _pluginToggles;
 
     /// <summary>Starts from the plugins known before an assembly reload, else from the ones enabled now.</summary>
-    private void InitializePluginToggles()
+    internal void InitializePluginToggles()
     {
         _pluginToggles = new PluginToggles(Engine.Singleton.HasMeta(PluginTogglesMeta)
             ? Engine.Singleton.GetMeta(PluginTogglesMeta).AsStringArray()
@@ -101,8 +101,7 @@ internal sealed partial class EGlobal
 
     private bool IsPlainPlugin(string slug) => slug != FrameworkSlug && !IsManagedPlugin(slug);
 
-    private static string PluginName(string slug) =>
-        EditorPluginExtensions.ReadMetadata($"res://addons/{slug}/plugin.cfg")?.Name is { Length: > 0 } name ? name : slug;
+    private string PluginName(string slug) => ReadInstalledMetadata(slug)?.Name is { Length: > 0 } name ? name : slug;
 
     /// <summary>
     /// Asks for the plugin's license like for an ePlugin, then installs the optional recipes of other plugins that it
@@ -133,7 +132,7 @@ internal sealed partial class EGlobal
             // afterwards, so its plugin list shows the plugin as disabled.
             using (ActivationProgress.Begin($"Disabling {name} until its license is accepted..."))
             {
-                EditorInterface.Singleton.SetPluginEnabled(slug, false);
+                _host.SetPluginEnabled(slug, false);
             }
 
             NotePluginToggle(slug, false);
@@ -189,10 +188,10 @@ internal sealed partial class EGlobal
                 }
             }
 
-            foreach (var dependant in dependants.Where(d => EditorInterface.Singleton.IsPluginEnabled(d.Slug)))
+            foreach (var dependant in dependants.Where(d => _host.IsPluginEnabled(d.Slug)))
             {
                 dependant.Logger?.Warn($"Disabling {dependant.Name}: it requires {name}, which was disabled.");
-                EditorInterface.Singleton.SetPluginEnabled(dependant.Slug, false);
+                _host.SetPluginEnabled(dependant.Slug, false);
             }
 
             UninstallOptionalDependenciesOn(slug);

@@ -280,10 +280,10 @@ internal sealed partial class EGlobal
         private static readonly StringName CloseScene = "close_scene";
         private static readonly StringName GetOpenSceneRoots = "get_open_scene_roots";
         private const int MaxClosedScenes = 1000;
-        public bool UiAvailable => DisplayServer.GetName() != "headless" && global._ePluginContext?.IsInsideTree() == true;
+        public bool UiAvailable => global.LicenseUiAvailable;
         public string BuildFailurePolicy => ProjectSettings.GetSetting("eplugin/updates/on_build_failure", "ask").AsString();
         public bool RestartAlways => ProjectSettings.GetSetting("eplugin/updates/restart_policy", "auto").AsString() == "always";
-        public bool IsEnabled(string slug) => EditorInterface.Singleton.IsPluginEnabled(slug);
+        public bool IsEnabled(string slug) => global._host.IsPluginEnabled(slug);
         public bool IsManaged(string slug) => global.IsManagedPlugin(slug);
         public void Preflight(IReadOnlyList<ValidatedPackage> packages)
         {
@@ -310,7 +310,7 @@ internal sealed partial class EGlobal
         }
         public void Reconcile(UpdateJournal journal, bool rollback) => global.ReconcileUpdateRecipes(journal, rollback);
         public void RebaseRecipes(UpdateJournal journal) => global.RebaseUpdateRecipes(journal);
-        public void SetPlainEnabled(string slug, bool enabled) => EditorInterface.Singleton.SetPluginEnabled(slug, enabled);
+        public void SetPlainEnabled(string slug, bool enabled) => global._host.SetPluginEnabled(slug, enabled);
         public void CloseScenes()
         {
             var editor = EditorInterface.Singleton;

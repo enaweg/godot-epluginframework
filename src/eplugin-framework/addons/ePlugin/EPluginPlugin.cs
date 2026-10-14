@@ -32,6 +32,9 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
     private ActivationProgress.Scope? _reopenProgress;
     private int _reopenFrames;
     private CancellationTokenSource _updateLifetime = new();
+    private static readonly TimeSpan InitializeRetryDelay = TimeSpan.FromSeconds(10);
+    private DateTime _nextInitializeAttempt;
+    private bool _unloadingObserved;
     internal CancellationToken UpdateLifetime => _updateLifetime.Token;
     public bool EnableDebugLogging => false;
 
@@ -320,7 +323,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
 
     private void InitializeInternals()
     {
-        if (!EnsureEarlyUpdateRecovery()) return;
+        if (!EnsureEarlyUpdateRecovery() || DateTime.UtcNow < _nextInitializeAttempt) return;
         _managerUiAdded = false;
         _updateOwner = EGlobal.Instance;
         _updateOwner.UpdateDecisionNeeded -= ShowUpdateFailure;
@@ -328,14 +331,25 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         _updateOwner.RestartRequested -= RememberManagerForRestart;
         _updateOwner.RestartRequested += RememberManagerForRestart;
         var context = AssemblyLoadContext.GetLoadContext(typeof(EPluginPlugin).Assembly);
-        if (context is not null) context.Unloading += _ => { try { _updateLifetime.Cancel(); } catch (ObjectDisposedException) { } };
+        if (context is not null && !_unloadingObserved)
+        {
+            _unloadingObserved = true; // once per assembly, also when a failed start is tried again
+            context.Unloading += _ => { try { _updateLifetime.Cancel(); } catch (ObjectDisposedException) { } };
+        }
         UpdateSettings.Register();
         LicenseSettings.Register();
         // A reconnected window spans recovery and initialization. If the manager was open, let it draw before closing.
         var progress = _reopenProgress ?? (ManagerReopen.IsSet ? ActivationProgress.Begin("Finishing the plugin update...") : null);
         _reopenProgress = null;
         try { EGlobal.Instance.Initialize(this, new GenericLoggerFactory(category => new GodotConsoleLogger(category))); }
-        catch { progress?.Dispose(); throw; }
+        catch (Exception ex)
+        {
+            // EGlobal stays invalid; trying again every frame would only repeat the error.
+            progress?.Dispose();
+            _nextInitializeAttempt = DateTime.UtcNow + InitializeRetryDelay;
+            Logger.Error($"ePlugin could not start and tries again in {InitializeRetryDelay.TotalSeconds:0} seconds: {ex}");
+            return;
+        }
         if (progress is null) return;
         // Another restart follows, e.g. after the interim build: the manager opens after that one.
         if (EGlobal.Instance.IsRestartPending) { progress.Dispose(); return; }

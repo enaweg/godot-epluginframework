@@ -16,7 +16,10 @@ internal sealed partial class EGlobal
     private LicenseReview? _pendingLicenseReview;
     private ulong _pendingLicenseFrame;
 
-    private bool LicenseUiAvailable => DisplayServer.GetName() != "headless" && _ePluginContext?.IsInsideTree() == true;
+    /// <summary>The license review waiting for its dialog, for tests; <see cref="TakeLicenseReview"/> hands it out.</summary>
+    internal LicenseReview? PendingLicenseReview => _pendingLicenseReview;
+
+    private bool LicenseUiAvailable => _ePluginContext is not null && _host.CanShowDialogs(_ePluginContext);
 
     private string FrameworkSlug => _ePluginContext?.GetPluginSlug() ?? "ePlugin";
 
@@ -68,9 +71,9 @@ internal sealed partial class EGlobal
         context.State = EEditorPluginState.Deactivated;
         Post(() =>
         {
-            if (EditorInterface.Singleton.IsPluginEnabled(context.Slug))
+            if (_host.IsPluginEnabled(context.Slug))
             {
-                EditorInterface.Singleton.SetPluginEnabled(context.Slug, false);
+                _host.SetPluginEnabled(context.Slug, false);
             }
 
             _contexts.Remove(context);
@@ -102,7 +105,7 @@ internal sealed partial class EGlobal
             var recipe = RecipeOf(current);
             foreach (var dependency in recipe?.PluginDependencies ?? [])
             {
-                if (!EditorInterface.Singleton.IsPluginEnabled(dependency.Slug))
+                if (!_host.IsPluginEnabled(dependency.Slug))
                 {
                     Visit(dependency.Slug);
                 }
@@ -155,44 +158,20 @@ internal sealed partial class EGlobal
     /// </summary>
     private EEditorPluginRecipe? ReadRecipeOfDisabledPlugin(string slug)
     {
-        var directory = $"res://addons/{slug}";
-        using var config = new ConfigFile();
-        if (config.Load(directory + "/plugin.cfg") != Error.Ok)
-        {
-            return null;
-        }
-
-        var script = PluginCatalog.ResolveScript(directory, config.GetValue("plugin", "script", "").AsString().Trim());
-        var type = script is null || !script.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) ? null
-            : typeof(EGlobal).Assembly.GetTypes().FirstOrDefault(t =>
-                typeof(EditorPlugin).IsAssignableFrom(t) && typeof(IEEditorPlugin).IsAssignableFrom(t) &&
-                PluginCatalog.ScriptPaths(t).Contains(script));
-        if (type is null)
-        {
-            return null;
-        }
-
-        EditorPlugin? instance = null;
+        var builder = EEditorPluginBuilder.Create();
         try
         {
-            instance = (EditorPlugin)Activator.CreateInstance(type)!;
-            var builder = EEditorPluginBuilder.Create();
-            ((IEEditorPlugin)instance).CreateRecipe(builder);
-            return builder.PluginRecipe;
+            return _host.CreateRecipeOfDisabledPlugin(slug, builder) ? builder.PluginRecipe : null;
         }
         catch (Exception ex)
         {
             _ePluginContext?.Logger.Warn($"Cannot read the recipe of {slug} to collect its license and dependencies: {ex.Message}");
             return null;
         }
-        finally
-        {
-            instance?.Free();
-        }
     }
 
-    private static LicenseInfo? ReadInstalledLicense(string slug, EEditorPluginRecipe? recipe) =>
-        ReadLicense(slug, recipe, $"res://addons/{slug}/plugin.cfg", ProjectSettings.GlobalizePath($"res://addons/{slug}"));
+    private LicenseInfo? ReadInstalledLicense(string slug, EEditorPluginRecipe? recipe) =>
+        ReadLicense(slug, recipe, $"{_host.PluginDirectory(slug)}/plugin.cfg", ProjectSettings.GlobalizePath(_host.PluginDirectory(slug)));
 
     /// <summary>
     /// The license of a plugin: the one its recipe sets, else the license_file of its plugin.cfg, else its LICENSE file.
@@ -405,9 +384,9 @@ internal sealed partial class EGlobal
         {
             Post(() =>
             {
-                if (EditorInterface.Singleton.IsPluginEnabled(activation.Slug) != enable)
+                if (_host.IsPluginEnabled(activation.Slug) != enable)
                 {
-                    EditorInterface.Singleton.SetPluginEnabled(activation.Slug, enable);
+                    _host.SetPluginEnabled(activation.Slug, enable);
                 }
             });
         }
