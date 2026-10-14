@@ -20,7 +20,7 @@ internal sealed class LifecycleFixture : IDisposable
 {
     private readonly Dictionary<string, Action<IEEditorPluginBuilder>?> _ePlugins = new(StringComparer.Ordinal);
     private readonly List<GodotObject> _objects = [];
-    private readonly ILoggerFactory _loggers;
+    private readonly GenericLoggerFactory _loggers;
 
     public LifecycleFixture()
     {

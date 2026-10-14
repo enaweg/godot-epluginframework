@@ -39,7 +39,7 @@ public class UpdateSiteTests
 
         var reloaded = new UpdateSiteSettings(SitesFile);
         reloaded.Load();
-        Assertions.AssertArray(reloaded.Sites.Select(s => s.Slug).ToArray()).IsEqual(new[] { "alpha", "zeta" });
+        Assertions.AssertArray(reloaded.Sites.Select(s => s.Slug).ToArray()).ContainsExactly("alpha", "zeta");
         Assertions.AssertString(reloaded.UrlOf("zeta")).IsEqual(Config);
         Assertions.AssertString(reloaded.UrlOf("missing")).IsNull();
 
@@ -92,7 +92,7 @@ public class UpdateSiteTests
         settings.Load();
         Assertions.AssertString(settings.Problem).IsNull();
         // an unsupported URL stays, so checks fall back to plugin.cfg; invalid slugs and empty URLs are dropped
-        Assertions.AssertArray(settings.Sites.Select(s => s.Slug).ToArray()).IsEqual(new[] { "plugin" });
+        Assertions.AssertArray(settings.Sites.Select(s => s.Slug).ToArray()).ContainsExactly("plugin");
         Assertions.AssertBool(UpdateSourceFactory.IsSupported(settings.UrlOf("plugin"))).IsFalse();
     }
 
@@ -136,7 +136,7 @@ public class UpdateSiteTests
         var service = new UpdateService(new Factory(), new SystemClock(), store);
         var target = Target(site: Offline);
         var versions = await service.ListVersionsAsync(target, new(), CancellationToken.None);
-        Assertions.AssertString(versions.First().SourceUrl).IsEqual(Config);
+        Assertions.AssertString(versions[0].SourceUrl).IsEqual(Config);
         Assertions.AssertString(store.State.Results.Single().SourceUrl).IsEqual(Config);
         // a cached update counts for the plugin whichever of its sites it came from
         Assertions.AssertInt(UpdateScheduler.CurrentCached(store.State, [target]).Count).IsEqual(1);

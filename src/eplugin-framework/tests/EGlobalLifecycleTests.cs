@@ -85,7 +85,7 @@ public class EGlobalLifecycleTests
 
         Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Error);
         Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsFalse();
-        Assertions.AssertBool(_fixture.Operations.Any(o => o.StartsWith("add-"))).IsFalse();
+        Assertions.AssertBool(_fixture.Operations.Any(o => o.StartsWith("add-", StringComparison.Ordinal))).IsFalse();
         Assertions.AssertString(_fixture.Store.GetLocal("app")!.Reason).IsEqual("dependency_resolution_failed");
         Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsFalse();
     }
@@ -195,7 +195,7 @@ public class EGlobalLifecycleTests
         Assertions.AssertObject(_fixture.State("a")).IsEqual(EEditorPluginState.Error);
         Assertions.AssertObject(_fixture.State("self")).IsEqual(EEditorPluginState.Error);
         Assertions.AssertBool(_fixture.Host.Enabled.Overlaps(["a", "b", "self"])).IsFalse();
-        Assertions.AssertBool(_fixture.Operations.Any(o => o.StartsWith("add-"))).IsFalse();
+        Assertions.AssertBool(_fixture.Operations.Any(o => o.StartsWith("add-", StringComparison.Ordinal))).IsFalse();
         Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsFalse();
         Assertions.AssertBool(_fixture.Log.Any(l => l.Contains("cycle: a -> b -> a"))).IsTrue();
         Assertions.AssertBool(_fixture.Log.Any(l => l.Contains("cycle: self -> self"))).IsTrue();
@@ -304,7 +304,7 @@ public class EGlobalLifecycleTests
         Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsFalse();
         Assertions.AssertObject(_fixture.Global.PendingLicenseReview).IsNull();
         Assertions.AssertThat(_fixture.Operations).IsEmpty();
-        Assertions.AssertBool(_fixture.Log.Any(l => l.StartsWith("error:") && l.Contains("license"))).IsTrue();
+        Assertions.AssertBool(_fixture.Log.Any(l => l.StartsWith("error:", StringComparison.Ordinal) && l.Contains("license"))).IsTrue();
     }
 
     [TestCase]
@@ -333,7 +333,7 @@ public class EGlobalLifecycleTests
         _fixture.Global.ExecuteInitializers();
 
         Assertions.AssertInt(ran).IsEqual(1);
-        Assertions.AssertBool(_fixture.Log.Any(l => l.StartsWith("error:") && l.Contains("broken"))).IsTrue();
+        Assertions.AssertBool(_fixture.Log.Any(l => l.StartsWith("error:", StringComparison.Ordinal) && l.Contains("broken"))).IsTrue();
     }
 
     private sealed class Initializer(Action initialize) : IInitialize

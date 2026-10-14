@@ -135,7 +135,7 @@ public class UpdateSourceTests
              {"tag_name":"3.0.0","draft":true,"assets":[]}]
             """)));
         var listed = await new GitHubReleaseSource(new(github), "owner", "repo").ListAsync(Target(), new(), CancellationToken.None);
-        Assertions.AssertArray(listed.Select(c => c.NewVersion).ToArray()).IsEqual(new[] { "v1.2.0", "v1.1.0", "2.0.0-beta.1" });
+        Assertions.AssertArray(listed.Select(c => c.NewVersion).ToArray()).ContainsExactly("v1.2.0", "v1.1.0", "2.0.0-beta.1");
         Assertions.AssertString(((ZipPackageRef)listed[1].Package).Url).IsEqual("https://github.com/owner/repo/archive/refs/tags/v1.1.0.zip");
 
         using var gitlab = new HttpClient(new Handler(_ => Json("""
@@ -143,7 +143,7 @@ public class UpdateSourceTests
              {"tag_name":"1.2.0","upcoming_release":false,"assets":{"links":[],"sources":[]}}]
             """)));
         var gitlabVersions = await new GitLabReleaseSource(new(gitlab), "git.example", "team/project").ListAsync(Target(), new(), CancellationToken.None);
-        Assertions.AssertArray(gitlabVersions.Select(c => c.NewVersion).ToArray()).IsEqual(new[] { "1.3.0" });
+        Assertions.AssertArray(gitlabVersions.Select(c => c.NewVersion).ToArray()).ContainsExactly("1.3.0");
 
         var tags = await new GitSource(new(), new FakeGit(), new("https://host/repo.git", "addon", null)).ListAsync(Target(), new(), CancellationToken.None);
         Assertions.AssertString(tags.Single().NewVersion).IsEqual("v2.0.0");
@@ -206,7 +206,7 @@ public class UpdateSourceTests
         var git = new FakeGit("addons/plugin", refs);
         var source = (GitSource)new UpdateSourceFactory(new(), git).Create("https://github.com/owner/repo/tags");
         var listed = await source.ListAsync(Target(), new(), CancellationToken.None);
-        Assertions.AssertArray(listed.Select(c => c.NewVersion).ToArray()).IsEqual(new[] { "v2.0.0-beta.1", "v1.4", "1.3.0", "v1.2.3", "1.2" });
+        Assertions.AssertArray(listed.Select(c => c.NewVersion).ToArray()).ContainsExactly("v2.0.0-beta.1", "v1.4", "1.3.0", "v1.2.3", "1.2");
         // an annotated tag installs the commit it points to, not the tag object
         Assertions.AssertString(((GitPackageRef)listed[1].Package).Commit).IsEqual(Commit('8'));
         Assertions.AssertString(((GitPackageRef)listed[1].Package).Repository).IsEqual("https://github.com/owner/repo.git");

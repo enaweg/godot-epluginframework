@@ -82,12 +82,12 @@ internal sealed partial class EGlobal
         var groups = UpdateGroupsOf(packages);
         using var restarts = DeferRestarts();
         // The editor drops a scan requested while one runs, so a scan per group would miss later groups: scan once after all.
-        using var scans = groups.Count > 1 ? DeferScans() : null;
+        using var scans = groups.Length > 1 ? DeferScans() : null;
         return Applier().ApplyGroups(groups, directory, _updateJournals!.NewDirectory, trustChangedSources,
             (index, group) =>
             {
-                if (groups.Count == 1) return;
-                ActivationProgress.SetText($"Updating {GroupNames(group)} ({index + 1} of {groups.Count})...");
+                if (groups.Length == 1) return;
+                ActivationProgress.SetText($"Updating {GroupNames(group)} ({index + 1} of {groups.Length})...");
             },
             result =>
             {
@@ -104,7 +104,7 @@ internal sealed partial class EGlobal
 
     private static string GroupNames(IReadOnlyList<ValidatedPackage> group) => string.Join(", ", group.Select(p => p.Candidate.PluginName));
 
-    private IReadOnlyList<IReadOnlyList<ValidatedPackage>> UpdateGroupsOf(IReadOnlyList<ValidatedPackage> packages)
+    private IReadOnlyList<ValidatedPackage>[] UpdateGroupsOf(IReadOnlyList<ValidatedPackage> packages)
     {
         var dependencies = _contexts.Where(c => c.Plugin is not null && c.State == EEditorPluginState.Activated).DistinctBy(c => c.Slug)
             .ToDictionary(c => c.Slug, c => (IReadOnlyCollection<string>)Snapshot(c).PluginDependencies.Select(d => d.Slug).ToArray(), StringComparer.Ordinal);

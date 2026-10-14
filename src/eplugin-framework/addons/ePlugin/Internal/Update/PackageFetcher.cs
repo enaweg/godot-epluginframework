@@ -36,7 +36,7 @@ internal sealed class PackageFetcher(UpdateHttp http, IGitRunner git)
                 string? reason;
                 try
                 {
-                    var validated = await StageAsync(candidate, targets, stage, transactionDirectory, relay, ct, allowDowngrade, allowReinstall).ConfigureAwait(false);
+                    var validated = await StageAsync(candidate, targets, stage, transactionDirectory, relay, allowDowngrade, allowReinstall, ct).ConfigureAwait(false);
                     reason = validated.IsValid ? null
                         : $"Package for '{candidate.Slug}' was refused: " + string.Join("; ", validated.Findings.Where(f => f.Severity == FindingSeverity.Error).Select(f => f.Message));
                     if (reason is null) result.Add(validated);
@@ -57,7 +57,7 @@ internal sealed class PackageFetcher(UpdateHttp http, IGitRunner git)
     }
 
     private async Task<ValidatedPackage> StageAsync(UpdateCandidate candidate, IReadOnlyList<PluginUpdateTarget> targets, string stage,
-        string transactionDirectory, IProgress<double> relay, CancellationToken ct, bool allowDowngrade, bool allowReinstall)
+        string transactionDirectory, IProgress<double> relay, bool allowDowngrade, bool allowReinstall, CancellationToken ct)
     {
         var target = targets.First(t => t.Slug == candidate.Slug);
         Directory.CreateDirectory(Path.GetDirectoryName(stage)!);

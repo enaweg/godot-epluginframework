@@ -89,7 +89,7 @@ public class LocalSourceTests
         var index = LocalPackageIndexer.Build([packages], CancellationToken.None);
         Assertions.AssertInt(index.Packages.Count).IsEqual(0);
         Assertions.AssertArray(index.Failures.Select(f => Path.GetFileName(f.Path)).Order().ToArray())
-            .IsEqual(new[] { "archive-root.zip", "noversion.zip", "outside-root.zip", "two-roots.zip", "unsafe.zip" });
+            .ContainsExactly("archive-root.zip", "noversion.zip", "outside-root.zip", "two-roots.zip", "unsafe.zip");
     }
 
     [TestCase]
@@ -106,7 +106,7 @@ public class LocalSourceTests
         var target = Target();
         // A prerelease is a version like any other.
         var versions = LocalDirectorySource.Versions(index, target);
-        Assertions.AssertArray(versions.Select(c => c.NewVersion).ToArray()).IsEqual(new[] { "3.0.0-beta.1", "2.0.0", "1.5.0" });
+        Assertions.AssertArray(versions.Select(c => c.NewVersion).ToArray()).ContainsExactly("3.0.0-beta.1", "2.0.0", "1.5.0");
         Assertions.AssertString(((LocalZipPackageRef)versions[1].Package).Path).IsEqual("b.zip");
 
         // A stable install is updated to the newest stable version, a prerelease install to the newest version.
@@ -140,7 +140,7 @@ public class LocalSourceTests
         var local = LocalDirectorySource.Versions(index, Target());
         var remote = await service.ListVersionsAsync(Target() with { UpdateUrl = "https://example.org/listed" }, new(), CancellationToken.None);
         var combined = UpdateService.MergeVersions(local, remote);
-        Assertions.AssertArray(combined.Select(v => v.NewVersion).ToArray()).IsEqual(new[] { "2.0.0", "1.5.0", "1.2.0" });
+        Assertions.AssertArray(combined.Select(v => v.NewVersion).ToArray()).ContainsExactly("2.0.0", "1.5.0", "1.2.0");
         // The update site lists 1.2.0 too; the local package of the same version wins.
         Assertions.AssertBool(combined.Single(v => v.NewVersion == "1.2.0").Package is LocalZipPackageRef).IsTrue();
 

@@ -19,8 +19,8 @@ internal interface IUpdateWorkflowHost
     Task<IReadOnlyList<UpdateCandidate>> ListRemoteVersionsAsync(PluginUpdateTarget target, CancellationToken ct);
 
     Task<(IReadOnlyList<ValidatedPackage> Packages, IReadOnlyList<RefusedPackage> Refused, string Directory)> StageUpdatesAsync(
-        IReadOnlyList<UpdateCandidate> candidates, IProgress<double>? progress, CancellationToken ct, bool allowDowngrade,
-        bool allowReinstall);
+        IReadOnlyList<UpdateCandidate> candidates, IProgress<double>? progress, bool allowDowngrade, bool allowReinstall,
+        CancellationToken ct);
 
     LicenseReview? ReviewUpdateLicenses(IEnumerable<ValidatedPackage> packages);
     void RecordLicenses(LicenseReview review);
@@ -194,7 +194,7 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<LicenseReview, T
                         var percent = (int)(value * 100);
                         if (Interlocked.Exchange(ref shown, percent) != percent) progress.Report($"{text} {percent}%");
                     });
-                    staged = await host.StageUpdatesAsync(request.Batch, relay, ct, request.AllowDowngrade, request.AllowReinstall);
+                    staged = await host.StageUpdatesAsync(request.Batch, relay, request.AllowDowngrade, request.AllowReinstall, ct);
                 }
 
                 Staged = staged.Packages;

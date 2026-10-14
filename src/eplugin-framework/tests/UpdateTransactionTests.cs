@@ -40,7 +40,7 @@ public class UpdateTransactionTests
         var stage = Path.Combine(directory, "staging/plugin"); Directory.CreateDirectory(stage);
         File.WriteAllText(Path.Combine(stage, "plugin.cfg"), Config("2.0.0"));
         var candidate = new UpdateCandidate("plugin", "Plugin", "1.0.0", "2.0.0", "https://example.org/releases", null, "v2.0.0", new ZipPackageRef("https://example.org/package.zip", "plugin"));
-        SemVer.TryParse("2.0.0", out var version);
+        Assertions.AssertBool(SemVer.TryParse("2.0.0", out var version)).IsTrue();
         return (new(candidate, stage, version, null, csharp, []), directory);
     }
     [TestCase]
@@ -238,7 +238,7 @@ public class UpdateTransactionTests
         var stage = Path.Combine(directory, "staging/other"); Directory.CreateDirectory(stage);
         File.WriteAllText(Path.Combine(stage, "plugin.cfg"), Config("2.0.0"));
         var candidate = new UpdateCandidate("other", "Other", "1.0.0", "2.0.0", "https://example.org/releases", null, "v2.0.0", new ZipPackageRef("https://example.org/other.zip", "other"));
-        SemVer.TryParse("2.0.0", out var version);
+        Assertions.AssertBool(SemVer.TryParse("2.0.0", out var version)).IsTrue();
         return new(candidate, stage, version, null, csharp, []);
     }
     private string NewDirectory() => Path.Combine(_root, ".godot/eplugin/updates", "group-" + Guid.NewGuid().ToString("N")[..8]);

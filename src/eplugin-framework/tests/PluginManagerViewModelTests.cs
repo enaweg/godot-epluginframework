@@ -80,7 +80,7 @@ public class PluginManagerViewModelTests
             [Plugin("gamma", PluginKind.GDScript, enabled: false), Plugin("beta", PluginKind.EPlugin, "https://example.org/releases"),
              Plugin("ePlugin", PluginKind.Framework), Plugin("Alpha", PluginKind.CSharp)],
             [candidate, Candidate("orphan")], [new("beta", "beta", "1.0.0", candidate.SourceUrl, "/unused")], null, _ => []);
-        Assertions.AssertArray(model.Plugins.Select(p => p.Plugin.Slug).ToArray()).IsEqual(new[] { "ePlugin", "Alpha", "beta", "gamma", "orphan" });
+        Assertions.AssertArray(model.Plugins.Select(p => p.Plugin.Slug).ToArray()).ContainsExactly("ePlugin", "Alpha", "beta", "gamma", "orphan");
         var beta = model.Find("beta")!;
         Assertions.AssertBool(beta.HasUpdate && beta.IsUpdatable && beta.IsEPlugin).IsTrue();
         Assertions.AssertBool(model.Find("gamma")!.IsUpdatable || model.Find("gamma")!.IsEPlugin).IsFalse();
@@ -188,15 +188,15 @@ public class PluginManagerViewModelTests
     public static void VersionOptionsMarkInstalledAndDowngrades()
     {
         var options = PluginManagerViewModel.VersionOptions("1.5.0", [Version("1.0.0"), Version("2.0.0"), Version("1.5.0")]);
-        Assertions.AssertArray(options.Select(o => o.Version).ToArray()).IsEqual(new[] { "2.0.0", "1.5.0", "1.0.0" });
+        Assertions.AssertArray(options.Select(o => o.Version).ToArray()).ContainsExactly("2.0.0", "1.5.0", "1.0.0");
         Assertions.AssertBool(options[1].Installed && !options[0].IsDowngrade && options[2].IsDowngrade).IsTrue();
         var unlisted = PluginManagerViewModel.VersionOptions("1.7.0", [Version("2.0.0"), Version("1.0.0")]);
-        Assertions.AssertArray(unlisted.Select(o => o.Version).ToArray()).IsEqual(new[] { "2.0.0", "1.7.0", "1.0.0" });
+        Assertions.AssertArray(unlisted.Select(o => o.Version).ToArray()).ContainsExactly("2.0.0", "1.7.0", "1.0.0");
         Assertions.AssertObject(unlisted[1].Candidate).IsNull();
 
         var plugin = new PluginRow(Plugin("beta", PluginKind.EPlugin, "https://example.org/releases"), null);
         Assertions.AssertObject(PluginManagerViewModel.VersionChangeBlocked(plugin, options[2])).IsNull();
-        Assertions.AssertArray(options.Select(o => o.Action).ToArray()).IsEqual(new[] { "Update", "Reinstall", "Downgrade" });
+        Assertions.AssertArray(options.Select(o => o.Action).ToArray()).ContainsExactly("Update", "Reinstall", "Downgrade");
         var framework = new PluginRow(Plugin("ePlugin", PluginKind.Framework, "https://example.org/releases"), null);
         Assertions.AssertString(PluginManagerViewModel.VersionChangeBlocked(framework, options[2])).Contains("cannot be downgraded");
         Assertions.AssertObject(PluginManagerViewModel.VersionChangeBlocked(framework, options[0])).IsNull();
@@ -255,7 +255,7 @@ public class PluginManagerViewModelTests
     }
     private static ValidatedPackage Package(string slug)
     {
-        SemVer.TryParse("2.0.0", out var version);
+        Assertions.AssertBool(SemVer.TryParse("2.0.0", out var version)).IsTrue();
         return new(Candidate(slug), "/staging/" + slug, version, null, false, []);
     }
     private static UpdateCandidate Version(string version) => Candidate("beta") with { InstalledVersion = "1.5.0", NewVersion = version };
