@@ -36,7 +36,7 @@ internal sealed partial class EGlobal
         var findings = new List<Finding>();
         foreach (var candidate in candidates)
         {
-            var directory = ProjectSettings.GlobalizePath($"res://addons/{candidate.Slug}");
+            var directory = ProjectSettings.GlobalizePath(_host.PluginDirectory(candidate.Slug));
             if (Directory.Exists(directory) && AddonPackageValidator.NativeExtension(PackageFiles.Files(directory)) is { } native) findings.Add(native);
         }
         var updated = candidates.ToDictionary(c => c.Slug, StringComparer.Ordinal);
@@ -56,7 +56,7 @@ internal sealed partial class EGlobal
         return findings;
     }
 
-    private void PrepareUpdateRecipes(UpdateJournal journal)
+    internal void PrepareUpdateRecipes(UpdateJournal journal)
     {
         foreach (var context in _contexts.Where(c => c.State == EEditorPluginState.Activated && (c.Plugin is not null || c.PluginBase == _ePluginContext)))
         {
@@ -72,7 +72,7 @@ internal sealed partial class EGlobal
     /// does not update are taken from what is enabled now. Those it updates keep their baseline, because the loaded code
     /// may already be their new version.
     /// </summary>
-    private void RebaseUpdateRecipes(UpdateJournal journal)
+    internal void RebaseUpdateRecipes(UpdateJournal journal)
     {
         var updated = journal.Plugins.Select(p => p.Slug).ToHashSet(StringComparer.Ordinal);
         foreach (var slug in journal.Recipes.Keys.Where(s => !updated.Contains(s)).ToArray()) journal.Recipes.Remove(slug);
@@ -83,7 +83,7 @@ internal sealed partial class EGlobal
         }
     }
 
-    private void ReconcileUpdateRecipes(UpdateJournal journal, bool rollback)
+    internal void ReconcileUpdateRecipes(UpdateJournal journal, bool rollback)
     {
         _recipeUpdateJournal = journal;
         _updateRefreshSuppression++;
@@ -148,7 +148,8 @@ internal sealed partial class EGlobal
                 foreach (var entry in journal.Recipes.ToArray())
                 {
                     var context = _contexts.FirstOrDefault(c => c.Slug == entry.Key);
-                    if (context is null) continue;
+                    // A newly enabled plain dependency has no editor context and contributes no new recipe.
+                    if (context is null) { entry.Value.Target ??= entry.Value.Applied.Clone(); continue; }
                     if (untouched.Contains(entry.Key)) { entry.Value.Target = entry.Value.Applied.Clone(); continue; }
                     var updated = journal.Plugins.Any(p => p.Slug == entry.Key);
                     if (updated) context.AppliedOptionalDependencies = null;
@@ -221,7 +222,7 @@ internal sealed partial class EGlobal
             case RecipeOperationKind.PrepareTree:
                 if (plugin is not null)
                 {
-                    var root = Path.Combine(UpdateProjectRoot, "addons", context.Slug);
+                    var root = ProjectSettings.GlobalizePath(_host.PluginDirectory(context.Slug));
                     InterimBridge.Remove(root, plugin.Preserved);
                     UidMap.Restore(root, plugin.Uids);
                     journal.Recipes[context.Slug].TreePrepared = true;
