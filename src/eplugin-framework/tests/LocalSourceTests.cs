@@ -93,7 +93,7 @@ public class LocalSourceTests
     }
 
     [TestCase]
-    public void LocalSourceMatchesTheRootFolderAndOffersTheNewestVersion()
+    public static void LocalSourceMatchesTheRootFolderAndOffersTheNewestVersion()
     {
         var index = new LocalPackageIndex([
             Package("a.zip", "addons/plugin/", "1.5.0"),
@@ -118,7 +118,7 @@ public class LocalSourceTests
     }
 
     [TestCase]
-    public void SameVersionPrefersTheNewestFileAndLocalWinsOverRemote()
+    public static void SameVersionPrefersTheNewestFileAndLocalWinsOverRemote()
     {
         var older = Package("old.zip", "addons/plugin/", "2.0.0") with { ModifiedUtc = DateTime.UtcNow.AddDays(-1) };
         var newer = Package("new.zip", "addons/plugin/", "2.0.0");
@@ -133,7 +133,7 @@ public class LocalSourceTests
     }
 
     [TestCase]
-    public async Task VersionListsOfBothSourcesAreMergedAndRemoteFailuresStayVisible()
+    public static async Task VersionListsOfBothSourcesAreMergedAndRemoteFailuresStayVisible()
     {
         var index = new LocalPackageIndex([Package("a.zip", "addons/plugin/", "1.5.0"), Package("b.zip", "addons/plugin/", "1.2.0")], [], 2, []);
         var service = new UpdateService(new Factory(), new SystemClock(), new MemoryStore());
@@ -156,7 +156,7 @@ public class LocalSourceTests
     }
 
     [TestCase]
-    public async Task RemoteChecksSkipPluginsWithoutUpdateUrl()
+    public static async Task RemoteChecksSkipPluginsWithoutUpdateUrl()
     {
         var service = new UpdateService(new Factory(), new SystemClock(), new MemoryStore());
         var result = await service.CheckAsync([Target(), Target("remote") with { UpdateUrl = "https://example.org/listed" }], new(), CancellationToken.None);

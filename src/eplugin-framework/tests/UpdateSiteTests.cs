@@ -97,7 +97,7 @@ public class UpdateSiteTests
     }
 
     [TestCase]
-    public void TheProjectSiteIsPreferredAndPluginCfgIsTheFallback()
+    public static void TheProjectSiteIsPreferredAndPluginCfgIsTheFallback()
     {
         Assertions.AssertArray(Target().UpdateUrls.ToArray()).IsEqual(new[] { Site, Config });
         Assertions.AssertArray(Target(site: null).UpdateUrls.ToArray()).IsEqual(new[] { Config });
@@ -107,7 +107,7 @@ public class UpdateSiteTests
     }
 
     [TestCase]
-    public async Task ChecksUseTheProjectSiteAndFallBackWhenItFails()
+    public static async Task ChecksUseTheProjectSiteAndFallBackWhenItFails()
     {
         var store = new MemoryStore();
         var service = new UpdateService(new Factory(), new SystemClock(), store);
@@ -130,7 +130,7 @@ public class UpdateSiteTests
     }
 
     [TestCase]
-    public async Task VersionListsFallBackAndCacheTheSiteTheyCameFrom()
+    public static async Task VersionListsFallBackAndCacheTheSiteTheyCameFrom()
     {
         var store = new MemoryStore();
         var service = new UpdateService(new Factory(), new SystemClock(), store);
@@ -144,7 +144,7 @@ public class UpdateSiteTests
     }
 
     [TestCase]
-    public void ManagerAcceptsUpdatesFromEitherSiteAndShowsTheProjectSite()
+    public static void ManagerAcceptsUpdatesFromEitherSiteAndShowsTheProjectSite()
     {
         var plugin = new PluginInfo("plugin", "Plugin", PluginKind.GDScript, true) { Version = "1.0.0", UpdateUrl = Config, UpdateSite = Site };
         var fromSite = Candidate(Site);
@@ -164,7 +164,7 @@ public class UpdateSiteTests
     }
 
     [TestCase]
-    public async Task TheBuiltInSiteIsTheLastFallback()
+    public static async Task TheBuiltInSiteIsTheLastFallback()
     {
         const string known = "https://github.com/known/plugin/releases";
         var target = Target(site: null) with { KnownUrl = known };
@@ -186,7 +186,7 @@ public class UpdateSiteTests
     }
 
     [TestCase]
-    public void TheManagerUsesTheBuiltInEntryForWhatPluginCfgDoesNotSet()
+    public static void TheManagerUsesTheBuiltInEntryForWhatPluginCfgDoesNotSet()
     {
         var known = new KnownPlugin("plugin", "Known Plugin", "https://github.com/known/plugin/releases", "https://known.example/docs",
             "https://known.example", "https://github.com/known/plugin");
@@ -208,7 +208,7 @@ public class UpdateSiteTests
     }
 
     [TestCase]
-    public void BuiltInEntriesAreUniqueAndUsable()
+    public static void BuiltInEntriesAreUniqueAndUsable()
     {
         Assertions.AssertInt(KnownPlugins.All.Count).IsGreater(0);
         Assertions.AssertInt(KnownPlugins.All.Select(k => k.Slug).Distinct(StringComparer.Ordinal).Count()).IsEqual(KnownPlugins.All.Count);
@@ -223,7 +223,7 @@ public class UpdateSiteTests
 
     [TestCase]
     [RequireGodotRuntime]
-    public void DialogSceneHasTheNodesItsScriptBinds()
+    public static void DialogSceneHasTheNodesItsScriptBinds()
     {
         var dialog = Godot.GD.Load<Godot.PackedScene>("res://addons/ePlugin/Internal/Manager/UpdateSitesDialog.tscn").Instantiate<UpdateSitesDialog>();
         try

@@ -112,7 +112,7 @@ internal sealed partial class UpdateSitesDialog : AcceptDialog, ISerializationLi
     /// ePlugin's built-in list, read-only: the installed add-ons first, as only those use it. It stays visible while it is
     /// turned off, so it can be reviewed before turning it on.
     /// </summary>
-    private void RenderKnownPlugins(TreeItem root, IReadOnlyDictionary<string, PluginInfo> plugins)
+    private void RenderKnownPlugins(TreeItem root, Dictionary<string, PluginInfo> plugins)
     {
         var enabled = EGlobal.UseKnownPlugins;
         var group = Group(root, enabled ? $"Built-in list ({KnownPlugins.All.Count} add-ons, read-only)"

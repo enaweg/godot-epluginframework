@@ -14,7 +14,7 @@ namespace Enaweg.Plugin.Tests;
 public class EGlobalDetachTests
 {
     [TestCase]
-    public void DisablingTheFrameworkLetsTheNextInstanceInitialize()
+    public static void DisablingTheFrameworkLetsTheNextInstanceInitialize()
     {
         var framework = new EPluginPlugin();
         try
@@ -36,7 +36,7 @@ public class EGlobalDetachTests
     }
 
     [TestCase]
-    public void AnotherInstanceKeepsTheFrameworkOfTheCurrentOne()
+    public static void AnotherInstanceKeepsTheFrameworkOfTheCurrentOne()
     {
         var framework = new EPluginPlugin();
         var other = new EPluginPlugin();

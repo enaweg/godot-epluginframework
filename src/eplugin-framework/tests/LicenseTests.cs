@@ -88,7 +88,7 @@ public class LicenseTests
     }
 
     [TestCase]
-    public void RecipeTextIsIdentifiedByItsContentsAndPathsByThePath()
+    public static void RecipeTextIsIdentifiedByItsContentsAndPathsByThePath()
     {
         var first = PluginLicense.FromText("plugin", "Plugin", "1.0.0", "Terms\r\nv1");
         Assertions.AssertString(first.Source).StartsWith(PluginLicense.TextPrefix);
@@ -102,7 +102,7 @@ public class LicenseTests
 
     [TestCase]
     [RequireGodotRuntime]
-    public void BuilderTellsLicensePathsFromLicenseTexts()
+    public static void BuilderTellsLicensePathsFromLicenseTexts()
     {
         var builder = EEditorPluginBuilder.Create();
         builder.SetLicense("res://addons/plugin/EULA.txt");
@@ -170,7 +170,7 @@ public class LicenseTests
     }
 
     [TestCase]
-    public void DetailsLinkTheLicenseOrShowItMissing()
+    public static void DetailsLinkTheLicenseOrShowItMissing()
     {
         var missing = new LicenseInfo(Entry("plugin") with { Problem = "missing" }, false, null);
         Assertions.AssertString(PluginManagerViewModel.LicenseLine(missing)).Contains("missing (no LICENSE file");
@@ -190,7 +190,7 @@ public class LicenseTests
     }
 
     [TestCase]
-    public void DecliningADependencyLicenseCancelsAndSkipsItsDependant()
+    public static void DecliningADependencyLicenseCancelsAndSkipsItsDependant()
     {
         var review = new LicenseReview([Entry("dependency"), Entry("plugin")],
             [new LicenseActivation("plugin", "Plugin", ["dependency", "plugin"])]);
@@ -205,7 +205,7 @@ public class LicenseTests
     }
 
     [TestCase]
-    public void SeparateActivationsAreDecidedOnTheirOwn()
+    public static void SeparateActivationsAreDecidedOnTheirOwn()
     {
         var review = new LicenseReview([Entry("one"), Entry("two"), Entry("three")],
             [new LicenseActivation("one", "One", ["one"]), new LicenseActivation("two", "Two", ["two"], Enabled: true),
@@ -223,7 +223,7 @@ public class LicenseTests
 
     [TestCase]
     [RequireGodotRuntime]
-    public void DialogSceneHasTheNodesItsScriptBinds()
+    public static void DialogSceneHasTheNodesItsScriptBinds()
     {
         var dialog = Godot.GD.Load<Godot.PackedScene>(LicenseDialog.ScenePath).Instantiate<LicenseDialog>();
         try
@@ -236,7 +236,7 @@ public class LicenseTests
     }
 
     [TestCase]
-    public void ClosingDeclinesWhatIsLeftAndMergingKeepsDecisions()
+    public static void ClosingDeclinesWhatIsLeftAndMergingKeepsDecisions()
     {
         var first = new LicenseReview([Entry("one")], [new LicenseActivation("one", "One", ["one"])]);
         first.Accept("one");

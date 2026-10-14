@@ -48,7 +48,7 @@ internal sealed partial class EGlobal
             var reason = $"The license of {names} has to be accepted first. Enable {context.Name} on its own to review it, then use Retry failed.";
             context.Logger?.Error(reason);
             context.State = EEditorPluginState.Error;
-            context.ErrorDetail = new Exception(reason);
+            context.ErrorDetail = new InvalidOperationException(reason);
             _toCheckEnable.Push(context);
             FailAllUncheckedPluginsAndRefresh(reason);
             return false;

@@ -10,7 +10,7 @@ namespace Enaweg.Plugin.Tests;
 public class UpdateMetadataTests
 {
     [TestCase]
-    public void OptionalUpdateUrlIsReadWithoutMissingKeyErrors()
+    public static void OptionalUpdateUrlIsReadWithoutMissingKeyErrors()
     {
         var path = Path.Combine(Path.GetTempPath(), "plugin-" + Guid.NewGuid().ToString("N") + ".cfg");
         try

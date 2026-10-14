@@ -9,7 +9,7 @@ namespace Enaweg.Plugin.Tests;
 public class PluginTogglesTests
 {
     [TestCase]
-    public void ReportsEnabledAndDisabledPluginsInOrder()
+    public static void ReportsEnabledAndDisabledPluginsInOrder()
     {
         var toggles = new PluginToggles(["ePlugin", "kept", "removed_b", "removed_a"]);
 
@@ -20,7 +20,7 @@ public class PluginTogglesTests
     }
 
     [TestCase]
-    public void RebaseTakesTheCurrentPluginsAsHandled()
+    public static void RebaseTakesTheCurrentPluginsAsHandled()
     {
         var toggles = new PluginToggles(["a"]);
         toggles.Rebase(Set("b"));
@@ -33,7 +33,7 @@ public class PluginTogglesTests
     }
 
     [TestCase]
-    public void NotedTogglesAreNotReportedAgain()
+    public static void NotedTogglesAreNotReportedAgain()
     {
         // e.g. a plain dependency the framework enabled itself, and a plugin it disabled for its license
         var toggles = new PluginToggles(["licensed"]);
@@ -47,7 +47,7 @@ public class PluginTogglesTests
     }
 
     [TestCase]
-    public void PluginDisabledAndEnabledAgainBetweenTwoLooksIsNoChange()
+    public static void PluginDisabledAndEnabledAgainBetweenTwoLooksIsNoChange()
     {
         var toggles = new PluginToggles(["plain"]);
 

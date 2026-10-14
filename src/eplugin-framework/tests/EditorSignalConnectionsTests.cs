@@ -10,7 +10,7 @@ namespace Enaweg.Plugin.Tests;
 public class EditorSignalConnectionsTests
 {
     [TestCase]
-    public void CleanupDisconnectsOwnedCallbacksAndPreservesOtherSubscribers()
+    public static void CleanupDisconnectsOwnedCallbacksAndPreservesOtherSubscribers()
     {
         var first = new Button();
         var second = new Button();
@@ -38,7 +38,7 @@ public class EditorSignalConnectionsTests
     }
 
     [TestCase]
-    public void CleanupBeforeTargetDisposalRemovesCrossNodeCallbacks()
+    public static void CleanupBeforeTargetDisposalRemovesCrossNodeCallbacks()
     {
         var source = new Button();
         var target = new Window();
@@ -63,7 +63,7 @@ public class EditorSignalConnectionsTests
     }
 
     [TestCase]
-    public void CleanupToleratesFreedSourcesAndAlreadyDisconnectedCallbacks()
+    public static void CleanupToleratesFreedSourcesAndAlreadyDisconnectedCallbacks()
     {
         var source = new Button();
         var freed = new Button();

@@ -10,10 +10,10 @@ namespace Enaweg.Plugin.Tests;
 public class LoggingSettingsTests
 {
     [AfterTest]
-    public void Cleanup() => ProjectSettings.SetSetting(LoggingSettings.DebugKey, false);
+    public static void Cleanup() => ProjectSettings.SetSetting(LoggingSettings.DebugKey, false);
 
     [TestCase]
-    public void DebugLoggingFollowsTheProjectSettingAndIsOffByDefault()
+    public static void DebugLoggingFollowsTheProjectSettingAndIsOffByDefault()
     {
         LoggingSettings.Register();
         var framework = new EPluginPlugin();

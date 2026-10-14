@@ -1,6 +1,7 @@
 #if TOOLS
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -217,11 +218,11 @@ internal sealed class PluginManagerViewModel
         WelcomeEntry? welcome = null)
     {
         var plugin = row.Plugin; var text = new StringBuilder();
-        void Line(string label, string? value) { if (!string.IsNullOrWhiteSpace(value)) text.Append($"[b]{label}:[/b] {Escape(value)}\n"); }
+        void Line(string label, string? value) { if (!string.IsNullOrWhiteSpace(value)) text.Append(CultureInfo.CurrentCulture, $"[b]{label}:[/b] {Escape(value)}\n"); }
         void Link(string label, string? value)
         {
             if (value is null || !IsWebUrl(value)) Line(label, value);
-            else text.Append($"[b]{label}:[/b] [url={value}]{Escape(value)}[/url]\n");
+            else text.Append(CultureInfo.CurrentCulture, $"[b]{label}:[/b] [url={value}]{Escape(value)}[/url]\n");
         }
         Line("Type", PluginCatalog.KindName(plugin.Kind));
         Line("Status", StatusText(plugin));
@@ -235,17 +236,17 @@ internal sealed class PluginManagerViewModel
         text.Append(LicenseLine(license));
         text.Append(WelcomeLine(welcome));
         if (!string.IsNullOrWhiteSpace(plugin.Description)) text.Append('\n').Append(Escape(plugin.Description)).Append('\n');
-        if (plugin.Error is not null) text.Append($"\n[color=#ff7070]{Escape(plugin.Error)}[/color]\n");
+        if (plugin.Error is not null) text.Append(CultureInfo.CurrentCulture, $"\n[color=#ff7070]{Escape(plugin.Error)}[/color]\n");
 
         text.Append("\n[b]Update[/b]\n");
         if (row.Update is { } update)
         {
-            text.Append($"{Escape(update.Candidate.InstalledVersion)} → [color=#70e070]{Escape(update.Candidate.NewVersion)}[/color]\n");
+            text.Append(CultureInfo.CurrentCulture, $"{Escape(update.Candidate.InstalledVersion)} → [color=#70e070]{Escape(update.Candidate.NewVersion)}[/color]\n");
             if (update.Candidate.Package is LocalZipPackageRef local) Line("Local package", local.Path);
             else Link("Update site", update.Candidate.SourceUrl);
             if (update.Candidate.ReleaseUrl is not null) Link("Release", update.Candidate.ReleaseUrl);
-            foreach (var finding in update.Findings) text.Append($"[color={Color(finding.Severity)}]{finding.Severity}:[/color] {Escape(finding.Message)}\n");
-            if (update.Failed is { } failed) text.Append($"[color=#ff7070]Previously failed {failed.Utc:u}:[/color] {Escape(failed.Reason)}\n");
+            foreach (var finding in update.Findings) text.Append(CultureInfo.CurrentCulture, $"[color={Color(finding.Severity)}]{finding.Severity}:[/color] {Escape(finding.Message)}\n");
+            if (update.Failed is { } failed) text.Append(CultureInfo.CurrentCulture, $"[color=#ff7070]Previously failed {failed.Utc:u}:[/color] {Escape(failed.Reason)}\n");
         }
         else if ((plugin.UpdateSite ?? plugin.UpdateUrl ?? plugin.Known?.UpdateUrl) is { } site) Link("Update site", site);
         else if (plugin.LocalPackages == 0)
@@ -265,12 +266,12 @@ internal sealed class PluginManagerViewModel
             else if (known.UpdateUrl != plugin.UpdateSite && known.UpdateUrl != plugin.UpdateUrl)
                 Link("Built-in update site", known.UpdateUrl);
         }
-        if (plugin.LocalPackages > 0) Line("Local packages", plugin.LocalPackages.ToString());
+        if (plugin.LocalPackages > 0) Line("Local packages", plugin.LocalPackages.ToString(CultureInfo.CurrentCulture));
 
         if (reviewed is { Count: > 0 })
         {
             text.Append("\n[b]Reviewed package[/b]\n");
-            foreach (var finding in reviewed) text.Append($"[color={Color(finding.Severity)}]{finding.Severity}:[/color] {Escape(finding.Message)}\n");
+            foreach (var finding in reviewed) text.Append(CultureInfo.CurrentCulture, $"[color={Color(finding.Severity)}]{finding.Severity}:[/color] {Escape(finding.Message)}\n");
         }
 
         if (plugin.Recipe is { } recipe)
@@ -289,7 +290,7 @@ internal sealed class PluginManagerViewModel
         {
             var values = items.ToArray();
             if (values.Length == 0) return;
-            text.Append($"\n[b]{title}[/b]\n");
+            text.Append(CultureInfo.CurrentCulture, $"\n[b]{title}[/b]\n");
             foreach (var value in values) text.Append("• ").Append(Escape(value)).Append('\n');
         }
     }
@@ -305,7 +306,7 @@ internal sealed class PluginManagerViewModel
     /// while the default font of the dialog is scaled, so a heading would otherwise be smaller than the text at 200%.
     /// </summary>
     internal static string ScaleFontSizes(string bbcode, float scale) => Math.Abs(scale - 1f) < 0.01f ? bbcode
-        : FontSize.Replace(bbcode, m => $"[font_size={Math.Max(1, (int)Math.Round(int.Parse(m.Groups[1].Value) * scale))}]");
+        : FontSize.Replace(bbcode, m => $"[font_size={Math.Max(1, (int)Math.Round(int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture) * scale))}]");
     private static readonly Regex FontSize = new(@"\[font_size=(\d{1,4})\]", RegexOptions.CultureInvariant);
 
     internal static bool IsWebUrl(string? value) =>

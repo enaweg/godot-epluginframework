@@ -14,7 +14,7 @@ public class NugetConfigManagerTests
     private static string ConfigPath => Path.Combine(ProjectSettings.GlobalizePath("res://"), "nuget.config");
 
     [AfterTest]
-    public void Cleanup()
+    public static void Cleanup()
     {
         if (File.Exists(ConfigPath))
         {
@@ -24,7 +24,7 @@ public class NugetConfigManagerTests
 
     [TestCase]
     [RequireGodotRuntime]
-    public void RegisterSourceCreatesFileWithManagedEntry()
+    public static void RegisterSourceCreatesFileWithManagedEntry()
     {
         NugetConfigManager.RegisterSource("sample_plugin", "res://addons/sample_plugin/.nuget", new NullLogger());
 
@@ -37,7 +37,7 @@ public class NugetConfigManagerTests
 
     [TestCase]
     [RequireGodotRuntime]
-    public void RegisterSourceSameSourceFromTwoPluginsSharesOneEntry()
+    public static void RegisterSourceSameSourceFromTwoPluginsSharesOneEntry()
     {
         NugetConfigManager.RegisterSource("plugin_a", "res://addons/shared/.nuget", new NullLogger());
         NugetConfigManager.RegisterSource("plugin_b", "res://addons/shared/.nuget", new NullLogger());
@@ -49,7 +49,7 @@ public class NugetConfigManagerTests
 
     [TestCase]
     [RequireGodotRuntime]
-    public void UnregisterSourceOneOfTwoUsersKeepsEntry()
+    public static void UnregisterSourceOneOfTwoUsersKeepsEntry()
     {
         NugetConfigManager.RegisterSource("plugin_a", "res://addons/shared/.nuget", new NullLogger());
         NugetConfigManager.RegisterSource("plugin_b", "res://addons/shared/.nuget", new NullLogger());
@@ -63,7 +63,7 @@ public class NugetConfigManagerTests
 
     [TestCase]
     [RequireGodotRuntime]
-    public void UnregisterSourceLastUserRemovesFileWhenOtherwiseEmpty()
+    public static void UnregisterSourceLastUserRemovesFileWhenOtherwiseEmpty()
     {
         NugetConfigManager.RegisterSource("sample_plugin", "res://addons/sample_plugin/.nuget", new NullLogger());
 
@@ -74,7 +74,7 @@ public class NugetConfigManagerTests
 
     [TestCase]
     [RequireGodotRuntime]
-    public void UnregisterSourceLastUserPreservesFileWithOtherContent()
+    public static void UnregisterSourceLastUserPreservesFileWithOtherContent()
     {
         File.WriteAllText(ConfigPath,
             "<configuration><packageSources><add key=\"nuget.org\" value=\"https://api.nuget.org/v3/index.json\" /></packageSources></configuration>");
@@ -90,7 +90,7 @@ public class NugetConfigManagerTests
 
     [TestCase]
     [RequireGodotRuntime]
-    public void RegisterSourceExistingIdenticalUserSourceIsNotDuplicatedOrOwned()
+    public static void RegisterSourceExistingIdenticalUserSourceIsNotDuplicatedOrOwned()
     {
         File.WriteAllText(ConfigPath,
             "<configuration><packageSources><add key=\"my-feed\" value=\"https://example.com/feed/index.json\" /></packageSources></configuration>");
@@ -104,7 +104,7 @@ public class NugetConfigManagerTests
 
     [TestCase]
     [RequireGodotRuntime]
-    public void RegisterSourceUrlPersistsVerbatim()
+    public static void RegisterSourceUrlPersistsVerbatim()
     {
         const string url = "https://example.com/feed/index.json";
 

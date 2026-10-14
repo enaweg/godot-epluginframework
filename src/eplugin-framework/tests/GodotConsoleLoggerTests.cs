@@ -8,7 +8,7 @@ namespace Enaweg.Plugin.Tests;
 public class GodotConsoleLoggerTests
 {
     [TestCase]
-    public void ErrorPrinterBindsSoMessagesNameTheirCaller()
+    public static void ErrorPrinterBindsSoMessagesNameTheirCaller()
     {
         // Without it errors still print, but at GodotConsoleLogger instead of the code that logged them.
         Assertions.AssertBool(GodotConsoleLogger.NamesCallers).IsTrue();

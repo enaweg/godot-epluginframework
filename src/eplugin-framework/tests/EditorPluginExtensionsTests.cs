@@ -11,7 +11,7 @@ namespace Enaweg.Plugin.Tests;
 public class EditorPluginExtensionsTests
 {
     [TestCase]
-    public void APluginWithoutScriptHasNoDirectoryAndIsNamedByItsNode()
+    public static void APluginWithoutScriptHasNoDirectoryAndIsNamedByItsNode()
     {
         var plugin = new EditorPlugin();
         try
@@ -29,7 +29,7 @@ public class EditorPluginExtensionsTests
     }
 
     [TestCase]
-    public void TheFrameworkFindsItsDirectoryAndMetadataFromItsScript()
+    public static void TheFrameworkFindsItsDirectoryAndMetadataFromItsScript()
     {
         var framework = new EPluginPlugin();
         try
@@ -45,7 +45,7 @@ public class EditorPluginExtensionsTests
     }
 
     [TestCase]
-    public void MetadataReadsEveryKeyAndLeavesOptionalOnesNull()
+    public static void MetadataReadsEveryKeyAndLeavesOptionalOnesNull()
     {
         var directory = Path.Combine(Path.GetTempPath(), "eplugin-metadata-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);

@@ -16,7 +16,7 @@ namespace Enaweg.Plugin.Tests;
 public class UpdateSourceTests
 {
     [TestCase]
-    public void GitUrlRejectsUnsafeTransportsAndPaths()
+    public static void GitUrlRejectsUnsafeTransportsAndPaths()
     {
         foreach (var url in new[] { "https://github.com/a/b.git?path=addons/plugin#main", "ssh://git@host/project.git#v1.0", "git@host:owner/repo.git?path=plugin" })
             Assertions.AssertBool(GitUrl.TryParse(url, out _)).IsTrue();
@@ -25,7 +25,7 @@ public class UpdateSourceTests
     }
 
     [TestCase]
-    public async Task GitHubChoosesNextBetterVersionAndPluginAsset()
+    public static async Task GitHubChoosesNextBetterVersionAndPluginAsset()
     {
         // A stable install is offered the highest stable release, a prerelease install the highest release of any kind.
         // Drafts are never offered.
@@ -45,7 +45,7 @@ public class UpdateSourceTests
     }
 
     [TestCase]
-    public async Task GitLabSupportsSubgroupsAndSourceArchives()
+    public static async Task GitLabSupportsSubgroupsAndSourceArchives()
     {
         string? requested = null;
         using var client = new HttpClient(new Handler(request => { requested = request.RequestUri!.AbsoluteUri; return Json("""
@@ -57,7 +57,7 @@ public class UpdateSourceTests
     }
 
     [TestCase]
-    public async Task RedirectDropsCredentialsAndRefusesHttp()
+    public static async Task RedirectDropsCredentialsAndRefusesHttp()
     {
         var calls = 0;
         var leaked = false;
@@ -77,7 +77,7 @@ public class UpdateSourceTests
     }
 
     [TestCase]
-    public async Task RateLimitFallsBackToLatestRedirect()
+    public static async Task RateLimitFallsBackToLatestRedirect()
     {
         using var client = new HttpClient(new Handler(request =>
         {
@@ -95,7 +95,7 @@ public class UpdateSourceTests
     }
 
     [TestCase]
-    public async Task BranchCheckUsesRawMetadataAndTagsArePinned()
+    public static async Task BranchCheckUsesRawMetadataAndTagsArePinned()
     {
         using var client = new HttpClient(new Handler(_ => Json("[plugin]\nversion=\"2.0.0\"\n")));
         var git = new FakeGit();
@@ -108,7 +108,7 @@ public class UpdateSourceTests
     }
 
     [TestCase]
-    public async Task SparseFetchLimitsCheckoutAndCleansWorkingTree()
+    public static async Task SparseFetchLimitsCheckoutAndCleansWorkingTree()
     {
         var root = Path.Combine(Path.GetTempPath(), "git-fetch-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -126,7 +126,7 @@ public class UpdateSourceTests
     }
 
     [TestCase]
-    public async Task SourcesListEveryPublishedVersion()
+    public static async Task SourcesListEveryPublishedVersion()
     {
         using var github = new HttpClient(new Handler(_ => Json("""
             [{"tag_name":"v1.2.0","draft":false,"prerelease":false,"assets":[{"name":"plugin.zip","browser_download_url":"https://example.org/1.2.zip"}]},
@@ -151,7 +151,7 @@ public class UpdateSourceTests
     }
 
     [TestCase]
-    public async Task PinnedGitSourcesListTheCommitTheyPointToNow()
+    public static async Task PinnedGitSourcesListTheCommitTheyPointToNow()
     {
         using var client = new HttpClient(new Handler(_ => Json("[plugin]\nversion=\"1.0.0\"\n")));
         // A branch, tag or commit is listed even when its plugin.cfg version is the installed one, so it can be reinstalled.
@@ -168,7 +168,7 @@ public class UpdateSourceTests
     }
 
     [TestCase]
-    public void TagPagesNameTheirRepository()
+    public static void TagPagesNameTheirRepository()
     {
         foreach (var (page, repository, path) in new[]
                  {
@@ -190,7 +190,7 @@ public class UpdateSourceTests
     }
 
     [TestCase]
-    public async Task VersionTagsAreTheVersionsOfARepository()
+    public static async Task VersionTagsAreTheVersionsOfARepository()
     {
         string Commit(char c) => new(c, 40);
         var refs = string.Join('\n',
@@ -221,7 +221,7 @@ public class UpdateSourceTests
     }
 
     [TestCase]
-    public async Task RepositoryWithoutPathFindsThePluginFolder()
+    public static async Task RepositoryWithoutPathFindsThePluginFolder()
     {
         var root = Path.Combine(Path.GetTempPath(), "git-folder-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);

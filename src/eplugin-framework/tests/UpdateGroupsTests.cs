@@ -10,14 +10,14 @@ namespace Enaweg.Plugin.Tests;
 public class UpdateGroupsTests
 {
     [TestCase]
-    public void IndependentPluginsAreGroupedAloneInBatchOrder()
+    public static void IndependentPluginsAreGroupedAloneInBatchOrder()
     {
         var groups = Plan(["b", "a", "c"], new() { ["a"] = ["ePlugin"], ["b"] = ["ePlugin"] });
         Assertions.AssertThat(groups).ContainsExactly("b", "a", "c");
     }
 
     [TestCase]
-    public void DependantJoinsItsDependencyAlsoThroughAPluginThatIsNotUpdated()
+    public static void DependantJoinsItsDependencyAlsoThroughAPluginThatIsNotUpdated()
     {
         // app -> lib directly, tool -> bridge -> lib through a plugin outside the batch
         var groups = Plan(["app", "solo", "tool", "lib"], new()
@@ -28,14 +28,14 @@ public class UpdateGroupsTests
     }
 
     [TestCase]
-    public void SharedDependencyOutsideTheBatchDoesNotJoinGroups()
+    public static void SharedDependencyOutsideTheBatchDoesNotJoinGroups()
     {
         var groups = Plan(["a", "b"], new() { ["a"] = ["logging"], ["b"] = ["logging"] });
         Assertions.AssertThat(groups).ContainsExactly("a", "b");
     }
 
     [TestCase]
-    public void FrameworkIsGroupedAloneAndFirst()
+    public static void FrameworkIsGroupedAloneAndFirst()
     {
         var groups = Plan(["a", "ePlugin", "b"], new() { ["a"] = ["ePlugin"], ["b"] = ["ePlugin", "a"] });
         Assertions.AssertThat(groups).ContainsExactly("ePlugin", "a,b");

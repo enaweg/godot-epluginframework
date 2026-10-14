@@ -174,7 +174,7 @@ internal static class NugetConfigManager
 
         var text = comment.Value.Trim();
         if (!text.StartsWith(UsedByCommentPrefix, StringComparison.Ordinal) ||
-            !text.EndsWith("\"", StringComparison.Ordinal))
+            !text.EndsWith('"'))
         {
             return [];
         }

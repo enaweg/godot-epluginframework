@@ -41,7 +41,7 @@ public class ActivationProgressTests
     }
 
     [AfterTest]
-    public void Cleanup()
+    public static void Cleanup()
     {
         ActivationProgress.Reset();
         ActivationProgress.Launch = ActivationProgress.LaunchDefault;
@@ -154,7 +154,7 @@ public class ActivationProgressTests
     }
 
     [TestCase]
-    public void PublicProgressInsideLifecycleWorkDoesNotReopenSettingsEarly()
+    public static void PublicProgressInsideLifecycleWorkDoesNotReopenSettingsEarly()
     {
         var dialog = new FakeDisposable();
         var hideCount = 0;
@@ -504,7 +504,7 @@ public class ActivationProgressTests
     }
 
     [TestCase]
-    public void SettingsDialogIsRestoredWhenOperationThrows()
+    public static void SettingsDialogIsRestoredWhenOperationThrows()
     {
         var dialog = new FakeDisposable();
         ActivationProgress.HideSettingsDialog = () => dialog;
@@ -521,7 +521,7 @@ public class ActivationProgressTests
     }
 
     [TestCase]
-    public void SettingsDialogIsLeftAloneByOperationsOutsideTheEditorThread()
+    public static void SettingsDialogIsLeftAloneByOperationsOutsideTheEditorThread()
     {
         var hidden = false;
         ActivationProgress.HideSettingsDialog = () =>
@@ -550,7 +550,7 @@ public class ActivationProgressTests
 
     [TestCase]
     [RequireGodotRuntime]
-    public void ProcessHelperIsNotStartedWhenAssemblyIsMissing()
+    public static void ProcessHelperIsNotStartedWhenAssemblyIsMissing()
     {
         ActivationProgress.IsEditorThread = () => true;
         Assertions.AssertObject(ProcessProgressHelper.TryStart("res://addons/ePlugin/progress/Missing.dll")).IsNull();

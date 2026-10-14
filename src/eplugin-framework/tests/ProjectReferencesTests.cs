@@ -86,7 +86,7 @@ public class ProjectReferencesTests
     }
 
     [TestCase]
-    public void InvalidCallsAreRecognized()
+    public static void InvalidCallsAreRecognized()
     {
         Assertions.AssertBool(ProjectReferences.IsValidPackageId("Newtonsoft.Json")).IsTrue();
         Assertions.AssertBool(ProjectReferences.IsValidPackageId("")).IsFalse();

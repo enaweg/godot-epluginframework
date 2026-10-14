@@ -216,7 +216,7 @@ internal sealed partial class EGlobal
                                        c.State is not (EEditorPluginState.Deactivated or EEditorPluginState.Error) &&
                                        DeclaresOptionalDependency(c, slug));
 
-    private bool DeclaresOptionalDependency(PluginContext context, string slug)
+    private static bool DeclaresOptionalDependency(PluginContext context, string slug)
     {
         try
         {

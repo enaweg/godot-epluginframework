@@ -14,7 +14,7 @@ namespace Enaweg.Plugin.Tests;
 public class UpdateCoreTests
 {
     [TestCase]
-    public void SemVerParsingAndPrecedence()
+    public static void SemVerParsingAndPrecedence()
     {
         var ordered = new[] { "1.0.0-alpha", "1.0.0-alpha.1", "1.0.0-alpha.beta", "1.0.0-beta", "1.0.0-beta.2", "1.0.0-beta.11", "1.0.0-rc.1", "v1.0.0+build", "1.0.0.1-rc", "1.0.0.1", "1.0.0.12", "1.1", "2.0.0" };
         for (var i = 0; i < ordered.Length; i++)
@@ -49,7 +49,7 @@ public class UpdateCoreTests
     }
 
     [TestCase]
-    public void PluginIniReadsGodotStrings()
+    public static void PluginIniReadsGodotStrings()
     {
         var values = PluginIni.Parse("[plugin]\r\n\r\nname=\"Edit Resources as Spreadsheet\"\r\n" +
             "description=\"Edit Many Resources from one Folder as a table.\r\n[not a section] key=\\\"quoted\\\"\r\n\ttab\\u00e9\\'\"\r\n" +
@@ -64,7 +64,7 @@ public class UpdateCoreTests
     }
 
     [TestCase]
-    public void ScheduleBoundaryAndCacheUseInstalledVersion()
+    public static void ScheduleBoundaryAndCacheUseInstalledVersion()
     {
         var now = DateTimeOffset.UtcNow;
         Assertions.AssertBool(UpdateScheduler.ShouldCheck(now, now.AddHours(-20), true)).IsTrue();
@@ -81,7 +81,7 @@ public class UpdateCoreTests
     }
 
     [TestCase]
-    public async Task FailingSourceDoesNotStopOthersAndOfflineDoesNotAdvanceTimestamp()
+    public static async Task FailingSourceDoesNotStopOthersAndOfflineDoesNotAdvanceTimestamp()
     {
         var directory = Path.Combine(Path.GetTempPath(), "eplugin-check-" + Guid.NewGuid().ToString("N"));
         try
@@ -105,7 +105,7 @@ public class UpdateCoreTests
     }
 
     [TestCase]
-    public async Task TimeoutAndCancellationAreDistinct()
+    public static async Task TimeoutAndCancellationAreDistinct()
     {
         var store = new MemoryStore();
         var service = new UpdateService(new Factory(), new SystemClock(), store);
@@ -120,7 +120,7 @@ public class UpdateCoreTests
     }
 
     [TestCase]
-    public async Task VersionListIsNewestFirstAndNeedsAListingSource()
+    public static async Task VersionListIsNewestFirstAndNeedsAListingSource()
     {
         var service = new UpdateService(new Factory(), new SystemClock(), new MemoryStore());
         var versions = await service.ListVersionsAsync(Target("listed") with { UpdateUrl = "https://example.org/listed/releases" }, new(), CancellationToken.None);
@@ -132,7 +132,7 @@ public class UpdateCoreTests
     }
 
     [TestCase]
-    public async Task NewerListedVersionIsCachedAsTheUpdate()
+    public static async Task NewerListedVersionIsCachedAsTheUpdate()
     {
         var store = new MemoryStore();
         var service = new UpdateService(new Factory(), new SystemClock(), store);
@@ -161,7 +161,7 @@ public class UpdateCoreTests
     }
 
     [TestCase]
-    public void UpdatesMoveToTheNextBetterVersionOfTheSameKind()
+    public static void UpdatesMoveToTheNextBetterVersionOfTheSameKind()
     {
         static bool IsUpdate(string installed, string version) =>
             SemVer.TryParse(installed, out var i) && SemVer.TryParse(version, out var v) && UpdateService.IsUpdate(i, v);

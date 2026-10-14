@@ -10,7 +10,7 @@ namespace Enaweg.Plugin.Tests;
 public class EEditorPluginBuilderTests
 {
     [TestCase]
-    public void EveryResourceIsRecordedOnTheRecipeInOrder()
+    public static void EveryResourceIsRecordedOnTheRecipeInOrder()
     {
         var builder = EEditorPluginBuilder.Create();
 
@@ -37,7 +37,7 @@ public class EEditorPluginBuilderTests
     }
 
     [TestCase]
-    public void EveryDocumentedAddProjectFormCompiles()
+    public static void EveryDocumentedAddProjectFormCompiles()
     {
         // Compiling this test is the check: one argument was ambiguous between both overloads (CS0121).
         IEEditorPluginBuilder root = EEditorPluginBuilder.Create();
@@ -65,7 +65,7 @@ public class EEditorPluginBuilderTests
     }
 
     [TestCase]
-    public void AnOptionalDependencyKeepsItsResourcesInItsOwnRecipe()
+    public static void AnOptionalDependencyKeepsItsResourcesInItsOwnRecipe()
     {
         var builder = EEditorPluginBuilder.Create();
 
@@ -91,7 +91,7 @@ public class EEditorPluginBuilderTests
     }
 
     [TestCase]
-    public void InvalidDeclarationsThrowAndSayWhatIsWrong()
+    public static void InvalidDeclarationsThrowAndSayWhatIsWrong()
     {
         (string What, Action<IEEditorPluginBuilder> Declare)[] cases =
         [
@@ -119,7 +119,7 @@ public class EEditorPluginBuilderTests
     }
 
     [TestCase]
-    public void TheSameDeclarationTwiceCountsOnceAndContradictionsThrow()
+    public static void TheSameDeclarationTwiceCountsOnceAndContradictionsThrow()
     {
         var builder = EEditorPluginBuilder.Create();
         builder.AddNuget("ZLogger", "2.0.0").AddNuget("zlogger", "2.0.0")
@@ -146,7 +146,7 @@ public class EEditorPluginBuilderTests
     }
 
     [TestCase]
-    public void AConstraintOnTheFrameworkReplacesItsImplicitDependency()
+    public static void AConstraintOnTheFrameworkReplacesItsImplicitDependency()
     {
         var builder = EEditorPluginBuilder.Create();
 

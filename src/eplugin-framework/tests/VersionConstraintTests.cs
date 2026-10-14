@@ -8,7 +8,7 @@ namespace Enaweg.Plugin.Tests;
 public class VersionConstraintTests
 {
     [TestCase]
-    public void ConstraintsCompareTheNumbersOfUpdateVersions()
+    public static void ConstraintsCompareTheNumbersOfUpdateVersions()
     {
         (string Version, string Constraint, bool Matches)[] cases =
         [
@@ -40,7 +40,7 @@ public class VersionConstraintTests
     }
 
     [TestCase]
-    public void MalformedVersionsAndConstraintsNeverMatchAndSayWhy()
+    public static void MalformedVersionsAndConstraintsNeverMatchAndSayWhy()
     {
         foreach (var (version, constraint) in new[]
                  {

@@ -28,7 +28,7 @@ public class IDotnetCliTests
     private static string ProjectRoot => Path.GetFullPath(ProjectSettings.GlobalizePath("res://"));
 
     [TestCase]
-    public void VersionTest()
+    public static void VersionTest()
     {
         var dotnetVersionManager = new DotnetVersionManager(new NullLogger(), false);
 
@@ -37,7 +37,7 @@ public class IDotnetCliTests
     }
 
     [TestCase]
-    public void ProjectPathUsesResolvedSolutionName()
+    public static void ProjectPathUsesResolvedSolutionName()
     {
         var expectedPath = Path.Combine(ProjectRoot, "EPluginFramework.csproj");
 
@@ -48,7 +48,7 @@ public class IDotnetCliTests
     }
 
     [TestCase]
-    public void TheDetectedGenerationChoosesTheCli()
+    public static void TheDetectedGenerationChoosesTheCli()
     {
         foreach (var (version, expected) in new[] { ("10.0.401", typeof(DotnetCli10)), ("11.0.100-preview.1", typeof(DotnetCli10)), ("8.0.425", typeof(DotnetCli9)) })
         {
@@ -77,7 +77,7 @@ public class IDotnetCliTests
     }
 
     [TestCase]
-    public void BothGenerationsPassUnquotedPathsAndAcceptResPaths()
+    public static void BothGenerationsPassUnquotedPathsAndAcceptResPaths()
     {
         var project = Path.Combine(ProjectRoot, "EPluginFramework.csproj");
         var solution = Path.Combine(ProjectRoot, "EPluginFramework.sln");
@@ -125,7 +125,7 @@ public class IDotnetCliTests
     }
 
     [TestCase]
-    public void RemovingWhatIsAlreadyGoneDoesNotRunTheCli()
+    public static void RemovingWhatIsAlreadyGoneDoesNotRunTheCli()
     {
         foreach (var generation in new[] { 9, 10 })
         {
@@ -142,7 +142,7 @@ public class IDotnetCliTests
     }
 
     [TestCase]
-    public void AFailingCommandIsReportedWithoutThrowing()
+    public static void AFailingCommandIsReportedWithoutThrowing()
     {
         // a command that cannot start answers without output; the error message must not need any
         foreach (DotnetCliBase cli in new DotnetCliBase[] { new DotnetCli9(new NullLogger(), false, new RecordingRunner(-1)), new DotnetCli10(new NullLogger(), false, new RecordingRunner(-1)) })
@@ -154,7 +154,7 @@ public class IDotnetCliTests
     }
 
     [TestCase(Timeout = 120000)]
-    public void BothGenerationsChangeARealProjectAndUndoIt()
+    public static void BothGenerationsChangeARealProjectAndUndoIt()
     {
         // The installed SDK runs both command forms; the .NET 10 form needs SDK 10 or newer.
         var sdk = new DotnetVersionManager(new NullLogger(), false);

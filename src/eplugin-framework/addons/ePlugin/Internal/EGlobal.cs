@@ -19,7 +19,7 @@ namespace Enaweg.Plugin.Internal;
 [Tool]
 internal sealed partial class EGlobal
 {
-    private static EGlobal? _instance = null;
+    private static EGlobal? _instance;
 
     public static EGlobal Instance
     {
@@ -32,13 +32,13 @@ internal sealed partial class EGlobal
     }
 
     private readonly List<PluginContext> _contexts = [];
-    private EPluginPlugin? _ePluginContext = null;
+    private EPluginPlugin? _ePluginContext;
     private PluginStateStore? _stateStore;
     private PlainPluginObserver? _plainPluginObserver;
 
-    public DotnetVersionManager? CliService { get; private set; } = null;
+    public DotnetVersionManager? CliService { get; private set; }
 
-    private ILoggerFactory? _loggerFactory = null;
+    private ILoggerFactory? _loggerFactory;
 
     private readonly Stack<PluginContext> _toCheckEnable = new();
     private readonly Stack<PluginContext> _toCheckDisable = new();
@@ -127,7 +127,7 @@ internal sealed partial class EGlobal
     private void InitializeCore(EPluginPlugin plugin, ILoggerFactory loggerFactory)
     {
         AssemblyReload.Capture();
-        using var progress = _toCheckEnable.Any() ? ActivationProgress.Begin("Activating plugins...") : null;
+        using var progress = _toCheckEnable.Count > 0 ? ActivationProgress.Begin("Activating plugins...") : null;
         _loggerFactory = loggerFactory;
         _ePluginContext = plugin;
         plugin.Logger = _loggerFactory.CreateLogger(_ePluginContext.GetType().FullName ?? "UNKNOWN");
@@ -153,7 +153,7 @@ internal sealed partial class EGlobal
         RefreshPlainPlugins();
         InitializePluginToggles();
 
-        if (_toCheckEnable.Any())
+        if (_toCheckEnable.Count > 0)
         {
             // Take the waiting plugins off the stack first: EnableEPlugin pushes a plugin back while one of its
             // dependencies is still being enabled, which would break enumerating the stack, and draining it until
@@ -561,7 +561,7 @@ internal sealed partial class EGlobal
         foreach (var participant in _transition.Participants.Keys)
         {
             participant.State = EEditorPluginState.Error;
-            participant.ErrorDetail ??= new Exception($"Plugin operation failed: {reason}");
+            participant.ErrorDetail ??= new InvalidOperationException($"Plugin operation failed: {reason}");
         }
 
         _toCheckEnable.Clear();
@@ -861,7 +861,7 @@ internal sealed partial class EGlobal
         if (refreshAtEnd)
         {
             // trigger install for waiting plugins
-            while (_toCheckEnable.Any())
+            while (_toCheckEnable.Count > 0)
             {
                 var nextPlugin = _toCheckEnable.Pop();
 
@@ -920,7 +920,7 @@ internal sealed partial class EGlobal
         foreach (var plugin in _toCheckEnable.ToArray())
         {
             plugin.State = EEditorPluginState.Error;
-            plugin.ErrorDetail ??= new Exception(reason);
+            plugin.ErrorDetail ??= new InvalidOperationException(reason);
             _host.SetPluginEnabled(plugin.Slug, false);
         }
 
@@ -1108,7 +1108,7 @@ internal sealed partial class EGlobal
     /// Returns the recipe of <paramref name="context"/> when it is installed and declares an optional
     /// dependency on <paramref name="slug"/>, otherwise <see langword="null"/>.
     /// </summary>
-    private EEditorPluginRecipe? GetInstalledOptionalRecipeOrNull(PluginContext context, string slug)
+    private static EEditorPluginRecipe? GetInstalledOptionalRecipeOrNull(PluginContext context, string slug)
     {
         // installed either in an earlier session (Activated after a reload) or in this one (it has a
         // snapshot). Anything else was never installed and resolves its optionals on activation.
@@ -1245,7 +1245,7 @@ internal sealed partial class EGlobal
             pluginsToDisable.Add(plugin);
         }
 
-        if (pluginsToDisable.Any())
+        if (pluginsToDisable.Count > 0)
         {
             _toCheckDisable.Push(context);
 
@@ -1291,7 +1291,7 @@ internal sealed partial class EGlobal
         if (refreshAtEnd)
         {
             // trigger uninstall for waiting plugins
-            while (_toCheckDisable.Any())
+            while (_toCheckDisable.Count > 0)
             {
                 var nextPlugin = _toCheckDisable.Pop();
 
@@ -1376,7 +1376,7 @@ internal sealed partial class EGlobal
         _ePluginContext.Logger.Log($"Refreshing plugins");
 
         var deactivatedPlugins = _contexts.Where(c => c.State == EEditorPluginState.Deactivated).ToArray();
-        if (deactivatedPlugins.Any())
+        if (deactivatedPlugins.Length > 0)
         {
             foreach (var pluginContext in deactivatedPlugins)
             {
@@ -1467,7 +1467,7 @@ internal sealed partial class EGlobal
     /// Creates the plugin's recipe on its context, once. When <see cref="IEEditorPlugin.CreateRecipe"/> throws, the plugin
     /// is in error with the exception as its detail, and its recipe stays uncreated and empty for a retry.
     /// </summary>
-    private bool TryEnsureRecipe(PluginContext context)
+    private static bool TryEnsureRecipe(PluginContext context)
     {
         if (context.IsRecipeCreated)
         {

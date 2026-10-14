@@ -11,10 +11,10 @@ namespace Enaweg.Plugin.Tests;
 public class EditorThreadQueueTests
 {
     [BeforeTest]
-    public void Setup() => EGlobal.RunPosted();
+    public static void Setup() => EGlobal.RunPosted();
 
     [TestCase]
-    public void PostedWorkRunsInOrderAndWorkPostedWhileRunningWaitsForTheNextFrame()
+    public static void PostedWorkRunsInOrderAndWorkPostedWhileRunningWaitsForTheNextFrame()
     {
         var ran = new List<string>();
         EGlobal.Post(() => { ran.Add("first"); EGlobal.Post(() => ran.Add("posted while running")); });
@@ -26,7 +26,7 @@ public class EditorThreadQueueTests
     }
 
     [TestCase]
-    public void WorkPostedFromAnotherThreadCompletesItsTaskOnTheNextRun()
+    public static void WorkPostedFromAnotherThreadCompletesItsTaskOnTheNextRun()
     {
         var task = Task.Factory.StartNew(() => EGlobal.OnEditorThread(() => { }, CancellationToken.None)).Result;
         Assertions.AssertBool(task.IsCompleted).IsFalse();
@@ -35,7 +35,7 @@ public class EditorThreadQueueTests
     }
 
     [TestCase]
-    public void CanceledWorkIsSkipped()
+    public static void CanceledWorkIsSkipped()
     {
         using var cancel = new CancellationTokenSource();
         var ran = false;

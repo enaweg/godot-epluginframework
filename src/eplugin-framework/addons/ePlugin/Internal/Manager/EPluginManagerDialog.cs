@@ -1,6 +1,7 @@
 #if TOOLS
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -236,7 +237,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         else ShowDetails(null);
         var count = _model.Updates.Count;
         _status.Text = (_operationNotice ?? (count == 0 ? "" : $"{count} update{(count == 1 ? "" : "s")} available · ") +
-                       "Last checked: " + (_global.LastUpdateCheck?.ToLocalTime().ToString("g") ?? "never") +
+                       "Last checked: " + (_global.LastUpdateCheck?.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) ?? "never") +
                        (_global.IsIndexingLocalSources ? " · Indexing local directories..." : "")) +
                        ((_reloadPending = AssemblyReload.IsPending) ? " · " + ReloadNotice
                            : _pluginOperation.IsAwaitingReload ? " · " + ReloadFailedNotice : "");

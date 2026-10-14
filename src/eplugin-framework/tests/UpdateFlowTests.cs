@@ -267,7 +267,7 @@ public class UpdateFlowTests
     }
 
     [TestCase]
-    public async Task WorkStartedFromASignalReportsItsFailureInsteadOfThrowing()
+    public static async Task WorkStartedFromASignalReportsItsFailureInsteadOfThrowing()
     {
         var reported = new TaskCompletionSource<Exception>();
         ObservedTask.Run(Task.Run(() => throw new InvalidOperationException("broken")), reported.SetResult);
