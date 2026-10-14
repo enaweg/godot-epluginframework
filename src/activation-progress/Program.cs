@@ -126,16 +126,20 @@ internal static class Program
 /// just before, restores the record and keeps the helper running.
 /// </para>
 /// </remarks>
+/// <param name="clock">Milliseconds since some start; <see cref="Environment.TickCount64"/> unless a test drives time.</param>
+/// <param name="exit">Ends the helper; <see cref="Environment.Exit"/> unless a test watches for it.</param>
 internal sealed class Commands(IProgressWindow window, string? commandFile, string initialText, TimeSpan windowTimeout,
-    TimeSpan lifetime)
+    TimeSpan lifetime, Func<long>? clock = null, Action? exit = null)
 {
     private const int TickMilliseconds = 100;
     private const int ExitDrainMilliseconds = 1000;
     private static readonly string[] Keywords = ["TEXT", "HEARTBEAT", "END", "CLOSE", "HOLD"];
 
+    private readonly Func<long> _clock = clock ?? (() => Environment.TickCount64);
+    private readonly Action _exit = exit ?? (() => Environment.Exit(0));
     private readonly object _gate = new();
     private readonly Dictionary<string, User> _users = new(StringComparer.Ordinal);
-    private long _lastMessage = Environment.TickCount64;
+    private long _lastMessage = (clock ?? (() => Environment.TickCount64))();
     private long _sequence;
     private bool _shown;
     private string? _text;
@@ -161,7 +165,7 @@ internal sealed class Commands(IProgressWindow window, string? commandFile, stri
     {
         if (_quitting)
         {
-            Environment.Exit(0);
+            _exit();
         }
     }
 
@@ -226,9 +230,10 @@ internal sealed class Commands(IProgressWindow window, string? commandFile, stri
         }
     }
 
-    private void Apply(string line)
+    /// <summary>Applies one command line; the caller holds the lock.</summary>
+    internal void Apply(string line)
     {
-        var now = Environment.TickCount64;
+        var now = _clock();
         _lastMessage = now;
         if (_exitAt >= 0)
         {
@@ -274,10 +279,11 @@ internal sealed class Commands(IProgressWindow window, string? commandFile, stri
         }
     }
 
-    private void Update()
+    /// <summary>Shows, updates or closes the window for the active users, and exits once all were silent too long.</summary>
+    internal void Update()
     {
         if (_quitting) return;
-        var now = Environment.TickCount64;
+        var now = _clock();
         var forget = (long)lifetime.TotalMilliseconds;
         User? latest = null;
         var active = false;
@@ -316,7 +322,12 @@ internal sealed class Commands(IProgressWindow window, string? commandFile, stri
         }
 
         if (now - _lastMessage < forget) return;
-        if (commandFile is null) Environment.Exit(0);
+        if (commandFile is null)
+        {
+            _exit();
+            return;
+        }
+
         var exiting = Path.ChangeExtension(commandFile, ".exiting");
         if (_exitAt < 0)
         {
@@ -337,7 +348,7 @@ internal sealed class Commands(IProgressWindow window, string? commandFile, stri
             // Editors discard the files of a helper that is no longer running.
         }
 
-        Environment.Exit(0);
+        _exit();
     }
 
     private sealed class User

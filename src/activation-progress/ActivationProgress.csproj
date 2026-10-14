@@ -18,6 +18,9 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="ActivationProgress.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <EmbeddedResource Include="../../design/icon-head.png" LogicalName="ActivationProgress.LogoHead.png" />
     <EmbeddedResource Include="../../design/icon-puzzle.png" LogicalName="ActivationProgress.LogoPuzzle.png" />
   </ItemGroup>
