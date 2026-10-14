@@ -1,3 +1,4 @@
+#if TOOLS
 using System;
 using Enaweg.Plugin.Internal;
 using GdUnit4;
@@ -154,3 +155,4 @@ public class EEditorPluginBuilderTests
         Assertions.AssertThat(builder.PluginRecipe.PluginDependencies).ContainsExactly(new EEditorPluginRecipe.Plugin("ePlugin", ">=0.9.1"));
     }
 }
+#endif

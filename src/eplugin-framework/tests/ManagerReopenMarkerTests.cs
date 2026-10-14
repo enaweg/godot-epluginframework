@@ -1,3 +1,4 @@
+#if TOOLS
 using System;
 using System.IO;
 using Enaweg.Plugin.Internal.Manager;
@@ -46,3 +47,4 @@ public class ManagerReopenMarkerTests
         Assertions.AssertBool(File.Exists(marker.Path)).IsFalse();
     }
 }
+#endif

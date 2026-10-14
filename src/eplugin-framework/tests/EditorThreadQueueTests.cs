@@ -1,3 +1,4 @@
+#if TOOLS
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -45,3 +46,4 @@ public class EditorThreadQueueTests
         Assertions.AssertBool(task.IsCanceled).IsTrue();
     }
 }
+#endif

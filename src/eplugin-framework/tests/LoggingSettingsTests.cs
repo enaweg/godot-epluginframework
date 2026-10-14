@@ -1,3 +1,4 @@
+#if TOOLS
 using Enaweg.Plugin.Internal;
 using GdUnit4;
 using Godot;
@@ -28,3 +29,4 @@ public class LoggingSettingsTests
         }
     }
 }
+#endif

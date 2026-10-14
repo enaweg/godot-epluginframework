@@ -1,3 +1,4 @@
+#if TOOLS
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -205,3 +206,4 @@ public class IDotnetCliTests
         Assertions.AssertBool(runner.Calls.SelectMany(c => c).Any(argument => argument.Contains('"'))).IsFalse();
     }
 }
+#endif

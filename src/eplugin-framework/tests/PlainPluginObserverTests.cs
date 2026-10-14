@@ -1,3 +1,4 @@
+#if TOOLS
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -102,3 +103,4 @@ public class PlainPluginObserverTests
         Assertions.AssertObject(_store.GetShared("blocked")).IsNull();
     }
 }
+#endif

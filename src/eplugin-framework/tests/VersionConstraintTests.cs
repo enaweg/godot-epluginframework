@@ -1,3 +1,4 @@
+#if TOOLS
 using Enaweg.Plugin.Internal;
 using GdUnit4;
 
@@ -53,3 +54,4 @@ public class VersionConstraintTests
         }
     }
 }
+#endif

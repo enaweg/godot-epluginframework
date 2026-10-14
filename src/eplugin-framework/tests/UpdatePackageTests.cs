@@ -1,3 +1,4 @@
+#if TOOLS
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -331,3 +332,4 @@ public class UpdatePackageTests
     private static bool Refused(Action action) { try { action(); return false; } catch (InvalidDataException) { return true; } }
     private static string Config(string version) => $"[plugin]\nname=\"Plugin\"\nversion=\"{version}\"\nscript=\"plugin.gd\"\nupdate_url=\"https://example.org/releases\"\n";
 }
+#endif

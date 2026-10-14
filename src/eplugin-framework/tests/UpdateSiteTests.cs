@@ -1,3 +1,4 @@
+#if TOOLS
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -263,3 +264,4 @@ public class UpdateSiteTests
         public void Save() { }
     }
 }
+#endif

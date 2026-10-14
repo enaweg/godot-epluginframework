@@ -1,3 +1,4 @@
+#if TOOLS
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -239,3 +240,4 @@ public class EGlobalTests
         Assertions.AssertBool(contexts.Single(c => c.Slug == "a_dependant").IsRecipeCreated).IsFalse();
     }
 }
+#endif

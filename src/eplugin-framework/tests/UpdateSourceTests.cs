@@ -1,3 +1,4 @@
+#if TOOLS
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -310,3 +311,4 @@ public class UpdateSourceTests
         }
     }
 }
+#endif

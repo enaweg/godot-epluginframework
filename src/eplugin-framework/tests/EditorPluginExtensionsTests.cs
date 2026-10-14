@@ -1,3 +1,4 @@
+#if TOOLS
 using System;
 using System.IO;
 using GdUnit4;
@@ -86,3 +87,4 @@ public class EditorPluginExtensionsTests
         }
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if TOOLS
 using Enaweg.Plugin.Internal.Manager;
 using GdUnit4;
 using Godot;
@@ -64,3 +65,4 @@ public class EditorIconsTests
         Assertions.AssertBool(found).IsTrue();
     }
 }
+#endif

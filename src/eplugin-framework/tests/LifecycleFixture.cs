@@ -1,3 +1,4 @@
+#if TOOLS
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -216,3 +217,4 @@ internal sealed class RecordingLogger(List<string> log, string category) : ILogg
     public void Warn(string message) => log.Add($"warn: {category}: {message}");
     public void Error(string message) => log.Add($"error: {category}: {message}");
 }
+#endif

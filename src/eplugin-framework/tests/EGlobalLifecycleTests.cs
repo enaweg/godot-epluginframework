@@ -1,3 +1,4 @@
+#if TOOLS
 using System;
 using System.IO;
 using System.Linq;
@@ -340,3 +341,4 @@ public class EGlobalLifecycleTests
         public void Initialize(IEPlugin ePlugin) => initialize();
     }
 }
+#endif

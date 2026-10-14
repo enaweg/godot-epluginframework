@@ -1,3 +1,4 @@
+#if TOOLS
 using Enaweg.Plugin.Internal.Manager;
 using GdUnit4;
 using Godot;
@@ -80,3 +81,4 @@ public class EditorSignalConnectionsTests
         finally { source.Free(); }
     }
 }
+#endif

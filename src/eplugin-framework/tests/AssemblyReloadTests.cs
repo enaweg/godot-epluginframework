@@ -1,3 +1,4 @@
+#if TOOLS
 using System;
 using Enaweg.Plugin.Internal;
 using GdUnit4;
@@ -36,3 +37,4 @@ public class AssemblyReloadTests
         Assertions.AssertObject(AssemblyReload.Decide(ref loaded, built.AddMinutes(1), now.AddMinutes(2), ref since)).IsEqual(AssemblyReload.State.Pending);
     }
 }
+#endif

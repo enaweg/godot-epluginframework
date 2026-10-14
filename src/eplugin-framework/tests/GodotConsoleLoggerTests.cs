@@ -1,3 +1,4 @@
+#if TOOLS
 using Enaweg.Plugin.Logging;
 using GdUnit4;
 
@@ -13,3 +14,4 @@ public class GodotConsoleLoggerTests
         Assertions.AssertBool(GodotConsoleLogger.NamesCallers).IsTrue();
     }
 }
+#endif

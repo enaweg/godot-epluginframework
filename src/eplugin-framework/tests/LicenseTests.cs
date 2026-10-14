@@ -1,3 +1,4 @@
+#if TOOLS
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -248,3 +249,4 @@ public class LicenseTests
         Assertions.AssertArray(merged.Canceled.Select(a => a.Slug).ToArray()).IsEqual(new[] { "two" });
     }
 }
+#endif

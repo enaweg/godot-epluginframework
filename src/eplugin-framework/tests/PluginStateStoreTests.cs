@@ -1,3 +1,4 @@
+#if TOOLS
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -367,3 +368,4 @@ public class PluginStateStoreTests
         Assertions.AssertBool(store.IsBlocked("sample_plugin")).IsTrue();
     }
 }
+#endif

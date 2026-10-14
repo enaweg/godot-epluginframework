@@ -1,3 +1,4 @@
+#if TOOLS
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -357,3 +358,4 @@ public class UpdateTransactionTests
         public void Log(string message) { }
     }
 }
+#endif
