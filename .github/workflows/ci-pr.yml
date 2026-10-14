@@ -22,6 +22,9 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      - name: Test progress helper commands
+        run: dotnet test src/activation-progress.Tests/ActivationProgress.Tests.csproj
+
       - name: Smoke test progress helper
         shell: bash
         run: |
@@ -37,6 +40,19 @@ jobs:
           "$python" src/activation-progress/smoke.py dotnet "$output/ActivationProgress.dll"
 
   build-and-test:
+    # The installed SDK decides which dotnet CLI generation ePlugin uses (DotnetCli9 or DotnetCli10).
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sdk: dotnet8
+            dotnet: 8.0.x
+          # the newest installed SDK is used; the .NET 8 runtime runs the net8.0 test host
+          - sdk: dotnet10
+            dotnet: |
+              8.0.x
+              10.0.x
+    name: build-and-test (${{ matrix.sdk }})
     runs-on: ubuntu-latest
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: true
@@ -48,7 +64,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: ${{ matrix.dotnet }}
 
       - name: Setup Godot .NET
         uses: chickensoft-games/setup-godot@v2
@@ -67,7 +83,12 @@ jobs:
 
       - name: Build
         working-directory: src/eplugin-framework
-        run: dotnet build "EPluginFramework.sln" --configuration Debug
+        run: |
+          dotnet --version
+          dotnet build "EPluginFramework.sln" --configuration Debug
+
+      - name: Test progress helper commands
+        run: dotnet test src/activation-progress.Tests/ActivationProgress.Tests.csproj
 
       - name: Smoke test progress helper
         run: |
@@ -90,6 +111,7 @@ jobs:
             dotnet test "EPluginFramework.sln" --configuration Debug --no-build --settings .runsettings --verbosity normal -m:1
 
       - name: Create PR artifact
+        if: matrix.sdk == 'dotnet8'
         shell: bash
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -99,8 +121,34 @@ jobs:
           zip -r "../../out/ePlugin-pr-${PR_NUMBER}.zip" addons/ePlugin
 
       - name: Upload PR artifact
+        if: matrix.sdk == 'dotnet8'
         uses: actions/upload-artifact@v7
         with:
           path: out/ePlugin-pr-${{ github.event.pull_request.number }}.zip
           archive: false
           if-no-files-found: error
+
+  godot-compatibility:
+    # The framework supports Godot 4.4 to 4.7; tests run on 4.7, the older Godot APIs are compiled against here.
+    strategy:
+      fail-fast: false
+      matrix:
+        godot: [4.4.1, 4.5.1, 4.6.2]
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      DOTNET_NOLOGO: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build against Godot ${{ matrix.godot }}
+        working-directory: src/eplugin-framework
+        run: |
+          sed -i -E "s|Godot.NET.Sdk/[0-9.]+|Godot.NET.Sdk/${{ matrix.godot }}|" EPluginFramework.csproj
+          dotnet build "EPluginFramework.sln" --configuration Debug
