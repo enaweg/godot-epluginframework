@@ -1,4 +1,5 @@
-﻿using System.Runtime.CompilerServices;
+﻿#if TOOLS
+using System.Runtime.CompilerServices;
 using Enaweg.Plugin;
 
 namespace EPluginFramework.addons.sample_addedcode_plugin;
@@ -11,3 +12,4 @@ public static class InitializerSetup
         EPlugin.RegisterInitializer(new InitializerForModule());
     }
 }
+#endif

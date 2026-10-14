@@ -102,6 +102,7 @@ The `EditorPlugin` extensions `GetPluginSlug()`, `GetPluginDirectory()`, `ReadMe
 Code in a managed directory can implement `IInitialize`. Register it with `EPlugin.RegisterInitializer` to receive its `Initialize(IEPlugin)` callback once the framework is ready, after every startup and C# assembly reload. A module initializer is a convenient place to register it, because it runs whenever the assembly is loaded:
 
 ```csharp
+#if TOOLS
 public class MyInitializer : IInitialize
 {
     public void Initialize(IEPlugin ePlugin) => ePlugin.Logger.Log("My plugin code is ready.");
@@ -112,7 +113,11 @@ public static class MyInitializerSetup
     [ModuleInitializer]
     public static void Register() => EPlugin.RegisterInitializer(new MyInitializer());
 }
+#endif
 ```
+
+Wrap code that uses ePlugin in `#if TOOLS`, like the plugin itself: the framework exists only in the editor, so an
+exported game does not compile it otherwise.
 
 An `EditorPlugin` that implements `IInitialize` itself is initialized when the framework first sees it, without registering. An initializer that throws is logged and does not keep the others from running. `IEPlugin.Logger` writes to ePlugin's log. The [added-code sample](../src/eplugin-framework/addons/sample_addedcode_plugin) demonstrates this pattern.
 
