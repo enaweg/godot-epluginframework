@@ -109,11 +109,180 @@ jobs:
         run: |
           "$GODOT_BIN" --path . --editor --headless --quit-after 2000
 
-      - name: Run tests
-        working-directory: src/eplugin-framework
+      - name: Install dotnet-coverage
+        run: |
+          dotnet tool install --global dotnet-coverage --version 18.12.0
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Run tests with coverage
+        # Godot loads the project assembly from memory, out of reach of `dotnet test --collect`; the script instruments
+        # the built assembly instead, runs dotnet test and restores it.
+        env:
+          REPORT: ${{ runner.temp }}/coverage/${{ matrix.sdk }}.cobertura.xml
         run: |
           xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" \
-            dotnet test "EPluginFramework.sln" --configuration Debug --no-build --settings .runsettings --verbosity normal -m:1
+            bash tools/coverage.sh "$REPORT" --verbosity normal -m:1
+
+      - name: Upload coverage report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-${{ matrix.sdk }}
+          path: ${{ runner.temp }}/coverage/${{ matrix.sdk }}.cobertura.xml
+          if-no-files-found: warn
+          retention-days: 14
+
+  coverage:
+    # Merges the SDK runs (each covers its own dotnet CLI generation) and reports them in the run summary and as a
+    # pull request comment, compared with the latest main measurement on the coverage branch.
+    needs: build-and-test
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      DOTNET_NOLOGO: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          # A pull request checks out its merge commit; its first parent is the base for the changed lines.
+          fetch-depth: 2
+
+      - name: Download coverage reports
+        uses: actions/download-artifact@v8
+        with:
+          pattern: coverage-dotnet*
+          path: coverage
+          merge-multiple: true
+
+      - name: Fetch the latest main measurement
+        if: ${{ hashFiles('coverage/*.cobertura.xml') != '' }}
+        run: |
+          if git ls-remote --exit-code --heads origin coverage > /dev/null; then
+            git fetch --depth=1 origin coverage
+            git show FETCH_HEAD:latest.json > "$RUNNER_TEMP/baseline.json"
+          else
+            echo "No coverage branch yet."
+          fi
+
+      - name: Diff the pull request
+        if: ${{ github.event_name == 'pull_request' && hashFiles('coverage/*.cobertura.xml') != '' }}
+        run: git diff --unified=0 HEAD^1 HEAD -- src/eplugin-framework/addons/ePlugin > "$RUNNER_TEMP/pr.diff"
+
+      - name: Setup .NET
+        if: ${{ hashFiles('coverage/*.cobertura.xml') != '' }}
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Create HTML report
+        if: ${{ hashFiles('coverage/*.cobertura.xml') != '' }}
+        run: |
+          dotnet tool install --global dotnet-reportgenerator-globaltool --version 5.5.11
+          "$HOME/.dotnet/tools/reportgenerator" "-reports:coverage/*.cobertura.xml" \
+            -targetdir:artifacts/coverage/html -reporttypes:Html "-title:ePlugin Framework"
+
+      - name: Upload HTML report
+        id: html
+        if: ${{ hashFiles('coverage/*.cobertura.xml') != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: artifacts/coverage/html
+          retention-days: 14
+
+      - name: Summarize coverage
+        id: summary
+        if: ${{ hashFiles('coverage/*.cobertura.xml') != '' }}
+        env:
+          LABEL: ${{ github.event_name == 'pull_request' && 'This pull request' || 'This push' }}
+          COMMIT: ${{ github.sha }}
+          REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
+          HTML_URL: ${{ steps.html.outputs.artifact-url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          args=()
+          for report in coverage/*.cobertura.xml; do args+=(--report "$report"); done
+          if [[ -s "$RUNNER_TEMP/baseline.json" ]]; then args+=(--baseline "$RUNNER_TEMP/baseline.json"); fi
+          if [[ -f "$RUNNER_TEMP/pr.diff" ]]; then args+=(--diff "$RUNNER_TEMP/pr.diff"); fi
+          python3 tools/ci/report_coverage.py summary "${args[@]}" --root "$GITHUB_WORKSPACE" \
+            --commit "$COMMIT" --label "$LABEL" --repository-url "$REPOSITORY_URL" \
+            --html-url "$HTML_URL" --run-url "$RUN_URL" --output-dir artifacts/coverage
+          cat artifacts/coverage/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload measurement
+        if: ${{ steps.summary.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-summary
+          path: |
+            artifacts/coverage/coverage.json
+            artifacts/coverage/summary.md
+          retention-days: 14
+
+      - name: Update the pull request coverage comment
+        # Forks have a read-only token; their coverage remains in the run summary.
+        if: ${{ steps.summary.outcome == 'success' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          comment="$(gh api --paginate "repos/$REPOSITORY/issues/$PR_NUMBER/comments" \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- eplugin-coverage -->"))) | .id' | head -n 1)"
+          if [[ -n "$comment" ]]; then
+            gh api --method PATCH "repos/$REPOSITORY/issues/comments/$comment" \
+              -F "body=@artifacts/coverage/summary.md" > /dev/null
+          else
+            gh api --method POST "repos/$REPOSITORY/issues/$PR_NUMBER/comments" \
+              -F "body=@artifacts/coverage/summary.md" > /dev/null
+          fi
+
+  coverage-history:
+    # Records each main measurement on the generated coverage branch (README with trend chart, history.csv, badge),
+    # which pull requests compare against. Only runs of trusted main code get the write token.
+    needs: [build-and-test, coverage]
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.build-and-test.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    concurrency:
+      group: coverage-history
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Download measurement
+        uses: actions/download-artifact@v8
+        with:
+          name: coverage-summary
+          path: ${{ runner.temp }}/coverage
+
+      - name: Record the measurement on the coverage branch
+        env:
+          COMMIT: ${{ github.sha }}
+          REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          history="$RUNNER_TEMP/history"
+          if git ls-remote --exit-code --heads origin coverage > /dev/null; then
+            git fetch --depth=1 origin coverage
+            git worktree add --detach "$history" FETCH_HEAD
+          else
+            git worktree add --orphan -b coverage "$history"
+          fi
+          python3 tools/ci/report_coverage.py history --coverage "$RUNNER_TEMP/coverage/coverage.json" \
+            --branch-dir "$history" --repository-url "$REPOSITORY_URL"
+          git -C "$history" add --all
+          git -C "$history" commit --quiet -m "chore: record coverage of ${COMMIT:0:7}"
+          git -C "$history" push origin HEAD:coverage
 
   godot-compatibility:
     # The framework supports Godot 4.4 to 4.7; tests run on 4.7, the older Godot APIs are compiled against here.
