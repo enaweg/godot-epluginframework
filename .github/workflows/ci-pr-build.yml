@@ -1,0 +1,125 @@
+name: CI-PR-Build
+
+# Packages the plugin of every pull request like a release, so it can be downloaded and tried in a project. The
+# version gets the PR number as a prerelease: 0.9.1 -> 0.9.1-pr.42, 1.0.0-rc.1+build.5 -> 1.0.0-rc.1.pr.42+build.5.
+# A PR build therefore sorts before the release of the same version, and the updater still offers that release.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      DOTNET_NOLOGO: true
+      PLUGIN_CFG: src/eplugin-framework/addons/ePlugin/plugin.cfg
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build
+        working-directory: src/eplugin-framework
+        run: dotnet build "EPluginFramework.sln" --configuration Debug
+
+      - name: Initialize version
+        shell: bash
+        run: |
+          # Semantic Versioning 2.0.0 (https://semver.org), without the leading v that tags have.
+          id='(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)'
+          semver="^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-$id(\.$id)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?\$"
+          base="$(sed -n -E 's/^version="([^"]*)"[[:space:]]*$/\1/p' "$PLUGIN_CFG")"
+          if [[ ! "$base" =~ $semver ]]; then
+            echo "::error file=$PLUGIN_CFG::version=\"$base\" is not a semantic version (MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD])"
+            exit 1
+          fi
+          # Only build metadata may contain '+', and the first '-' outside it starts the prerelease.
+          build=""
+          if [[ "$base" == *+* ]]; then build="+${base#*+}"; fi
+          rest="${base%%+*}"
+          core="${rest%%-*}"
+          prerelease=""
+          if [[ "$rest" == *-* ]]; then prerelease="${rest#*-}."; fi
+          version="$core-${prerelease}pr.$PR_NUMBER$build"
+          [[ "$version" =~ $semver ]] || { echo "::error::Computed version $version is not a semantic version"; exit 1; }
+          echo "Plugin version: $base -> $version"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Set version in plugin.cfg
+        shell: bash
+        run: |
+          sed -i -E "s/^version=\"[^\"]*\"/version=\"$VERSION\"/" "$PLUGIN_CFG"
+          grep -qFx "version=\"$VERSION\"" "$PLUGIN_CFG"
+
+      - name: Publish progress helper
+        shell: bash
+        run: |
+          # Framework-dependent and RID-neutral: one assembly serves every platform.
+          dotnet publish src/activation-progress/ActivationProgress.csproj \
+            --configuration Release -p:DebugType=None \
+            --output src/eplugin-framework/addons/ePlugin/progress
+          test "$(find src/eplugin-framework/addons/ePlugin/progress -maxdepth 1 -type f -name 'ActivationProgress.*' | wc -l)" -eq 2
+
+      - name: Create artifact
+        shell: bash
+        run: |
+          mkdir -p out
+          cd src/eplugin-framework
+          zip -r "../../out/ePlugin-v${VERSION}.zip" addons/ePlugin
+
+      - name: Upload artifact
+        id: upload
+        uses: actions/upload-artifact@v7
+        with:
+          path: out/ePlugin-v${{ env.VERSION }}.zip
+          archive: false
+          if-no-files-found: error
+
+      - name: Write download summary
+        shell: bash
+        env:
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          {
+            echo "<!-- eplugin-pr-build -->"
+            echo "### ePlugin test build"
+            echo
+            echo "[ePlugin-v${VERSION}.zip](${ARTIFACT_URL}) (version \`${VERSION}\`, commit ${HEAD_SHA:0:7})"
+            echo
+            echo "Extract its \`addons/ePlugin\` directory into your project's \`addons\` directory, build the project and enable"
+            echo "**ePlugin** under **Project > Project Settings > Plugins**. Downloading requires a GitHub login."
+          } > "$RUNNER_TEMP/build-comment.md"
+          cat "$RUNNER_TEMP/build-comment.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment download link on the pull request
+        # Fork pull requests get a read-only token; their download link is in the run summary.
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          # One comment per pull request, updated by every run.
+          comment="$(gh api --paginate "repos/$REPOSITORY/issues/$PR_NUMBER/comments" \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- eplugin-pr-build -->"))) | .id' | head -n 1)"
+          if [[ -n "$comment" ]]; then
+            gh api --method PATCH "repos/$REPOSITORY/issues/comments/$comment" -F "body=@$RUNNER_TEMP/build-comment.md" > /dev/null
+          else
+            gh api --method POST "repos/$REPOSITORY/issues/$PR_NUMBER/comments" -F "body=@$RUNNER_TEMP/build-comment.md" > /dev/null
+          fi
