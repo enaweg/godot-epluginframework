@@ -72,7 +72,7 @@ internal sealed class GtkProgressWindow : IProgressWindow
 
             Update();
             gtk_widget_show_all(_window);
-            g_timeout_add(Animation.FrameMilliseconds, Marshal.GetFunctionPointerForDelegate(_frame), IntPtr.Zero);
+            _ = g_timeout_add(Animation.FrameMilliseconds, Marshal.GetFunctionPointerForDelegate(_frame), IntPtr.Zero);
             return false;
         };
         _open = _ =>
@@ -143,12 +143,14 @@ internal sealed class GtkProgressWindow : IProgressWindow
             IntPtr.Zero, IntPtr.Zero, 0);
         g_signal_connect_data(window, "delete-event", Marshal.GetFunctionPointerForDelegate(_refuseDelete),
             IntPtr.Zero, IntPtr.Zero, 0);
-        g_timeout_add(100, Marshal.GetFunctionPointerForDelegate(_pulse), _progress);
+        // Source IDs are only needed to remove a callback explicitly. These callbacks remove themselves by
+        // returning false, or run for the lifetime of this helper's main loop.
+        _ = g_timeout_add(100, Marshal.GetFunctionPointerForDelegate(_pulse), _progress);
         _showDelay = (uint)showDelayMilliseconds;
 
         _onReady = ready;
         _onHidden = hidden;
-        g_idle_add(Marshal.GetFunctionPointerForDelegate(_ready), IntPtr.Zero);
+        _ = g_idle_add(Marshal.GetFunctionPointerForDelegate(_ready), IntPtr.Zero);
         gtk_main();
     }
 
@@ -161,19 +163,19 @@ internal sealed class GtkProgressWindow : IProgressWindow
     public void Open()
     {
         // g_idle_add is thread-safe and runs the callback on the GTK main loop.
-        g_idle_add(Marshal.GetFunctionPointerForDelegate(_open), IntPtr.Zero);
+        _ = g_idle_add(Marshal.GetFunctionPointerForDelegate(_open), IntPtr.Zero);
     }
 
     public void Close()
     {
-        g_idle_add(Marshal.GetFunctionPointerForDelegate(_close), IntPtr.Zero);
+        _ = g_idle_add(Marshal.GetFunctionPointerForDelegate(_close), IntPtr.Zero);
     }
 
     private void Schedule(int? generation)
     {
         if (generation is { } value)
         {
-            g_timeout_add(_showDelay, Marshal.GetFunctionPointerForDelegate(_show), (IntPtr)value);
+            _ = g_timeout_add(_showDelay, Marshal.GetFunctionPointerForDelegate(_show), (IntPtr)value);
         }
     }
 

@@ -109,38 +109,48 @@ internal sealed class Win32ProgressWindow : IProgressWindow
             throw new Win32Exception();
         }
 
-        LoadImages();
-        _canvas = new Canvas(_width, _height);
-        if (GdipCreateBitmapFromScan0(_width, _height, _width * 4, PixelFormat32bppPArgb, _canvas.Bits, out var bitmap) != 0 ||
-            GdipGetImageGraphicsContext(bitmap, out _graphics) != 0)
+        var bitmap = IntPtr.Zero;
+        try
         {
-            throw new Win32Exception("GDI+ could not draw into the window buffer.");
+            LoadImages();
+            _canvas = new Canvas(_width, _height);
+            if (GdipCreateBitmapFromScan0(_width, _height, _width * 4, PixelFormat32bppPArgb, _canvas.Bits, out bitmap) != 0 ||
+                GdipGetImageGraphicsContext(bitmap, out _graphics) != 0)
+            {
+                throw new Win32Exception("GDI+ could not draw into the window buffer.");
+            }
+
+            if (GdipSetSmoothingMode(_graphics, 4) != 0 || // SmoothingModeAntiAlias
+                GdipSetInterpolationMode(_graphics, 7) != 0 || // InterpolationModeHighQualityBicubic
+                GdipSetPixelOffsetMode(_graphics, 4) != 0) // PixelOffsetModeHighQuality
+            {
+                throw new InvalidOperationException("GDI+ could not configure the window buffer.");
+            }
+            _controls = new Canvas(Layout.Scale(Layout.FullPanel.Width, _scale), Layout.Scale(Layout.FullPanel.Height, _scale));
+            _font = CreateFontW(-Layout.Scale(12, _scale), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, "Segoe UI"); // 9pt, CLEARTYPE_QUALITY
+            SelectObject(_controls.Dc, _font);
+            _theme = OpenThemeData(_window, "PROGRESS");
+
+            _showDelay = (uint)showDelayMilliseconds;
+            _onHidden = hidden;
+            ready();
+
+            while (GetMessageW(out var message, IntPtr.Zero, 0, 0) > 0)
+            {
+                TranslateMessage(ref message);
+                DispatchMessageW(ref message);
+            }
         }
-
-        GdipSetSmoothingMode(_graphics, 4); // SmoothingModeAntiAlias
-        GdipSetInterpolationMode(_graphics, 7); // InterpolationModeHighQualityBicubic
-        GdipSetPixelOffsetMode(_graphics, 4); // PixelOffsetModeHighQuality
-        _controls = new Canvas(Layout.Scale(Layout.FullPanel.Width, _scale), Layout.Scale(Layout.FullPanel.Height, _scale));
-        _font = CreateFontW(-Layout.Scale(12, _scale), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, "Segoe UI"); // 9pt, CLEARTYPE_QUALITY
-        SelectObject(_controls.Dc, _font);
-        _theme = OpenThemeData(_window, "PROGRESS");
-
-        _showDelay = (uint)showDelayMilliseconds;
-        _onHidden = hidden;
-        ready();
-
-        while (GetMessageW(out var message, IntPtr.Zero, 0, 0) > 0)
+        finally
         {
-            TranslateMessage(ref message);
-            DispatchMessageW(ref message);
+            // Best-effort release: there is no drawing left to recover, and all resources must be attempted.
+            if (_theme != IntPtr.Zero) _ = CloseThemeData(_theme);
+            if (_graphics != IntPtr.Zero) _ = GdipDeleteGraphics(_graphics);
+            if (bitmap != IntPtr.Zero) _ = GdipDisposeImage(bitmap);
+            if (_head != IntPtr.Zero) _ = GdipDisposeImage(_head);
+            if (_puzzle != IntPtr.Zero) _ = GdipDisposeImage(_puzzle);
+            if (_gdiplusToken != 0) GdiplusShutdown(_gdiplusToken);
         }
-
-        if (_theme != IntPtr.Zero) CloseThemeData(_theme);
-        GdipDeleteGraphics(_graphics);
-        GdipDisposeImage(bitmap);
-        GdipDisposeImage(_head);
-        GdipDisposeImage(_puzzle);
-        GdiplusShutdown(_gdiplusToken);
     }
 
     public void SetText(string text)
@@ -218,20 +228,21 @@ internal sealed class Win32ProgressWindow : IProgressWindow
     private void Draw()
     {
         var frame = _animation.Frame;
-        GdipGraphicsClear(_graphics, 0);
+        // Keep the last complete frame if a native drawing operation fails; the next timer tick retries.
+        // Do not throw through the unmanaged window-procedure callback.
+        if (GdipGraphicsClear(_graphics, 0) != 0) return;
         if (Layout.PanelAt(frame.Split) is { } panel)
         {
-            DrawPanel(panel);
+            if (!DrawPanel(panel)) return;
             if (frame.Controls > 0)
             {
-                GdipFlush(_graphics, 1); // FlushIntentionSync: the panel must be in the buffer before blending
-                DrawControls(frame.Controls);
+                // FlushIntentionSync: the panel must be in the buffer before blending.
+                if (GdipFlush(_graphics, 1) != 0 || !DrawControls(frame.Controls)) return;
             }
         }
 
-        DrawImage(_head, Layout.HeadAt(frame.Split));
-        DrawImage(_puzzle, Layout.PuzzleAt(frame.Split));
-        GdipFlush(_graphics, 1);
+        if (!DrawImage(_head, Layout.HeadAt(frame.Split)) ||
+            !DrawImage(_puzzle, Layout.PuzzleAt(frame.Split)) || GdipFlush(_graphics, 1) != 0) return;
 
         var position = new Point { X = _x, Y = _y };
         var size = new Size { Width = _width, Height = _height };
@@ -244,31 +255,40 @@ internal sealed class Win32ProgressWindow : IProgressWindow
         UpdateLayeredWindow(_window, IntPtr.Zero, ref position, ref size, _canvas.Dc, ref source, 0, ref blend, 2); // ULW_ALPHA
     }
 
-    private void DrawPanel(Box panel)
+    private bool DrawPanel(Box panel)
     {
         float x = (float)(panel.X * _scale), y = (float)(panel.Y * _scale);
         float width = (float)(panel.Width * _scale), height = (float)(panel.Height * _scale);
         var diameter = (float)Math.Min(2 * Layout.PanelRadius * _scale, Math.Min(width, height));
-        GdipCreatePath(0, out var path);
-        GdipAddPathArc(path, x, y, diameter, diameter, 180, 90);
-        GdipAddPathArc(path, x + width - diameter, y, diameter, diameter, 270, 90);
-        GdipAddPathArc(path, x + width - diameter, y + height - diameter, diameter, diameter, 0, 90);
-        GdipAddPathArc(path, x, y + height - diameter, diameter, diameter, 90, 90);
-        GdipClosePathFigure(path);
-        GdipCreateSolidFill(Argb(GetSysColor(ColorBtnFace)), out var brush);
-        GdipFillPath(_graphics, brush, path);
-        GdipDeleteBrush(brush);
-        GdipCreatePen1(Argb(GetSysColor(ColorBtnShadow)), 1, 0, out var pen);
-        GdipDrawPath(_graphics, pen, path);
-        GdipDeletePen(pen);
-        GdipDeletePath(path);
+        if (GdipCreatePath(0, out var path) != 0) return false;
+        var brush = IntPtr.Zero;
+        var pen = IntPtr.Zero;
+        try
+        {
+            return GdipAddPathArc(path, x, y, diameter, diameter, 180, 90) == 0 &&
+                   GdipAddPathArc(path, x + width - diameter, y, diameter, diameter, 270, 90) == 0 &&
+                   GdipAddPathArc(path, x + width - diameter, y + height - diameter, diameter, diameter, 0, 90) == 0 &&
+                   GdipAddPathArc(path, x, y + height - diameter, diameter, diameter, 90, 90) == 0 &&
+                   GdipClosePathFigure(path) == 0 &&
+                   GdipCreateSolidFill(Argb(GetSysColor(ColorBtnFace)), out brush) == 0 &&
+                   GdipFillPath(_graphics, brush, path) == 0 &&
+                   GdipCreatePen1(Argb(GetSysColor(ColorBtnShadow)), 1, 0, out pen) == 0 &&
+                   GdipDrawPath(_graphics, pen, path) == 0;
+        }
+        finally
+        {
+            // Cleanup must not stop after one failed release, including when drawing failed above.
+            if (pen != IntPtr.Zero) _ = GdipDeletePen(pen);
+            if (brush != IntPtr.Zero) _ = GdipDeleteBrush(brush);
+            _ = GdipDeletePath(path);
+        }
     }
 
     /// <summary>
     /// Draws the label and the progress bar with GDI and the visual style into an opaque buffer of the panel's size,
     /// then blends their area over the panel: GDI cannot draw into a buffer with an alpha channel.
     /// </summary>
-    private void DrawControls(double opacity)
+    private bool DrawControls(double opacity)
     {
         var panelX = Layout.Scale(Layout.FullPanel.X, _scale);
         var panelY = Layout.Scale(Layout.FullPanel.Y, _scale);
@@ -279,13 +299,16 @@ internal sealed class Win32ProgressWindow : IProgressWindow
         };
 
         var all = new Rect { Right = _controls.Width, Bottom = _controls.Height };
-        FillRect(_controls.Dc, ref all, GetSysColorBrush(ColorBtnFace));
+        if (FillRect(_controls.Dc, ref all, GetSysColorBrush(ColorBtnFace)) == 0) return false;
         var label = Local(Layout.Label);
-        SetBkMode(_controls.Dc, 1); // TRANSPARENT
-        SetTextColor(_controls.Dc, GetSysColor(ColorBtnText));
-        DrawTextW(_controls.Dc, _text, -1, ref label, DtSingleLine | DtVCenter | DtNoPrefix | DtEndEllipsis);
+        if (SetBkMode(_controls.Dc, 1) == 0 || // TRANSPARENT; returns the previous mode, or zero on failure.
+            SetTextColor(_controls.Dc, GetSysColor(ColorBtnText)) == uint.MaxValue) return false; // CLR_INVALID
+        var text = _text;
+        // Empty labels need no drawing; DrawText also returns zero for an empty string.
+        if (text.Length > 0 && DrawTextW(_controls.Dc, text, -1, ref label,
+                DtSingleLine | DtVCenter | DtNoPrefix | DtEndEllipsis) == 0) return false;
         var bar = Local(Layout.Bar);
-        DrawBar(bar);
+        if (!DrawBar(bar)) return false;
 
         var top = Math.Min(label.Top, bar.Top);
         var bottom = Math.Max(label.Bottom, bar.Bottom);
@@ -305,9 +328,10 @@ internal sealed class Win32ProgressWindow : IProgressWindow
 
             Marshal.Copy(target, 0, _canvas.Bits + ((y + panelY) * _width + left + panelX) * 4, target.Length);
         }
+        return true;
     }
 
-    private void DrawBar(Rect bar)
+    private bool DrawBar(Rect bar)
     {
         var phase = _marquee.Elapsed.TotalSeconds % MarqueeSeconds / MarqueeSeconds;
         if (_theme != IntPtr.Zero &&
@@ -315,18 +339,17 @@ internal sealed class Win32ProgressWindow : IProgressWindow
             GetThemeBackgroundContentRect(_theme, _controls.Dc, ProgressBar, 1, ref bar, out var content) == 0)
         {
             var chunk = Chunk(content, phase);
-            DrawThemeBackground(_theme, _controls.Dc, ProgressFill, 1, ref chunk, ref content);
-            return;
+            if (DrawThemeBackground(_theme, _controls.Dc, ProgressFill, 1, ref chunk, ref content) == 0) return true;
         }
 
         // Classic theme.
-        FillRect(_controls.Dc, ref bar, GetSysColorBrush(ColorWindow));
-        FrameRect(_controls.Dc, ref bar, GetSysColorBrush(ColorBtnShadow));
+        if (FillRect(_controls.Dc, ref bar, GetSysColorBrush(ColorWindow)) == 0 ||
+            FrameRect(_controls.Dc, ref bar, GetSysColorBrush(ColorBtnShadow)) == 0) return false;
         var inner = new Rect { Left = bar.Left + 1, Top = bar.Top + 1, Right = bar.Right - 1, Bottom = bar.Bottom - 1 };
         var fill = Chunk(inner, phase);
         fill.Left = Math.Max(fill.Left, inner.Left);
         fill.Right = Math.Min(fill.Right, inner.Right);
-        if (fill.Right > fill.Left) FillRect(_controls.Dc, ref fill, GetSysColorBrush(ColorHighlight));
+        return fill.Right <= fill.Left || FillRect(_controls.Dc, ref fill, GetSysColorBrush(ColorHighlight)) != 0;
     }
 
     /// <summary>The indeterminate bar's moving chunk, entering on the left and leaving on the right.</summary>
@@ -337,10 +360,10 @@ internal sealed class Win32ProgressWindow : IProgressWindow
         return content with { Left = left, Right = left + width };
     }
 
-    private void DrawImage(IntPtr image, Box box)
+    private bool DrawImage(IntPtr image, Box box)
     {
-        GdipDrawImageRect(_graphics, image, (float)(box.X * _scale), (float)(box.Y * _scale),
-            (float)(box.Width * _scale), (float)(box.Height * _scale));
+        return GdipDrawImageRect(_graphics, image, (float)(box.X * _scale), (float)(box.Y * _scale),
+            (float)(box.Width * _scale), (float)(box.Height * _scale)) == 0;
     }
 
     /// <summary>A COLORREF as an opaque ARGB value.</summary>
@@ -377,13 +400,20 @@ internal sealed class Win32ProgressWindow : IProgressWindow
             }
 
             // GDI+ decodes lazily from the stream; a clone owns its pixels.
-            var clone = IntPtr.Zero;
-            GdipGetImageWidth(image, out var width);
-            GdipGetImageHeight(image, out var height);
-            var status = GdipCloneBitmapAreaI(0, 0, (int)width, (int)height, PixelFormat32bppPArgb, image, out clone);
-            GdipDisposeImage(image);
-            if (status != 0) throw new Win32Exception("GDI+ could not decode the ePlugin logo.");
-            return clone;
+            try
+            {
+                if (GdipGetImageWidth(image, out var width) != 0 || GdipGetImageHeight(image, out var height) != 0 ||
+                    GdipCloneBitmapAreaI(0, 0, (int)width, (int)height, PixelFormat32bppPArgb, image, out var clone) != 0)
+                {
+                    throw new InvalidOperationException("GDI+ could not decode the ePlugin logo.");
+                }
+                return clone;
+            }
+            finally
+            {
+                // Release the stream-backed image even when reading its dimensions or cloning it failed.
+                _ = GdipDisposeImage(image);
+            }
         }
         finally
         {
