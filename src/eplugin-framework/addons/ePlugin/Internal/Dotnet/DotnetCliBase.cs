@@ -13,14 +13,20 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
     /// <summary>The main Godot project, next to the solution and named like it.</summary>
     internal string GodotProjectPath { get; }
 
+    /// <summary>The Godot project directory, <c>res://</c>.</summary>
+    internal string ProjectRoot { get; }
+
     protected readonly ILogger? Logger;
 
-    protected DotnetCliBase(ILogger? logger, bool enableDebugLogging, IProcessRunner? runner = null)
+    /// <param name="projectRoot">The Godot project directory; null for the open project. Tests use a scratch project.</param>
+    protected DotnetCliBase(ILogger? logger, bool enableDebugLogging, IProcessRunner? runner = null, string? projectRoot = null)
         : base(logger, enableDebugLogging, runner)
     {
         Logger = logger;
-        var pathToSolution = ProjectSettings.GlobalizePath("res://");
-        var solutionName = $"{ProjectSettings.GetSetting("dotnet/project/assembly_name")}.sln";
+        var pathToSolution = projectRoot ?? ProjectSettings.GlobalizePath("res://");
+        ProjectRoot = Path.GetFullPath(pathToSolution);
+        var assemblyName = projectRoot is null ? ProjectSettings.GetSetting("dotnet/project/assembly_name").AsString() : "";
+        var solutionName = $"{assemblyName}.sln";
 
         var expectedSolutionPath = Path.GetFullPath(Path.Combine(pathToSolution, solutionName));
         // Godot's assembly name need not match the solution name (the sample project uses
@@ -89,19 +95,12 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
 
     /// <summary>
     /// The absolute path of a project a recipe names: relative to the Godot project directory, as a <c>res://</c> path,
-    /// or absolute.
+    /// or absolute. The CLI is given absolute paths, so it does not depend on the editor's working directory; it writes
+    /// project references relative to the project and removes them again by their absolute path.
     /// </summary>
-    internal static string ProjectFile(string path) =>
-        Path.GetFullPath(path.StartsWith("res://", System.StringComparison.Ordinal)
-            ? ProjectSettings.GlobalizePath(path)
-            : Path.Combine(ProjectSettings.GlobalizePath("res://"), path));
-
-    /// <summary>
-    /// A referenced project relative to the main project's directory, the form the CLI writes into the project and finds
-    /// again when it is removed. The editor runs in that directory.
-    /// </summary>
-    internal string ReferencePath(string path) =>
-        Path.GetRelativePath(Path.GetDirectoryName(GodotProjectPath)!, ProjectFile(path));
+    internal string ProjectFile(string path) =>
+        Path.GetFullPath(Path.Combine(ProjectRoot,
+            path.StartsWith("res://", System.StringComparison.Ordinal) ? path["res://".Length..] : path));
 
     /// <summary>A NuGet source as the CLI takes it: <c>res://</c> and <c>user://</c> paths made absolute, URLs unchanged.</summary>
     internal static string NugetSource(string source) => ProjectSettings.GlobalizePath(source);

@@ -80,8 +80,7 @@ public class IDotnetCliTests
     {
         var project = Path.Combine(ProjectRoot, "EPluginFramework.csproj");
         var solution = Path.Combine(ProjectRoot, "EPluginFramework.sln");
-        var reference = Path.Combine("addons", "other", "Other.csproj");
-        var absolute = Path.Combine(ProjectRoot, reference);
+        var absolute = Path.Combine(ProjectRoot, "addons", "other", "Other.csproj");
 
         var cli9Runner = new RecordingRunner();
         var cli9 = new DotnetCli9(new NullLogger(), false, cli9Runner);
@@ -99,7 +98,7 @@ public class IDotnetCliTests
             ["dotnet", "add", project, "package", "Some.Package", "--version", "1.2.3", "--source", ProjectSettings.GlobalizePath("res://feed")],
             ["dotnet", "sln", solution, "add", absolute],
             ["dotnet", "sln", solution, "add", "-s", "Folder", absolute],
-            ["dotnet", "add", project, "reference", reference],
+            ["dotnet", "add", project, "reference", absolute],
             ["dotnet", "remove", project, "package", "ZLogger"],
             ["dotnet", "test", solution],
             ["dotnet", "restore", "--force"]);
@@ -118,7 +117,7 @@ public class IDotnetCliTests
             ["dotnet", "build", solution, "--no-incremental"],
             ["dotnet", "package", "add", "Some.Package", "--project", project, "--source", "https://example.org/v3/index.json", "--prerelease"],
             ["dotnet", "sln", solution, "add", "-s", "Folder", absolute],
-            ["dotnet", "reference", "add", reference, "--project", project],
+            ["dotnet", "reference", "add", absolute, "--project", project],
             ["dotnet", "package", "remove", "ZLogger", "--project", project],
             ["dotnet", "test", solution],
             ["dotnet", "restore", "--force"]);
@@ -150,6 +149,48 @@ public class IDotnetCliTests
             Assertions.AssertBool(cli.AddNugetToProject("Some.Package", "1.0.0")).IsFalse();
             Assertions.AssertBool(cli.AddNugetToProject("Some.Package")).IsFalse();
             Assertions.AssertBool(cli.TryRebuildSolution()).IsFalse();
+        }
+    }
+
+    [TestCase(Timeout = 120000)]
+    public void BothGenerationsChangeARealProjectAndUndoIt()
+    {
+        // The installed SDK runs both command forms; the .NET 10 form needs SDK 10 or newer.
+        var sdk = new DotnetVersionManager(new NullLogger(), false);
+        var generations = DotnetVersionManager.ParseMajorVersion(sdk.DotnetVersion) >= 10 ? new[] { 9, 10 } : [9];
+        foreach (var generation in generations)
+        {
+            var root = Path.Combine(Path.GetTempPath(), "eplugin-cli-" + Path.GetRandomFileName());
+            Directory.CreateDirectory(Path.Combine(root, "addons", "my lib"));
+            try
+            {
+                const string project = """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>""";
+                File.WriteAllText(Path.Combine(root, "Game.csproj"), project);
+                File.WriteAllText(Path.Combine(root, "addons", "my lib", "Lib.csproj"), project);
+                File.WriteAllText(Path.Combine(root, "Game.sln"),
+                    "Microsoft Visual Studio Solution File, Format Version 12.00\n# Visual Studio Version 17\nGlobal\nEndGlobal\n");
+                DotnetCliBase cli = generation == 9
+                    ? new DotnetCli9(new NullLogger(), false, projectRoot: root)
+                    : new DotnetCli10(new NullLogger(), false, projectRoot: root);
+                const string lib = "res://addons/my lib/Lib.csproj"; // a path with a space, as a res:// path
+                bool References() => File.ReadAllText(Path.Combine(root, "Game.csproj")).Contains("Lib.csproj");
+                bool Contains() => File.ReadAllText(Path.Combine(root, "Game.sln")).Contains("Lib.csproj");
+
+                Assertions.AssertBool(cli.TryAddProjectToSolution(lib, "Libraries")).IsTrue();
+                Assertions.AssertBool(cli.TryAddProjectReference(lib)).IsTrue();
+                Assertions.AssertBool(Contains() && References()).IsTrue();
+
+                Assertions.AssertBool(cli.TryRemoveProjectReference(lib)).IsTrue();
+                Assertions.AssertBool(cli.TryRemoveProjectFromSolution(lib)).IsTrue();
+                Assertions.AssertBool(Contains() || References()).IsFalse();
+                // already gone counts as done
+                Assertions.AssertBool(cli.TryRemoveProjectReference(lib)).IsTrue();
+                Assertions.AssertBool(cli.TryRemoveProjectFromSolution(lib)).IsTrue();
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
         }
     }
 

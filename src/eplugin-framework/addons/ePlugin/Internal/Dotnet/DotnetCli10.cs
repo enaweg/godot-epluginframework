@@ -5,8 +5,9 @@ using Enaweg.Plugin.Logging;
 namespace Enaweg.Plugin.Internal.Dotnet;
 
 /// <summary>The dotnet CLI from .NET 10: <c>dotnet package|reference add|remove ... --project &lt;project&gt;</c>.</summary>
-internal sealed class DotnetCli10(ILogger? logger, bool enableDebugLogging, IProcessRunner? runner = null)
-    : DotnetCliBase(logger, enableDebugLogging, runner)
+internal sealed class DotnetCli10(ILogger? logger, bool enableDebugLogging, IProcessRunner? runner = null,
+    string? projectRoot = null)
+    : DotnetCliBase(logger, enableDebugLogging, runner, projectRoot)
 {
     private const string CmdDotNet = "dotnet";
 
@@ -100,7 +101,7 @@ internal sealed class DotnetCli10(ILogger? logger, bool enableDebugLogging, IPro
 
     public override bool TryAddProjectReference(string projectReference)
     {
-        return Execute(["reference", "add", ReferencePath(projectReference), "--project", GodotProjectPath]).Item1 == 0;
+        return Execute(["reference", "add", ProjectFile(projectReference), "--project", GodotProjectPath]).Item1 == 0;
     }
 
     public override void RemoveProjectReference(string projectReference)
@@ -111,7 +112,7 @@ internal sealed class DotnetCli10(ILogger? logger, bool enableDebugLogging, IPro
     public override bool TryRemoveProjectReference(string projectReference)
     {
         if (CheckProjectReferenceRemoval(projectReference) is { } settled) return settled;
-        return Execute(["reference", "remove", ReferencePath(projectReference), "--project", GodotProjectPath]).Item1 == 0;
+        return Execute(["reference", "remove", ProjectFile(projectReference), "--project", GodotProjectPath]).Item1 == 0;
     }
 
     public override (int, string[]) Execute(string command, string[] args)
