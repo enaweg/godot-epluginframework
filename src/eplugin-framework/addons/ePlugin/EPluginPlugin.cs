@@ -36,7 +36,8 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
     private DateTime _nextInitializeAttempt;
     private bool _unloadingObserved;
     internal CancellationToken UpdateLifetime => _updateLifetime.Token;
-    public bool EnableDebugLogging => false;
+    /// <summary>The <c>eplugin/logging/debug</c> project setting.</summary>
+    public bool EnableDebugLogging => LoggingSettings.Debug;
 
     private ILogger? _logger = null;
 
@@ -338,6 +339,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         }
         UpdateSettings.Register();
         LicenseSettings.Register();
+        LoggingSettings.Register();
         // A reconnected window spans recovery and initialization. If the manager was open, let it draw before closing.
         var progress = _reopenProgress ?? (ManagerReopen.IsSet ? ActivationProgress.Begin("Finishing the plugin update...") : null);
         _reopenProgress = null;
