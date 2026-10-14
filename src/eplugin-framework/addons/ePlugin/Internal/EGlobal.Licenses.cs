@@ -298,7 +298,7 @@ internal sealed partial class EGlobal
     /// Asks about enabled plugins whose license is not accepted as it is now: an update changed the license its recipe
     /// sets, or the plugin was enabled without the framework asking. Declining disables the plugin.
     /// </summary>
-    private void ReviewEnabledLicenses()
+    internal void ReviewEnabledLicenses()
     {
         if (_stateStore is null || _stateStore.IsReadOnly || _updateJournals?.Read().Any(j => j.IsActive) == true)
         {
