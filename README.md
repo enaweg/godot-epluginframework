@@ -9,6 +9,7 @@
 [![CI](https://github.com/enaweg/godot-epluginframework/actions/workflows/ci-pr.yml/badge.svg)](https://github.com/enaweg/godot-epluginframework/actions/workflows/ci-pr.yml)
 [![Static analysis](https://github.com/enaweg/godot-epluginframework/actions/workflows/ci-analysis.yml/badge.svg?branch=main)](https://github.com/enaweg/godot-epluginframework/actions/workflows/ci-analysis.yml)
 [![CodeQL](https://github.com/enaweg/godot-epluginframework/actions/workflows/ci-codeql.yml/badge.svg?branch=main)](https://github.com/enaweg/godot-epluginframework/actions/workflows/ci-codeql.yml)
+[![Coverage](https://raw.githubusercontent.com/enaweg/godot-epluginframework/coverage/badge.svg)](https://github.com/enaweg/godot-epluginframework/tree/coverage)
 ![Godot 4.4](https://img.shields.io/badge/Godot-v4.4-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
 ![Godot 4.5](https://img.shields.io/badge/Godot-v4.5-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
 ![Godot 4.6](https://img.shields.io/badge/Godot-v4.6-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
@@ -85,6 +86,8 @@ Updates replace whole addon folders. They do not install missing plugins or reso
 CI tests pull requests and pushes to `main` with Godot 4.7.2 and both the .NET 8 and the .NET 10 SDK, which use different dotnet command forms, and builds the framework against the Godot 4.6.2, 4.5.1 and 4.4.1 SDKs. Running it on those older Godot versions is tested by hand.
 
 Static analysis also runs SDK analyzers, dependency vulnerability auditing, workflow lint and CodeQL security checks on pull requests and `main`. Counts appear in PR comments and workflow summaries, and findings appear in code-scanning views. See [Static analysis in CI](docs/static-analysis.md) for the policy, reports and local commands.
+
+The tests also measure the framework's line coverage. Each pull request gets a comment with its coverage, the change against `main` and which of its changed lines no test runs; the history of `main` is kept on the [`coverage` branch](https://github.com/enaweg/godot-epluginframework/tree/coverage). See [Code coverage](docs/code-coverage.md).
 
 Every pull request is also packaged like a release by the **CI-PR-Build** workflow. Its ZIP carries the PR number as a semver prerelease (`0.9.1` becomes `0.9.1-pr.42`), so the release of that version still counts as an update. The download link is in a comment on the pull request (for pull requests from forks, in the workflow run's summary), and downloading needs a GitHub login. Copy the archive's `addons/ePlugin` directory into a project to try the change.
 
