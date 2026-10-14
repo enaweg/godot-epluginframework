@@ -81,7 +81,7 @@ public class WelcomeTests
 
     [TestCase]
     [RequireGodotRuntime]
-    public void BuilderTellsWelcomePathsFromWelcomeTexts()
+    public static void BuilderTellsWelcomePathsFromWelcomeTexts()
     {
         var builder = EEditorPluginBuilder.Create();
         builder.SetWelcome("res://addons/plugin/WELCOME.txt");
@@ -143,7 +143,7 @@ public class WelcomeTests
     }
 
     [TestCase]
-    public void DetailsLinkTheWelcomePage()
+    public static void DetailsLinkTheWelcomePage()
     {
         Assertions.AssertString(PluginManagerViewModel.WelcomeLine(null)).IsEmpty();
         var welcome = new WelcomeEntry("plugin", "Plugin", "1.0.0", "README.md", "text");
@@ -156,7 +156,7 @@ public class WelcomeTests
 
     [TestCase]
     [RequireGodotRuntime]
-    public void DialogSceneHasTheNodesItsScriptBinds()
+    public static void DialogSceneHasTheNodesItsScriptBinds()
     {
         var dialog = Godot.GD.Load<Godot.PackedScene>(WelcomeDialog.ScenePath).Instantiate<WelcomeDialog>();
         try

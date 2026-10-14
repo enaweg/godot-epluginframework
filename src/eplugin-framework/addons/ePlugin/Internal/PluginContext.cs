@@ -37,7 +37,7 @@ internal sealed class PluginContext(IEEditorPlugin? plugin, EditorPlugin pluginB
     /// <summary>Replaced by an empty one when creating the recipe failed, so a retry does not add to a half recipe.</summary>
     public EEditorPluginBuilder Builder { get; set; } = EEditorPluginBuilder.Create();
 
-    public bool IsRecipeCreated { get; set; } = false;
+    public bool IsRecipeCreated { get; set; }
 
     /// <summary>
     /// The optional dependencies whose nested recipe is currently installed for this plugin. Uninstall
@@ -45,9 +45,9 @@ internal sealed class PluginContext(IEEditorPlugin? plugin, EditorPlugin pluginB
     /// activated in this session, e.g. after an assembly reload) and the optional dependencies have to be
     /// resolved against the current editor state instead.
     /// </summary>
-    public List<EEditorPluginRecipe.OptionalPlugin>? AppliedOptionalDependencies { get; set; } = null;
+    public List<EEditorPluginRecipe.OptionalPlugin>? AppliedOptionalDependencies { get; set; }
 
-    public Exception? ErrorDetail { get; set; } = null;
+    public Exception? ErrorDetail { get; set; }
 }
 
 #endif

@@ -11,7 +11,7 @@ public class AssemblyReloadTests
     private static readonly DateTime Loaded = new(2026, 10, 11, 11, 0, 0, DateTimeKind.Utc);
 
     [TestCase]
-    public void TheLoadedBuildOrAnOlderOneIsNoReload()
+    public static void TheLoadedBuildOrAnOlderOneIsNoReload()
     {
         DateTime? loaded = Loaded, since = null;
         Assertions.AssertObject(AssemblyReload.Decide(ref loaded, Loaded, Loaded.AddMinutes(5), ref since)).IsEqual(AssemblyReload.State.Current);
@@ -23,7 +23,7 @@ public class AssemblyReloadTests
     }
 
     [TestCase]
-    public void ANewerBuildIsPendingUntilItIsLoadedOrWaitedForTooLong()
+    public static void ANewerBuildIsPendingUntilItIsLoadedOrWaitedForTooLong()
     {
         DateTime? loaded = Loaded, since = null;
         var built = Loaded.AddSeconds(30);

@@ -25,6 +25,12 @@ internal static class ReleaseAssets
     public static string? String(JsonElement element, string property) => element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
     public static bool Flag(JsonElement element, string property) => element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.True;
     public static JsonElement[] Array(JsonElement element, string property) => element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Array ? value.EnumerateArray().ToArray() : [];
+    public static SemVer Version(JsonElement release)
+    {
+        var tag = String(release, "tag_name");
+        if (!SemVer.TryParse(tag, out var version)) throw new InvalidDataException($"Invalid release version tag: {tag}.");
+        return version;
+    }
 }
 
 internal sealed class GitHubReleaseSource(UpdateHttp http, string owner, string repository, bool pinned = false) : IUpdateSource, IVersionListSource
@@ -42,7 +48,7 @@ internal sealed class GitHubReleaseSource(UpdateHttp http, string owner, string 
     {
         var root = $"https://github.com/{owner}/{repository}";
         var tag = ReleaseAssets.String(release, "tag_name")!;
-        SemVer.TryParse(tag, out var version);
+        var version = ReleaseAssets.Version(release);
         var assets = ReleaseAssets.Array(release, "assets").Select(a => (ReleaseAssets.String(a, "name") ?? "", ReleaseAssets.String(a, "browser_download_url") ?? "")).Where(a => a.Item2.Length > 0);
         var download = ReleaseAssets.Select(assets, target.Slug) ?? $"{root}/archive/refs/tags/{Uri.EscapeDataString(tag)}.zip";
         return new(target.Slug, target.Name, target.InstalledVersion, version.ToString(), target.UpdateUrl,
@@ -58,7 +64,7 @@ internal sealed class GitHubReleaseSource(UpdateHttp http, string owner, string 
             var release = document.RootElement.EnumerateArray()
                 .Where(r => !ReleaseAssets.Flag(r, "draft") && SemVer.TryParse(ReleaseAssets.String(r, "tag_name"), out var v) &&
                     UpdateService.Offers(target, v))
-                .OrderByDescending(r => { SemVer.TryParse(ReleaseAssets.String(r, "tag_name"), out var v); return v; }).Select(r => (JsonElement?)r).FirstOrDefault();
+                .OrderByDescending(ReleaseAssets.Version).Select(r => (JsonElement?)r).FirstOrDefault();
             return release is null ? null : Candidate(target, release.Value);
         }
         catch (UpdateHttpException ex) when (ex.RateLimited)
@@ -90,7 +96,7 @@ internal sealed class GitLabReleaseSource(UpdateHttp http, string host, string p
         if (pinned) return null;
         var release = (await Releases(30, ct).ConfigureAwait(false))
             .Where(r => SemVer.TryParse(ReleaseAssets.String(r, "tag_name"), out var v) && UpdateService.Offers(target, v))
-            .OrderByDescending(r => { SemVer.TryParse(ReleaseAssets.String(r, "tag_name"), out var v); return v; }).Select(r => (JsonElement?)r).FirstOrDefault();
+            .OrderByDescending(ReleaseAssets.Version).Select(r => (JsonElement?)r).FirstOrDefault();
         return release is null ? null : Candidate(target, release.Value);
     }
     public async Task<IReadOnlyList<UpdateCandidate>> ListAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct)
@@ -105,7 +111,7 @@ internal sealed class GitLabReleaseSource(UpdateHttp http, string host, string p
     private UpdateCandidate Candidate(PluginUpdateTarget target, JsonElement release)
     {
         var tag = ReleaseAssets.String(release, "tag_name")!;
-        SemVer.TryParse(tag, out var version);
+        var version = ReleaseAssets.Version(release);
         var assets = release.GetProperty("assets");
         var download = ReleaseAssets.Select(ReleaseAssets.Array(assets, "links").Select(a =>
             (ReleaseAssets.String(a, "name") ?? "", ReleaseAssets.String(a, "direct_asset_url") ?? ReleaseAssets.String(a, "url") ?? "")).Where(a => a.Item2.Length > 0), target.Slug)

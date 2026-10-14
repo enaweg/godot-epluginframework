@@ -267,7 +267,7 @@ public class UpdateFlowTests
     }
 
     [TestCase]
-    public async Task WorkStartedFromASignalReportsItsFailureInsteadOfThrowing()
+    public static async Task WorkStartedFromASignalReportsItsFailureInsteadOfThrowing()
     {
         var reported = new TaskCompletionSource<Exception>();
         ObservedTask.Run(Task.Run(() => throw new InvalidOperationException("broken")), reported.SetResult);
@@ -328,7 +328,7 @@ public class UpdateFlowTests
         public Task<IReadOnlyList<UpdateCandidate>> ListRemoteVersionsAsync(PluginUpdateTarget target, CancellationToken ct) => Versions;
 
         public Task<(IReadOnlyList<ValidatedPackage> Packages, IReadOnlyList<RefusedPackage> Refused, string Directory)> StageUpdatesAsync(
-            IReadOnlyList<UpdateCandidate> candidates, IProgress<double>? progress, CancellationToken ct, bool allowDowngrade, bool allowReinstall)
+            IReadOnlyList<UpdateCandidate> candidates, IProgress<double>? progress, bool allowDowngrade, bool allowReinstall, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
             Stagings++;
@@ -336,7 +336,7 @@ public class UpdateFlowTests
             progress?.Report(0.5); progress?.Report(0.5); progress?.Report(1.0);
             StagingDirectory = Path.Combine(_root, "stage-" + Stagings);
             Directory.CreateDirectory(StagingDirectory);
-            SemVer.TryParse("2.0.0", out var version);
+            Assertions.AssertBool(SemVer.TryParse("2.0.0", out var version)).IsTrue();
             var packages = candidates.Where(c => Packages.ContainsKey(c.Slug))
                 .Select(c => new ValidatedPackage(c, Path.Combine(StagingDirectory, c.Slug), version, null, false, Packages[c.Slug]))
                 .ToArray();

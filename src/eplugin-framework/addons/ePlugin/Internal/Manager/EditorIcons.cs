@@ -41,7 +41,7 @@ internal static class EditorIcons
         return Cache[key] = Render(path, lightIcons, scale, tintable);
     }
 
-    private static Texture2D? Render(string path, bool lightIcons, float scale, bool tintable)
+    private static ImageTexture? Render(string path, bool lightIcons, float scale, bool tintable)
     {
         if (!FileAccess.FileExists(path)) return null;
         var svg = FileAccess.GetFileAsString(path);

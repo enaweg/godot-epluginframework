@@ -441,7 +441,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         if (replace && System.IO.Directory.Exists(target)) System.IO.Directory.Delete(target, true);
         System.IO.Directory.CreateDirectory(target);
         var files = new List<string>();
-        foreach (var file in System.IO.Directory.GetFiles(projectRoot).Where(f => new[] { ".csproj", ".sln", ".slnx" }.Contains(Path.GetExtension(f)) || Path.GetFileName(f).Equals("nuget.config", StringComparison.OrdinalIgnoreCase) || Path.GetFileName(f) == "project.godot"))
+        foreach (var file in System.IO.Directory.GetFiles(projectRoot).Where(f => Path.GetExtension(f) is ".csproj" or ".sln" or ".slnx" || Path.GetFileName(f).Equals("nuget.config", StringComparison.OrdinalIgnoreCase) || Path.GetFileName(f) == "project.godot"))
         {
             files.Add(Path.GetFileName(file));
             File.Copy(file, Path.Combine(target, Path.GetFileName(file)), false);

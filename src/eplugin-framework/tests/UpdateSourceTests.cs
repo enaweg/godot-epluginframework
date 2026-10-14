@@ -16,7 +16,7 @@ namespace Enaweg.Plugin.Tests;
 public class UpdateSourceTests
 {
     [TestCase]
-    public void GitUrlRejectsUnsafeTransportsAndPaths()
+    public static void GitUrlRejectsUnsafeTransportsAndPaths()
     {
         foreach (var url in new[] { "https://github.com/a/b.git?path=addons/plugin#main", "ssh://git@host/project.git#v1.0", "git@host:owner/repo.git?path=plugin" })
             Assertions.AssertBool(GitUrl.TryParse(url, out _)).IsTrue();
@@ -25,7 +25,7 @@ public class UpdateSourceTests
     }
 
     [TestCase]
-    public async Task GitHubChoosesNextBetterVersionAndPluginAsset()
+    public static async Task GitHubChoosesNextBetterVersionAndPluginAsset()
     {
         // A stable install is offered the highest stable release, a prerelease install the highest release of any kind.
         // Drafts are never offered.
@@ -45,7 +45,7 @@ public class UpdateSourceTests
     }
 
     [TestCase]
-    public async Task GitLabSupportsSubgroupsAndSourceArchives()
+    public static async Task GitLabSupportsSubgroupsAndSourceArchives()
     {
         string? requested = null;
         using var client = new HttpClient(new Handler(request => { requested = request.RequestUri!.AbsoluteUri; return Json("""
@@ -57,7 +57,7 @@ public class UpdateSourceTests
     }
 
     [TestCase]
-    public async Task RedirectDropsCredentialsAndRefusesHttp()
+    public static async Task RedirectDropsCredentialsAndRefusesHttp()
     {
         var calls = 0;
         var leaked = false;
@@ -77,7 +77,7 @@ public class UpdateSourceTests
     }
 
     [TestCase]
-    public async Task RateLimitFallsBackToLatestRedirect()
+    public static async Task RateLimitFallsBackToLatestRedirect()
     {
         using var client = new HttpClient(new Handler(request =>
         {
@@ -95,7 +95,7 @@ public class UpdateSourceTests
     }
 
     [TestCase]
-    public async Task BranchCheckUsesRawMetadataAndTagsArePinned()
+    public static async Task BranchCheckUsesRawMetadataAndTagsArePinned()
     {
         using var client = new HttpClient(new Handler(_ => Json("[plugin]\nversion=\"2.0.0\"\n")));
         var git = new FakeGit();
@@ -108,7 +108,7 @@ public class UpdateSourceTests
     }
 
     [TestCase]
-    public async Task SparseFetchLimitsCheckoutAndCleansWorkingTree()
+    public static async Task SparseFetchLimitsCheckoutAndCleansWorkingTree()
     {
         var root = Path.Combine(Path.GetTempPath(), "git-fetch-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -126,7 +126,7 @@ public class UpdateSourceTests
     }
 
     [TestCase]
-    public async Task SourcesListEveryPublishedVersion()
+    public static async Task SourcesListEveryPublishedVersion()
     {
         using var github = new HttpClient(new Handler(_ => Json("""
             [{"tag_name":"v1.2.0","draft":false,"prerelease":false,"assets":[{"name":"plugin.zip","browser_download_url":"https://example.org/1.2.zip"}]},
@@ -135,7 +135,7 @@ public class UpdateSourceTests
              {"tag_name":"3.0.0","draft":true,"assets":[]}]
             """)));
         var listed = await new GitHubReleaseSource(new(github), "owner", "repo").ListAsync(Target(), new(), CancellationToken.None);
-        Assertions.AssertArray(listed.Select(c => c.NewVersion).ToArray()).IsEqual(new[] { "v1.2.0", "v1.1.0", "2.0.0-beta.1" });
+        Assertions.AssertArray(listed.Select(c => c.NewVersion).ToArray()).ContainsExactly("v1.2.0", "v1.1.0", "2.0.0-beta.1");
         Assertions.AssertString(((ZipPackageRef)listed[1].Package).Url).IsEqual("https://github.com/owner/repo/archive/refs/tags/v1.1.0.zip");
 
         using var gitlab = new HttpClient(new Handler(_ => Json("""
@@ -143,7 +143,7 @@ public class UpdateSourceTests
              {"tag_name":"1.2.0","upcoming_release":false,"assets":{"links":[],"sources":[]}}]
             """)));
         var gitlabVersions = await new GitLabReleaseSource(new(gitlab), "git.example", "team/project").ListAsync(Target(), new(), CancellationToken.None);
-        Assertions.AssertArray(gitlabVersions.Select(c => c.NewVersion).ToArray()).IsEqual(new[] { "1.3.0" });
+        Assertions.AssertArray(gitlabVersions.Select(c => c.NewVersion).ToArray()).ContainsExactly("1.3.0");
 
         var tags = await new GitSource(new(), new FakeGit(), new("https://host/repo.git", "addon", null)).ListAsync(Target(), new(), CancellationToken.None);
         Assertions.AssertString(tags.Single().NewVersion).IsEqual("v2.0.0");
@@ -151,7 +151,7 @@ public class UpdateSourceTests
     }
 
     [TestCase]
-    public async Task PinnedGitSourcesListTheCommitTheyPointToNow()
+    public static async Task PinnedGitSourcesListTheCommitTheyPointToNow()
     {
         using var client = new HttpClient(new Handler(_ => Json("[plugin]\nversion=\"1.0.0\"\n")));
         // A branch, tag or commit is listed even when its plugin.cfg version is the installed one, so it can be reinstalled.
@@ -168,7 +168,7 @@ public class UpdateSourceTests
     }
 
     [TestCase]
-    public void TagPagesNameTheirRepository()
+    public static void TagPagesNameTheirRepository()
     {
         foreach (var (page, repository, path) in new[]
                  {
@@ -190,7 +190,7 @@ public class UpdateSourceTests
     }
 
     [TestCase]
-    public async Task VersionTagsAreTheVersionsOfARepository()
+    public static async Task VersionTagsAreTheVersionsOfARepository()
     {
         string Commit(char c) => new(c, 40);
         var refs = string.Join('\n',
@@ -206,7 +206,7 @@ public class UpdateSourceTests
         var git = new FakeGit("addons/plugin", refs);
         var source = (GitSource)new UpdateSourceFactory(new(), git).Create("https://github.com/owner/repo/tags");
         var listed = await source.ListAsync(Target(), new(), CancellationToken.None);
-        Assertions.AssertArray(listed.Select(c => c.NewVersion).ToArray()).IsEqual(new[] { "v2.0.0-beta.1", "v1.4", "1.3.0", "v1.2.3", "1.2" });
+        Assertions.AssertArray(listed.Select(c => c.NewVersion).ToArray()).ContainsExactly("v2.0.0-beta.1", "v1.4", "1.3.0", "v1.2.3", "1.2");
         // an annotated tag installs the commit it points to, not the tag object
         Assertions.AssertString(((GitPackageRef)listed[1].Package).Commit).IsEqual(Commit('8'));
         Assertions.AssertString(((GitPackageRef)listed[1].Package).Repository).IsEqual("https://github.com/owner/repo.git");
@@ -221,7 +221,7 @@ public class UpdateSourceTests
     }
 
     [TestCase]
-    public async Task RepositoryWithoutPathFindsThePluginFolder()
+    public static async Task RepositoryWithoutPathFindsThePluginFolder()
     {
         var root = Path.Combine(Path.GetTempPath(), "git-folder-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);

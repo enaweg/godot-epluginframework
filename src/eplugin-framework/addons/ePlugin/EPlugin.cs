@@ -40,7 +40,7 @@ public static class EPlugin
     {
         get
         {
-            _instanceCache ??= (IEPlugin)(EditorInterface.Singleton.GetBaseControl().GetParent().GetChildren()
+            _instanceCache ??= (IEPlugin?)(EditorInterface.Singleton.GetBaseControl().GetParent().GetChildren()
                 .FirstOrDefault(c => c is IEPlugin));
 
             return _instanceCache;

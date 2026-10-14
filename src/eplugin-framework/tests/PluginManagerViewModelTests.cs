@@ -12,7 +12,7 @@ namespace Enaweg.Plugin.Tests;
 public class PluginManagerViewModelTests
 {
     [TestCase]
-    public void APluginOperationRejectsAnotherClickUntilReloadCreatesANewDialog()
+    public static void APluginOperationRejectsAnotherClickUntilReloadCreatesANewDialog()
     {
         var gate = new PluginOperationGate();
         Assertions.AssertBool(gate.TryBegin()).IsTrue();
@@ -28,7 +28,7 @@ public class PluginManagerViewModelTests
     }
 
     [TestCase]
-    public void AnOperationThatNeedsNoReloadReleasesTheManager()
+    public static void AnOperationThatNeedsNoReloadReleasesTheManager()
     {
         var gate = new PluginOperationGate();
         Assertions.AssertBool(gate.TryBegin()).IsTrue();
@@ -39,7 +39,7 @@ public class PluginManagerViewModelTests
     }
 
     [TestCase]
-    public void BlockedAndFailedVersionsAreNotPreselected()
+    public static void BlockedAndFailedVersionsAreNotPreselected()
     {
         var cache = new UpdateCache(); cache.FailedUpdates["failed"] = [new("2.0", "build failed", DateTimeOffset.UtcNow)];
         var candidates = new[] { Candidate("blocked"), Candidate("failed"), Candidate("healthy") };
@@ -51,7 +51,7 @@ public class PluginManagerViewModelTests
         Assertions.AssertObject(model.Updates.Single(r => r.Candidate.Slug == "failed").Failed!).IsNotNull();
     }
     [TestCase]
-    public void SourceTrustIsRequiredOnlyForSelectedRows()
+    public static void SourceTrustIsRequiredOnlyForSelectedRows()
     {
         var candidate = Candidate("plugin");
         var model = new PluginManagerViewModel([], [candidate], [new("plugin", "Plugin", "1.0", candidate.SourceUrl, "/unused")], null,
@@ -64,7 +64,7 @@ public class PluginManagerViewModelTests
         Assertions.AssertBool(model.CanApply).IsFalse();
     }
     [TestCase]
-    public void MissingTargetCannotBeAppliedAndFrameworkAnnouncesRestart()
+    public static void MissingTargetCannotBeAppliedAndFrameworkAnnouncesRestart()
     {
         var model = new PluginManagerViewModel([], [Candidate("missing"), Candidate("ePlugin")],
             [new("ePlugin", "Framework", "1.0", "https://example.org/releases", "/unused", RecordedVersion: "0.9")], null, _ => []);
@@ -73,14 +73,14 @@ public class PluginManagerViewModelTests
         Assertions.AssertBool(model.Updates[1].Findings.Any(f => f.Code == "recorded_version" && f.Severity == FindingSeverity.Info)).IsTrue();
     }
     [TestCase]
-    public void ListsAllPluginsFrameworkFirstAndJoinsUpdates()
+    public static void ListsAllPluginsFrameworkFirstAndJoinsUpdates()
     {
         var candidate = Candidate("beta");
         var model = new PluginManagerViewModel(
             [Plugin("gamma", PluginKind.GDScript, enabled: false), Plugin("beta", PluginKind.EPlugin, "https://example.org/releases"),
              Plugin("ePlugin", PluginKind.Framework), Plugin("Alpha", PluginKind.CSharp)],
             [candidate, Candidate("orphan")], [new("beta", "beta", "1.0.0", candidate.SourceUrl, "/unused")], null, _ => []);
-        Assertions.AssertArray(model.Plugins.Select(p => p.Plugin.Slug).ToArray()).IsEqual(new[] { "ePlugin", "Alpha", "beta", "gamma", "orphan" });
+        Assertions.AssertArray(model.Plugins.Select(p => p.Plugin.Slug).ToArray()).ContainsExactly("ePlugin", "Alpha", "beta", "gamma", "orphan");
         var beta = model.Find("beta")!;
         Assertions.AssertBool(beta.HasUpdate && beta.IsUpdatable && beta.IsEPlugin).IsTrue();
         Assertions.AssertBool(model.Find("gamma")!.IsUpdatable || model.Find("gamma")!.IsEPlugin).IsFalse();
@@ -92,7 +92,7 @@ public class PluginManagerViewModelTests
         Assertions.AssertBool(model.CanRetry).IsFalse();
     }
     [TestCase]
-    public void LocalPackagesShowTheirFileAndNeverAnUpdateSite()
+    public static void LocalPackagesShowTheirFileAndNeverAnUpdateSite()
     {
         var local = Candidate("local") with { SourceUrl = null, Package = new LocalZipPackageRef("/packages/local.zip") };
         var model = new PluginManagerViewModel([Plugin("local", PluginKind.GDScript, "https://example.org/releases")], [local, local with { Slug = "gone" }],
@@ -105,7 +105,7 @@ public class PluginManagerViewModelTests
         Assertions.AssertString(PluginManagerViewModel.Describe(model.Find("gone")!)).NotContains("Update site");
     }
     [TestCase]
-    public void FailedAttemptEnablesRetryAndIsShownInStatus()
+    public static void FailedAttemptEnablesRetryAndIsShownInStatus()
     {
         var attempt = new LocalPluginAttempt(Guid.NewGuid(), "broken", "1.0", PersistedPluginState.Activated, PersistedPluginState.Failed, "build_failed");
         var model = new PluginManagerViewModel([Plugin("broken", PluginKind.EPlugin) with { FailedAttempt = attempt }], [], [], null, _ => []);
@@ -113,7 +113,7 @@ public class PluginManagerViewModelTests
         Assertions.AssertString(PluginManagerViewModel.StatusText(model.Plugins[0].Plugin)).Contains("needs retry: build_failed");
     }
     [TestCase]
-    public void DetailsShowVersionChangeAndEscapePluginText()
+    public static void DetailsShowVersionChangeAndEscapePluginText()
     {
         var candidate = Candidate("beta");
         var recipe = new EEditorPluginRecipe();
@@ -136,7 +136,7 @@ public class PluginManagerViewModelTests
         Assertions.AssertString(PluginManagerViewModel.Describe(new(Plugin("plain", PluginKind.GDScript), null))).Contains("no update_url");
     }
     [TestCase]
-    public void PluginPagesScaleTheirFontSizesWithTheEditor()
+    public static void PluginPagesScaleTheirFontSizesWithTheEditor()
     {
         const string page = "[font_size=20][b]Title[/b][/font_size]\n[font_size=13]small[/font_size] [code]font_size=20[/code]";
         Assertions.AssertString(PluginManagerViewModel.ScaleFontSizes(page, 2f))
@@ -145,7 +145,7 @@ public class PluginManagerViewModelTests
         Assertions.AssertString(PluginManagerViewModel.ScaleFontSizes(page, 1f)).IsEqual(page);
     }
     [TestCase]
-    public void DetailsLinkDocumentationAndSource()
+    public static void DetailsLinkDocumentationAndSource()
     {
         var plugin = Plugin("docs", PluginKind.EPlugin) with
         {
@@ -160,7 +160,7 @@ public class PluginManagerViewModelTests
         Assertions.AssertString(none).NotContains("Source:");
     }
     [TestCase]
-    public void ClassifiesPluginScripts()
+    public static void ClassifiesPluginScripts()
     {
         var types = typeof(PluginCatalog).Assembly.GetTypes();
         Assertions.AssertObject(PluginCatalog.Classify("res://addons/sample_plugin/SamplePlugin.cs", false, types)).IsEqual(PluginKind.EPlugin);
@@ -172,7 +172,7 @@ public class PluginManagerViewModelTests
         Assertions.AssertString(PluginCatalog.ResolveScript("res://addons/x", "res://other/Plugin.cs")).IsEqual("res://other/Plugin.cs");
     }
     [TestCase]
-    public void ClassifiesDerivedScriptTypes()
+    public static void ClassifiesDerivedScriptTypes()
     {
         // a script class deriving from another one inherits its base's ScriptPath next to its own
         var types = new[] { typeof(BaseScript), typeof(DerivedScript) };
@@ -183,20 +183,20 @@ public class PluginManagerViewModelTests
     [Godot.ScriptPath("res://addons/x/Base.cs")]
     private class BaseScript;
     [Godot.ScriptPath("res://addons/x/Derived.cs")]
-    private class DerivedScript : BaseScript;
+    private sealed class DerivedScript : BaseScript;
     [TestCase]
-    public void VersionOptionsMarkInstalledAndDowngrades()
+    public static void VersionOptionsMarkInstalledAndDowngrades()
     {
         var options = PluginManagerViewModel.VersionOptions("1.5.0", [Version("1.0.0"), Version("2.0.0"), Version("1.5.0")]);
-        Assertions.AssertArray(options.Select(o => o.Version).ToArray()).IsEqual(new[] { "2.0.0", "1.5.0", "1.0.0" });
+        Assertions.AssertArray(options.Select(o => o.Version).ToArray()).ContainsExactly("2.0.0", "1.5.0", "1.0.0");
         Assertions.AssertBool(options[1].Installed && !options[0].IsDowngrade && options[2].IsDowngrade).IsTrue();
         var unlisted = PluginManagerViewModel.VersionOptions("1.7.0", [Version("2.0.0"), Version("1.0.0")]);
-        Assertions.AssertArray(unlisted.Select(o => o.Version).ToArray()).IsEqual(new[] { "2.0.0", "1.7.0", "1.0.0" });
+        Assertions.AssertArray(unlisted.Select(o => o.Version).ToArray()).ContainsExactly("2.0.0", "1.7.0", "1.0.0");
         Assertions.AssertObject(unlisted[1].Candidate).IsNull();
 
         var plugin = new PluginRow(Plugin("beta", PluginKind.EPlugin, "https://example.org/releases"), null);
         Assertions.AssertObject(PluginManagerViewModel.VersionChangeBlocked(plugin, options[2])).IsNull();
-        Assertions.AssertArray(options.Select(o => o.Action).ToArray()).IsEqual(new[] { "Update", "Reinstall", "Downgrade" });
+        Assertions.AssertArray(options.Select(o => o.Action).ToArray()).ContainsExactly("Update", "Reinstall", "Downgrade");
         var framework = new PluginRow(Plugin("ePlugin", PluginKind.Framework, "https://example.org/releases"), null);
         Assertions.AssertString(PluginManagerViewModel.VersionChangeBlocked(framework, options[2])).Contains("cannot be downgraded");
         Assertions.AssertObject(PluginManagerViewModel.VersionChangeBlocked(framework, options[0])).IsNull();
@@ -204,7 +204,7 @@ public class PluginManagerViewModelTests
         Assertions.AssertString(PluginManagerViewModel.VersionChangeBlocked(disabled, options[0])).Contains("Enable");
     }
     [TestCase]
-    public void InstalledVersionCanBeReinstalledWhenItsPackageIsOffered()
+    public static void InstalledVersionCanBeReinstalledWhenItsPackageIsOffered()
     {
         var plugin = new PluginRow(Plugin("beta", PluginKind.EPlugin, "https://example.org/repo.git#main"), null);
         // e.g. the head of a pinned git branch whose plugin.cfg version did not change
@@ -224,7 +224,7 @@ public class PluginManagerViewModelTests
         Assertions.AssertString(PluginManagerViewModel.VersionChangeBlocked(disabled, listed)).Contains("Enable");
     }
     [TestCase]
-    public void VersionLabelsMarkLatestInstalledAndLocalVersions()
+    public static void VersionLabelsMarkLatestInstalledAndLocalVersions()
     {
         var local = Version("2.1.0") with { SourceUrl = null, Package = new LocalZipPackageRef("/packages/beta.zip") };
         var options = PluginManagerViewModel.VersionOptions("1.5.0", [local, Version("2.0.0"), Version("1.5.0")]);
@@ -235,7 +235,7 @@ public class PluginManagerViewModelTests
         Assertions.AssertString(PluginManagerViewModel.VersionSource(options[1])).Contains("https://example.org/releases");
     }
     [TestCase]
-    public void UpdateSummaryNamesInstalledAndFailedGroups()
+    public static void UpdateSummaryNamesInstalledAndFailedGroups()
     {
         UpdateGroupResult Group(string slug, UpdateOutcome? outcome, string? failure = null) =>
             new([Package(slug)], "/updates/" + slug, outcome, failure);
@@ -255,7 +255,7 @@ public class PluginManagerViewModelTests
     }
     private static ValidatedPackage Package(string slug)
     {
-        SemVer.TryParse("2.0.0", out var version);
+        Assertions.AssertBool(SemVer.TryParse("2.0.0", out var version)).IsTrue();
         return new(Candidate(slug), "/staging/" + slug, version, null, false, []);
     }
     private static UpdateCandidate Version(string version) => Candidate("beta") with { InstalledVersion = "1.5.0", NewVersion = version };

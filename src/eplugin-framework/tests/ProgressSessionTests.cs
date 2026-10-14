@@ -229,7 +229,8 @@ public class ProgressSessionTests
     private string PathOf(string name, string extension) => Path.Combine(_shared, Token(name) + extension);
 
     private static string Token(string name) =>
-        Convert.ToHexString(System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(name))).ToLowerInvariant();
+        // Handoffs require a token in the GUID's 32-character N format.
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(name)))[..32].ToLowerInvariant();
 
     /// <summary>Publishes a simulated helper and returns its command file.</summary>
     private string Helper(string name, ProcessIdentity helper, int protocol = ProgressSession.Protocol, bool running = true)

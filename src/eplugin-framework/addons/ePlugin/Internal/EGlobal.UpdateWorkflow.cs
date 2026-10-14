@@ -21,7 +21,7 @@ internal sealed partial class EGlobal : IUpdateWorkflowHost
 
     Task<(IReadOnlyList<ValidatedPackage> Packages, IReadOnlyList<RefusedPackage> Refused, string Directory)>
         IUpdateWorkflowHost.StageUpdatesAsync(IReadOnlyList<UpdateCandidate> candidates, IProgress<double>? progress,
-            CancellationToken ct, bool allowDowngrade, bool allowReinstall) =>
+            bool allowDowngrade, bool allowReinstall, CancellationToken ct) =>
         StageUpdatesAsync(candidates, progress, ct, allowDowngrade, allowReinstall);
 
     LicenseReview? IUpdateWorkflowHost.ReviewUpdateLicenses(IEnumerable<ValidatedPackage> packages) => ReviewUpdateLicenses(packages);

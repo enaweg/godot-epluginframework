@@ -122,7 +122,7 @@ public class UpdatePackageTests
     }
 
     [TestCase]
-    public void InstalledReleaseIsNotOfferedAgain()
+    public static void InstalledReleaseIsNotOfferedAgain()
     {
         var release = new UpdateCandidate("plugin", "Plugin", "2.0.0", "2.0.1", "https://example.org/releases", null, "v2.0.1", new ZipPackageRef("https://example.org/plugin.zip", "plugin"));
         var installed = new Dictionary<string, AppliedRevision> { ["plugin"] = new("https://example.org/releases", "v2.0.1", DateTimeOffset.UtcNow, "2.0.0") };

@@ -39,7 +39,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
     /// <summary>The <c>eplugin/logging/debug</c> project setting.</summary>
     public bool EnableDebugLogging => LoggingSettings.Debug;
 
-    private ILogger? _logger = null;
+    private ILogger? _logger;
 
     public ILogger Logger
     {

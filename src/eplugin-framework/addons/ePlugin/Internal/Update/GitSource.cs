@@ -84,6 +84,8 @@ internal sealed class GitRunner(bool allowFileProtocol = false) : IGitRunner
 }
 internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : IUpdateSource, IVersionListSource
 {
+    private static readonly char[] HeadSeparators = ['\t', '\n'];
+
     /// <summary>
     /// Every tag named like a version ("1.2", "v1.2.3", semantic prerelease/build suffixes) is a version, installed from
     /// the commit it points to. The announced version is the tag name; the validator warns when the tagged plugin.cfg
@@ -99,18 +101,18 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
             await EnsureVersion(work, ct).ConfigureAwait(false);
             var refs = await Refs(work, ct).ConfigureAwait(false);
             var tags = url.Ref is null ? TagCandidates(refs, target) : [];
-            if (tags.Count > 0) return tags;
+            if (tags.Length > 0) return tags;
             return [await Candidate(work, target, await Commit(work, refs, ct).ConfigureAwait(false), ct).ConfigureAwait(false)];
         }
         finally { DeleteWork(work); }
     }
     /// <summary>One candidate per version tag, announcing the tag's version; nothing is fetched.</summary>
-    private IReadOnlyList<UpdateCandidate> TagCandidates(string[][] refs, PluginUpdateTarget target) =>
+    private UpdateCandidate[] TagCandidates(string[][] refs, PluginUpdateTarget target) =>
         refs.Where(p => IsVersionTag(p[1]))
             .Select(p =>
             {
                 var tag = p[1][10..];
-                SemVer.TryParse(tag, out var version);
+                if (!SemVer.TryParse(tag, out var version)) throw new InvalidDataException($"Invalid version tag: {tag}.");
                 return (Commit: Tagged(refs, tag), Version: version);
             })
             .Where(c => IsCommit(c.Commit))
@@ -162,7 +164,7 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
         else
         {
             var head = await Checked(git, work, ["ls-remote", "--", url.Repository, "HEAD"], ct).ConfigureAwait(false);
-            commit = head.Output.Split(new[] { '\t', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+            commit = head.Output.Split(HeadSeparators, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
         }
         if (!IsCommit(commit)) throw new IOException("Git source returned no usable commit.");
         return commit!;
@@ -184,7 +186,7 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
             var refs = await Refs(work, ct).ConfigureAwait(false);
             if (url.Ref is { } reference && Tagged(refs, reference) is not null) return null;
             // With version tags the newest one this install is offered (see UpdateService.IsUpdate), if any.
-            if (url.Ref is null && TagCandidates(refs, target) is { Count: > 0 } tags)
+            if (url.Ref is null && TagCandidates(refs, target) is { Length: > 0 } tags)
                 return tags.FirstOrDefault(c => SemVer.TryParse(c.NewVersion, out var version) && UpdateService.Offers(target, version));
             return await Candidate(work, target, await Commit(work, refs, ct).ConfigureAwait(false), ct).ConfigureAwait(false);
         }

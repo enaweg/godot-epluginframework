@@ -88,7 +88,7 @@ public class LicenseTests
     }
 
     [TestCase]
-    public void RecipeTextIsIdentifiedByItsContentsAndPathsByThePath()
+    public static void RecipeTextIsIdentifiedByItsContentsAndPathsByThePath()
     {
         var first = PluginLicense.FromText("plugin", "Plugin", "1.0.0", "Terms\r\nv1");
         Assertions.AssertString(first.Source).StartsWith(PluginLicense.TextPrefix);
@@ -102,7 +102,7 @@ public class LicenseTests
 
     [TestCase]
     [RequireGodotRuntime]
-    public void BuilderTellsLicensePathsFromLicenseTexts()
+    public static void BuilderTellsLicensePathsFromLicenseTexts()
     {
         var builder = EEditorPluginBuilder.Create();
         builder.SetLicense("res://addons/plugin/EULA.txt");
@@ -170,7 +170,7 @@ public class LicenseTests
     }
 
     [TestCase]
-    public void DetailsLinkTheLicenseOrShowItMissing()
+    public static void DetailsLinkTheLicenseOrShowItMissing()
     {
         var missing = new LicenseInfo(Entry("plugin") with { Problem = "missing" }, false, null);
         Assertions.AssertString(PluginManagerViewModel.LicenseLine(missing)).Contains("missing (no LICENSE file");
@@ -190,22 +190,22 @@ public class LicenseTests
     }
 
     [TestCase]
-    public void DecliningADependencyLicenseCancelsAndSkipsItsDependant()
+    public static void DecliningADependencyLicenseCancelsAndSkipsItsDependant()
     {
         var review = new LicenseReview([Entry("dependency"), Entry("plugin")],
             [new LicenseActivation("plugin", "Plugin", ["dependency", "plugin"])]);
         Assertions.AssertString(review.NextPending()!.Slug).IsEqual("dependency");
-        Assertions.AssertArray(review.NeededBy("dependency").Select(a => a.Slug).ToArray()).IsEqual(new[] { "plugin" });
+        Assertions.AssertArray(review.NeededBy("dependency").Select(a => a.Slug).ToArray()).ContainsExactly("plugin");
         review.Decline("dependency");
         Assertions.AssertBool(review.IsComplete).IsTrue();
         Assertions.AssertObject(review.DecisionOf("plugin")).IsEqual(LicenseDecision.Skipped);
         Assertions.AssertInt(review.Approved.Count()).IsEqual(0);
         Assertions.AssertInt(review.Accepted.Count()).IsEqual(0);
-        Assertions.AssertArray(review.Canceled.Select(a => a.Slug).ToArray()).IsEqual(new[] { "plugin" });
+        Assertions.AssertArray(review.Canceled.Select(a => a.Slug).ToArray()).ContainsExactly("plugin");
     }
 
     [TestCase]
-    public void SeparateActivationsAreDecidedOnTheirOwn()
+    public static void SeparateActivationsAreDecidedOnTheirOwn()
     {
         var review = new LicenseReview([Entry("one"), Entry("two"), Entry("three")],
             [new LicenseActivation("one", "One", ["one"]), new LicenseActivation("two", "Two", ["two"], Enabled: true),
@@ -216,14 +216,14 @@ public class LicenseTests
         Assertions.AssertInt(review.PendingCount).IsEqual(1);
         review.AcceptAll();
         Assertions.AssertBool(review.IsComplete).IsTrue();
-        Assertions.AssertArray(review.Approved.Select(a => a.Slug).ToArray()).IsEqual(new[] { "one", "three" });
-        Assertions.AssertArray(review.Accepted.Select(e => e.Slug).ToArray()).IsEqual(new[] { "one", "three" });
+        Assertions.AssertArray(review.Approved.Select(a => a.Slug).ToArray()).ContainsExactly("one", "three");
+        Assertions.AssertArray(review.Accepted.Select(e => e.Slug).ToArray()).ContainsExactly("one", "three");
         Assertions.AssertBool(review.Canceled.Single().Enabled).IsTrue();
     }
 
     [TestCase]
     [RequireGodotRuntime]
-    public void DialogSceneHasTheNodesItsScriptBinds()
+    public static void DialogSceneHasTheNodesItsScriptBinds()
     {
         var dialog = Godot.GD.Load<Godot.PackedScene>(LicenseDialog.ScenePath).Instantiate<LicenseDialog>();
         try
@@ -236,7 +236,7 @@ public class LicenseTests
     }
 
     [TestCase]
-    public void ClosingDeclinesWhatIsLeftAndMergingKeepsDecisions()
+    public static void ClosingDeclinesWhatIsLeftAndMergingKeepsDecisions()
     {
         var first = new LicenseReview([Entry("one")], [new LicenseActivation("one", "One", ["one"])]);
         first.Accept("one");
@@ -245,8 +245,8 @@ public class LicenseTests
         Assertions.AssertInt(merged.Entries.Count).IsEqual(2);
         Assertions.AssertObject(merged.DecisionOf("one")).IsEqual(LicenseDecision.Accepted);
         merged.DeclineRemaining();
-        Assertions.AssertArray(merged.Approved.Select(a => a.Slug).ToArray()).IsEqual(new[] { "one" });
-        Assertions.AssertArray(merged.Canceled.Select(a => a.Slug).ToArray()).IsEqual(new[] { "two" });
+        Assertions.AssertArray(merged.Approved.Select(a => a.Slug).ToArray()).ContainsExactly("one");
+        Assertions.AssertArray(merged.Canceled.Select(a => a.Slug).ToArray()).ContainsExactly("two");
     }
 }
 #endif

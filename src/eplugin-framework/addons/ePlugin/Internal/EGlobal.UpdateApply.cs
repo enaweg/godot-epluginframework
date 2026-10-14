@@ -28,7 +28,7 @@ internal sealed partial class EGlobal
     private bool _scanDeferred;
     // Plugins rolled back since this assembly was loaded: it still holds their new code until the editor restarts.
     private readonly HashSet<string> _rolledBackUpdates = new(StringComparer.Ordinal);
-    private string UpdateProjectRoot => ProjectSettings.GlobalizePath("res://");
+    private static string UpdateProjectRoot => ProjectSettings.GlobalizePath("res://");
     private void InitializeUpdateJournals() => _updateJournals = new(Path.Combine(UpdateProjectRoot, ".godot/eplugin/updates"), message => _ePluginContext?.Logger.Error(message));
     private UpdateApplier Applier()
     {
@@ -82,12 +82,12 @@ internal sealed partial class EGlobal
         var groups = UpdateGroupsOf(packages);
         using var restarts = DeferRestarts();
         // The editor drops a scan requested while one runs, so a scan per group would miss later groups: scan once after all.
-        using var scans = groups.Count > 1 ? DeferScans() : null;
+        using var scans = groups.Length > 1 ? DeferScans() : null;
         return Applier().ApplyGroups(groups, directory, _updateJournals!.NewDirectory, trustChangedSources,
             (index, group) =>
             {
-                if (groups.Count == 1) return;
-                ActivationProgress.SetText($"Updating {GroupNames(group)} ({index + 1} of {groups.Count})...");
+                if (groups.Length == 1) return;
+                ActivationProgress.SetText($"Updating {GroupNames(group)} ({index + 1} of {groups.Length})...");
             },
             result =>
             {
@@ -104,7 +104,7 @@ internal sealed partial class EGlobal
 
     private static string GroupNames(IReadOnlyList<ValidatedPackage> group) => string.Join(", ", group.Select(p => p.Candidate.PluginName));
 
-    private IReadOnlyList<IReadOnlyList<ValidatedPackage>> UpdateGroupsOf(IReadOnlyList<ValidatedPackage> packages)
+    private IReadOnlyList<ValidatedPackage>[] UpdateGroupsOf(IReadOnlyList<ValidatedPackage> packages)
     {
         var dependencies = _contexts.Where(c => c.Plugin is not null && c.State == EEditorPluginState.Activated).DistinctBy(c => c.Slug)
             .ToDictionary(c => c.Slug, c => (IReadOnlyCollection<string>)Snapshot(c).PluginDependencies.Select(d => d.Slug).ToArray(), StringComparer.Ordinal);
@@ -112,7 +112,7 @@ internal sealed partial class EGlobal
             .Select(group => (IReadOnlyList<ValidatedPackage>)group.Select(slug => packages.First(p => p.Candidate.Slug == slug)).ToArray()).ToArray();
     }
 
-    private IDisposable DeferRestarts()
+    private Deferral DeferRestarts()
     {
         _restartDeferrals++;
         return new Deferral(() =>
@@ -123,7 +123,7 @@ internal sealed partial class EGlobal
         });
     }
 
-    private IDisposable DeferScans()
+    private Deferral DeferScans()
     {
         _deferScans = true;
         return new Deferral(() =>
@@ -297,7 +297,7 @@ internal sealed partial class EGlobal
             var findings = global.UpdatePreflightFindings(packages.Select(p => p.Candidate with { NewVersion = PluginIni.Parse(File.ReadAllText(Path.Combine(p.StagingDir, "plugin.cfg")))["version"] }).ToArray());
             if (findings.Any(f => f.Severity == FindingSeverity.Error)) throw new InvalidOperationException(string.Join("; ", findings.Where(f => f.Severity == FindingSeverity.Error).Select(f => f.Message)));
             foreach (var warning in findings.Where(f => f.Severity == FindingSeverity.Warning)) Log(warning.Message);
-            if (global._toCheckEnable.Any() || global._toCheckDisable.Any()) throw new InvalidOperationException("Finish plugin transitions before updating.");
+            if (global._toCheckEnable.Count > 0 || global._toCheckDisable.Count > 0) throw new InvalidOperationException("Finish plugin transitions before updating.");
             if (packages.Any(p => p.ContainsCSharp) && global.GetOrCreateContext(global._ePluginContext!).Cli is not ICheckedDotnetCli)
                 throw new InvalidOperationException("A working dotnet CLI is required for C# updates.");
         }
@@ -305,7 +305,7 @@ internal sealed partial class EGlobal
         public void Bridge(UpdateJournal journal, UpdatePluginJournal plugin)
         {
             if (!plugin.IsEPlugin || !journal.Recipes.TryGetValue(plugin.Slug, out var recipe)) return;
-            plugin.Preserved = InterimBridge.Restore(plugin.Slug, recipe.Old, journal.Backup(plugin.Slug), Path.Combine(global.UpdateProjectRoot, "addons", plugin.Slug));
+            plugin.Preserved = InterimBridge.Restore(plugin.Slug, recipe.Old, journal.Backup(plugin.Slug), Path.Combine(UpdateProjectRoot, "addons", plugin.Slug));
             journal.Save();
         }
         public void Reconcile(UpdateJournal journal, bool rollback) => global.ReconcileUpdateRecipes(journal, rollback);

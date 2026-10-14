@@ -13,7 +13,7 @@ namespace Enaweg.Plugin.Tests;
 public class RecipeReconcilerTests
 {
     [TestCase]
-    public void UpgradeUsesAddAndReferencesAreRemovedBeforePackageChanges()
+    public static void UpgradeUsesAddAndReferencesAreRemovedBeforePackageChanges()
     {
         var old = new RecipeSnapshot { Nugets = [new("Shared", "1.0", null), new("Gone", "1.0", null)],
             Projects = [new("old.csproj", null, true)], Autoloads = [new("Global", "old.gd")] };
@@ -28,7 +28,7 @@ public class RecipeReconcilerTests
         Assertions.AssertInt(RecipeReconciler.Plan(applied, old).Count).IsEqual(0);
     }
     [TestCase]
-    public void OnlyNugetProjectAndDirectoryChangesChangeTheBuild()
+    public static void OnlyNugetProjectAndDirectoryChangesChangeTheBuild()
     {
         var old = new RecipeSnapshot { Nugets = [new("Shared", "1.0", null)], Projects = [new("lib.csproj", null, true)],
             Directories = ["res://addons/plugin/.src"], Autoloads = [new("Global", "old.gd")] };
@@ -41,7 +41,7 @@ public class RecipeReconcilerTests
         foreach (var next in new[] { nuget, project, directory }) Assertions.AssertBool(RecipeReconciler.ChangesBuild(old, next)).IsTrue();
     }
     [TestCase]
-    public void EqualSnapshotsAreNoopAndCyclesAreRejected()
+    public static void EqualSnapshotsAreNoopAndCyclesAreRejected()
     {
         var same = new RecipeSnapshot { Directories = ["res://addons/plugin/.src"] };
         Assertions.AssertInt(RecipeReconciler.Plan(same, same).Count).IsEqual(0);
@@ -52,7 +52,7 @@ public class RecipeReconcilerTests
         Assertions.AssertBool(rejected).IsTrue();
     }
     [TestCase]
-    public void BridgeKeepsOldVisibleCodeUntilNewRecipeIsReady()
+    public static void BridgeKeepsOldVisibleCodeUntilNewRecipeIsReady()
     {
         var root = Path.Combine(Path.GetTempPath(), "bridge-test-" + Guid.NewGuid().ToString("N"));
         try
@@ -72,7 +72,7 @@ public class RecipeReconcilerTests
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
     [TestCase]
-    public void RelativeProjectBridgePreservesMissingNeighborsWithoutOverwritingNewCode()
+    public static void RelativeProjectBridgePreservesMissingNeighborsWithoutOverwritingNewCode()
     {
         var root = Path.Combine(Path.GetTempPath(), "project-bridge-" + Guid.NewGuid().ToString("N"));
         try
@@ -95,7 +95,7 @@ public class RecipeReconcilerTests
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
     [TestCase]
-    public void RootAndAppliedOptionalsAreSerializedAsInstalledResources()
+    public static void RootAndAppliedOptionalsAreSerializedAsInstalledResources()
     {
         var root = new EEditorPluginRecipe { Nugets = [new("Root", "1.0", null)] };
         var optional = new EEditorPluginRecipe.OptionalPlugin("optional", ">1.0", new() { Autoloads = [new("Optional", "optional.gd")] });

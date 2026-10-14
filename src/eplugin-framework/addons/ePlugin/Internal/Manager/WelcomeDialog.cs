@@ -17,7 +17,7 @@ internal sealed partial class WelcomeDialog : AcceptDialog, ISerializationListen
 {
     internal const string ScenePath = "res://addons/ePlugin/Internal/Manager/WelcomeDialog.tscn";
     private readonly EditorSignalConnections _signals = new();
-    private IReadOnlyList<WelcomeEntry> _welcomes = [];
+    private WelcomeEntry[] _welcomes = [];
     private Action<IReadOnlyList<WelcomeEntry>>? _closed;
     private ItemList _list = null!;
     private Label _summary = null!;
@@ -41,7 +41,7 @@ internal sealed partial class WelcomeDialog : AcceptDialog, ISerializationListen
     /// <summary>Opens above whatever exclusive editor window is open, e.g. Project Settings or the ePlugin Manager.</summary>
     public void Open() => EditorInterface.Singleton.PopupDialogCenteredClamped(this, Size, 0.9f);
 
-    private void Initialize(IReadOnlyList<WelcomeEntry> welcomes, Action<IReadOnlyList<WelcomeEntry>>? closed)
+    private void Initialize(WelcomeEntry[] welcomes, Action<IReadOnlyList<WelcomeEntry>>? closed)
     {
         _welcomes = welcomes; _closed = closed;
         _list = GetNode<ItemList>("%WelcomeList"); _summary = GetNode<Label>("%Summary");
@@ -54,7 +54,7 @@ internal sealed partial class WelcomeDialog : AcceptDialog, ISerializationListen
         {
             if (PluginManagerViewModel.IsWebUrl(meta.AsString())) OS.ShellOpen(meta.AsString());
         }));
-        _list.Visible = _summary.Visible = welcomes.Count > 1;
+        _list.Visible = _summary.Visible = welcomes.Length > 1;
         if (closed is null) Title = "ePlugin — Welcome page";
         foreach (var welcome in welcomes) _list.AddItem(welcome.Name);
         Display(0);

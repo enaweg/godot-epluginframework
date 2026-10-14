@@ -11,7 +11,7 @@ namespace Enaweg.Plugin.Tests;
 public class EditorWindowsTests
 {
     [TestCase]
-    public async Task ReleaseHidesAWindowNowAndFreesItOnlyLater()
+    public static async Task ReleaseHidesAWindowNowAndFreesItOnlyLater()
     {
         var tree = (SceneTree)Engine.GetMainLoop();
         var window = new Window { Visible = false };
@@ -34,7 +34,7 @@ public class EditorWindowsTests
     }
 
     [TestCase]
-    public void ReleasingAWindowOutsideTheTreeFreesItRightAway()
+    public static void ReleasingAWindowOutsideTheTreeFreesItRightAway()
     {
         var window = new Window { Visible = false };
         EditorWindows.Release(window);

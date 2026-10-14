@@ -10,7 +10,7 @@ namespace Enaweg.Plugin.Tests;
 public class EditorIconsTests
 {
     [TestCase]
-    public void ThemeChangesRecolorBothEditorIcons()
+    public static void ThemeChangesRecolorBothEditorIcons()
     {
         using var theme = new Theme();
         foreach (var path in new[] { EditorIcons.EPluginPath, EditorIcons.UpdatePath })
@@ -28,7 +28,7 @@ public class EditorIconsTests
     }
 
     [TestCase]
-    public void IconPaletteFollowsFontsEvenWhenBackgroundContrastDiffers()
+    public static void IconPaletteFollowsFontsEvenWhenBackgroundContrastDiffers()
     {
         using var theme = new Theme();
         theme.SetColor("mono_color", "Editor", Colors.White);
@@ -40,7 +40,7 @@ public class EditorIconsTests
     }
 
     [TestCase]
-    public void StatusMaskStaysWhiteAndEditorScaleIsPartOfTheCache()
+    public static void StatusMaskStaysWhiteAndEditorScaleIsPartOfTheCache()
     {
         using var theme = new Theme();
         theme.SetColor("font_color", "Editor", Colors.Black);

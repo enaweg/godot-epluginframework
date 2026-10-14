@@ -55,27 +55,27 @@ internal static class RecipeEntries
     }
 
     /// <summary>Adds a hard dependency. Naming the framework replaces its implicit, unconstrained dependency.</summary>
-    public static void AddPluginDependency(EEditorPluginRecipe recipe, string slug, string? version)
+    public static void AddPluginDependency(EEditorPluginRecipe recipe, string pluginSlug, string? version)
     {
-        RequireSlug(slug);
+        RequireSlug(pluginSlug);
         RequireConstraint(version);
-        if (slug == "ePlugin") recipe.PluginDependencies.RemoveAll(d => d.Slug == slug && d.Version is null);
-        if (recipe.OptionalPluginDependencies.Any(d => d.Slug == slug))
-            throw new ArgumentException($"Plugin {slug} cannot be both a required and an optional dependency.", "pluginSlug");
-        Add(recipe.PluginDependencies, new EEditorPluginRecipe.Plugin(slug, version), d => d.Slug == slug,
-            $"Plugin dependency {slug}", "pluginSlug");
+        if (pluginSlug == "ePlugin") recipe.PluginDependencies.RemoveAll(d => d.Slug == pluginSlug && d.Version is null);
+        if (recipe.OptionalPluginDependencies.Any(d => d.Slug == pluginSlug))
+            throw new ArgumentException($"Plugin {pluginSlug} cannot be both a required and an optional dependency.", nameof(pluginSlug));
+        Add(recipe.PluginDependencies, new EEditorPluginRecipe.Plugin(pluginSlug, version), d => d.Slug == pluginSlug,
+            $"Plugin dependency {pluginSlug}", nameof(pluginSlug));
     }
 
-    public static void AddOptionalPluginDependency(EEditorPluginRecipe recipe, string slug, string? version,
+    public static void AddOptionalPluginDependency(EEditorPluginRecipe recipe, string pluginSlug, string? version,
         EEditorPluginRecipe optionalRecipe)
     {
-        RequireSlug(slug);
+        RequireSlug(pluginSlug);
         RequireConstraint(version);
-        if (recipe.PluginDependencies.Any(d => d.Slug == slug))
-            throw new ArgumentException($"Plugin {slug} cannot be both a required and an optional dependency.", "pluginSlug");
-        if (recipe.OptionalPluginDependencies.Any(d => d.Slug == slug))
-            throw new ArgumentException($"Optional dependency {slug} is declared twice; declare its resources in one recipe.", "pluginSlug");
-        recipe.OptionalPluginDependencies.Add(new EEditorPluginRecipe.OptionalPlugin(slug, version, optionalRecipe));
+        if (recipe.PluginDependencies.Any(d => d.Slug == pluginSlug))
+            throw new ArgumentException($"Plugin {pluginSlug} cannot be both a required and an optional dependency.", nameof(pluginSlug));
+        if (recipe.OptionalPluginDependencies.Any(d => d.Slug == pluginSlug))
+            throw new ArgumentException($"Optional dependency {pluginSlug} is declared twice; declare its resources in one recipe.", nameof(pluginSlug));
+        recipe.OptionalPluginDependencies.Add(new EEditorPluginRecipe.OptionalPlugin(pluginSlug, version, optionalRecipe));
     }
 
     /// <summary>Adds an entry once; an entry for the same thing that differs from it is a contradiction.</summary>
@@ -97,11 +97,11 @@ internal static class RecipeEntries
         if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException($"The {what} must not be empty.", parameter);
     }
 
-    private static void RequireSlug(string? slug)
+    private static void RequireSlug(string? pluginSlug)
     {
-        Require(slug, "pluginSlug", "plugin slug");
-        if (slug is "." or ".." || slug!.IndexOfAny(['/', '\\', ':']) >= 0)
-            throw new ArgumentException($"'{slug}' is not a plugin slug: use its folder name below addons.", "pluginSlug");
+        Require(pluginSlug, nameof(pluginSlug), "plugin slug");
+        if (pluginSlug is "." or ".." || pluginSlug!.IndexOfAny(['/', '\\', ':']) >= 0)
+            throw new ArgumentException($"'{pluginSlug}' is not a plugin slug: use its folder name below addons.", nameof(pluginSlug));
     }
 
     private static void RequireConstraint(string? version)
