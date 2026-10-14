@@ -110,24 +110,6 @@ jobs:
           xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" \
             dotnet test "EPluginFramework.sln" --configuration Debug --no-build --settings .runsettings --verbosity normal -m:1
 
-      - name: Create PR artifact
-        if: matrix.sdk == 'dotnet8'
-        shell: bash
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          mkdir -p out
-          cd src/eplugin-framework
-          zip -r "../../out/ePlugin-pr-${PR_NUMBER}.zip" addons/ePlugin
-
-      - name: Upload PR artifact
-        if: matrix.sdk == 'dotnet8'
-        uses: actions/upload-artifact@v7
-        with:
-          path: out/ePlugin-pr-${{ github.event.pull_request.number }}.zip
-          archive: false
-          if-no-files-found: error
-
   godot-compatibility:
     # The framework supports Godot 4.4 to 4.7; tests run on 4.7, the older Godot APIs are compiled against here.
     strategy:

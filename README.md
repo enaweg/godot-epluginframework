@@ -82,6 +82,8 @@ Updates replace whole addon folders. They do not install missing plugins or reso
 
 CI tests pull requests with Godot 4.7.2 and both the .NET 8 and the .NET 10 SDK, which use different dotnet command forms, and builds the framework against the Godot 4.6.2, 4.5.1 and 4.4.1 SDKs. Running it on those older Godot versions is tested by hand.
 
+Every pull request is also packaged like a release by the **CI-PR-Build** workflow. Its ZIP carries the PR number as a semver prerelease (`0.9.1` becomes `0.9.1-pr.42`), so the release of that version still counts as an update. The download link is in a comment on the pull request (for pull requests from forks, in the workflow run's summary), and downloading needs a GitHub login. Copy the archive's `addons/ePlugin` directory into a project to try the change.
+
 ```bash
 cd src/eplugin-framework
 dotnet build "EPluginFramework.sln" --configuration Debug
