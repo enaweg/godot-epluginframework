@@ -78,11 +78,17 @@ public interface IEEditorPluginBuilder : IEEditorPluginRecipeBuilder
     /// </param>
     /// <param name="version">
     /// Optional version constraint matched against the dependency's <c>plugin.cfg</c>.
-    /// Use an exact version (<c>"1.2.3"</c>) or a "<c>&gt;</c>"-prefixed value
-    /// (<c>"&gt;1.2.0"</c>) which is interpreted as "this version or higher".
-    /// Versions must follow <c>[major].[minor].[patch]</c>; semver pre-release suffixes are
-    /// stripped before comparison. When <see langword="null"/>, any installed version is accepted.
+    /// Use an exact version (<c>"1.2.3"</c>) or a minimum (<c>"&gt;=1.2.0"</c>, this version or higher; the older
+    /// form <c>"&gt;1.2.0"</c> means the same). Versions are written like <c>plugin.cfg</c> versions: an optional
+    /// <c>v</c>, two to four numbers, a prerelease suffix and build metadata. Only the numbers are compared, so
+    /// <c>1.2</c> equals <c>1.2.0</c> and <c>1.2.3-beta.1</c> satisfies <c>1.2.3</c>. When <see langword="null"/>,
+    /// any installed version is accepted.
     /// </param>
+    /// <remarks>
+    /// Every recipe depends on the framework (<c>ePlugin</c>) already; naming it here only adds a version constraint.
+    /// A plugin cannot be both a required and an optional dependency, and must not depend on itself, also not through
+    /// other plugins: such a cycle fails the activation.
+    /// </remarks>
     /// <returns>The builder itself.</returns>
     IEEditorPluginBuilder AddPluginDependency(string pluginSlug, string? version = null);
 

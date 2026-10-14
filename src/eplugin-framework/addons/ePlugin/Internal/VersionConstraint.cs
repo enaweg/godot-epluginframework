@@ -40,6 +40,14 @@ internal static class VersionConstraint
         return minimum > 0 ? comparison >= 0 : comparison == 0;
     }
 
+    /// <summary>Whether <paramref name="constraint"/> can be compared with versions.</summary>
+    public static bool IsValid(string? constraint)
+    {
+        var text = constraint?.Trim() ?? "";
+        var minimum = text.StartsWith(">=", System.StringComparison.Ordinal) ? 2 : text.StartsWith('>') ? 1 : 0;
+        return SemVer.TryParse(text[minimum..], out _);
+    }
+
     private static SemVer Numbers(SemVer version) => new(version.Major, version.Minor, version.Patch, null, version.Revision);
 }
 #endif

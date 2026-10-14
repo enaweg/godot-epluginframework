@@ -12,6 +12,12 @@ namespace Enaweg.Plugin;
 /// (<see cref="IEEditorPluginBuilder.AddOptionalPluginDependency"/>) is built through this interface alone —
 /// nested recipes cannot declare further dependencies.
 /// All methods return the builder itself to support a fluent call chain.
+/// <para>
+/// Declarations are checked as they are made: an empty name or path, an invalid NuGet package id or project path, a
+/// malformed plugin slug or version constraint, or two declarations that contradict each other (one package with two
+/// versions, one autoload name with two paths) throw an <see cref="System.ArgumentException"/>, which fails the
+/// activation with that message. Declaring the same thing twice counts once.
+/// </para>
 /// </remarks>
 public interface IEEditorPluginRecipeBuilder
 {
