@@ -1,0 +1,12 @@
+<Project>
+  <PropertyGroup>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <RunAnalyzersDuringBuild>true</RunAnalyzersDuringBuild>
+    <AnalysisLevel>8.0-recommended</AnalysisLevel>
+  </PropertyGroup>
+
+  <!-- Keep a separate report for each project, including the helper's project reference. -->
+  <PropertyGroup Condition="'$(CIStaticAnalysis)' == 'true'">
+    <ErrorLog>$(MSBuildThisFileDirectory)../artifacts/static-analysis/$(MSBuildProjectName).sarif,version=2.1</ErrorLog>
+  </PropertyGroup>
+</Project>

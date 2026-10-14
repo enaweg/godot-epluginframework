@@ -63,7 +63,8 @@ Godot, with plugins in a temporary addons folder, a `RecordingCli` and real stat
 project assembly, so they use `internal` members; don't reach private ones through reflection. Known failures on
 Windows: two `ProgressSessionTests` read a command file another handle keeps open.
 
-There is no lint command configured beyond the `.editorconfig` (UTF-8 charset only).
+Static analysis uses SDK analyzers during builds and `actionlint` for workflows. See
+`docs/static-analysis.md` for local commands and CI policy. `.editorconfig` still specifies UTF-8 only.
 
 Documentation screenshots (`docs/images`) are regenerated with `tools/screenshots/capture.sh` (needs a desktop session
 with X11 or Xwayland, `GODOT_BIN`, python3 with python-xlib and Pillow; `EPLUGIN_SCREENSHOTS_DARK=1` on GNOME). It

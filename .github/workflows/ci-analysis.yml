@@ -1,0 +1,84 @@
+name: CI-Analysis
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: analysis-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  managed-analysis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      DOTNET_NOLOGO: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          # Update deliberately: this SDK matches the reviewed analyzer baseline.
+          dotnet-version: 10.0.401
+
+      - name: Restore and audit the Godot project
+        run: |
+          dotnet restore src/eplugin-framework/EPluginFramework.sln --force \
+            -p:NuGetAudit=true -p:NuGetAuditMode=all -p:NuGetAuditLevel=high \
+            -warnaserror:NU1900,NU1903,NU1904
+
+      - name: Restore and audit the progress helper and tests
+        id: restore_helper
+        run: |
+          dotnet restore src/activation-progress.Tests/ActivationProgress.Tests.csproj --force \
+            -p:NuGetAudit=true -p:NuGetAuditMode=all -p:NuGetAuditLevel=high \
+            -warnaserror:NU1900,NU1903,NU1904
+
+      - name: Create report directory
+        id: report_directory
+        run: mkdir -p artifacts/static-analysis
+
+      - name: Analyze the Godot editor project
+        # Debug defines TOOLS; export configurations omit most framework code.
+        run: |
+          dotnet build src/eplugin-framework/EPluginFramework.sln \
+            --configuration Debug --no-restore --no-incremental -p:CIStaticAnalysis=true
+
+      - name: Analyze the progress helper and tests
+        # Still analyze the other projects if the Godot build fails.
+        if: ${{ !cancelled() && steps.restore_helper.outcome == 'success' && steps.report_directory.outcome == 'success' }}
+        run: |
+          dotnet build src/activation-progress.Tests/ActivationProgress.Tests.csproj \
+            --configuration Debug --no-restore --no-incremental -p:CIStaticAnalysis=true
+
+      - name: Preserve compiler and analyzer reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: managed-analysis
+          path: artifacts/static-analysis/*.sarif
+          if-no-files-found: warn
+          retention-days: 14
+
+  workflow-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Check workflows and embedded shell scripts
+        uses: docker://rhysd/actionlint@sha256:6f03470d0152251d7f07f7c4dc019dbe7024c72cd952f839544c7798843efa8f # 1.7.11
