@@ -73,7 +73,7 @@ Godot lifecycle conventions and native interop need specific judgment.
 
 Whitespace/style enforcement and additional Sonar analyzers remain follow-up
 work. `.editorconfig` still specifies only UTF-8; no formatting rewrite is part
-of these checks. See the [tool investigation and rollout plan](implementation-plans/static-analysis-ci.md).
+of these checks.
 
 ## Run the checks locally
 

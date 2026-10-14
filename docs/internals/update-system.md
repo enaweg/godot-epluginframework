@@ -1,8 +1,7 @@
 # Update system internals
 
 How ePlugin's updater is built, for maintainers of the framework. The user-facing behaviour is described in
-[Updating plugins](../updating-plugins.md); measured engine behaviour and pending platform checks are in
-[update-system-spikes.md](../implementation-plans/update-system-spikes.md).
+[Updating plugins](../updating-plugins.md).
 
 ## Layout
 
