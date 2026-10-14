@@ -367,5 +367,90 @@ public class PluginStateStoreTests
         Assertions.AssertBool(store.TryComplete(id, [new("sample_plugin", "1.0", PersistedPluginState.Activated)])).IsFalse();
         Assertions.AssertBool(store.IsBlocked("sample_plugin")).IsTrue();
     }
+
+    [TestCase]
+    public void AnUnwritableLocalFileRefusesNewMarkersButStillCompletes()
+    {
+        var (_, path) = NewStore();
+        var log = new List<string>();
+        var store = new PluginStateStore(path, new RecordingLogger(log, "store"));
+        Assertions.AssertBool(store.Load()).IsTrue();
+        Assertions.AssertBool(store.TryCreateBaseline([])).IsTrue();
+        Assertions.AssertBool(store.TryBeginAttempt("sample_plugin", "1.0", PersistedPluginState.Activated, out var id)).IsTrue();
+        Assertions.AssertBool(store.TryBeginAttempt("waiting_plugin", "1.0", PersistedPluginState.Activated, out _)).IsTrue();
+        // something else took the local file's place, e.g. a folder created by a sync tool
+        File.Delete(path + ".user");
+        Directory.CreateDirectory(path + ".user");
+
+        Assertions.AssertBool(store.TryBeginAttempt("other_plugin", "1.0", PersistedPluginState.Activated, out var refused)).IsFalse();
+        Assertions.AssertObject(refused).IsEqual(Guid.Empty);
+        Assertions.AssertBool(store.TryAddParticipant(id, "other_plugin", "1.0", PersistedPluginState.Activated)).IsFalse();
+        Assertions.AssertBool(store.TryFail(id, PersistedPluginState.Failed, "solution_build_failed")).IsFalse();
+        Assertions.AssertBool(log.Any(l => l.StartsWith("error: store: Cannot save local plugin state", StringComparison.Ordinal))).IsTrue();
+        Assertions.AssertBool(Directory.GetFiles(Path.GetDirectoryName(path)!, "*.tmp-*").Length == 0).IsTrue();
+
+        // the shared file is what counts; the marker that cannot be removed is ignored once it is completed
+        Assertions.AssertBool(store.TryComplete(id, [new("sample_plugin", "1.0", PersistedPluginState.Activated)])).IsTrue();
+        Assertions.AssertObject(store.GetShared("sample_plugin")!.State).IsEqual(PersistedPluginState.Activated);
+        Assertions.AssertBool(store.IsBlocked("sample_plugin")).IsFalse();
+        Assertions.AssertBool(store.IsBlocked("waiting_plugin")).IsTrue();
+        Assertions.AssertBool(log.Any(l => l.StartsWith("warn: store: Completed plugin state was saved", StringComparison.Ordinal))).IsTrue();
+    }
+
+    [TestCase]
+    public void AnUnwritableSharedFileFailsTheBaseline()
+    {
+        var (_, path) = NewStore();
+        var log = new List<string>();
+        var store = new PluginStateStore(path, new RecordingLogger(log, "store"));
+        Assertions.AssertBool(store.Load()).IsTrue();
+        Directory.CreateDirectory(path);
+
+        Assertions.AssertBool(store.TryCreateBaseline([])).IsFalse();
+
+        Assertions.AssertBool(store.HasSharedFile).IsFalse();
+        Assertions.AssertBool(log.Any(l => l.StartsWith("error: store: Cannot save finalized plugin state", StringComparison.Ordinal))).IsTrue();
+    }
+
+    [TestCase]
+    public void InvalidRequestsAreRefusedWithoutWriting()
+    {
+        var (_, path) = NewStore();
+        var log = new List<string>();
+        var store = new PluginStateStore(path, new RecordingLogger(log, "store"));
+        Assertions.AssertBool(store.Load()).IsTrue();
+
+        Assertions.AssertBool(store.TryCreateBaseline([
+            new SharedPluginState("sample_plugin", "1.0", PersistedPluginState.Activated),
+            new SharedPluginState("sample_plugin", "2.0", PersistedPluginState.Activated)
+        ])).IsFalse();
+        Assertions.AssertBool(log.Any(l => l.Contains("Cannot create plugin state baseline for sample_plugin"))).IsTrue();
+        Assertions.AssertBool(File.Exists(path)).IsFalse();
+
+        Assertions.AssertBool(store.TryCreateBaseline([])).IsTrue();
+        Assertions.AssertBool(store.TryAddParticipant(Guid.NewGuid(), "sample_plugin", "1.0", PersistedPluginState.Activated)).IsFalse();
+        Assertions.AssertBool(store.TryBeginAttempt("sample_plugin", "1.0", PersistedPluginState.Activated, out var id)).IsTrue();
+        Assertions.AssertBool(store.TryFail(id, PersistedPluginState.Activated, "not a failure")).IsFalse();
+        Assertions.AssertBool(store.TryFail(id, PersistedPluginState.Failed, " ")).IsFalse();
+        Assertions.AssertBool(store.TryFail(Guid.NewGuid(), PersistedPluginState.Failed, "unknown_attempt")).IsFalse();
+        Assertions.AssertString(store.GetLocal("sample_plugin")!.Reason).IsEqual("attempt_in_progress");
+    }
+
+    [TestCase]
+    public void ALocalFileWithAnInvalidAttemptMakesTheStoreReadOnly()
+    {
+        var (store, path) = NewStore();
+        Assertions.AssertBool(store.TryCreateBaseline([])).IsTrue();
+        Assertions.AssertBool(store.TryBeginAttempt("sample_plugin", "1.0", PersistedPluginState.Activated, out _)).IsTrue();
+        var local = File.ReadAllText(path + ".user").Replace("\"attempt_in_progress\"", "\"\"");
+        File.WriteAllText(path + ".user", local);
+
+        var reloaded = new PluginStateStore(path, new NullLogger());
+
+        Assertions.AssertBool(reloaded.Load()).IsFalse();
+        Assertions.AssertBool(reloaded.IsReadOnly).IsTrue();
+        Assertions.AssertBool(reloaded.TryComplete(Guid.NewGuid(), [])).IsFalse();
+        Assertions.AssertString(File.ReadAllText(path + ".user")).IsEqual(local);
+    }
 }
 #endif

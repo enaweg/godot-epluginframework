@@ -102,5 +102,51 @@ public class PlainPluginObserverTests
         Assertions.AssertObject(_store.GetShared("owned")).IsNull();
         Assertions.AssertObject(_store.GetShared("blocked")).IsNull();
     }
+
+    [TestCase]
+    public void APluginRecordedAsActivatedButMissingAtStartupIsReportedAndKept()
+    {
+        var log = new List<string>();
+        _store.TryCreateBaseline([new SharedPluginState("gone", "1.0", PersistedPluginState.Activated)]);
+        var observer = new PlainPluginObserver(_store, () => _enabled, _ => _version, _ => false, _ => false, new RecordingLogger(log, "observer"));
+
+        observer.Refresh();
+
+        Assertions.AssertThat(log).ContainsExactly(
+            "warn: observer: Plugin gone is disabled or missing but recorded as activated; persisted state was preserved.");
+        Assertions.AssertObject(_store.GetShared("gone")!.State).IsEqual(PersistedPluginState.Activated);
+    }
+
+    [TestCase]
+    public void APluginEnabledLaterWithoutVersionIsRecordedAsInvalid()
+    {
+        _store.TryCreateBaseline([]);
+        _observer.Refresh();
+        _version = "";
+
+        _enabled.Add("plain");
+        _observer.Refresh();
+
+        Assertions.AssertObject(_store.GetShared("plain")).IsNull();
+        Assertions.AssertString(_store.GetLocal("plain")!.Reason).IsEqual("invalid_plugin_version");
+    }
+
+    [TestCase]
+    public void AStateFileEditedOnDiskIsNotOverwritten()
+    {
+        var log = new List<string>();
+        _store.TryCreateBaseline([]);
+        var observer = new PlainPluginObserver(_store, () => _enabled, _ => _version, _ => false, _ => false, new RecordingLogger(log, "observer"));
+        observer.Refresh();
+        File.AppendAllText(_path, " ");
+        var edited = File.ReadAllText(_path);
+
+        _enabled.Add("plain");
+        observer.Refresh();
+
+        Assertions.AssertString(File.ReadAllText(_path)).IsEqual(edited);
+        Assertions.AssertBool(log.Contains("error: observer: Cannot record observed state for plain plugin plain; persisted state was preserved.")).IsTrue();
+        Assertions.AssertBool(_store.IsBlocked("plain")).IsTrue();
+    }
 }
 #endif

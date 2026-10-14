@@ -169,6 +169,104 @@ public class EGlobalLifecycleTests
     }
 
     [TestCase]
+    public void APlainPluginEnabledInProjectSettingsWaitsForItsLicense()
+    {
+        _fixture.AddPlainPlugin("tool", extraConfig: "license_required=true");
+        File.WriteAllText(Path.Combine(_fixture.Addon("tool"), "LICENSE"), "Terms");
+        _fixture.Global.InitializePluginToggles();
+
+        // without dialogs it cannot be accepted and is disabled again
+        _fixture.Host.Enabled.Add("tool");
+        _fixture.Global.ObservePluginToggles();
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("tool")).IsFalse();
+        Assertions.AssertObject(_fixture.Global.PendingLicenseReview).IsNull();
+        Assertions.AssertBool(_fixture.Log.Any(l => l.StartsWith("error:", StringComparison.Ordinal) &&
+                                                    l.Contains("tool was not enabled: the license of tool"))).IsTrue();
+
+        _fixture.Host.Dialogs = true;
+        _fixture.Host.Enabled.Add("tool");
+        _fixture.Global.ObservePluginToggles();
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("tool")).IsFalse();
+        var review = _fixture.Global.PendingLicenseReview!;
+        Assertions.AssertString(review.Activations.Single().Slug).IsEqual("tool");
+
+        review.Accept("tool");
+        _fixture.Global.CompleteLicenseReview(review);
+        EGlobal.RunPosted();
+        _fixture.Global.ObservePluginToggles();
+
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("tool")).IsTrue();
+        Assertions.AssertBool(_fixture.Store.IsLicenseAccepted("tool", "LICENSE")).IsTrue();
+    }
+
+    [TestCase]
+    public void APlainPluginNothingNeedsIsToggledWithoutWork()
+    {
+        _fixture.AddPlainPlugin("tool");
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"));
+        _fixture.Enable("app");
+        _fixture.Global.InitializePluginToggles();
+        var start = _fixture.Operations.Count;
+
+        _fixture.Host.Enabled.Add("tool");
+        _fixture.Global.ObservePluginToggles();
+        _fixture.Host.Enabled.Remove("tool");
+        _fixture.Global.ObservePluginToggles();
+
+        Assertions.AssertThat(OperationsSince(start)).IsEmpty();
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Activated);
+        Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsFalse();
+    }
+
+    [TestCase]
+    public void OptionalRecipesOfAPlainPluginFailWhenTheStateCannotBeRecorded()
+    {
+        _fixture.AddPlainPlugin("extra");
+        _fixture.AddEPlugin("app", b => b.AddOptionalPluginDependency("extra", null, optional => optional.AddNuget("App.Extra")));
+        _fixture.Enable("app");
+        _fixture.Global.InitializePluginToggles();
+        var start = _fixture.Operations.Count;
+        // a state file written by a newer framework is read-only
+        var path = Path.Combine(_fixture.Root, "future-state.json");
+        File.WriteAllText(path, "{\"schemaVersion\": 99, \"plugins\": [], \"attempts\": []}");
+        var store = new PluginStateStore(path, new RecordingLogger(_fixture.Log, "store"));
+        store.Load();
+        _fixture.Global.StateStore = store;
+
+        _fixture.Host.Enabled.Add("extra");
+        _fixture.Global.ObservePluginToggles();
+
+        Assertions.AssertThat(OperationsSince(start)).IsEmpty();
+        Assertions.AssertBool(_fixture.Log.Any(l => l.StartsWith("error:", StringComparison.Ordinal) &&
+                                                    l.Contains("Installing the optional recipes that extra satisfies failed"))).IsTrue();
+        Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsFalse();
+    }
+
+    [TestCase]
+    public void RemovingOptionalRecipesOfAPlainPluginFailsWhenTheStateCannotBeRecorded()
+    {
+        _fixture.AddPlainPlugin("extra");
+        _fixture.AddEPlugin("app", b => b.AddOptionalPluginDependency("extra", null, optional => optional.AddNuget("App.Extra")));
+        _fixture.Enable("extra");
+        _fixture.Enable("app");
+        _fixture.Global.InitializePluginToggles();
+        var start = _fixture.Operations.Count;
+        var path = Path.Combine(_fixture.Root, "future-state.json");
+        File.WriteAllText(path, "{\"schemaVersion\": 99, \"plugins\": [], \"attempts\": []}");
+        var store = new PluginStateStore(path, new RecordingLogger(_fixture.Log, "store"));
+        store.Load();
+        _fixture.Global.StateStore = store;
+
+        _fixture.Host.Enabled.Remove("extra");
+        _fixture.Global.ObservePluginToggles();
+
+        Assertions.AssertThat(OperationsSince(start)).IsEmpty();
+        Assertions.AssertBool(_fixture.Log.Any(l => l.StartsWith("error:", StringComparison.Ordinal) &&
+                                                    l.Contains("Removing what needs extra failed"))).IsTrue();
+        Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsFalse();
+    }
+
+    [TestCase]
     public void AnOptionalPluginWithAnOlderVersionIsSkipped()
     {
         _fixture.AddPlainPlugin("extra", "0.9");
@@ -256,6 +354,95 @@ public class EGlobalLifecycleTests
     }
 
     [TestCase]
+    public void APluginWithoutVersionFailsUntilPluginCfgIsRepairedAndRetried()
+    {
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"), version: "");
+
+        _fixture.Enable("app");
+
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Error);
+        Assertions.AssertString(_fixture.Store.GetLocal("app")!.Reason).IsEqual("invalid_plugin_version");
+        Assertions.AssertThat(_fixture.Operations).IsEmpty();
+
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"), version: "1.2.0");
+        _fixture.Global.RetryFailedPlugins();
+
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Activated);
+        Assertions.AssertString(_fixture.Store.GetShared("app")!.Version).IsEqual("1.2.0");
+        Assertions.AssertObject(_fixture.Store.GetLocal("app")).IsNull();
+    }
+
+    [TestCase]
+    public void AFailedDeactivationIsRetried()
+    {
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"));
+        _fixture.Enable("app");
+        _fixture.Cli.BuildFails = true;
+
+        _fixture.Disable("app");
+
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Error);
+        Assertions.AssertObject(_fixture.Store.GetLocal("app")!.TargetState).IsEqual(PersistedPluginState.Deactivated);
+
+        _fixture.Cli.BuildFails = false;
+        var start = _fixture.Operations.Count;
+        _fixture.Global.RetryFailedPlugins();
+
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Deactivated);
+        Assertions.AssertThat(OperationsSince(start)).ContainsExactly("remove-nuget App.Package", "build");
+        Assertions.AssertObject(_fixture.Store.GetShared("app")!.State).IsEqual(PersistedPluginState.Deactivated);
+        Assertions.AssertObject(_fixture.Store.GetLocal("app")).IsNull();
+    }
+
+    [TestCase]
+    public void RetryRecreatesAnEPluginThatHasNoEditorInstance()
+    {
+        // e.g. after a restart: the failed attempt is on disk, but the plugin is disabled
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"));
+        Assertions.AssertBool(_fixture.Store.TryBeginAttempt("app", "1.0.0", PersistedPluginState.Activated, out var id)).IsTrue();
+        Assertions.AssertBool(_fixture.Store.TryFail(id, PersistedPluginState.Failed, "recipe_operation_failed")).IsTrue();
+
+        _fixture.Global.RetryFailedPlugins();
+
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Activated);
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsTrue();
+        Assertions.AssertThat(_fixture.Operations).ContainsExactly("add-nuget App.Package", "build");
+        Assertions.AssertObject(_fixture.Store.GetLocal("app")).IsNull();
+    }
+
+    [TestCase]
+    public void RetryLeavesAttemptsItCannotRepairBlocked()
+    {
+        _fixture.AddPlainPlugin("tool");
+        _fixture.AddEPlugin("broken", b => b.AddNuget("Broken.Package"));
+        _fixture.Host.Broken.Add("broken");
+        foreach (var slug in new[] { "tool", "broken" })
+        {
+            Assertions.AssertBool(_fixture.Store.TryBeginAttempt(slug, "1.0.0", PersistedPluginState.Activated, out var id)).IsTrue();
+            Assertions.AssertBool(_fixture.Store.TryFail(id, PersistedPluginState.Failed, "recipe_operation_failed")).IsTrue();
+        }
+
+        _fixture.Global.RetryFailedPlugins();
+
+        Assertions.AssertThat(_fixture.Operations).IsEmpty();
+        Assertions.AssertObject(_fixture.Store.GetLocal("tool")).IsNotNull();
+        Assertions.AssertObject(_fixture.Store.GetLocal("broken")).IsNotNull();
+        Assertions.AssertBool(_fixture.Log.Any(l => l.Contains("Cannot retry tool: recipe_operation_failed requires manual recovery"))).IsTrue();
+        Assertions.AssertBool(_fixture.Log.Any(l => l.Contains("Cannot retry broken: no editor plugin instance is available"))).IsTrue();
+    }
+
+    [TestCase]
+    public void DisablingTheFrameworkIsRecordedInTheSharedState()
+    {
+        _fixture.Global.RecordFrameworkDisabled(_fixture.Framework);
+
+        var framework = _fixture.Store.GetShared(_fixture.Framework.GetPluginSlug())!;
+        Assertions.AssertObject(framework.State).IsEqual(PersistedPluginState.Deactivated);
+        Assertions.AssertString(framework.Version).IsNotEmpty();
+        Assertions.AssertObject(_fixture.Store.GetLocal(framework.Slug)).IsNull();
+    }
+
+    [TestCase]
     public void AFailedBuildFailsTheTransition()
     {
         _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"));
@@ -321,6 +508,28 @@ public class EGlobalLifecycleTests
         Assertions.AssertThat(welcomes.Select(w => w.Slug).ToArray()).ContainsExactly("app");
         _fixture.Global.CompleteWelcomes(welcomes);
         Assertions.AssertBool(_fixture.Store.IsWelcomeShown("app")).IsTrue();
+    }
+
+    [TestCase]
+    public void WelcomePagesComeFromTheRecipeOrTheReadmeAndAreShownAgainWhenNotSaved()
+    {
+        _fixture.AddEPlugin("app", b => b.SetWelcome("res://addons/app/WELCOME.md"));
+        _fixture.AddPlainPlugin("tool");
+        File.WriteAllText(Path.Combine(_fixture.Addon("tool"), "README.md"), "# Tool");
+        _fixture.AddPlainPlugin("quiet");
+
+        Assertions.AssertString(_fixture.Global.DescribeWelcome("app")!.Source).IsEqual("WELCOME.md");
+        Assertions.AssertString(_fixture.Global.DescribeWelcome("tool")!.Text).IsEqual("# Tool");
+        Assertions.AssertObject(_fixture.Global.DescribeWelcome("quiet")).IsNull();
+
+        // a project without a state file yet cannot keep what was shown
+        var store = new PluginStateStore(Path.Combine(_fixture.Root, "unsaved-state.json"), new RecordingLogger(_fixture.Log, "store"));
+        store.Load();
+        _fixture.Global.StateStore = store;
+        _fixture.Global.CompleteWelcomes([_fixture.Global.DescribeWelcome("tool")!]);
+
+        Assertions.AssertBool(_fixture.Log.Any(l => l.StartsWith("warn:", StringComparison.Ordinal) &&
+                                                    l.Contains("Shown welcome pages could not be saved"))).IsTrue();
     }
 
     [TestCase]

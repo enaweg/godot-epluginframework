@@ -34,9 +34,9 @@ internal sealed class LifecycleFixture : IDisposable
         Store.Load();
         Store.TryCreateBaseline([]);
         Global.StateStore = Store;
-        var framework = new EPluginPlugin();
-        _objects.Add(framework);
-        Global.Attach(framework, _loggers, Cli);
+        Framework = new EPluginPlugin();
+        _objects.Add(Framework);
+        Global.Attach(Framework, _loggers, Cli);
     }
 
     public string Root { get; }
@@ -44,6 +44,9 @@ internal sealed class LifecycleFixture : IDisposable
     public EGlobal Global { get; }
     public PluginStateStore Store { get; }
     public RecordingCli Cli { get; }
+
+    /// <summary>The framework's own editor plugin, which builds the solution.</summary>
+    public EPluginPlugin Framework { get; }
 
     /// <summary>The recipe operations and builds, e.g. <c>add-nuget a.Package</c>, <c>build</c>.</summary>
     public List<string> Operations { get; } = [];
