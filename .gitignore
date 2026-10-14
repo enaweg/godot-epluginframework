@@ -25,6 +25,8 @@ obj/
 
 # gdUnit Test ignores
 reports/
+artifacts/static-analysis/
+__pycache__/
 **/addons/gdUnit4/GdUnitRunner.cfg
 
 build/

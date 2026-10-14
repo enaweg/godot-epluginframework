@@ -1,0 +1,60 @@
+name: CI-CodeQL
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  codeql-csharp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      DOTNET_NOLOGO: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: 10.0.401
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@f3c49fd1ef3281abc41069b3dd22807a60c963f6 # v4
+        with:
+          languages: csharp
+          build-mode: manual
+          queries: security-extended
+
+      - name: Build the Godot editor project under tracing
+        # Debug includes TOOLS and Godot's generated code in the extraction.
+        run: |
+          dotnet build src/eplugin-framework/EPluginFramework.sln \
+            --configuration Debug --no-incremental
+
+      - name: Build the progress helper and tests under tracing
+        run: |
+          dotnet build src/activation-progress.Tests/ActivationProgress.Tests.csproj \
+            --configuration Debug --no-incremental
+
+      - name: Analyze and upload security results
+        uses: github/codeql-action/analyze@f3c49fd1ef3281abc41069b3dd22807a60c963f6 # v4
+        with:
+          category: /language:csharp

@@ -56,7 +56,7 @@ dotnet test "src/eplugin-framework/EPluginFramework.sln" --settings "src/eplugin
 - Keep recipe creation deterministic and side-effect free.
 - Preserve existing public API and plugin lifecycle behavior unless the task explicitly changes it.
 - Follow `.editorconfig` and existing C# style.
-- There is no separate lint command configured.
+- Static analysis uses SDK analyzers during builds and `actionlint` for workflows. See `docs/static-analysis.md` for local commands and CI policy.
 
 ## Commit and PR messages
 

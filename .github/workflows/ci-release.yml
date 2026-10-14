@@ -88,7 +88,7 @@ jobs:
         run: |
           mkdir out/
           cd src/eplugin-framework
-          zip -r ../../out/ePlugin-v${VERSION}.zip addons/ePlugin
+          zip -r "../../out/ePlugin-v${VERSION}.zip" addons/ePlugin
 
       - name: Build Changelog
         id: build_changelog
