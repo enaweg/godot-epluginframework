@@ -46,6 +46,7 @@ dotnet test "src/eplugin-framework/EPluginFramework.sln" --settings "src/eplugin
 - Recipe changes should go through the `IDotnetCli` abstraction; new CLI operations must be
   implemented for both .NET 9 and .NET 10 CLI implementations. Pass arguments unquoted and project paths as
   absolute paths.
+- Read `docs/internals/update-system.md` before changing the update system under `Internal/Update/`.
 - `EGlobal` reaches the editor only through `IEditorHost`; lifecycle tests use `tests/LifecycleFixture.cs` with a fake
   editor. Tests use `internal` members, not reflection.
 - Keep `IEEditorPlugin` as an interface; this works around Godot 4.5+ `EditorPlugin` regressions.

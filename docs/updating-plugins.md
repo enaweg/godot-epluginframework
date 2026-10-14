@@ -173,3 +173,5 @@ If automatic recovery cannot run, close the editor, restore `updates/<id>/backup
 | `builtin_update_sites` | `true` | Uses ePlugin's [built-in update sites](#built-in-update-sites) for plugins that name no working update site. |
 
 Update journals and recipe snapshots use versioned, backward-compatible readers. Future framework releases must preserve that contract and keep the shared and local state schemas readable by a rolled-back framework. Unsupported future journals need manual repair. Updates do not install missing addons, resolve remote plugin dependencies, or run migration scripts.
+
+How the updater is built (sources, staging, groups, journals and recovery) is described for maintainers in [Update system internals](internals/update-system.md).
