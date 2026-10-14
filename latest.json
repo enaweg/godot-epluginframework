@@ -1,8 +1,8 @@
 {
- "commit": "659bbaa6769ba1db6a0da1e7bee266b2158f5e74",
- "date": "2026-10-14T16:07:17Z",
- "covered": 6109,
- "coverable": 8790,
+ "commit": "fc57fee06cb05235d5cafd80d663e2e5797f8ed6",
+ "date": "2026-10-14T16:10:16Z",
+ "covered": 6106,
+ "coverable": 8788,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -13,8 +13,8 @@
    9
   ],
   "src/eplugin-framework/addons/ePlugin/EPluginPlugin.cs": [
-   157,
-   252
+   156,
+   251
   ],
   "src/eplugin-framework/addons/ePlugin/EditorPluginExtensions.cs": [
    46,
@@ -125,8 +125,8 @@
    72
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.cs": [
-   742,
-   1000
+   738,
+   996
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EPluginProgress.cs": [
    1,
@@ -213,8 +213,8 @@
    69
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PluginContext.cs": [
-   17,
-   17
+   14,
+   14
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PluginStateStore.cs": [
    379,
@@ -250,7 +250,7 @@
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/GitSource.cs": [
    171,
-   198
+   199
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/InterimBridge.cs": [
    41,
@@ -293,8 +293,8 @@
    26
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/ReleaseSources.cs": [
-   85,
-   86
+   90,
+   91
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/SafeZipExtractor.cs": [
    57,
