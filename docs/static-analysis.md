@@ -29,9 +29,40 @@ solution; the framework's best-effort helper publish is not an analysis gate.
 Setting `CIStaticAnalysis=true` writes SARIF 2.1 reports to
 `artifacts/static-analysis/`, with one filename per project. CI preserves the
 reports as the `managed-analysis` artifact for 14 days, including reports from
-failed builds. These files are gitignored. They are artifacts rather than uploads
-to GitHub code scanning; compiler reports include source-suppressed diagnostics
-from Godot-generated code and need filtering before a useful code-scanning upload.
+failed builds. These files are gitignored. The reporting script also merges owned
+source findings into `github.sarif`, removing suppressed, generated, example and
+vendored diagnostics and normalizing locations to repository-relative paths.
+The filtered report is uploaded to GitHub code scanning with the `dotnet` category,
+separate from CodeQL. Raw reports remain available for full inspection.
+
+## Where results are visible
+
+| View | What appears |
+| --- | --- |
+| PR conversation | A single bot comment, updated on each run, with audit/build status, per-project error/warning/note counts, frequent rules, and a link to the run. |
+| PR checks and source annotations | Native job status checks, up to ten immediate owned-source diagnostic annotations, and code-scanning annotations for changed lines. |
+| Actions run summary | The same numeric analysis table and a workflow-lint status summary, including when a build or audit fails. |
+| Repository Security / code scanning | Owned-source `.NET SDK analyzers` findings and separate CodeQL alerts, tracked across commits once scans run on `main`. |
+| Artifacts and API consumers | Raw SARIF, filtered `github.sarif`, `summary.md`, and `metrics.json` with per-project counts, totals, per-rule counts, excluded counts, and report completeness. |
+| README | Static-analysis and CodeQL badges show the latest `main` workflow status. |
+
+Counts are current totals, not a computed delta against `main`. Notes are counted
+separately from warnings. Missing reports say **not produced**, rather than zero;
+incomplete sets are not uploaded, to avoid incorrectly resolving earlier alerts
+from projects that were not analyzed. Code-scanning annotations compare findings
+using GitHub's own tracking, with upload-sarif generating fingerprints.
+
+Fork PRs retain checks, annotations and run summaries; their read-only tokens
+cannot write the conversation comment. The comment is limited to same-repository
+PRs and uses the workflow's GitHub token, without additional service secrets.
+Custom numeric trends are not automatically added to GitHub's general Insights
+charts; the JSON artifact provides those values for a future dashboard. Badges
+and scheduled scans start showing `main` results after these workflows land.
+
+The reporting tests run in CI and can be run locally with
+`python -m unittest discover -s tools/ci`. To render existing local SARIF reports,
+run `python tools/ci/report_analysis.py` from the repository root. In Actions, this
+also writes the job summary and annotations.
 
 Recommended analyzer warnings are not globally treated as errors. The initial
 Windows/SDK 10 baseline contained 240 Godot-project warnings (64 framework,
