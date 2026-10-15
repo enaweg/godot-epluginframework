@@ -14,8 +14,8 @@ using Godot;
 namespace Enaweg.Plugin.DocScreenshots;
 
 /// <summary>
-/// Opens the framework's dialogs with sample data and has capture.py photograph each window with its frame.
-/// capture.sh copies this file into the project and registers it as an autoload for one editor run; it is not part of
+/// Opens the framework's dialogs with sample data and has capture.cs photograph each window with its frame.
+/// capture.cs copies this file into the project and registers it as an autoload for one editor run; it is not part of
 /// the framework. Every dialog is opened the way the framework opens it, so the screenshots show the real layout.
 /// </summary>
 [Tool]
@@ -216,11 +216,12 @@ public partial class DocScreenshots : Node
 
     private void Capture(string name, string window, params string[] extra)
     {
-        var args = new List<string> { _capture, "--out", Path.Combine(_out, name + ".png") };
+        // EPLUGIN_SCREENSHOTS_CAPTURE is the running capture.cs program, which captures one window with `window`.
+        var args = new List<string> { "window", "--out", Path.Combine(_out, name + ".png") };
         if (window.Length > 0) args.AddRange(["--window", window]);
         args.AddRange(extra);
         var output = new Godot.Collections.Array();
-        var exit = OS.Execute("python3", args.ToArray(), output, true);
+        var exit = OS.Execute(_capture, args.ToArray(), output, true);
         GD.Print($"DocScreenshots {name}: {string.Join("", output.Select(o => o.AsString())).Trim()}");
         if (exit != 0) throw new InvalidOperationException($"Capturing {name} failed with exit code {exit}.");
     }

@@ -49,16 +49,24 @@ Run a single test:
 dotnet test "src/eplugin-framework/EPluginFramework.sln" --settings "src/eplugin-framework/.runsettings" --filter "FullyQualifiedName~IDotnetCliTests.VersionTest"
 ```
 Run the same tests with line coverage of `addons/ePlugin` (Cobertura report; needs `dotnet-coverage` on PATH, after a
-Debug build). Godot loads the assembly from memory, so `dotnet test --collect` sees none of it; the script instruments
+Debug build). Godot loads the assembly from memory, so `dotnet test --collect` sees none of it; the tool instruments
 the built DLL on disk and restores it afterwards. CI reports it per PR and on the `coverage` branch
 (`docs/code-coverage.md`):
 ```
-tools/coverage.sh coverage.cobertura.xml
+dotnet run tools/coverage.cs -- coverage.cobertura.xml
 ```
 The progress helper's command handling has plain xUnit tests that need no Godot:
 ```
 dotnet test "src/activation-progress.Tests/ActivationProgress.Tests.csproj"
 ```
+Repository tooling is C# on .NET 10, not Python or shell scripts: single-file apps in `tools/` (`dotnet run tools/<name>.cs
+-- <args>`: `coverage.cs`, `progress_smoke.cs`, `screenshots/capture.cs`, the known-plugins generators) and the CI
+reports project `tools/ci-reports` (coverage comment and `coverage` branch, static-analysis summary), tested with:
+```
+dotnet test "tools/ci-reports.Tests/CiReports.Tests.csproj"
+```
+CI installs that SDK separately (`$RUNNER_TEMP/dotnet-tools`) where the job's own SDK must stay in charge of building and
+testing, so tools that start `dotnet` themselves (coverage.cs) use the `dotnet` on `PATH`.
 Alternative: gdUnit4's own CLI runner (`src/eplugin-framework/addons/gdUnit4/runtest.cmd` /
 `runtest.sh`), which takes `--godot_binary <path>` or the same `GODOT_BIN` env var.
 
@@ -73,8 +81,8 @@ Windows: two `ProgressSessionTests` read a command file another handle keeps ope
 Static analysis uses SDK analyzers during builds and `actionlint` for workflows. See
 `docs/static-analysis.md` for local commands and CI policy. `.editorconfig` still specifies UTF-8 only.
 
-Documentation screenshots (`docs/images`) are regenerated with `tools/screenshots/capture.sh` (needs a desktop session
-with X11 or Xwayland, `GODOT_BIN`, python3 with python-xlib and Pillow; `EPLUGIN_SCREENSHOTS_DARK=1` on GNOME). It
+Documentation screenshots (`docs/images`) are regenerated with `dotnet run tools/screenshots/capture.cs` (needs a
+desktop session with X11 or Xwayland and `GODOT_BIN`; `EPLUGIN_SCREENSHOTS_DARK=1` on GNOME). It
 injects `tools/screenshots/DocScreenshots.cs` as an autoload for one editor run, opens every dialog with sample data,
 captures each window with its frame, and restores the project afterwards. Add new dialogs there.
 

@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- Unit tests of the progress helper's command handling; smoke.py covers the published helper with its windows. -->
+  <!-- Unit tests of the progress helper's command handling; tools/progress_smoke.cs covers the published helper with its windows. -->
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <RollForward>Major</RollForward>

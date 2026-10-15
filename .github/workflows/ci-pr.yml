@@ -22,6 +22,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      - name: Setup .NET for the tools
+        # The C# tools under tools/ need .NET 10. A separate installation, so the SDK below still decides what builds and
+        # tests the helper.
+        uses: actions/setup-dotnet@v6
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet-tools
+        with:
+          dotnet-version: 10.0.x
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
@@ -41,8 +50,7 @@ jobs:
           dotnet publish src/activation-progress/ActivationProgress.csproj \
             --configuration Release -p:DebugType=None --output "$output"
           test "$(find "$output" -maxdepth 1 -type f | wc -l)" -eq 2
-          python="$(command -v python || command -v python3)"
-          "$python" src/activation-progress/smoke.py dotnet "$output/ActivationProgress.dll"
+          "$temp/dotnet-tools/dotnet" run tools/progress_smoke.cs -- dotnet "$output/ActivationProgress.dll"
 
   build-and-test:
     # The installed SDK decides which dotnet CLI generation ePlugin uses (DotnetCli9 or DotnetCli10).
@@ -65,6 +73,15 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+
+      - name: Setup .NET for the tools
+        # The C# tools under tools/ need .NET 10. A separate installation, so the SDK below still decides what builds and
+        # tests the project (and which dotnet CLI generation ePlugin uses).
+        uses: actions/setup-dotnet@v6
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet-tools
+        with:
+          dotnet-version: 10.0.x
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
@@ -101,7 +118,7 @@ jobs:
             --configuration Release -p:DebugType=None \
             --output src/eplugin-framework/addons/ePlugin/progress
           test "$(find src/eplugin-framework/addons/ePlugin/progress -maxdepth 1 -type f -name 'ActivationProgress.*' | wc -l)" -eq 2
-          xvfb-run --auto-servernum python3 src/activation-progress/smoke.py \
+          xvfb-run --auto-servernum "$RUNNER_TEMP/dotnet-tools/dotnet" run tools/progress_smoke.cs -- \
             dotnet src/eplugin-framework/addons/ePlugin/progress/ActivationProgress.dll
 
       - name: Rebuild Godot project cache
@@ -115,13 +132,13 @@ jobs:
           echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
 
       - name: Run tests with coverage
-        # Godot loads the project assembly from memory, out of reach of `dotnet test --collect`; the script instruments
-        # the built assembly instead, runs dotnet test and restores it.
+        # Godot loads the project assembly from memory, out of reach of `dotnet test --collect`; the tool instruments
+        # the built assembly instead, runs dotnet test (with the dotnet on PATH) and restores it.
         env:
           REPORT: ${{ runner.temp }}/coverage/${{ matrix.sdk }}.cobertura.xml
         run: |
           xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" \
-            bash tools/coverage.sh "$REPORT" --verbosity normal -m:1
+            "$RUNNER_TEMP/dotnet-tools/dotnet" run tools/coverage.cs -- "$REPORT" --verbosity normal -m:1
 
       - name: Upload coverage report
         if: ${{ !cancelled() }}
@@ -177,7 +194,10 @@ jobs:
         if: ${{ hashFiles('coverage/*.cobertura.xml') != '' }}
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 8.0.x
+          # 8 for ReportGenerator, 10 for the coverage report tool (tools/ci-reports).
+          dotnet-version: |
+            8.0.x
+            10.0.x
 
       - name: Create HTML report
         if: ${{ hashFiles('coverage/*.cobertura.xml') != '' }}
@@ -209,7 +229,7 @@ jobs:
           for report in coverage/*.cobertura.xml; do args+=(--report "$report"); done
           if [[ -s "$RUNNER_TEMP/baseline.json" ]]; then args+=(--baseline "$RUNNER_TEMP/baseline.json"); fi
           if [[ -f "$RUNNER_TEMP/pr.diff" ]]; then args+=(--diff "$RUNNER_TEMP/pr.diff"); fi
-          python3 tools/ci/report_coverage.py summary "${args[@]}" --root "$GITHUB_WORKSPACE" \
+          dotnet run --project tools/ci-reports -- coverage summary "${args[@]}" --root "$GITHUB_WORKSPACE" \
             --commit "$COMMIT" --label "$LABEL" --repository-url "$REPOSITORY_URL" \
             --html-url "$HTML_URL" --run-url "$RUN_URL" --output-dir artifacts/coverage
           cat artifacts/coverage/summary.md >> "$GITHUB_STEP_SUMMARY"
@@ -258,6 +278,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
       - name: Download measurement
         uses: actions/download-artifact@v8
         with:
@@ -278,7 +303,7 @@ jobs:
           else
             git worktree add --orphan -b coverage "$history"
           fi
-          python3 tools/ci/report_coverage.py history --coverage "$RUNNER_TEMP/coverage/coverage.json" \
+          dotnet run --project tools/ci-reports -- coverage history --coverage "$RUNNER_TEMP/coverage/coverage.json" \
             --branch-dir "$history" --repository-url "$REPOSITORY_URL"
           git -C "$history" add --all
           git -C "$history" commit --quiet -m "chore: record coverage of ${COMMIT:0:7}"

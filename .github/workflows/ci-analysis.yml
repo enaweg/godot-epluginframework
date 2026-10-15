@@ -38,7 +38,7 @@ jobs:
           dotnet-version: 10.0.401
 
       - name: Check analysis reporting
-        run: python3 -m unittest discover -s tools/ci
+        run: dotnet test tools/ci-reports.Tests/CiReports.Tests.csproj
 
       - name: Restore and audit the Godot project
         id: restore_framework
@@ -82,7 +82,7 @@ jobs:
           BUILD_FRAMEWORK: ${{ steps.build_framework.outcome }}
           BUILD_HELPER: ${{ steps.build_helper.outcome }}
           ANALYSIS_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: python3 tools/ci/report_analysis.py
+        run: dotnet run --project tools/ci-reports -- analysis
 
       - name: Upload owned-code findings to GitHub code scanning
         if: ${{ !cancelled() && steps.report.outputs.reports_complete == 'true' }}
@@ -139,4 +139,4 @@ jobs:
         env:
           LINT_STATUS: ${{ steps.lint.outcome }}
         run: |
-          printf '### Workflow lint\n\nactionlint, ShellCheck and pyflakes: **%s**\n' "$LINT_STATUS" >> "$GITHUB_STEP_SUMMARY"
+          printf '### Workflow lint\n\nactionlint and ShellCheck: **%s**\n' "$LINT_STATUS" >> "$GITHUB_STEP_SUMMARY"
