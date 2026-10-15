@@ -21,6 +21,15 @@ jobs:
           fetch-depth: 200
           fetch-tags: true
 
+      - name: Setup .NET for the tools
+        # The C# tools under tools/ need .NET 10. A separate installation, so the SDK below still decides what builds, tests
+        # and publishes the release.
+        uses: actions/setup-dotnet@v6
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet-tools
+        with:
+          dotnet-version: 10.0.x
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
@@ -80,7 +89,7 @@ jobs:
         run: |
           # Verify the exact files that ship in the release archive.
           test "$(find src/eplugin-framework/addons/ePlugin/progress -maxdepth 1 -type f -name 'ActivationProgress.*' | wc -l)" -eq 2
-          xvfb-run --auto-servernum python3 src/activation-progress/smoke.py \
+          xvfb-run --auto-servernum "$RUNNER_TEMP/dotnet-tools/dotnet" run tools/progress_smoke.cs -- \
             dotnet src/eplugin-framework/addons/ePlugin/progress/ActivationProgress.dll
 
       - name: Create artifact

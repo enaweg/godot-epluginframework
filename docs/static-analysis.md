@@ -5,7 +5,7 @@ Pull requests and pushes to `main` run the following checks:
 | Workflow / job | What it checks | Failure policy |
 | --- | --- | --- |
 | [CI-Analysis / managed-analysis](../.github/workflows/ci-analysis.yml) | SDK analyzers, compiler diagnostics, and NuGet Audit for the framework, progress helper and helper tests | Build errors, high/critical dependency vulnerabilities, and failure to retrieve vulnerability data fail the job. Existing analyzer warnings remain informational. |
-| [CI-Analysis / workflow-lint](../.github/workflows/ci-analysis.yml) | All Actions workflow files, expressions, action inputs, and embedded Bash/Python scripts through actionlint, ShellCheck and pyflakes | Lint findings fail the job. |
+| [CI-Analysis / workflow-lint](../.github/workflows/ci-analysis.yml) | All Actions workflow files, expressions, action inputs, and embedded Bash scripts through actionlint and ShellCheck | Lint findings fail the job. |
 | [CI-CodeQL / codeql-csharp](../.github/workflows/ci-codeql.yml) | C# security dataflow with the `security-extended` query suite | Extraction, build or analysis failures fail the job; security findings are reported through GitHub's separate code-scanning results check. |
 | [CI-PR](../.github/workflows/ci-pr.yml) | Existing .NET/Godot compatibility and native progress-helper tests | Build, runtime test and smoke-test failures fail the relevant matrix job. |
 
@@ -60,8 +60,8 @@ charts; the JSON artifact provides those values for a future dashboard. Badges
 and scheduled scans start showing `main` results after these workflows land.
 
 The reporting tests run in CI and can be run locally with
-`python -m unittest discover -s tools/ci`. To render existing local SARIF reports,
-run `python tools/ci/report_analysis.py` from the repository root. In Actions, this
+`dotnet test tools/ci-reports.Tests/CiReports.Tests.csproj`. To render existing local SARIF reports,
+run `dotnet run --project tools/ci-reports -- analysis` from the repository root. In Actions, this
 also writes the job summary and annotations.
 
 Recommended analyzer warnings are not globally treated as errors. The initial
@@ -100,7 +100,7 @@ continuations with backticks, and create the report directory with
 Static analysis requires the Godot NuGet SDK, but no running Godot editor,
 GTK or Xvfb. Existing framework runtime tests still require `GODOT_BIN`.
 
-For workflows, install actionlint 1.7.11 plus ShellCheck and pyflakes, then run
+For workflows, install actionlint 1.7.11 plus ShellCheck, then run
 `actionlint` from the repository root. On a Linux Docker host, the exact pinned
 CI tool image can also be run locally:
 

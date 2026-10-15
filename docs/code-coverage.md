@@ -28,7 +28,7 @@ Coverage does not fail a check. It is reported, not enforced.
 
 gdUnit4 runs the tests inside a Godot process, and Godot loads the project assembly from a memory stream. Profiler-based
 collectors (`dotnet test --collect "Code Coverage"`, coverlet) only see assemblies loaded from a file. They report Godot's
-own assemblies but nothing of the framework. [tools/coverage.sh](../tools/coverage.sh) therefore:
+own assemblies but nothing of the framework. [tools/coverage.cs](../tools/coverage.cs) therefore:
 
 1. instruments the built `EPluginFramework.dll` on disk with `dotnet-coverage instrument` (filtered by
    [coverage.settings.xml](../src/eplugin-framework/coverage.settings.xml)),
@@ -36,9 +36,10 @@ own assemblies but nothing of the framework. [tools/coverage.sh](../tools/covera
 3. runs `dotnet test` like before and writes a Cobertura report when the session shuts down,
 4. restores the original assembly, so an incremental build doesn't keep the instrumented one.
 
-[tools/ci/report_coverage.py](../tools/ci/report_coverage.py) merges the reports and writes the comment and the branch
+[tools/ci-reports](../tools/ci-reports/CoverageReport.cs) merges the reports and writes the comment and the branch
 contents. It counts each source line once per file, so its totals differ slightly from the HTML report, which counts a
-line once per class. Its tests run with the other reporting tests (`python3 -m unittest discover -s tools/ci`).
+line once per class. Its tests run with the other reporting tests
+(`dotnet test tools/ci-reports.Tests/CiReports.Tests.csproj`).
 
 Only line coverage is reported. Static instrumentation records no branch coverage.
 
@@ -47,10 +48,10 @@ Only line coverage is reported. Static instrumentation records no branch coverag
 ```bash
 dotnet tool install --global dotnet-coverage
 dotnet build src/eplugin-framework/EPluginFramework.sln --configuration Debug
-tools/coverage.sh coverage.cobertura.xml            # extra arguments go to dotnet test, e.g. --filter ...
-python3 tools/ci/report_coverage.py summary --report coverage.cobertura.xml --output-dir coverage
+dotnet run tools/coverage.cs -- coverage.cobertura.xml    # further arguments go to dotnet test, e.g. --filter ...
+dotnet run --project tools/ci-reports -- coverage summary --report coverage.cobertura.xml --output-dir coverage
 ```
 
-The script needs `GODOT_BIN` like `dotnet test`, and it exits with the exit code of `dotnet test`. On Windows, run it
-from Git Bash. `coverage/summary.md` is the comment a PR would get. For an HTML report, run ReportGenerator
+Both tools need the .NET 10 SDK. coverage.cs needs `GODOT_BIN` like `dotnet test`, runs the tests with the `dotnet`
+on `PATH`, and exits with the exit code of `dotnet test`. `coverage/summary.md` is the comment a PR would get. For an HTML report, run ReportGenerator
 (`dotnet tool install --global dotnet-reportgenerator-globaltool`) on the Cobertura file.
