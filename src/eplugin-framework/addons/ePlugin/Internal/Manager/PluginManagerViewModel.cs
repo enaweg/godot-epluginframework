@@ -225,10 +225,37 @@ internal sealed class PluginManagerViewModel
     public static bool AnyUpdateFailed(IReadOnlyList<UpdateGroupResult> results) =>
         results.Any(r => r.Outcome is null or UpdateOutcome.RolledBack or UpdateOutcome.KeptWithErrors);
 
+    /// <summary>The meta of the link in <see cref="KeptUpdateSection"/> that rolls back a kept update.</summary>
+    public const string RollbackKeptMeta = "eplugin-rollback-kept";
+
+    /// <summary>Project errors listed in the details; the dialog and the build log have the rest.</summary>
+    public const int ShownProjectErrors = 10;
+
+    /// <summary>
+    /// An update kept with build errors: which versions it replaced, why it was kept, the errors left in the project's own
+    /// code, and a link that rolls it back.
+    /// </summary>
+    public static string KeptUpdateSection(UpdateJournal kept)
+    {
+        var text = new StringBuilder("\n[b]Kept update[/b]\n");
+        foreach (var plugin in kept.Plugins) text.Append(CultureInfo.CurrentCulture, $"{Escape(plugin.Slug)} {Escape(plugin.OldVersion)} → [color=#ff7070]{Escape(plugin.NewVersion)}[/color]\n");
+        text.Append(Escape((kept.Failure ?? "The project does not build with the new version").TrimEnd('.'))).Append(".\n");
+        if (kept.ProjectErrors.Count > 0)
+        {
+            foreach (var error in kept.ProjectErrors.Take(ShownProjectErrors)) text.Append("[code]").Append(Escape(BuildDiagnostics.Format(error))).Append("[/code]\n");
+            if (kept.ProjectErrors.Count > ShownProjectErrors)
+                text.Append(CultureInfo.CurrentCulture, $"and {kept.ProjectErrors.Count - ShownProjectErrors} more, see the build log in {Escape(kept.Directory)}\n");
+        }
+        var versions = string.Join(", ", kept.Plugins.Select(p => $"{p.Slug} {p.OldVersion}"));
+        text.Append(CultureInfo.CurrentCulture, $"[url={RollbackKeptMeta}]Roll back to {Escape(versions)}[/url]\n");
+        return text.ToString();
+    }
+
     /// <summary>The details pane as BBCode. All plugin supplied text is escaped.</summary>
     /// <param name="reviewed">Findings of a staged package for an explicitly chosen version, awaiting confirmation.</param>
+    /// <param name="kept">The plugin's update kept with build errors, see <see cref="KeptUpdateSection"/>.</param>
     public static string Describe(PluginRow row, IReadOnlyList<Finding>? reviewed = null, LicenseInfo? license = null,
-        WelcomeEntry? welcome = null)
+        WelcomeEntry? welcome = null, UpdateJournal? kept = null)
     {
         var plugin = row.Plugin; var text = new StringBuilder();
         void Line(string label, string? value) { if (!string.IsNullOrWhiteSpace(value)) text.Append(CultureInfo.CurrentCulture, $"[b]{label}:[/b] {Escape(value)}\n"); }
@@ -250,6 +277,7 @@ internal sealed class PluginManagerViewModel
         text.Append(WelcomeLine(welcome));
         if (!string.IsNullOrWhiteSpace(plugin.Description)) text.Append('\n').Append(Escape(plugin.Description)).Append('\n');
         if (plugin.Error is not null) text.Append(CultureInfo.CurrentCulture, $"\n[color=#ff7070]{Escape(plugin.Error)}[/color]\n");
+        if (kept is not null) text.Append(KeptUpdateSection(kept));
 
         text.Append("\n[b]Update[/b]\n");
         if (row.Update is { } update)

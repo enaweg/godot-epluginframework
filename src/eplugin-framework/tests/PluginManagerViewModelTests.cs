@@ -284,6 +284,21 @@ public class PluginManagerViewModelTests
         var recovery = kept with { KeptForProjectCode = false, Failure = "Final build failed." };
         Assertions.AssertString(PluginManagerViewModel.UpdateSummary([recovery], restarting: false)).IsEqual("a 2.0.0 needs recovery: Final build failed. Logs: /updates/a");
     }
+    [TestCase]
+    public static void TheDetailsOfAKeptUpdateListItsProjectErrorsAndOfferTheRollback()
+    {
+        var journal = new UpdateJournal { Directory = "/updates/a", Failure = "Only [project] code fails." };
+        journal.Plugins.Add(new() { Slug = "a", OldVersion = "1.0.0", NewVersion = "2.0.0" });
+        journal.ProjectErrors = Enumerable.Range(1, PluginManagerViewModel.ShownProjectErrors + 2).Select(i => new BuildError("Main.cs", i, 1, "CS0117", "no [Api]")).ToList();
+        var row = new PluginRow(Plugin("a", PluginKind.EPlugin), null);
+        Assertions.AssertString(PluginManagerViewModel.Describe(row)).NotContains("Kept update");
+        var details = PluginManagerViewModel.Describe(row, kept: journal);
+        Assertions.AssertString(details).Contains("[b]Kept update[/b]\na 1.0.0 → [color=#ff7070]2.0.0[/color]\nOnly [lb]project] code fails.\n");
+        Assertions.AssertString(details).Contains("[code]Main.cs(1,1): CS0117 no [lb]Api][/code]");
+        Assertions.AssertString(details).NotContains($"Main.cs({PluginManagerViewModel.ShownProjectErrors + 1},1)");
+        Assertions.AssertString(details).Contains("and 2 more, see the build log in /updates/a");
+        Assertions.AssertString(details).Contains($"[url={PluginManagerViewModel.RollbackKeptMeta}]Roll back to a 1.0.0[/url]");
+    }
     private static ValidatedPackage Package(string slug)
     {
         Assertions.AssertBool(SemVer.TryParse("2.0.0", out var version)).IsTrue();

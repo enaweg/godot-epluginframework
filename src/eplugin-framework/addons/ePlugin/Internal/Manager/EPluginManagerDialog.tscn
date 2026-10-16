@@ -205,6 +205,14 @@ size = Vector2i(520, 200)
 ok_button_text = "Install"
 dialog_autowrap = true
 
+[node name="RollbackKeptConfirm" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+title = "Roll back kept update"
+initial_position = 2
+size = Vector2i(520, 200)
+ok_button_text = "Roll back"
+dialog_autowrap = true
+
 [node name="LocalSourcesDialog" parent="." instance=ExtResource("3_local")]
 unique_name_in_owner = true
 

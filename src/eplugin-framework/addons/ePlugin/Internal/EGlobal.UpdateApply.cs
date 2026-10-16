@@ -241,6 +241,28 @@ internal sealed partial class EGlobal
             HandleUpdateOutcome(journal.Directory, result);
         }
     }
+    /// <summary>The update of <paramref name="slug"/> kept with build errors, if there is one; see <see cref="RollbackKeptUpdate"/>.</summary>
+    internal UpdateJournal? KeptUpdate(string slug)
+    {
+        if (_stateStore is null || _updateJournals is null) return null;
+        var attempts = _stateStore.LocalAttempts.Where(a => a.Reason == "update_kept_build_failed").Select(a => a.AttemptId).ToHashSet();
+        return _updateJournals.Read().LastOrDefault(j => j.State == UpdatePhase.CommittedWithErrors && attempts.Contains(j.AttemptId) && j.Plugins.Any(p => p.Slug == slug));
+    }
+
+    /// <summary>Restores the versions an update kept with build errors replaced; asked for in the ePlugin Manager.</summary>
+    internal void RollbackKeptUpdate(UpdateJournal journal)
+    {
+        using var progress = ActivationProgress.Begin("Restoring plugins...");
+        UpdateOutcome result;
+        try { result = Applier().RollbackKept(journal); }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException)
+        {
+            _ePluginContext?.Logger.Error($"Cannot roll back the kept update: {ex.Message}");
+            return;
+        }
+        HandleUpdateOutcome(journal.Directory, result);
+    }
+
     private void RetryUpdate(UpdateJournal? journal)
     {
         if (journal is null) { _ePluginContext?.Logger.Error("Update journal is missing; restore addon files and project references manually before clearing local state."); return; }
