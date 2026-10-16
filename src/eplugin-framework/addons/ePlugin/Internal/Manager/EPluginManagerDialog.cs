@@ -182,6 +182,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         var plugins = _global.CollectPlugins();
         _targets = _global.CollectUpdateTargets();
         _model = new(plugins, _global.PendingUpdates, _targets, _global.UpdateCache, candidate => _global.UpdatePreflightFindings([candidate]));
+        // Update sites, local directories and retries change what the toolbar button shows, too.
+        _global.InvalidateManagerStatus();
         _trust.SetPressedNoSignal(false);
         Render();
     }
@@ -211,7 +213,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
                 item.SetButtonColor(NameColumn, 0, row.Update is { } state ? (state.HasError ? ErrorColor() : UpdateColor()) : DisabledColor());
             }
             if (!plugin.Enabled) item.SetCustomColor(NameColumn, DisabledColor());
-            if (plugin.FailedAttempt is not null || plugin.State == EEditorPluginState.Error) item.SetCustomColor(NameColumn, ErrorColor());
+            if (row.NeedsAttention) item.SetCustomColor(NameColumn, ErrorColor());
             item.SetText(AuthorColumn, plugin.Author);
             if (!string.IsNullOrWhiteSpace(plugin.Author)) item.SetTooltipText(AuthorColumn, plugin.Author);
             item.SetText(TypeColumn, PluginCatalog.KindName(plugin.Kind));
@@ -728,8 +730,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         var theme = EditorInterface.Singleton.GetEditorTheme();
         return theme is not null && theme.HasColor(name, type) ? theme.GetColor(name, type) : fallback;
     }
-    private static Color UpdateColor() => ThemeColor("success_color", "Editor", new Color(0.45f, 0.95f, 0.5f));
-    private static Color ErrorColor() => ThemeColor("error_color", "Editor", new Color(1f, 0.47f, 0.42f));
+    private static Color UpdateColor() => EditorIcons.SuccessColor;
+    private static Color ErrorColor() => EditorIcons.ErrorColor;
     private static Color DisabledColor() => ThemeColor("font_disabled_color", "Button", new Color(0.5f, 0.5f, 0.5f));
 
     public override void _Process(double delta)

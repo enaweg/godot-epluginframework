@@ -22,6 +22,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
     private readonly EditorSignalConnections _managerSignals = new();
     private bool _managerUiAdded;
     private Button? _managerButton;
+    private ManagerStatus _managerStatus;
     private EPluginManagerDialog? _managerDialog;
     private UpdateFailureDialog? _failureDialog;
     private LicenseDialog? _licenseDialog;
@@ -75,6 +76,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         // optional recipes are handled here, before the dialogs below look at them.
         if (EGlobal.Instance.IsValid()) EGlobal.Instance.ObservePluginToggles();
 
+        ShowManagerStatus();
         ReopenManager();
         ShowLicenseReview();
         ShowWelcomes();
@@ -203,9 +205,9 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         RemoveManagerButton();
         _managerButton = new Button
         {
-            Name = "EPluginManagerButton", Flat = true, TooltipText = "ePlugin Manager",
+            Name = "EPluginManagerButton", Flat = true, TooltipText = ManagerTooltip(_managerStatus),
             FocusMode = Control.FocusModeEnum.None,
-            Icon = EditorIcons.EPlugin
+            Icon = EditorIcons.Manager(_managerStatus)
         };
         if (_managerButton.Icon is null) _managerButton.Text = "ePlugin";
         _managerSignals.Connect(_managerButton, Control.SignalName.ThemeChanged, Callable.From(() => CallDeferred(nameof(RefreshManagerIcon))));
@@ -220,9 +222,27 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
     private void RefreshManagerIcon()
     {
         if (_managerButton is null || !GodotObject.IsInstanceValid(_managerButton)) return;
-        _managerButton.Icon = EditorIcons.EPlugin;
+        _managerButton.Icon = EditorIcons.Manager(_managerStatus);
         _managerButton.Text = _managerButton.Icon is null ? "ePlugin" : "";
+        _managerButton.TooltipText = ManagerTooltip(_managerStatus);
     }
+
+    /// <summary>Colors the puzzle piece of the toolbar button while updates can be installed or a plugin needs attention.</summary>
+    private void ShowManagerStatus()
+    {
+        if (!_managerUiAdded || !EGlobal.Instance.IsValid()) return;
+        var status = EGlobal.Instance.CurrentManagerStatus();
+        if (status == _managerStatus) return;
+        _managerStatus = status;
+        RefreshManagerIcon();
+    }
+
+    private static string ManagerTooltip(ManagerStatus status) => status switch
+    {
+        ManagerStatus.UpdatesAvailable => "ePlugin Manager\nPlugin updates are available.",
+        ManagerStatus.NeedsAttention => "ePlugin Manager\nA plugin needs attention.",
+        _ => "ePlugin Manager"
+    };
     /// <summary>Releases a dialog whose C# state was lost to an assembly reload; returns whether it was showing.</summary>
     private bool RemoveStaleManagerDialog()
     {

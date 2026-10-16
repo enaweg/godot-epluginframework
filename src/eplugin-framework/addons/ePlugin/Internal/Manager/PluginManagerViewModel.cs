@@ -28,7 +28,11 @@ internal sealed class PluginRow(PluginInfo plugin, UpdateRow? update)
                                Plugin.LocalPackages > 0 || Update is not null;
     public bool HasUpdate => Update is not null;
     public bool CanToggle => !Plugin.Missing;
+    /// <summary>The plugin failed or a failed attempt of it waits for Retry failed.</summary>
+    public bool NeedsAttention => Plugin.FailedAttempt is not null || Plugin.State == EEditorPluginState.Error;
 }
+/// <summary>What the toolbar button of the ePlugin Manager shows with the color of its puzzle piece.</summary>
+internal enum ManagerStatus { Normal, UpdatesAvailable, NeedsAttention }
 internal sealed record VersionOption(string Version, UpdateCandidate? Candidate, bool Installed, bool IsDowngrade)
 {
     public bool IsLocal => Candidate?.Package is LocalZipPackageRef;
@@ -45,6 +49,12 @@ internal sealed class PluginManagerViewModel
     public bool RequiresTrust => Updates.Any(r => r.Selected && r.Findings.Any(f => f.RequiresTrust));
     public bool CanApply => Selected.Count > 0 && (!RequiresTrust || TrustChangedSource);
     public bool CanRetry => Plugins.Any(p => p.Plugin.FailedAttempt is not null);
+    /// <summary>
+    /// A plugin that needs attention comes first; updates count only when they can be installed, so an update the
+    /// project rules out neither turns the button green nor red.
+    /// </summary>
+    public ManagerStatus Status => Plugins.Any(p => p.NeedsAttention) ? ManagerStatus.NeedsAttention
+        : Updates.Any(u => !u.HasError) ? ManagerStatus.UpdatesAvailable : ManagerStatus.Normal;
     public IReadOnlyList<UpdateCandidate> Selected => Updates.Where(r => r.Selected && !r.HasError).Select(r => r.Candidate).ToArray();
     public string OkText => $"Update {Selected.Count} plugin{(Selected.Count == 1 ? "" : "s")}";
     public PluginManagerViewModel(IReadOnlyList<PluginInfo> plugins, IReadOnlyList<UpdateCandidate> candidates,

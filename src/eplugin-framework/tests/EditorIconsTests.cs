@@ -54,7 +54,24 @@ public class EditorIconsTests
         Assertions.AssertInt(EditorIcons.Get(EditorIcons.EPluginPath, theme, 1f)!.GetWidth()).IsEqual(16);
     }
 
-    private static void AssertHasColor(Texture2D texture, string html)
+    [TestCase]
+    public static void ThePuzzlePieceTakesTheStatusColor()
+    {
+        using var theme = new Theme();
+        theme.SetColor("font_color", "Editor", Colors.Black);
+        var plain = EditorIcons.Get(EditorIcons.EPluginPath, theme, 4f)!;
+        var green = EditorIcons.Get(EditorIcons.EPluginPath, theme, 4f, piece: Color.FromHtml("#00ff00"))!;
+        var red = EditorIcons.Get(EditorIcons.EPluginPath, theme, 4f, piece: Color.FromHtml("#ff0000"))!;
+        AssertHasColor(green, "#00ff00");
+        AssertHasColor(red, "#ff0000");
+        Assertions.AssertBool(HasColor(plain, "#00ff00") || HasColor(red, "#00ff00")).IsFalse();
+        Assertions.AssertBool(ReferenceEquals(plain, green) || ReferenceEquals(green, red)).IsFalse();
+        Assertions.AssertBool(ReferenceEquals(green, EditorIcons.Get(EditorIcons.EPluginPath, theme, 4f, piece: Color.FromHtml("#00ff00")))).IsTrue();
+    }
+
+    private static void AssertHasColor(Texture2D texture, string html) => Assertions.AssertBool(HasColor(texture, html)).IsTrue();
+
+    private static bool HasColor(Texture2D texture, string html)
     {
         using var image = texture.GetImage();
         var expected = Color.FromHtml(html);
@@ -62,7 +79,7 @@ public class EditorIconsTests
         for (var y = 0; y < image.GetHeight() && !found; y++)
         for (var x = 0; x < image.GetWidth() && !found; x++)
             found = image.GetPixel(x, y).IsEqualApprox(expected);
-        Assertions.AssertBool(found).IsTrue();
+        return found;
     }
 }
 #endif
