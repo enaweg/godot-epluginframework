@@ -274,6 +274,16 @@ public class PluginManagerViewModelTests
             .IsEqual("Installed a 2.0.0. Skipped e v2.0.1: Package for 'e' was refused: version is not newer. Its files were not changed.");
         Assertions.AssertString(PluginManagerViewModel.RefusedSummary([])).IsEqual("");
     }
+    [TestCase]
+    public static void AnUpdateKeptForProjectCodeSaysSoAndPointsToTheDetails()
+    {
+        var kept = new UpdateGroupResult([Package("a")], "/updates/a", UpdateOutcome.KeptWithErrors, "The project's own code does not compile with the updated plugins (2 errors).", true);
+        Assertions.AssertString(PluginManagerViewModel.UpdateSummary([kept], restarting: false)).IsEqual(
+            "Kept a 2.0.0: The project's own code does not compile with the updated plugins (2 errors). " +
+            "The plugin's details list the errors and can roll it back. Logs: /updates/a");
+        var recovery = kept with { KeptForProjectCode = false, Failure = "Final build failed." };
+        Assertions.AssertString(PluginManagerViewModel.UpdateSummary([recovery], restarting: false)).IsEqual("a 2.0.0 needs recovery: Final build failed. Logs: /updates/a");
+    }
     private static ValidatedPackage Package(string slug)
     {
         Assertions.AssertBool(SemVer.TryParse("2.0.0", out var version)).IsTrue();

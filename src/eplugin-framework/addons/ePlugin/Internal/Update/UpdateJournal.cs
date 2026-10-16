@@ -56,6 +56,17 @@ internal sealed class UpdateJournal
     /// the update with reconciling once the project builds.
     /// </summary>
     public bool BeforeReconcile { get; set; }
+    /// <summary>Where the errors of the last failed build were; null while no build failed.</summary>
+    public BuildFailureCause? FailureCause { get; set; }
+    /// <summary>
+    /// Whether the plugins compiled on their own after a build failed only in project code; null when that was not
+    /// tried. True keeps the update: the project's code has to be adapted to the new version.
+    /// </summary>
+    public bool? PluginsBuildAlone { get; set; }
+    /// <summary>The errors in project code of the last failed build, at most <see cref="BuildDiagnostics.MaxProjectErrors"/>.</summary>
+    public List<BuildError> ProjectErrors { get; set; } = [];
+    /// <summary>Kept because only project code failed and the plugins compile on their own.</summary>
+    [JsonIgnore] public bool KeptForProjectCode => FailureCause == BuildFailureCause.ProjectCode && PluginsBuildAlone == true;
     [JsonIgnore] public string Directory { get; set; } = "";
     public string Backup(string slug) => PackageFiles.Inside(Path.Combine(Directory, "backup"), slug);
     public string Staging(string slug) => PackageFiles.Inside(Path.Combine(Directory, "staging"), slug);
@@ -81,6 +92,8 @@ internal sealed class UpdateJournal
             if (recipe.Value.Target is not null) RecipeReconciler.Validate(recipe.Value.Target);
         }
         foreach (var plugin in journal.Plugins) foreach (var path in plugin.Preserved) PackageFiles.Normalize(path);
+        // Only shown to the user: a journal without them, or with an invalid list, is still recoverable.
+        journal.ProjectErrors = journal.ProjectErrors?.Where(e => e is not null).ToList() ?? [];
         journal.Directory = directory;
         return journal;
     }

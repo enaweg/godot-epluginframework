@@ -200,6 +200,9 @@ internal sealed class PluginManagerViewModel
         {
             if (result.Outcome is null) parts.Add($"Skipped {Names(result.Packages)}: {Reason(result.Failure, "it was refused")}. Its files were not changed.");
             else if (result.Outcome == UpdateOutcome.RolledBack) parts.Add($"Rolled back {Names(result.Packages)}: {Reason(result.Failure, "the update failed")}. Logs: {result.Directory}");
+            else if (result is { Outcome: UpdateOutcome.KeptWithErrors, KeptForProjectCode: true })
+                parts.Add($"Kept {Names(result.Packages)}: {Reason(result.Failure, "the project's own code does not compile with it")}. " +
+                          $"The plugin's details list the errors and can roll it back. Logs: {result.Directory}");
             else if (result.Outcome == UpdateOutcome.KeptWithErrors)
                 parts.Add($"{Names(result.Packages)} needs recovery: {Reason(result.Failure, "Use Retry failed in the ePlugin Manager")}. Logs: {result.Directory}");
         }
