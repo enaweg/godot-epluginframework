@@ -46,6 +46,9 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private Button _installVersion = null!;
     private Label _versionHint = null!;
     private ConfirmationDialog _versionConfirm = null!;
+    private ConfirmationDialog _rollbackKeptConfirm = null!;
+    // The selected plugin's update kept with build errors, read when its details are shown.
+    private UpdateJournal? _keptUpdate;
     private LocalSourcesDialog _localSources = null!;
     private UpdateSitesDialog _updateSites = null!;
     // Checking, loading versions, staging and installing; this dialog shows what they report.
@@ -106,6 +109,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _versionSeparator = GetNode<Control>("%VersionSeparator"); _versionRow = GetNode<Control>("%VersionRow");
         _versionSelect = GetNode<OptionButton>("%VersionSelect"); _installVersion = GetNode<Button>("%InstallVersionButton");
         _versionHint = GetNode<Label>("%VersionHint"); _versionConfirm = GetNode<ConfirmationDialog>("%VersionConfirm");
+        _rollbackKeptConfirm = GetNode<ConfirmationDialog>("%RollbackKeptConfirm");
         _localSources = GetNode<LocalSourcesDialog>("%LocalSourcesDialog"); _localSources.Initialize(global);
         _updateSites = GetNode<UpdateSitesDialog>("%UpdateSitesDialog"); _updateSites.Initialize(global);
         _locationRow = GetNode<Control>("%LocationRow"); _locationLink = GetNode<LinkButton>("%LocationLink"); _openFolder = GetNode<Button>("%OpenFolderButton");
@@ -117,7 +121,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _tree.SetColumnTitle(TypeColumn, "Type"); _tree.SetColumnTitle(VersionColumn, "Version");
         _tree.SetColumnExpand(EnabledColumn, false); _tree.SetColumnExpand(NameColumn, false); _tree.SetColumnExpand(AuthorColumn, true);
         _tree.SetColumnExpand(TypeColumn, false); _tree.SetColumnExpand(VersionColumn, false);
-        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm }) EditorWindows.Prepare(window, _signals, this, nameof(QueueWindowIcons));
+        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm, _rollbackKeptConfirm }) EditorWindows.Prepare(window, _signals, this, nameof(QueueWindowIcons));
         var scale = EditorInterface.Singleton.GetEditorScale();
         _tree.SetColumnCustomMinimumWidth(EnabledColumn, (int)(40 * scale)); _tree.SetColumnCustomMinimumWidth(AuthorColumn, (int)(AuthorMinimumWidth * scale));
         _tree.SetColumnCustomMinimumWidth(VersionColumn, (int)(150 * scale));
@@ -138,6 +142,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         {
             if (_pendingVersion is { } version) Install(new([version], true, _pendingDowngrade, _pendingReinstall));
         }));
+        _signals.Connect(_rollbackKeptConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(RollbackKept));
         _signals.Connect(_tree, Tree.SignalName.ItemSelected, Callable.From(() => ShowDetails(SlugOf(_tree.GetSelected()))));
         _signals.Connect(_tree, Tree.SignalName.ItemActivated, Callable.From(OpenRelease));
         _signals.Connect(_tree, Tree.SignalName.ButtonClicked, Callable.From<TreeItem, long, long, long>((item, _, _, _) => item.Select(NameColumn)));
@@ -151,7 +156,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private void QueueWindowIcons() => CallDeferred(nameof(RefreshWindowIcons));
     private void RefreshWindowIcons()
     {
-        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm })
+        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm, _rollbackKeptConfirm })
             EditorWindows.ApplyIcon(window);
     }
 
@@ -289,7 +294,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _detailsIcon.Texture = row?.IsEPlugin == true ? _logo : null;
         _detailsName.Text = row?.Plugin.Name ?? "No plugin selected";
         var reviewed = _updates.Request?.VersionInstall == true ? _updates.Staged?.FirstOrDefault(p => p.Candidate.Slug == slug)?.Findings : null;
-        _detailsText.Text = row is null ? "Select a plugin to see its details." : PluginManagerViewModel.Describe(row, reviewed, LicenseOf(row), WelcomeOf(row));
+        _keptUpdate = row is null ? null : _global.KeptUpdate(row.Plugin.Slug);
+        _detailsText.Text = row is null ? "Select a plugin to see its details." : PluginManagerViewModel.Describe(row, reviewed, LicenseOf(row), WelcomeOf(row), _keptUpdate);
         _release.Visible = IsSafeUrl(row?.Update?.Candidate.ReleaseUrl);
         _locationRow.Visible = row is not null;
         if (row is not null)
@@ -329,6 +335,23 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         else if (link == PluginManagerViewModel.WelcomeMeta && _selectedSlug is not null && _model.Find(_selectedSlug) is { } shown &&
                  WelcomeOf(shown) is { Problem: null } welcome)
             WelcomeDialog.Create([welcome]).Open();
+        else if (link == PluginManagerViewModel.RollbackKeptMeta && _keptUpdate is { } kept && !Busy && _updates.Staged is null)
+        {
+            var versions = string.Join(", ", kept.Plugins.Select(p => $"{p.Slug} {p.OldVersion}"));
+            _rollbackKeptConfirm.DialogText = $"Restore {versions}?\n\nOpen scenes are saved first. Changes made inside the plugin's folder since the update are lost. " +
+                (kept.BeforeReconcile
+                    ? "Project files you changed since then (.csproj, .sln, nuget.config) stay as they are. "
+                    : "Project files (.csproj, .sln, nuget.config) are restored as they were before the update. ") +
+                "If you already adapted the project's code to the new version, it will not build with the old one.";
+            _rollbackKeptConfirm.PopupCentered();
+        }
+    }
+
+    private void RollbackKept()
+    {
+        if (_keptUpdate is not { } kept || _updates.Staged is not null || !BeginPluginOperation()) return;
+        try { _global.RollbackKeptUpdate(kept); }
+        finally { CompletePluginOperation(); }
     }
 
     /// <summary>

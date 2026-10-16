@@ -229,6 +229,207 @@ public class UpdateTransactionTests
             Assertions.AssertInt(_host.Reloads).IsEqual(2);
         }
     }
+    /// <summary>A build error in the project's own code, as the update breaks its use of a plugin API.</summary>
+    private BuildOutcome ProjectError(params int[] lines)
+    {
+        File.WriteAllText(Path.Combine(_root, "Main.cs"), "class Main {}");
+        var main = Path.Combine(_root, "Main.cs");
+        return new(1, (lines.Length == 0 ? [2] : lines).Select(line => $"{main}({line},5): error CS0117: 'Plug' does not contain a definition for 'Api'").ToArray());
+    }
+    private BuildOutcome PluginError() => new(1, [$"{Path.Combine(_root, "addons", "plugin", "Plugin.cs")}(1,1): error CS0246: missing type"]);
+    /// <summary>An update installed with the batch Update button, with the defaults: ask, keep on project errors.</summary>
+    private void Defaults() { _host.Managed = true; _host.HasUi = true; _host.Policy = "ask"; _host.KeepProjectErrors = true; }
+
+    [TestCase]
+    public void AnUpdateThatOnlyBreaksProjectCodeIsKeptWhenThePluginsCompileAlone()
+    {
+        Defaults();
+        _host.Builds.Enqueue(ProjectError());
+        var package = Package(true);
+        var results = _applier.ApplyGroups([[package.Package]], package.Directory, NewDirectory);
+        Assertions.AssertObject(results.Single().Outcome).IsEqual(UpdateOutcome.KeptWithErrors);
+        Assertions.AssertBool(results.Single().KeptForProjectCode).IsTrue();
+        var journal = UpdateJournal.Load(package.Directory);
+        Assertions.AssertObject(journal.State).IsEqual(UpdatePhase.CommittedWithErrors);
+        Assertions.AssertBool(journal.KeptForProjectCode).IsTrue();
+        Assertions.AssertBool(journal.BeforeReconcile).IsTrue();
+        Assertions.AssertString(journal.ProjectErrors.Single().File!).IsEqual("Main.cs");
+        Assertions.AssertString(journal.Failure!).Contains("1 error");
+        Assertions.AssertThat(journal.Builds.Select(b => b.Name).ToArray()).ContainsExactly("interim", "interim-plugins-only");
+        // The plugins-only build gets the addons folder, and its work folder is removed afterwards.
+        Assertions.AssertThat(_host.PluginsOnlyRuns.Single().PluginRoots).Contains(Path.Combine(_root, "addons"));
+        Assertions.AssertBool(Directory.Exists(_host.PluginsOnlyRuns.Single().WorkDirectory)).IsFalse();
+        Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/plugin/plugin.cfg")).Contains("2.0.0")).IsTrue();
+        Assertions.AssertString(_store.GetLocal("plugin")!.Reason).IsEqual("update_kept_build_failed");
+        Assertions.AssertString(_store.GetShared("plugin")!.Version).IsEqual("0.9.0");
+        // The editor keeps the code it runs: no restart into an assembly that does not build.
+        Assertions.AssertInt(_host.Reloads).IsEqual(0);
+    }
+
+    [TestCase]
+    public void AnUpdateFromThePluginsDetailsStillAsksWhenOnlyProjectCodeFails()
+    {
+        Defaults();
+        _host.Builds.Enqueue(ProjectError());
+        var package = Package(true);
+        Assertions.AssertObject(_applier.Apply([package.Package], package.Directory, askOnBuildFailure: true)).IsEqual(UpdateOutcome.AwaitingDecision);
+        Assertions.AssertBool(UpdateJournal.Load(package.Directory).KeptForProjectCode).IsTrue();
+    }
+
+    [TestCase]
+    public void AnUpdateIsRolledBackWhenThePluginsDoNotCompileAlone()
+    {
+        Defaults();
+        _host.Builds.Enqueue(ProjectError()); _host.PluginsOnly.Enqueue(PluginError());
+        var package = Package(true);
+        Assertions.AssertObject(_applier.Apply([package.Package], package.Directory)).IsEqual(UpdateOutcome.RolledBack);
+        var journal = UpdateJournal.Load(package.Directory);
+        Assertions.AssertBool(journal.PluginsBuildAlone == false).IsTrue();
+        Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/plugin/plugin.cfg")).Contains("1.0.0")).IsTrue();
+        Assertions.AssertInt(_store.LocalAttempts.Count).IsEqual(0);
+    }
+
+    [TestCase]
+    public void ErrorsInPluginCodeRollBackWithoutAPluginsOnlyBuild()
+    {
+        Defaults();
+        var project = ProjectError();
+        _host.Builds.Enqueue(new(1, [..project.Output, ..PluginError().Output]));
+        var package = Package(true);
+        Assertions.AssertObject(_applier.Apply([package.Package], package.Directory)).IsEqual(UpdateOutcome.RolledBack);
+        Assertions.AssertInt(_host.PluginsOnlyRuns.Count).IsEqual(0);
+        Assertions.AssertObject(UpdateJournal.Load(package.Directory).FailureCause).IsEqual(BuildFailureCause.PluginCode);
+    }
+
+    [TestCase]
+    public void ProjectErrorsRollBackWhenTheSettingsOrAHeadlessRunSaySo()
+    {
+        foreach (var setup in new Action[] { () => _host.Policy = "rollback", () => _host.KeepProjectErrors = false, () => _host.HasUi = false })
+        {
+            Cleanup(); Setup(); Defaults(); setup();
+            _host.Builds.Enqueue(ProjectError());
+            var package = Package(true);
+            Assertions.AssertObject(_applier.Apply([package.Package], package.Directory)).IsEqual(UpdateOutcome.RolledBack);
+            Assertions.AssertInt(_host.PluginsOnlyRuns.Count).IsEqual(0);
+        }
+    }
+
+    [TestCase]
+    public void ATransientFailureIsBuiltOnceMore()
+    {
+        Defaults();
+        _host.Builds.Enqueue(new(1, ["C:\\sdk\\Microsoft.Common.CurrentVersion.targets(5034,5): error MSB3027: Could not copy \"Game.dll\"."]));
+        var package = Package(true);
+        Assertions.AssertObject(_applier.Apply([package.Package], package.Directory)).IsEqual(UpdateOutcome.AwaitingReload);
+        Assertions.AssertInt(_host.BuildCount).IsEqual(2);
+        Assertions.AssertThat(UpdateJournal.Load(package.Directory).Builds.Select(b => b.Name).ToArray()).ContainsExactly("interim", "interim-again");
+    }
+
+    [TestCase]
+    public void LaterGroupsFailingWithTheSameProjectErrorsAreKeptToo()
+    {
+        Defaults();
+        var package = Package(true);
+        var other = Other(package.Directory, true);
+        _host.Builds.Enqueue(ProjectError()); _host.Builds.Enqueue(ProjectError());
+        var results = _applier.ApplyGroups([[package.Package], [other]], package.Directory, NewDirectory);
+        Assertions.AssertThat(results.Select(r => r.Outcome).ToArray()).ContainsExactly(UpdateOutcome.KeptWithErrors, UpdateOutcome.KeptWithErrors);
+        Assertions.AssertBool(results.All(r => r.KeptForProjectCode)).IsTrue();
+        Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/other/plugin.cfg")).Contains("2.0.0")).IsTrue();
+    }
+
+    [TestCase]
+    public void AFinalBuildThatOnlyBreaksProjectCodeIsKeptAfterReconciling()
+    {
+        Defaults();
+        var package = Package(true);
+        _host.OnPrepareJournal = journal => journal.Recipes["plugin"] = new() { Old = new() { Nugets = [new("Shared", "1.0", null)] }, Applied = new() };
+        _host.OnReconcile = journal => journal.Recipes["plugin"].Target = new() { Nugets = [new("Shared", "2.0", null)] };
+        Assertions.AssertObject(_applier.Apply([package.Package], package.Directory)).IsEqual(UpdateOutcome.AwaitingReload);
+        _host.Builds.Enqueue(ProjectError());
+        Assertions.AssertObject(_applier.Resume(UpdateJournal.Load(package.Directory))).IsEqual(UpdateOutcome.KeptWithErrors);
+        var journal = UpdateJournal.Load(package.Directory);
+        Assertions.AssertBool(journal.KeptForProjectCode).IsTrue();
+        Assertions.AssertBool(journal.BeforeReconcile).IsFalse();
+        Assertions.AssertThat(journal.Builds.Select(b => b.Name).ToArray()).ContainsExactly("interim", "final", "final-plugins-only");
+    }
+
+    [TestCase]
+    public void RetryShowsTheProjectErrorsThatAreLeftAndFinishesOnceTheProjectBuilds()
+    {
+        Defaults();
+        _host.Builds.Enqueue(ProjectError(2, 3, 4));
+        var package = Package(true);
+        Assertions.AssertObject(_applier.Apply([package.Package], package.Directory)).IsEqual(UpdateOutcome.KeptWithErrors);
+        _host.Builds.Enqueue(ProjectError(7));
+        Assertions.AssertObject(_applier.Retry(UpdateJournal.Load(package.Directory))).IsEqual(UpdateOutcome.KeptWithErrors);
+        var journal = UpdateJournal.Load(package.Directory);
+        Assertions.AssertInt(journal.ProjectErrors.Single().Line).IsEqual(7);
+        Assertions.AssertString(journal.Failure!).Contains("1 error");
+        // Fixed: the update restarts into the new code and continues with reconciling.
+        Assertions.AssertObject(_applier.Retry(journal)).IsEqual(UpdateOutcome.AwaitingReload);
+        journal = UpdateJournal.Load(package.Directory);
+        Assertions.AssertObject(journal.State).IsEqual(UpdatePhase.InterimBuilt);
+        Assertions.AssertObject(journal.FailureCause).IsNull();
+        Assertions.AssertInt(journal.ProjectErrors.Count).IsEqual(0);
+    }
+
+    [TestCase]
+    public void AKeptUpdateCanBeRolledBackKeepingTheProjectFilesChangedSince()
+    {
+        Defaults();
+        _host.Builds.Enqueue(ProjectError());
+        var package = Package(true);
+        Assertions.AssertObject(_applier.Apply([package.Package], package.Directory)).IsEqual(UpdateOutcome.KeptWithErrors);
+        File.WriteAllText(Path.Combine(_root, "Game.csproj"), "project changed while fixing");
+        Assertions.AssertObject(_applier.RollbackKept(UpdateJournal.Load(package.Directory))).IsEqual(UpdateOutcome.RolledBack);
+        Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/plugin/plugin.cfg")).Contains("1.0.0")).IsTrue();
+        Assertions.AssertBool(File.Exists(Path.Combine(_root, "addons/plugin/old.txt"))).IsTrue();
+        Assertions.AssertString(File.ReadAllText(Path.Combine(_root, "Game.csproj"))).IsEqual("project changed while fixing");
+        Assertions.AssertInt(_host.Rebases).IsEqual(1);
+        Assertions.AssertInt(_store.LocalAttempts.Count).IsEqual(0);
+        Assertions.AssertString(_store.GetShared("plugin")!.Version).IsEqual("0.9.0");
+    }
+
+    [TestCase]
+    public void JournalsWithoutTheBuildFailureFieldsStillLoad()
+    {
+        var directory = Path.Combine(_root, ".godot/eplugin/updates", "older");
+        var journal = new UpdateJournal { Id = "older", Directory = directory, AttemptId = Guid.NewGuid() };
+        journal.Plugins.Add(new() { Slug = "plugin", OldVersion = "1.0.0", NewVersion = "2.0.0" });
+        Directory.CreateDirectory(directory);
+        journal.Save(UpdatePhase.CommittedWithErrors);
+        var path = Path.Combine(directory, "journal.json");
+        foreach (var older in new Action<System.Text.Json.Nodes.JsonObject>[]
+                 {
+                     // Written by a framework before this feature, or with an empty list written as null.
+                     json => { json.Remove("failureCause"); json.Remove("pluginsBuildAlone"); json.Remove("projectErrors"); },
+                     json => json["projectErrors"] = null,
+                 })
+        {
+            var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+            older(json);
+            File.WriteAllText(path, json.ToJsonString());
+            var loaded = UpdateJournal.Load(directory);
+            Assertions.AssertObject(loaded.FailureCause).IsNull();
+            Assertions.AssertInt(loaded.ProjectErrors.Count).IsEqual(0);
+            Assertions.AssertBool(loaded.KeptForProjectCode).IsFalse();
+        }
+    }
+
+    [TestCase]
+    public static void ProjectCodeOnlyFailuresKeepUnlessTheSettingRollsBack()
+    {
+        Assertions.AssertString(UpdateFailureDecision.Policy("ask", false, false, true)).IsEqual("keep");
+        Assertions.AssertString(UpdateFailureDecision.Policy("ask", false, true, true)).IsEqual("ask");
+        Assertions.AssertString(UpdateFailureDecision.Policy("ask", true, true, true)).IsEqual("keep");
+        Assertions.AssertString(UpdateFailureDecision.Policy("keep", true, false, true)).IsEqual("keep");
+        Assertions.AssertString(UpdateFailureDecision.Policy("rollback", false, true, true)).IsEqual("rollback");
+        // A self-update or a headless run still rolls back.
+        Assertions.AssertString(UpdateFailureDecision.Choose(true, "keep", true)).IsEqual("rollback");
+        Assertions.AssertString(UpdateFailureDecision.Choose(false, "keep", false)).IsEqual("rollback");
+    }
+
     /// <summary>A second plugin "other" 1.0.0 staged as 2.0.0 into the batch folder of <see cref="Package"/>.</summary>
     private ValidatedPackage Other(string directory, bool csharp = false)
     {
@@ -338,6 +539,14 @@ public class UpdateTransactionTests
         public Action? OnScan; public Action? OnBeforeSwap; public Action? OnCloseScenes; public int Reloads; public int BuildCount; public int Rebases;
         public Action<UpdateJournal>? OnPrepareJournal; public Action<UpdatePluginJournal>? OnBridge; public Action<UpdateJournal>? OnReconcile;
         public Queue<BuildOutcome> Builds { get; } = new();
+        public bool KeepProjectErrors; public Queue<BuildOutcome> PluginsOnly { get; } = new(); public List<PluginsOnlyBuild> PluginsOnlyRuns { get; } = [];
+        public bool KeepOnProjectErrors => KeepProjectErrors;
+        public BuildOutcome BuildPluginsOnly(PluginsOnlyBuild build)
+        {
+            PluginsOnlyRuns.Add(build);
+            Directory.CreateDirectory(build.WorkDirectory);
+            return PluginsOnly.Count > 0 ? PluginsOnly.Dequeue() : new(0, []);
+        }
         public bool UiAvailable => HasUi;
         public string BuildFailurePolicy => Policy;
         public bool RestartAlways => false;

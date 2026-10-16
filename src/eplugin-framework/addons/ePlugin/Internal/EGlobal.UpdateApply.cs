@@ -241,6 +241,28 @@ internal sealed partial class EGlobal
             HandleUpdateOutcome(journal.Directory, result);
         }
     }
+    /// <summary>The update of <paramref name="slug"/> kept with build errors, if there is one; see <see cref="RollbackKeptUpdate"/>.</summary>
+    internal UpdateJournal? KeptUpdate(string slug)
+    {
+        if (_stateStore is null || _updateJournals is null) return null;
+        var attempts = _stateStore.LocalAttempts.Where(a => a.Reason == "update_kept_build_failed").Select(a => a.AttemptId).ToHashSet();
+        return _updateJournals.Read().LastOrDefault(j => j.State == UpdatePhase.CommittedWithErrors && attempts.Contains(j.AttemptId) && j.Plugins.Any(p => p.Slug == slug));
+    }
+
+    /// <summary>Restores the versions an update kept with build errors replaced; asked for in the ePlugin Manager.</summary>
+    internal void RollbackKeptUpdate(UpdateJournal journal)
+    {
+        using var progress = ActivationProgress.Begin("Restoring plugins...");
+        UpdateOutcome result;
+        try { result = Applier().RollbackKept(journal); }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException)
+        {
+            _ePluginContext?.Logger.Error($"Cannot roll back the kept update: {ex.Message}");
+            return;
+        }
+        HandleUpdateOutcome(journal.Directory, result);
+    }
+
     private void RetryUpdate(UpdateJournal? journal)
     {
         if (journal is null) { _ePluginContext?.Logger.Error("Update journal is missing; restore addon files and project references manually before clearing local state."); return; }
@@ -341,6 +363,34 @@ internal sealed partial class EGlobal
         {
             ActivationProgress.SetText("Building updated project...");
             return (global.GetOrCreateContext(global._ePluginContext!).Cli as ICheckedDotnetCli)?.TryBuild() ?? new(1, ["Checked dotnet CLI is unavailable."]);
+        }
+        public bool KeepOnProjectErrors => ProjectSettings.GetSetting("eplugin/updates/keep_on_project_errors", true).AsBool();
+        public IReadOnlyList<string> PluginCodeRoots(UpdateJournal journal)
+        {
+            var roots = new List<string>();
+            var addons = Path.Combine(UpdateProjectRoot, "addons");
+            // A linked addon may be reported with the path it points to.
+            if (Directory.Exists(addons))
+                foreach (var directory in new DirectoryInfo(addons).EnumerateDirectories())
+                {
+                    try { if (directory.LinkTarget is not null && directory.ResolveLinkTarget(true) is { } target) roots.Add(target.FullName); }
+                    catch (IOException) { }
+                }
+            foreach (var recipe in journal.Recipes.Values)
+                foreach (var project in new[] { recipe.Old, recipe.Applied, recipe.Target }.Where(r => r is not null).SelectMany(r => r!.Projects))
+                {
+                    var path = project.Path.StartsWith("res://", StringComparison.Ordinal) ? ProjectSettings.GlobalizePath(project.Path) : Path.Combine(UpdateProjectRoot, project.Path);
+                    if (Path.GetDirectoryName(Path.GetFullPath(path)) is { } directory) roots.Add(directory);
+                }
+            // A project in the project directory (or above it) would make all of the project's code plugin code.
+            var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(UpdateProjectRoot)) + Path.DirectorySeparatorChar;
+            return roots.Select(r => Path.TrimEndingDirectorySeparator(Path.GetFullPath(r)) + Path.DirectorySeparatorChar)
+                .Where(r => !root.StartsWith(r, StringComparison.OrdinalIgnoreCase)).Distinct(StringComparer.Ordinal).ToArray();
+        }
+        public BuildOutcome BuildPluginsOnly(PluginsOnlyBuild build)
+        {
+            ActivationProgress.SetText("Building the plugins without the project's code...");
+            return (global.GetOrCreateContext(global._ePluginContext!).Cli as ICheckedDotnetCli)?.TryBuildPluginsOnly(build) ?? new(1, ["Checked dotnet CLI is unavailable."]);
         }
         public void RequestReload(UpdateJournal journal)
         {

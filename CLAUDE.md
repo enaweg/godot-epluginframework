@@ -221,7 +221,8 @@ enough in `sln`/`nuget`/reference command behavior to need separate implementati
 through an `IProcessRunner` (`GodotProcessRunner` uses `OS.Execute`); tests record the arguments instead. The
 `dotnet --version` probe is cached until the assembly reloads. Any new dotnet CLI operation needs a corresponding
 abstract member on `DotnetCliBase`/`IDotnetCli` implemented in both `DotnetCli9` and `DotnetCli10`, with its arguments
-checked in `IDotnetCliTests`. Pass arguments one per element and unquoted (`OS.Execute` quotes them), and project
+checked in `IDotnetCliTests`. Pass arguments one per element and unquoted (`OS.Execute` quotes them; outside Windows it runs them through `/bin/sh`
+in double quotes, so `GodotProcessRunner` escapes `\ " $` and backticks), and project
 paths through `ProjectFile`, which accepts `res://`, project-relative and absolute paths and returns an absolute one, so
 nothing depends on the editor's working directory. `IDotnetCli.Execute(command, args)` runs `dotnet <command> <args>`.
 
@@ -244,7 +245,10 @@ built-in list), checks, staging, groups, plugin state attempts, restarts and rec
 - Groups run synchronously without frames and restart the editor at most once, after the last group.
 - A group writes its local marker before side effects and acknowledges versions once after verification; an
   acknowledged attempt is never rolled back because cleanup failed.
-- Builds after a swap or rollback are non-incremental (old timestamps cannot reuse new code).
+- Builds after a swap or rollback are non-incremental (old timestamps cannot reuse new code). A non-incremental build
+  cleans the editor's `.godot/mono/temp/bin/Debug` first, so run it through `DotnetCliBase.BuildKeepingOutput`, and
+  never give the plugins-only build (`PluginsOnlyBuild`, which decides whether an update that breaks only project code
+  is kept) the editor's `OutDir`.
 - `UpdateRecovery` stays independent of `EGlobal` and recipe execution.
 - Journal readers stay additive and backward compatible. Bump `IndexerVersion` when `LocalPackageIndexer.Read` changes
   what it extracts. Regenerate `KnownPlugins.Data.cs` with the tools, never by hand.

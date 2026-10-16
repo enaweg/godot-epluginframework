@@ -88,7 +88,43 @@ null and behaves exactly as before).
 
 A grouped journal never asks or keeps on a build failure; it rolls back. Only an update started from a plugin's details
 (`ApplyUpdatesAsync(askOnBuildFailure: true)`, persisted as `UpdateJournal.AskOnBuildFailure`) asks, for the interim and
-the final build (`UpdateFailureDecision.Policy`); the batch **Update** rolls back.
+the final build (`UpdateFailureDecision.Policy`); the batch **Update** rolls back. The exception is a build that fails
+only in project code while the plugins compile on their own (below): it is kept, in a group too, because a later group
+then fails with the same project errors and is kept the same way.
+
+## Build failures in project code
+
+`UpdateApplier.BuildPasses` wraps the interim, plain C# and final builds (not rollback and Retry builds). On failure,
+`BuildDiagnostics.Classify` (pure) reads MSBuild's canonical `file(line,col): error CODE: message` lines; the `error`
+keyword is not localized. An error below `addons/` or `IUpdateHost.PluginCodeRoots` (link targets of addons, directories
+of recipe projects, never the project directory itself) is `PluginCode`; one without a `.cs` file, in `.godot/`, below
+an `obj/` folder or in a file that does not exist (source generator output) is `Unknown`; `MSB3021/3026/3027`, `CS2012`
+and `NU1301` are `Transient` and get one more build (`<name>-again`); otherwise every error is `ProjectCode`. Only
+`ProjectCode` runs the plugins-only build (`<name>-plugins-only`, recorded in `journal.Builds`), and only when keeping
+is possible at all (`MayKeepForProjectCode`: `keep_on_project_errors`, UI available, `on_build_failure` not `rollback`,
+no self-update). The journal keeps `FailureCause`, `PluginsBuildAlone` and the first 200 `ProjectErrors` (additive
+fields; `KeptForProjectCode` combines them) and `Policy(..., projectCodeOnly)` keeps it, or asks for an update from the
+details. The marker is the usual `update_kept_build_failed`, so every framework version's Retry handles it. Retry
+refreshes `ProjectErrors` while the project still fails; `ResumeAfterRestart` clears them.
+
+The plugins-only build (`ICheckedDotnetCli.TryBuildPluginsOnly`, `PluginsOnlyBuild`) builds the Godot `.csproj`
+non-incrementally with `-p:CustomAfterMicrosoftCommonTargets=<generated targets>` and `-p:OutDir=<journal folder>`.
+The targets file removes every `Compile` and `ProjectReference` item outside the plugin roots in a target that runs
+before `BeforeRebuild`/`BeforeBuild`/`AssignProjectConfiguration` (a Rebuild resolves references while cleaning, and
+item metadata cannot be used in evaluation conditions), only for the Godot project (global properties reach referenced
+projects). Its `OutDir` must never be the editor's: its clean would empty it. Paths are MSBuild-escaped in the targets
+file and in the property values, and `OutDir` is passed without a trailing separator (a quoted `...\"` would escape the
+quote). Godot's own incremental build afterwards compiles the full project again.
+
+`IUpdateHost.KeepOnProjectErrors`, `PluginCodeRoots` and `BuildPluginsOnly` have defaults (off, none, failing) so test
+hosts opt in. `UpdateApplier.RollbackKept` (the manager's **Roll back to** link in a kept update's details) rebases
+`backup-project` and the other plugins' recipes first when the journal was kept before reconciling, then rolls back.
+
+Every non-incremental build goes through `DotnetCliBase.BuildKeepingOutput`: a Rebuild cleans
+`.godot/mono/temp/bin/Debug` before compiling, so a failed one left the editor without any assembly after a restart (no
+ePlugin, no Retry). `BuildOutputGuard` copies the folder to `.godot/eplugin/build-output` first and, when the build fails
+and the assembly is gone, puts the missing files back with their timestamps, so neither GodotTools' watcher nor
+`AssemblyReload` takes them for a new build.
 
 `EGlobal` runs all groups synchronously (no frames, so the editor cannot reload an assembly a group built), defers
 `RequestReload` and `Scan` until the last group (`DeferRestarts`/`DeferScans`, also around `ResumeUpdates`), and restarts

@@ -12,6 +12,8 @@ internal static class UpdateSettings
         // Every valid version is offered, prereleases included; drop the switch earlier versions registered.
         if (ProjectSettings.HasSetting("eplugin/updates/allow_prerelease")) ProjectSettings.Clear("eplugin/updates/allow_prerelease");
         Add("on_build_failure", "ask", Variant.Type.String, PropertyHint.Enum, "ask,rollback,keep");
+        // Keeps an update whose build fails only in the project's own code while its plugins compile on their own.
+        Add("keep_on_project_errors", true, Variant.Type.Bool);
         Add("restart_policy", "auto", Variant.Type.String, PropertyHint.Enum, "auto,always");
         // ePlugin's built-in list of add-on update sites, see KnownPlugins.
         Add("builtin_update_sites", true, Variant.Type.Bool);

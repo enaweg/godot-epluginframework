@@ -1,8 +1,10 @@
 #if TOOLS
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Enaweg.Plugin.Internal.Dotnet;
+using Enaweg.Plugin.Internal.Update;
 using Enaweg.Plugin.Logging;
 using GdUnit4;
 using Godot;
@@ -74,6 +76,19 @@ public class IDotnetCliTests
             Assertions.AssertObject(manager.DotnetVersion).IsNull();
             Assertions.AssertString(manager.Create(new NullLogger()).GetType().Name).IsEqual(nameof(DotnetCli9));
         }
+    }
+
+    [TestCase]
+    public static void ArgumentsReachTheCommandUnchangedThroughTheShellGodotUsesOutsideWindows()
+    {
+        Assertions.AssertString(GodotProcessRunner.QuotedForShell("a b'c")).IsEqual("a b'c");
+        Assertions.AssertString(GodotProcessRunner.QuotedForShell("$HOME `x` \"q\" \\")).IsEqual("\\$HOME \\`x\\` \\\"q\\\" \\\\");
+        // Windows starts the process without a shell, so only the other platforms run it.
+        if (OperatingSystem.IsWindows()) return;
+        const string argument = "/tmp/a b 'c' $HOME `id` \"q\" \\n;|&*";
+        var (exitCode, output) = GodotProcessRunner.Instance.Run("printf", ["%s", argument]);
+        Assertions.AssertInt(exitCode).IsEqual(0);
+        Assertions.AssertString(string.Concat(output)).IsEqual(argument);
     }
 
     [TestCase]
@@ -259,6 +274,128 @@ public class IDotnetCliTests
                 // already gone counts as done
                 Assertions.AssertBool(cli.TryRemoveProjectReference(lib)).IsTrue();
                 Assertions.AssertBool(cli.TryRemoveProjectFromSolution(lib)).IsTrue();
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [TestCase]
+    public static void BothGenerationsBuildPluginsOnlyWithTheSameArguments()
+    {
+        var project = Path.Combine(ProjectRoot, "EPluginFramework.csproj");
+        var work = Path.Combine(Path.GetTempPath(), "eplugin-plugins-only-" + Path.GetRandomFileName());
+        try
+        {
+            var build = new PluginsOnlyBuild(work, [Path.Combine(ProjectRoot, "addons")], Path.Combine(work, "errors.log"));
+            foreach (var generation in new[] { 9, 10 })
+            {
+                var runner = new RecordingRunner();
+                DotnetCliBase cli = generation == 9 ? new DotnetCli9(new NullLogger(), false, runner) : new DotnetCli10(new NullLogger(), false, runner);
+                cli.TryBuildPluginsOnly(build);
+                AssertCalls(runner, ["dotnet", "build", project, "-c", "Debug", "--no-incremental",
+                    "-p:CustomAfterMicrosoftCommonTargets=" + build.TargetsFile, "-p:OutDir=" + build.OutputDirectory,
+                    "-fileLoggerParameters:LogFile=" + build.ErrorLog + ";ErrorsOnly;Encoding=UTF-8"]);
+                Assertions.AssertString(File.ReadAllText(build.TargetsFile)).Contains(Path.Combine(ProjectRoot, "addons") + Path.DirectorySeparatorChar);
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(work)) Directory.Delete(work, true);
+        }
+    }
+
+    [TestCase(Timeout = 180000)]
+    public static void APluginsOnlyBuildLeavesOutTheProjectsCode()
+    {
+        // The project's own code and its own library use an API the plugin no longer has, as after a breaking update.
+        var root = Path.Combine(Path.GetTempPath(), "eplugin plugins-only 'a$b' " + Path.GetRandomFileName());
+        Directory.CreateDirectory(Path.Combine(root, "addons", "plug"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib"));
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "Game.csproj"), """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                  <ItemGroup><Compile Remove="Lib/**" /><ProjectReference Include="Lib/Lib.csproj" /></ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(root, "Game.sln"), "");
+            File.WriteAllText(Path.Combine(root, "addons", "plug", "Plug.cs"), "public static class Plug { public static int ApiV2() => 2; }");
+            File.WriteAllText(Path.Combine(root, "Main.cs"), "public static class Main { public static int Run() => Plug.Api(); }");
+            File.WriteAllText(Path.Combine(root, "Lib", "Lib.csproj"), """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>""");
+            File.WriteAllText(Path.Combine(root, "Lib", "Lib.cs"), "public static class Lib { public static int Run() => Missing.Value; }");
+            var sdk = new DotnetVersionManager(new NullLogger(), false);
+            DotnetCliBase cli = DotnetVersionManager.ParseMajorVersion(sdk.DotnetVersion) >= 10
+                ? new DotnetCli10(new NullLogger(), false, projectRoot: root)
+                : new DotnetCli9(new NullLogger(), false, projectRoot: root);
+            var full = cli.Execute("build", [Path.Combine(root, "Game.csproj")]);
+            Assertions.AssertInt(full.Item1).IsNotEqual(0);
+            Assertions.AssertObject(BuildDiagnostics.Classify(full.Item2, root).Cause).IsEqual(BuildFailureCause.ProjectCode);
+
+            var work = Path.Combine(root, ".godot", "plugins-only");
+            var build = new PluginsOnlyBuild(work, [Path.Combine(root, "addons")], Path.Combine(root, ".godot", "errors.log"));
+            var outcome = cli.TryBuildPluginsOnly(build);
+            Assertions.AssertInt(outcome.ExitCode).OverrideFailureMessage(string.Join("\n", outcome.Output)).IsEqual(0);
+            Assertions.AssertBool(File.Exists(Path.Combine(build.OutputDirectory, "Game.dll"))).IsTrue();
+
+            // The same build fails when the plugin itself is broken.
+            File.WriteAllText(Path.Combine(root, "addons", "plug", "Plug.cs"), "public static class Plug { public static int ApiV2() => Missing.Value; }");
+            outcome = cli.TryBuildPluginsOnly(build);
+            Assertions.AssertInt(outcome.ExitCode).IsNotEqual(0);
+            Assertions.AssertObject(BuildDiagnostics.Classify(File.ReadAllLines(build.ErrorLog), root).Cause).IsEqual(BuildFailureCause.PluginCode);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    /// <summary>Runs <paramref name="build"/> for every command, like a Rebuild that cleans the outputs first.</summary>
+    private sealed class BuildingRunner(Func<int> build) : IProcessRunner
+    {
+        public (int ExitCode, string[] Output) Run(string command, string[] arguments) => (build(), []);
+    }
+
+    [TestCase]
+    public static void AFailedBuildPutsBackTheAssemblyItRemoved()
+    {
+        foreach (var generation in new[] { 9, 10 })
+        {
+            var root = Path.Combine(Path.GetTempPath(), "eplugin-output-" + Path.GetRandomFileName());
+            var output = Path.Combine(root, ".godot", "mono", "temp", "bin", "Debug");
+            Directory.CreateDirectory(Path.Combine(output, "runtimes"));
+            try
+            {
+                File.WriteAllText(Path.Combine(root, "Game.sln"), "");
+                File.WriteAllText(Path.Combine(output, "Game.dll"), "old");
+                File.WriteAllText(Path.Combine(output, "runtimes", "native.dll"), "old");
+                var built = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+                File.SetLastWriteTimeUtc(Path.Combine(output, "Game.dll"), built);
+                var failing = new BuildingRunner(() => { Directory.Delete(output, true); Directory.CreateDirectory(output); return 1; });
+                DotnetCliBase cli = generation == 9
+                    ? new DotnetCli9(new NullLogger(), false, failing, root)
+                    : new DotnetCli10(new NullLogger(), false, failing, root);
+
+                Assertions.AssertInt(cli.TryBuild().ExitCode).IsEqual(1);
+                Assertions.AssertString(File.ReadAllText(Path.Combine(output, "Game.dll"))).IsEqual("old");
+                Assertions.AssertString(File.ReadAllText(Path.Combine(output, "runtimes", "native.dll"))).IsEqual("old");
+                // The same timestamp, so the editor does not take it for a new build and reload.
+                Assertions.AssertThat(File.GetLastWriteTimeUtc(Path.Combine(output, "Game.dll"))).IsEqual(built);
+                Assertions.AssertBool(Directory.Exists(Path.Combine(root, ".godot", "eplugin", "build-output"))).IsFalse();
+
+                var succeeding = new BuildingRunner(() => { File.WriteAllText(Path.Combine(output, "Game.dll"), "new"); return 0; });
+                cli = generation == 9 ? new DotnetCli9(new NullLogger(), false, succeeding, root) : new DotnetCli10(new NullLogger(), false, succeeding, root);
+                Assertions.AssertInt(cli.TryBuild().ExitCode).IsEqual(0);
+                Assertions.AssertString(File.ReadAllText(Path.Combine(output, "Game.dll"))).IsEqual("new");
+
+                // A build that failed after the project compiled keeps the new assembly.
+                var lateFailure = new BuildingRunner(() => { File.WriteAllText(Path.Combine(output, "Game.dll"), "newer"); return 1; });
+                cli = generation == 9 ? new DotnetCli9(new NullLogger(), false, lateFailure, root) : new DotnetCli10(new NullLogger(), false, lateFailure, root);
+                Assertions.AssertInt(cli.TryBuild().ExitCode).IsEqual(1);
+                Assertions.AssertString(File.ReadAllText(Path.Combine(output, "Game.dll"))).IsEqual("newer");
             }
             finally
             {

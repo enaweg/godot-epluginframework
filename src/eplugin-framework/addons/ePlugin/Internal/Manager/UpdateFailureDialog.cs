@@ -19,6 +19,9 @@ internal sealed partial class UpdateFailureDialog : AcceptDialog, ISerialization
     private bool _decided;
     private Action<bool> _decide = null!;
     private string? _log;
+    // Only project code failed: keeping is the expected answer, so it gets the focus.
+    private bool _projectCode;
+    private Button? _keep;
 
     public static UpdateFailureDialog Create(UpdateJournal journal, Action<bool> decide)
     {
@@ -31,19 +34,27 @@ internal sealed partial class UpdateFailureDialog : AcceptDialog, ISerialization
     {
         _decide = decide;
         EditorWindows.Prepare(this, _signals, this, nameof(QueueWindowIcon));
+        _projectCode = journal.KeptForProjectCode;
         GetNode<Label>("%Summary").Text = string.Join("\n", journal.Plugins.Select(p => $"{p.Slug} {p.OldVersion} → {p.NewVersion}")) +
-                                          "\nThe project does not compile with the installed version." +
-                                          "\nKeep it to fix the errors yourself, then use Retry failed in the ePlugin Manager to finish the update.";
-        var logName = journal.Builds.LastOrDefault()?.LogFile;
+                                          (_projectCode
+                                              ? "\nOnly the project's own code does not compile with the installed version; the plugins compile on their own." +
+                                                "\nKeep it and adapt the project's code, then use Retry failed in the ePlugin Manager to finish the update."
+                                              : "\nThe project does not compile with the installed version." +
+                                                (journal.FailureCause == BuildFailureCause.PluginCode ? " The errors are in plugin code." : "") +
+                                                "\nKeep it to fix the errors yourself, then use Retry failed in the ePlugin Manager to finish the update.");
+        // The full build that failed, not the plugins-only build that followed it.
+        var logName = journal.Builds.LastOrDefault(b => !b.Name.EndsWith("-plugins-only", StringComparison.Ordinal))?.LogFile;
         var log = logName is not null ? PackageFiles.Inside(journal.Directory, logName) : null;
         _log = log;
-        GetNode<TextEdit>("%BuildOutput").Text = log is not null && File.Exists(log)
-            ? string.Join("\n", File.ReadLines(log).Where(line => line.Contains("error", StringComparison.OrdinalIgnoreCase)).Take(15))
-            : journal.Failure ?? "Build failed.";
+        GetNode<TextEdit>("%BuildOutput").Text = _projectCode && journal.ProjectErrors.Count > 0
+            ? string.Join("\n", journal.ProjectErrors.Select(BuildDiagnostics.Format))
+            : log is not null && File.Exists(log)
+                ? string.Join("\n", File.ReadLines(log).Where(line => line.Contains("error", StringComparison.OrdinalIgnoreCase)).Take(15))
+                : journal.Failure ?? "Build failed.";
         var location = GetNode<Label>("%LogLocation");
         location.Text = "Rolling back restores the previous addon files and rebuilds.\n" + (log ?? journal.Directory);
         location.TooltipText = log ?? journal.Directory;
-        AddButton("Keep new version", false, "keep"); AddButton("Open build log", true, "log");
+        _keep = AddButton("Keep new version", false, "keep"); AddButton("Open build log", true, "log");
         _signals.Connect(this, SignalName.Confirmed, Callable.From(Rollback));
         _signals.Connect(this, SignalName.Canceled, Callable.From(Rollback));
         _signals.Connect(this, SignalName.CloseRequested, Callable.From(Rollback));
@@ -81,6 +92,6 @@ internal sealed partial class UpdateFailureDialog : AcceptDialog, ISerialization
     private void QueueWindowIcon() => CallDeferred(nameof(RefreshWindowIcon));
     private void RefreshWindowIcon() => EditorWindows.ApplyIcon(this);
 
-    public void Open() { PopupCentered(); GetOkButton().GrabFocus(); }
+    public void Open() { PopupCentered(); (_projectCode && _keep is not null ? _keep : GetOkButton()).GrabFocus(); }
 }
 #endif

@@ -18,9 +18,12 @@ internal sealed class DotnetCli9(ILogger? logger, bool enableDebugLogging, IProc
 
     public override bool TryRebuildSolution() => TryBuild().ExitCode == 0;
 
-    public override BuildOutcome TryBuild()
+    public override BuildOutcome TryBuild() => BuildKeepingOutput(["build", SolutionPath, "--no-incremental"]);
+
+    public override BuildOutcome TryBuildPluginsOnly(PluginsOnlyBuild build)
     {
-        var result = Execute(["build", SolutionPath, "--no-incremental"]);
+        build.WriteTargets(GodotProjectPath);
+        var result = Execute(build.Arguments(GodotProjectPath));
         return new BuildOutcome(result.Item1, result.Item2);
     }
 

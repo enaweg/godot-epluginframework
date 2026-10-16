@@ -16,6 +16,12 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
     /// <summary>The Godot project directory, <c>res://</c>.</summary>
     internal string ProjectRoot { get; }
 
+    /// <summary>The project assembly's name, which Godot loads from <see cref="OutputDirectory"/>.</summary>
+    internal string AssemblyName { get; }
+
+    /// <summary>Where the editor loads the project assembly from.</summary>
+    internal string OutputDirectory => Path.Combine(ProjectRoot, ".godot", "mono", "temp", "bin", "Debug");
+
     protected readonly ILogger? Logger;
 
     /// <param name="projectRoot">The Godot project directory; null for the open project. Tests use a scratch project.</param>
@@ -40,6 +46,7 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
             ? expectedSolutionPath
             : solutions[0];
         GodotProjectPath = Path.ChangeExtension(SolutionPath, ".csproj");
+        AssemblyName = string.IsNullOrEmpty(assemblyName) ? Path.GetFileNameWithoutExtension(GodotProjectPath) : assemblyName;
 
         if (enableDebugLogging)
         {
@@ -102,6 +109,17 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
         Path.GetFullPath(Path.Combine(ProjectRoot,
             path.StartsWith("res://", System.StringComparison.Ordinal) ? path["res://".Length..] : path));
 
+    /// <summary>
+    /// Runs a non-incremental build. It cleans the outputs first, so <see cref="BuildOutputGuard"/> puts the editor's
+    /// assembly back when the build fails.
+    /// </summary>
+    protected BuildOutcome BuildKeepingOutput(string[] args) =>
+        BuildOutputGuard.Run(OutputDirectory, Path.Combine(ProjectRoot, ".godot", "eplugin", "build-output"), AssemblyName + ".dll", Logger, () =>
+        {
+            var (exitCode, output) = Execute(args[0], args[1..]);
+            return new BuildOutcome(exitCode, output);
+        });
+
     /// <summary>A NuGet source as the CLI takes it: <c>res://</c> and <c>user://</c> paths made absolute, URLs unchanged.</summary>
     internal static string NugetSource(string source) => ProjectSettings.GlobalizePath(source);
 
@@ -118,6 +136,7 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
     public abstract void RemoveProjectReference(string projectReference);
     public abstract (int, string[]) Execute(string command, string[] args);
     public abstract BuildOutcome TryBuild();
+    public abstract BuildOutcome TryBuildPluginsOnly(PluginsOnlyBuild build);
     public abstract bool TryRebuildSolution();
     public abstract bool TryAddProjectToSolution(string projectPath, string? virtualFolderName);
     public abstract bool TryRemoveProjectFromSolution(string projectPath);

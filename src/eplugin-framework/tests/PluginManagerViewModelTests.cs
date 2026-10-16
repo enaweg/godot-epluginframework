@@ -274,6 +274,31 @@ public class PluginManagerViewModelTests
             .IsEqual("Installed a 2.0.0. Skipped e v2.0.1: Package for 'e' was refused: version is not newer. Its files were not changed.");
         Assertions.AssertString(PluginManagerViewModel.RefusedSummary([])).IsEqual("");
     }
+    [TestCase]
+    public static void AnUpdateKeptForProjectCodeSaysSoAndPointsToTheDetails()
+    {
+        var kept = new UpdateGroupResult([Package("a")], "/updates/a", UpdateOutcome.KeptWithErrors, "The project's own code does not compile with the updated plugins (2 errors).", true);
+        Assertions.AssertString(PluginManagerViewModel.UpdateSummary([kept], restarting: false)).IsEqual(
+            "Kept a 2.0.0: The project's own code does not compile with the updated plugins (2 errors). " +
+            "The plugin's details list the errors and can roll it back. Logs: /updates/a");
+        var recovery = kept with { KeptForProjectCode = false, Failure = "Final build failed." };
+        Assertions.AssertString(PluginManagerViewModel.UpdateSummary([recovery], restarting: false)).IsEqual("a 2.0.0 needs recovery: Final build failed. Logs: /updates/a");
+    }
+    [TestCase]
+    public static void TheDetailsOfAKeptUpdateListItsProjectErrorsAndOfferTheRollback()
+    {
+        var journal = new UpdateJournal { Directory = "/updates/a", Failure = "Only [project] code fails." };
+        journal.Plugins.Add(new() { Slug = "a", OldVersion = "1.0.0", NewVersion = "2.0.0" });
+        journal.ProjectErrors = Enumerable.Range(1, PluginManagerViewModel.ShownProjectErrors + 2).Select(i => new BuildError("Main.cs", i, 1, "CS0117", "no [Api]")).ToList();
+        var row = new PluginRow(Plugin("a", PluginKind.EPlugin), null);
+        Assertions.AssertString(PluginManagerViewModel.Describe(row)).NotContains("Kept update");
+        var details = PluginManagerViewModel.Describe(row, kept: journal);
+        Assertions.AssertString(details).Contains("[b]Kept update[/b]\na 1.0.0 → [color=#ff7070]2.0.0[/color]\nOnly [lb]project] code fails.\n");
+        Assertions.AssertString(details).Contains("[code]Main.cs(1,1): CS0117 no [lb]Api][/code]");
+        Assertions.AssertString(details).NotContains($"Main.cs({PluginManagerViewModel.ShownProjectErrors + 1},1)");
+        Assertions.AssertString(details).Contains("and 2 more, see the build log in /updates/a");
+        Assertions.AssertString(details).Contains($"[url={PluginManagerViewModel.RollbackKeptMeta}]Roll back to a 1.0.0[/url]");
+    }
     private static ValidatedPackage Package(string slug)
     {
         Assertions.AssertBool(SemVer.TryParse("2.0.0", out var version)).IsTrue();
