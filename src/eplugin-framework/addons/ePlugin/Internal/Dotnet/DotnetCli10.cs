@@ -20,6 +20,13 @@ internal sealed class DotnetCli10(ILogger? logger, bool enableDebugLogging, IPro
 
     public override BuildOutcome TryBuild() => BuildKeepingOutput(["build", SolutionPath, "--no-incremental"]);
 
+    public override BuildOutcome TryBuildPluginsOnly(PluginsOnlyBuild build)
+    {
+        build.WriteTargets(GodotProjectPath);
+        var result = Execute(build.Arguments(GodotProjectPath));
+        return new BuildOutcome(result.Item1, result.Item2);
+    }
+
     public override void RunTests()
     {
         Execute(["test", SolutionPath]);
