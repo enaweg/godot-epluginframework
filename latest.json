@@ -1,8 +1,8 @@
 {
- "commit": "10401ac5c5d5370fabf3b0c53da57356d306e0e3",
- "date": "2026-10-16T11:00:59Z",
- "covered": 6783,
- "coverable": 8850,
+ "commit": "e44d91f69afe69c46752ee3db6c85e90fa6c8822",
+ "date": "2026-10-16T18:36:56Z",
+ "covered": 7024,
+ "coverable": 9161,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -36,25 +36,29 @@
    7,
    18
   ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/BuildOutputGuard.cs": [
+   40,
+   50
+  ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetCli10.cs": [
-   76,
-   76
+   78,
+   78
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetCli9.cs": [
-   76,
-   76
+   78,
+   78
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetCliBase.cs": [
-   49,
-   52
+   56,
+   59
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetVersionManager.cs": [
    41,
    41
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/ExecuteCliBase.cs": [
-   32,
-   32
+   33,
+   33
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/ICheckedDotnetCli.cs": [
    1,
@@ -63,6 +67,10 @@
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/NugetConfigManager.cs": [
    147,
    150
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/PluginsOnlyBuild.cs": [
+   31,
+   31
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/ProjectReferences.cs": [
    38,
@@ -102,7 +110,7 @@
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateApply.cs": [
    31,
-   237
+   275
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateRecipes.cs": [
    184,
@@ -153,8 +161,8 @@
    9
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.cs": [
-   51,
-   581
+   52,
+   600
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EditorIcons.cs": [
    30,
@@ -189,12 +197,12 @@
    25
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/PluginManagerViewModel.cs": [
-   221,
-   230
+   240,
+   248
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateFailureDialog.cs": [
    0,
-   50
+   57
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateFlow.cs": [
    144,
@@ -247,6 +255,10 @@
   "src/eplugin-framework/addons/ePlugin/Internal/Update/AddonPackageValidator.cs": [
    92,
    93
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/BuildDiagnostics.cs": [
+   52,
+   54
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/GitSource.cs": [
    197,
@@ -309,8 +321,8 @@
    10
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateApplier.cs": [
-   278,
-   329
+   360,
+   407
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateGroups.cs": [
    20,
@@ -321,8 +333,8 @@
    72
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateJournal.cs": [
-   54,
-   57
+   57,
+   60
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateModels.cs": [
    34,
@@ -337,8 +349,8 @@
    94
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateSettings.cs": [
-   17,
-   17
+   18,
+   18
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateSiteSettings.cs": [
    50,

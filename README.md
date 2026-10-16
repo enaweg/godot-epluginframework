@@ -4,18 +4,19 @@ Line coverage of `src/eplugin-framework/addons/ePlugin` on `main`, recorded by t
 
 ![Line coverage](badge.svg)
 
-**76.64%** (6783 of 8850 lines) at [10401ac](https://github.com/enaweg/godot-epluginframework/commit/10401ac5c5d5370fabf3b0c53da57356d306e0e3), 2026-10-16.
+**76.67%** (7024 of 9161 lines) at [e44d91f](https://github.com/enaweg/godot-epluginframework/commit/e44d91f69afe69c46752ee3db6c85e90fa6c8822), 2026-10-16.
 
 ```mermaid
 xychart-beta
-    title "Line coverage on main (last 9 pushes)"
-    x-axis ["659bbaa", "fc57fee", "ce064dc", "7cfc8b2", "b7e2f25", "caa9da2", "bd7e681", "ff903cf", "10401ac"]
+    title "Line coverage on main (last 10 pushes)"
+    x-axis ["659bbaa", "fc57fee", "ce064dc", "7cfc8b2", "b7e2f25", "caa9da2", "bd7e681", "ff903cf", "10401ac", "e44d91f"]
     y-axis "Line coverage (%)" 67 --> 79
-    line [69.50, 69.48, 69.48, 69.48, 76.80, 76.80, 76.80, 76.80, 76.64]
+    line [69.50, 69.48, 69.48, 69.48, 76.80, 76.80, 76.80, 76.80, 76.64, 76.67]
 ```
 
 | Date | Commit | Line coverage | Change |
 |:--|:--|--:|--:|
+| 2026-10-16 | [e44d91f](https://github.com/enaweg/godot-epluginframework/commit/e44d91f69afe69c46752ee3db6c85e90fa6c8822) | 76.67% | +0.03 pp |
 | 2026-10-16 | [10401ac](https://github.com/enaweg/godot-epluginframework/commit/10401ac5c5d5370fabf3b0c53da57356d306e0e3) | 76.64% | -0.16 pp |
 | 2026-10-16 | [ff903cf](https://github.com/enaweg/godot-epluginframework/commit/ff903cf12369521deb3cd90778bd1d3407543cbe) | 76.80% | +0.00 pp |
 | 2026-10-16 | [bd7e681](https://github.com/enaweg/godot-epluginframework/commit/bd7e6810f7f41310d2483a1f6a4fc1df2366ea25) | 76.80% | +0.00 pp |
@@ -28,18 +29,18 @@ xychart-beta
 
 All measurements: [history.csv](history.csv).
 
-<details><summary>Files at 10401ac (91)</summary>
+<details><summary>Files at e44d91f (94)</summary>
 
 | File | Line coverage | Covered lines |
 |:--|--:|--:|
 | `IEEditorPluginExtensions.cs` | 0.0% | 0 of 15 |
 | `Internal/EGlobal.UpdateWorkflow.cs` | 0.0% | 0 of 7 |
-| `Internal/Manager/UpdateFailureDialog.cs` | 0.0% | 0 of 50 |
+| `Internal/Manager/UpdateFailureDialog.cs` | 0.0% | 0 of 57 |
 | `Internal/Manager/LicenseDialog.cs` | 7.5% | 12 of 161 |
 | `Internal/Manager/UpdateSitesDialog.cs` | 8.2% | 16 of 194 |
-| `Internal/Manager/EPluginManagerDialog.cs` | 8.8% | 51 of 581 |
+| `Internal/Manager/EPluginManagerDialog.cs` | 8.7% | 52 of 600 |
 | `Internal/ProjectSettingsDialog.cs` | 9.4% | 5 of 53 |
-| `Internal/EGlobal.UpdateApply.cs` | 13.1% | 31 of 237 |
+| `Internal/EGlobal.UpdateApply.cs` | 11.3% | 31 of 275 |
 | `Internal/Manager/LocalSourcesDialog.cs` | 18.0% | 16 of 89 |
 | `Internal/Manager/WelcomeDialog.cs` | 18.0% | 11 of 61 |
 | `Internal/EGlobal.PluginManager.cs` | 18.8% | 12 of 64 |
@@ -55,14 +56,15 @@ All measurements: [history.csv](history.csv).
 | `Internal/PluginTypes.cs` | 72.2% | 13 of 18 |
 | `EditorPluginExtensions.cs` | 75.4% | 46 of 61 |
 | `Logging/GodotConsoleLogger.cs` | 76.7% | 33 of 43 |
+| `Internal/Dotnet/BuildOutputGuard.cs` | 80.0% | 40 of 50 |
 | `Internal/ProgressSession.cs` | 81.4% | 153 of 188 |
 | `Internal/ActivationProgress.cs` | 82.5% | 241 of 292 |
-| `Internal/Update/UpdateApplier.cs` | 84.5% | 278 of 329 |
 | `Internal/EGlobal.cs` | 85.3% | 850 of 996 |
 | `Internal/AssemblyReload.cs` | 85.7% | 24 of 28 |
 | `Internal/EGlobal.PlainPlugins.cs` | 87.6% | 127 of 145 |
 | `Internal/Welcomes/PluginWelcome.cs` | 87.9% | 29 of 33 |
 | `Internal/EGlobal.RecipeOperations.cs` | 88.4% | 61 of 69 |
+| `Internal/Update/UpdateApplier.cs` | 88.5% | 360 of 407 |
 | `Internal/Update/PackageFiles.cs` | 90.4% | 94 of 104 |
 | `Internal/Licenses/PluginLicense.cs` | 91.1% | 41 of 45 |
 | `Internal/EEditorPluginBuilder.cs` | 91.3% | 63 of 69 |
@@ -71,14 +73,15 @@ All measurements: [history.csv](history.csv).
 | `Internal/Update/InterimBridge.cs` | 93.2% | 41 of 44 |
 | `Internal/Update/UpdateService.cs` | 93.6% | 88 of 94 |
 | `Internal/Manager/ManagerReopenMarker.cs` | 94.1% | 16 of 17 |
-| `Internal/Dotnet/DotnetCliBase.cs` | 94.2% | 49 of 52 |
 | `Internal/EEditorPluginSubRecipeBuilder.cs` | 94.3% | 33 of 35 |
-| `Internal/Update/UpdateJournal.cs` | 94.7% | 54 of 57 |
+| `Internal/Dotnet/DotnetCliBase.cs` | 94.9% | 56 of 59 |
 | `Internal/Dotnet/ProjectReferences.cs` | 95.0% | 38 of 40 |
 | `Internal/Update/SafeZipExtractor.cs` | 95.0% | 57 of 60 |
+| `Internal/Update/UpdateJournal.cs` | 95.0% | 57 of 60 |
 | `Internal/Update/LocalIndexCache.cs` | 96.0% | 24 of 25 |
-| `Internal/Manager/PluginManagerViewModel.cs` | 96.1% | 221 of 230 |
 | `Internal/Update/RecipeSnapshot.cs` | 96.2% | 25 of 26 |
+| `Internal/Update/BuildDiagnostics.cs` | 96.3% | 52 of 54 |
+| `Internal/Manager/PluginManagerViewModel.cs` | 96.8% | 240 of 248 |
 | `Internal/PlainPluginObserver.cs` | 97.1% | 67 of 69 |
 | `Internal/Update/UpdateModels.cs` | 97.1% | 34 of 35 |
 | `Internal/Update/UpdateRecovery.cs` | 97.3% | 143 of 147 |
@@ -95,11 +98,12 @@ All measurements: [history.csv](history.csv).
 | `Internal/Update/AddonPackageValidator.cs` | 98.9% | 92 of 93 |
 | `Internal/Update/GitSource.cs` | 99.0% | 197 of 199 |
 | `EEditorPluginMetadata.cs` | 100.0% | 4 of 4 |
-| `Internal/Dotnet/DotnetCli10.cs` | 100.0% | 76 of 76 |
-| `Internal/Dotnet/DotnetCli9.cs` | 100.0% | 76 of 76 |
+| `Internal/Dotnet/DotnetCli10.cs` | 100.0% | 78 of 78 |
+| `Internal/Dotnet/DotnetCli9.cs` | 100.0% | 78 of 78 |
 | `Internal/Dotnet/DotnetVersionManager.cs` | 100.0% | 41 of 41 |
-| `Internal/Dotnet/ExecuteCliBase.cs` | 100.0% | 32 of 32 |
+| `Internal/Dotnet/ExecuteCliBase.cs` | 100.0% | 33 of 33 |
 | `Internal/Dotnet/ICheckedDotnetCli.cs` | 100.0% | 1 of 1 |
+| `Internal/Dotnet/PluginsOnlyBuild.cs` | 100.0% | 31 of 31 |
 | `Internal/EEditorPluginRecipe.cs` | 100.0% | 13 of 13 |
 | `Internal/EPluginProgress.cs` | 100.0% | 1 of 1 |
 | `Internal/Licenses/LicenseReview.cs` | 100.0% | 47 of 47 |
@@ -118,7 +122,7 @@ All measurements: [history.csv](history.csv).
 | `Internal/Update/SemVer.cs` | 100.0% | 36 of 36 |
 | `Internal/Update/UidMap.cs` | 100.0% | 10 of 10 |
 | `Internal/Update/UpdateGroups.cs` | 100.0% | 20 of 20 |
-| `Internal/Update/UpdateSettings.cs` | 100.0% | 17 of 17 |
+| `Internal/Update/UpdateSettings.cs` | 100.0% | 18 of 18 |
 | `Internal/Update/UpdateSiteSettings.cs` | 100.0% | 50 of 50 |
 | `Internal/VersionConstraint.cs` | 100.0% | 25 of 25 |
 | `Logging/GenericLoggerFactory.cs` | 100.0% | 7 of 7 |
