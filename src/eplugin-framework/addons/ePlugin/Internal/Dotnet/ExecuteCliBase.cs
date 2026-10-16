@@ -26,7 +26,7 @@ internal sealed class GodotProcessRunner : IProcessRunner
         try
         {
             // OS.Execute takes one argument per element and quotes those containing spaces itself.
-            var exitCode = OS.Execute(command, arguments, result, true, false);
+            var exitCode = OS.Execute(command, OperatingSystem.IsWindows() ? arguments : arguments.Select(QuotedForShell).ToArray(), result, true, false);
             return (exitCode, result.Select(e => e.ToString()).ToArray());
         }
         finally
@@ -34,6 +34,14 @@ internal sealed class GodotProcessRunner : IProcessRunner
             result.Dispose();
         }
     }
+
+    /// <summary>
+    /// An argument as OS.Execute must be given it outside Windows: when it reads the output, Godot joins the arguments in
+    /// double quotes and runs the line through /bin/sh (popen), which would expand <c>$</c> and backticks and end the
+    /// quote at <c>"</c>. A backslash makes those four characters literal inside double quotes.
+    /// </summary>
+    internal static string QuotedForShell(string argument) =>
+        argument.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("$", "\\$").Replace("`", "\\`");
 }
 
 internal abstract class ExecuteCliBase(ILogger? logger, bool enableDebugLogging, IProcessRunner? runner = null)

@@ -79,6 +79,19 @@ public class IDotnetCliTests
     }
 
     [TestCase]
+    public static void ArgumentsReachTheCommandUnchangedThroughTheShellGodotUsesOutsideWindows()
+    {
+        Assertions.AssertString(GodotProcessRunner.QuotedForShell("a b'c")).IsEqual("a b'c");
+        Assertions.AssertString(GodotProcessRunner.QuotedForShell("$HOME `x` \"q\" \\")).IsEqual("\\$HOME \\`x\\` \\\"q\\\" \\\\");
+        // Windows starts the process without a shell, so only the other platforms run it.
+        if (OperatingSystem.IsWindows()) return;
+        const string argument = "/tmp/a b 'c' $HOME `id` \"q\" \\n;|&*";
+        var (exitCode, output) = GodotProcessRunner.Instance.Run("printf", ["%s", argument]);
+        Assertions.AssertInt(exitCode).IsEqual(0);
+        Assertions.AssertString(string.Concat(output)).IsEqual(argument);
+    }
+
+    [TestCase]
     public static void BothGenerationsPassUnquotedPathsAndAcceptResPaths()
     {
         var project = Path.Combine(ProjectRoot, "EPluginFramework.csproj");

@@ -221,7 +221,8 @@ enough in `sln`/`nuget`/reference command behavior to need separate implementati
 through an `IProcessRunner` (`GodotProcessRunner` uses `OS.Execute`); tests record the arguments instead. The
 `dotnet --version` probe is cached until the assembly reloads. Any new dotnet CLI operation needs a corresponding
 abstract member on `DotnetCliBase`/`IDotnetCli` implemented in both `DotnetCli9` and `DotnetCli10`, with its arguments
-checked in `IDotnetCliTests`. Pass arguments one per element and unquoted (`OS.Execute` quotes them), and project
+checked in `IDotnetCliTests`. Pass arguments one per element and unquoted (`OS.Execute` quotes them; outside Windows it runs them through `/bin/sh`
+in double quotes, so `GodotProcessRunner` escapes `\ " $` and backticks), and project
 paths through `ProjectFile`, which accepts `res://`, project-relative and absolute paths and returns an absolute one, so
 nothing depends on the editor's working directory. `IDotnetCli.Execute(command, args)` runs `dotnet <command> <args>`.
 
