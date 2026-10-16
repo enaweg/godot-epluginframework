@@ -1,8 +1,8 @@
 {
- "commit": "ff903cf12369521deb3cd90778bd1d3407543cbe",
- "date": "2026-10-16T09:47:51Z",
- "covered": 6749,
- "coverable": 8788,
+ "commit": "10401ac5c5d5370fabf3b0c53da57356d306e0e3",
+ "date": "2026-10-16T11:00:59Z",
+ "covered": 6783,
+ "coverable": 8850,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -13,8 +13,8 @@
    9
   ],
   "src/eplugin-framework/addons/ePlugin/EPluginPlugin.cs": [
-   156,
-   251
+   167,
+   266
   ],
   "src/eplugin-framework/addons/ePlugin/EditorPluginExtensions.cs": [
    46,
@@ -93,8 +93,8 @@
    145
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.PluginManager.cs": [
-   0,
-   39
+   12,
+   64
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.RecipeOperations.cs": [
    61,
@@ -154,11 +154,11 @@
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.cs": [
    51,
-   580
+   581
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EditorIcons.cs": [
-   22,
-   25
+   30,
+   43
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EditorSignalConnections.cs": [
    12,
@@ -189,8 +189,8 @@
    25
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/PluginManagerViewModel.cs": [
-   218,
-   227
+   221,
+   230
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateFailureDialog.cs": [
    0,

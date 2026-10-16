@@ -4,18 +4,19 @@ Line coverage of `src/eplugin-framework/addons/ePlugin` on `main`, recorded by t
 
 ![Line coverage](badge.svg)
 
-**76.80%** (6749 of 8788 lines) at [ff903cf](https://github.com/enaweg/godot-epluginframework/commit/ff903cf12369521deb3cd90778bd1d3407543cbe), 2026-10-16.
+**76.64%** (6783 of 8850 lines) at [10401ac](https://github.com/enaweg/godot-epluginframework/commit/10401ac5c5d5370fabf3b0c53da57356d306e0e3), 2026-10-16.
 
 ```mermaid
 xychart-beta
-    title "Line coverage on main (last 8 pushes)"
-    x-axis ["659bbaa", "fc57fee", "ce064dc", "7cfc8b2", "b7e2f25", "caa9da2", "bd7e681", "ff903cf"]
+    title "Line coverage on main (last 9 pushes)"
+    x-axis ["659bbaa", "fc57fee", "ce064dc", "7cfc8b2", "b7e2f25", "caa9da2", "bd7e681", "ff903cf", "10401ac"]
     y-axis "Line coverage (%)" 67 --> 79
-    line [69.50, 69.48, 69.48, 69.48, 76.80, 76.80, 76.80, 76.80]
+    line [69.50, 69.48, 69.48, 69.48, 76.80, 76.80, 76.80, 76.80, 76.64]
 ```
 
 | Date | Commit | Line coverage | Change |
 |:--|:--|--:|--:|
+| 2026-10-16 | [10401ac](https://github.com/enaweg/godot-epluginframework/commit/10401ac5c5d5370fabf3b0c53da57356d306e0e3) | 76.64% | -0.16 pp |
 | 2026-10-16 | [ff903cf](https://github.com/enaweg/godot-epluginframework/commit/ff903cf12369521deb3cd90778bd1d3407543cbe) | 76.80% | +0.00 pp |
 | 2026-10-16 | [bd7e681](https://github.com/enaweg/godot-epluginframework/commit/bd7e6810f7f41310d2483a1f6a4fc1df2366ea25) | 76.80% | +0.00 pp |
 | 2026-10-15 | [caa9da2](https://github.com/enaweg/godot-epluginframework/commit/caa9da2162fca30674b6017e64232cd30cbc9554) | 76.80% | +0.00 pp |
@@ -27,28 +28,29 @@ xychart-beta
 
 All measurements: [history.csv](history.csv).
 
-<details><summary>Files at ff903cf (91)</summary>
+<details><summary>Files at 10401ac (91)</summary>
 
 | File | Line coverage | Covered lines |
 |:--|--:|--:|
 | `IEEditorPluginExtensions.cs` | 0.0% | 0 of 15 |
-| `Internal/EGlobal.PluginManager.cs` | 0.0% | 0 of 39 |
 | `Internal/EGlobal.UpdateWorkflow.cs` | 0.0% | 0 of 7 |
 | `Internal/Manager/UpdateFailureDialog.cs` | 0.0% | 0 of 50 |
 | `Internal/Manager/LicenseDialog.cs` | 7.5% | 12 of 161 |
 | `Internal/Manager/UpdateSitesDialog.cs` | 8.2% | 16 of 194 |
-| `Internal/Manager/EPluginManagerDialog.cs` | 8.8% | 51 of 580 |
+| `Internal/Manager/EPluginManagerDialog.cs` | 8.8% | 51 of 581 |
 | `Internal/ProjectSettingsDialog.cs` | 9.4% | 5 of 53 |
 | `Internal/EGlobal.UpdateApply.cs` | 13.1% | 31 of 237 |
 | `Internal/Manager/LocalSourcesDialog.cs` | 18.0% | 16 of 89 |
 | `Internal/Manager/WelcomeDialog.cs` | 18.0% | 11 of 61 |
+| `Internal/EGlobal.PluginManager.cs` | 18.8% | 12 of 64 |
 | `Internal/EditorHost.cs` | 21.4% | 9 of 42 |
 | `Internal/Manager/EditorWindows.cs` | 33.3% | 18 of 54 |
 | `Internal/AssemblyUnloadCleanup.cs` | 38.9% | 7 of 18 |
 | `EPlugin.cs` | 44.4% | 4 of 9 |
 | `Internal/EGlobal.UpdateSites.cs` | 47.4% | 9 of 19 |
 | `Internal/EGlobal.LocalSources.cs` | 54.4% | 31 of 57 |
-| `EPluginPlugin.cs` | 62.2% | 156 of 251 |
+| `EPluginPlugin.cs` | 62.8% | 167 of 266 |
+| `Internal/Manager/EditorIcons.cs` | 69.8% | 30 of 43 |
 | `Internal/EGlobal.Updates.cs` | 70.8% | 80 of 113 |
 | `Internal/PluginTypes.cs` | 72.2% | 13 of 18 |
 | `EditorPluginExtensions.cs` | 75.4% | 46 of 61 |
@@ -60,7 +62,6 @@ All measurements: [history.csv](history.csv).
 | `Internal/AssemblyReload.cs` | 85.7% | 24 of 28 |
 | `Internal/EGlobal.PlainPlugins.cs` | 87.6% | 127 of 145 |
 | `Internal/Welcomes/PluginWelcome.cs` | 87.9% | 29 of 33 |
-| `Internal/Manager/EditorIcons.cs` | 88.0% | 22 of 25 |
 | `Internal/EGlobal.RecipeOperations.cs` | 88.4% | 61 of 69 |
 | `Internal/Update/PackageFiles.cs` | 90.4% | 94 of 104 |
 | `Internal/Licenses/PluginLicense.cs` | 91.1% | 41 of 45 |
@@ -76,7 +77,7 @@ All measurements: [history.csv](history.csv).
 | `Internal/Dotnet/ProjectReferences.cs` | 95.0% | 38 of 40 |
 | `Internal/Update/SafeZipExtractor.cs` | 95.0% | 57 of 60 |
 | `Internal/Update/LocalIndexCache.cs` | 96.0% | 24 of 25 |
-| `Internal/Manager/PluginManagerViewModel.cs` | 96.0% | 218 of 227 |
+| `Internal/Manager/PluginManagerViewModel.cs` | 96.1% | 221 of 230 |
 | `Internal/Update/RecipeSnapshot.cs` | 96.2% | 25 of 26 |
 | `Internal/PlainPluginObserver.cs` | 97.1% | 67 of 69 |
 | `Internal/Update/UpdateModels.cs` | 97.1% | 34 of 35 |
