@@ -1,4 +1,5 @@
 #if TOOLS
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -259,6 +260,57 @@ public class IDotnetCliTests
                 // already gone counts as done
                 Assertions.AssertBool(cli.TryRemoveProjectReference(lib)).IsTrue();
                 Assertions.AssertBool(cli.TryRemoveProjectFromSolution(lib)).IsTrue();
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    /// <summary>Runs <paramref name="build"/> for every command, like a Rebuild that cleans the outputs first.</summary>
+    private sealed class BuildingRunner(Func<int> build) : IProcessRunner
+    {
+        public (int ExitCode, string[] Output) Run(string command, string[] arguments) => (build(), []);
+    }
+
+    [TestCase]
+    public static void AFailedBuildPutsBackTheAssemblyItRemoved()
+    {
+        foreach (var generation in new[] { 9, 10 })
+        {
+            var root = Path.Combine(Path.GetTempPath(), "eplugin-output-" + Path.GetRandomFileName());
+            var output = Path.Combine(root, ".godot", "mono", "temp", "bin", "Debug");
+            Directory.CreateDirectory(Path.Combine(output, "runtimes"));
+            try
+            {
+                File.WriteAllText(Path.Combine(root, "Game.sln"), "");
+                File.WriteAllText(Path.Combine(output, "Game.dll"), "old");
+                File.WriteAllText(Path.Combine(output, "runtimes", "native.dll"), "old");
+                var built = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+                File.SetLastWriteTimeUtc(Path.Combine(output, "Game.dll"), built);
+                var failing = new BuildingRunner(() => { Directory.Delete(output, true); Directory.CreateDirectory(output); return 1; });
+                DotnetCliBase cli = generation == 9
+                    ? new DotnetCli9(new NullLogger(), false, failing, root)
+                    : new DotnetCli10(new NullLogger(), false, failing, root);
+
+                Assertions.AssertInt(cli.TryBuild().ExitCode).IsEqual(1);
+                Assertions.AssertString(File.ReadAllText(Path.Combine(output, "Game.dll"))).IsEqual("old");
+                Assertions.AssertString(File.ReadAllText(Path.Combine(output, "runtimes", "native.dll"))).IsEqual("old");
+                // The same timestamp, so the editor does not take it for a new build and reload.
+                Assertions.AssertThat(File.GetLastWriteTimeUtc(Path.Combine(output, "Game.dll"))).IsEqual(built);
+                Assertions.AssertBool(Directory.Exists(Path.Combine(root, ".godot", "eplugin", "build-output"))).IsFalse();
+
+                var succeeding = new BuildingRunner(() => { File.WriteAllText(Path.Combine(output, "Game.dll"), "new"); return 0; });
+                cli = generation == 9 ? new DotnetCli9(new NullLogger(), false, succeeding, root) : new DotnetCli10(new NullLogger(), false, succeeding, root);
+                Assertions.AssertInt(cli.TryBuild().ExitCode).IsEqual(0);
+                Assertions.AssertString(File.ReadAllText(Path.Combine(output, "Game.dll"))).IsEqual("new");
+
+                // A build that failed after the project compiled keeps the new assembly.
+                var lateFailure = new BuildingRunner(() => { File.WriteAllText(Path.Combine(output, "Game.dll"), "newer"); return 1; });
+                cli = generation == 9 ? new DotnetCli9(new NullLogger(), false, lateFailure, root) : new DotnetCli10(new NullLogger(), false, lateFailure, root);
+                Assertions.AssertInt(cli.TryBuild().ExitCode).IsEqual(1);
+                Assertions.AssertString(File.ReadAllText(Path.Combine(output, "Game.dll"))).IsEqual("newer");
             }
             finally
             {
