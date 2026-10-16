@@ -113,6 +113,27 @@ public class PluginManagerViewModelTests
         Assertions.AssertString(PluginManagerViewModel.StatusText(model.Plugins[0].Plugin)).Contains("needs retry: build_failed");
     }
     [TestCase]
+    public static void StatusShowsInstallableUpdatesAndPluginsThatNeedAttention()
+    {
+        var installable = Candidate("beta");
+        Assertions.AssertObject(new PluginManagerViewModel([Plugin("beta", PluginKind.EPlugin)], [], [], null, _ => []).Status)
+            .IsEqual(ManagerStatus.Normal);
+        var updates = new PluginManagerViewModel([Plugin("beta", PluginKind.EPlugin)], [installable],
+            [new("beta", "beta", "1.0.0", installable.SourceUrl, "/unused")], null, _ => []);
+        Assertions.AssertObject(updates.Status).IsEqual(ManagerStatus.UpdatesAvailable);
+        // An update that cannot be installed is shown in the manager only, neither green nor red.
+        var ruledOut = new PluginManagerViewModel([Plugin("beta", PluginKind.EPlugin)], [installable],
+            [new("beta", "beta", "1.0.0", installable.SourceUrl, "/unused")], null, _ => [new("R15", FindingSeverity.Error, "incompatible")]);
+        Assertions.AssertObject(ruledOut.Status).IsEqual(ManagerStatus.Normal);
+        Assertions.AssertObject(new PluginManagerViewModel([], [Candidate("orphan")], [], null, _ => []).Status).IsEqual(ManagerStatus.Normal);
+        var attempt = new LocalPluginAttempt(Guid.NewGuid(), "broken", "1.0", PersistedPluginState.Activated, PersistedPluginState.Failed, "build_failed");
+        var failed = new PluginManagerViewModel([Plugin("beta", PluginKind.EPlugin), Plugin("broken", PluginKind.EPlugin) with { FailedAttempt = attempt }],
+            [installable], [new("beta", "beta", "1.0.0", installable.SourceUrl, "/unused")], null, _ => []);
+        Assertions.AssertObject(failed.Status).IsEqual(ManagerStatus.NeedsAttention);
+        var error = new PluginManagerViewModel([Plugin("broken", PluginKind.EPlugin) with { State = EEditorPluginState.Error }], [], [], null, _ => []);
+        Assertions.AssertObject(error.Status).IsEqual(ManagerStatus.NeedsAttention);
+    }
+    [TestCase]
     public static void DetailsShowVersionChangeAndEscapePluginText()
     {
         var candidate = Candidate("beta");

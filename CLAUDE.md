@@ -253,7 +253,10 @@ built-in list), checks, staging, groups, plugin state attempts, restarts and rec
 
 `Internal/Manager/` holds the framework's only editor UI entry point, opened from the single Tools menu entry and
 the toolbar button that `EPluginPlugin.AddManagerUi` installs (the button's instance id is kept in Engine metadata
-so a stale one can be removed after an assembly reload). When an update restarts the editor while the manager is open,
+so a stale one can be removed after an assembly reload). The puzzle piece of its icon (`id="piece"` in
+`eplugin_editor.svg`) is red while a plugin needs attention (failed or awaiting Retry failed) and green while an update
+can be installed (`PluginManagerViewModel.Status`). `EGlobal.CurrentManagerStatus` checks every 30 frames and only builds
+the view model when pending updates, enabled plugins or their states changed; the manager's `Refresh` invalidates it. When an update restarts the editor while the manager is open,
 `EGlobal.RestartRequested` writes `ManagerReopenMarker` (`.godot/eplugin/manager-open`, renewed by an interim restart,
 expires after an hour); the start that requests no further restart wraps `Initialize` in one `ActivationProgress` scope,
 reopens the manager and closes that progress window a few frames later. Every dialog is its own scene (`EPluginManagerDialog.tscn`,
