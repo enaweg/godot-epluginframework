@@ -64,6 +64,17 @@ public class UpdateCoreTests
     }
 
     [TestCase]
+    public static void PluginIniReadsEscapesBareValuesAndIgnoresOtherSections()
+    {
+        var values = PluginIni.Parse("[editor]\nnot an assignment\n[plugin]\n" +
+            "description=\"a\\bb\\tc\\nd\\fe\\rf\\U01F600\"\nversion = 1.2.0 ; bare, with a comment\n# comment\n");
+        Assertions.AssertString(values["description"]).IsEqual("a\bb\tc\nd\fe\rf\U0001F600");
+        Assertions.AssertString(values["version"]).IsEqual("1.2.0");
+        foreach (var invalid in new[] { "[plugin]\nnot an assignment", "[plugin]\nname=\"a\"\nname=\"b\"", "[plugin]\nname=\"\\U110000\"" })
+            Assertions.AssertThrown(() => PluginIni.Parse(invalid)).IsInstanceOf<InvalidDataException>();
+    }
+
+    [TestCase]
     public static void ScheduleBoundaryAndCacheUseInstalledVersion()
     {
         var now = DateTimeOffset.UtcNow;
