@@ -4,6 +4,8 @@ Open **ePlugin Manager** with the ePlugin button at the right of the editor's ma
 
 ![The ePlugin button at the right end of the editor's main toolbar, after the run buttons](images/eplugin-toolbar-button.png)
 
+The puzzle piece of the button turns red while a plugin failed or a failed attempt waits for **Retry failed**, and green while an update can be installed. Red takes precedence. Updates that cannot be installed leave the button unchanged.
+
 ![ePlugin Manager listing the installed plugins, with the details of the selected SamplePlugin: status, missing license, welcome page and update source](images/eplugin-manager.png)
 
 The overview above uses the repository's sample plugins in Godot's default dark editor theme.
