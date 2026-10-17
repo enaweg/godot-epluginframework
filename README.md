@@ -4,18 +4,19 @@ Line coverage of `src/eplugin-framework/addons/ePlugin` on `main`, recorded by t
 
 ![Line coverage](badge.svg)
 
-**79.54%** (7647 of 9614 lines) at [d6fa7e2](https://github.com/enaweg/godot-epluginframework/commit/d6fa7e2bf3286e8cc0eb8b5330d6bb917aef2c8f), 2026-10-17.
+**79.54%** (7647 of 9614 lines) at [4c0596e](https://github.com/enaweg/godot-epluginframework/commit/4c0596e4b1ad1201ecc0253c9e74554ab7409529), 2026-10-17.
 
 ```mermaid
 xychart-beta
-    title "Line coverage on main (last 16 pushes)"
-    x-axis ["659bbaa", "fc57fee", "ce064dc", "7cfc8b2", "b7e2f25", "caa9da2", "bd7e681", "ff903cf", "10401ac", "e44d91f", "73f8104", "736827c", "6ff9d4b", "dd42316", "7b94ccd", "d6fa7e2"]
+    title "Line coverage on main (last 17 pushes)"
+    x-axis ["659bbaa", "fc57fee", "ce064dc", "7cfc8b2", "b7e2f25", "caa9da2", "bd7e681", "ff903cf", "10401ac", "e44d91f", "73f8104", "736827c", "6ff9d4b", "dd42316", "7b94ccd", "d6fa7e2", "4c0596e"]
     y-axis "Line coverage (%)" 67 --> 82
-    line [69.50, 69.48, 69.48, 69.48, 76.80, 76.80, 76.80, 76.80, 76.64, 76.67, 76.67, 76.46, 79.03, 79.03, 79.03, 79.54]
+    line [69.50, 69.48, 69.48, 69.48, 76.80, 76.80, 76.80, 76.80, 76.64, 76.67, 76.67, 76.46, 79.03, 79.03, 79.03, 79.54, 79.54]
 ```
 
 | Date | Commit | Line coverage | Change |
 |:--|:--|--:|--:|
+| 2026-10-17 | [4c0596e](https://github.com/enaweg/godot-epluginframework/commit/4c0596e4b1ad1201ecc0253c9e74554ab7409529) | 79.54% | +0.00 pp |
 | 2026-10-17 | [d6fa7e2](https://github.com/enaweg/godot-epluginframework/commit/d6fa7e2bf3286e8cc0eb8b5330d6bb917aef2c8f) | 79.54% | +0.51 pp |
 | 2026-10-17 | [7b94ccd](https://github.com/enaweg/godot-epluginframework/commit/7b94ccdc2ce811f3293f97e3c21b77515fffcf2c) | 79.03% | +0.00 pp |
 | 2026-10-17 | [dd42316](https://github.com/enaweg/godot-epluginframework/commit/dd4231688782e8151d5296688ec0313a038db1d7) | 79.03% | +0.00 pp |
@@ -35,7 +36,7 @@ xychart-beta
 
 All measurements: [history.csv](history.csv).
 
-<details><summary>Files at d6fa7e2 (107)</summary>
+<details><summary>Files at 4c0596e (107)</summary>
 
 | File | Line coverage | Covered lines |
 |:--|--:|--:|
