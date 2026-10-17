@@ -82,8 +82,6 @@ foreach (var addon in addons)
     var repositoryName = Regex.Replace(addon.Repository.TrimEnd('/').Split('/', ':')[^1], @"\.git$", "");
     string? slug;
     string note;
-    // The files whose .gdextension would make the updater refuse the plugin.
-    IEnumerable<string> payload;
     if (zip is { Error: { } refused, Refuses: true })
     {
         // The updater downloads this ZIP for every update and refuses it, whatever the slug.
@@ -94,15 +92,12 @@ foreach (var addon in addons)
     if (addon.Slug is { } given)
     {
         (slug, note) = (given, "from extra_addons.txt");
-        payload = zip?.Root is { } zipRoot ? Under(zip.Files, zipRoot)
-            : tree.Plugins.FirstOrDefault(p => Name(p) == given) is { } folder ? Under(tree.Files, folder) : [];
     }
     else if (zipSlug is not null)
     {
         slug = zipSlug;
         note = existing.TryGetValue(addon.Repository, out var listed) && listed != zipSlug
             ? $"from the release ZIP {zip!.Asset}, the current list had {listed}" : "";
-        payload = Under(zip!.Files, zip.Root!);
     }
     else
     {
@@ -116,16 +111,9 @@ foreach (var addon in addons)
         {
             note = $"kept {kept} from the current list" + (slug is null ? "" : $", the repository names {slug}");
             slug = kept;
-            folder = tree.Plugins.FirstOrDefault(p => Name(p) == kept) ?? (tree.Plugins.Contains("") ? "" : folder);
         }
         if (zip?.Error is { } failed) note = (note.Length == 0 ? "" : note + "; ") + $"release ZIP {zip.Asset} not used: {failed}";
         if (slug is null) { leftOut.Add($"{addon.Repository}: {note}"); continue; }
-        payload = folder is null ? [] : Under(tree.Files, folder);
-    }
-    if (payload.Any(f => f.EndsWith(".gdextension", StringComparison.OrdinalIgnoreCase)))
-    {
-        leftOut.Add($"{addon.Repository}: GDExtension plugin (ePlugin cannot update it)");
-        continue;
     }
     chosen.Add((slug, addon, note));
 }
@@ -149,8 +137,8 @@ var text = new StringBuilder($$"""
     // tools/build_godot_addons.cs): popular add-ons with at least {{stars}} stars and a commit within the last two years, plus those
     // in tools/extra_addons.txt, with a release or version tag. Each slug is the one extra_addons.txt gives, else
     // the plugin folder in the latest release's ZIP, else the add-on's slug in the previous list, else the plugin folder in
-    // the repository at that release or tag. Add-ons without a plugin folder, with a GDExtension or with a release ZIP the
-    // updater refuses are left out. The packages were not installed or validated.
+    // the repository at that release or tag. Add-ons without a plugin folder or with a release ZIP the updater refuses are
+    // left out. The packages were not installed or validated.
     internal static partial class KnownPlugins
     {
         private static KnownPlugin[] Entries() =>
@@ -314,7 +302,6 @@ static async Task<(int Code, string Output, string Error)> Git(string directory,
     return (process.ExitCode, await output, await error);
 }
 
-static IEnumerable<string> Under(IEnumerable<string> files, string folder) => files.Where(f => f.StartsWith(folder, StringComparison.Ordinal));
 static string Name(string folder) => folder.TrimEnd('/').Split('/')[^1];
 static string Plain(string name) => Regex.Replace(name.ToLowerInvariant(), "[-_. ]", "").Replace("godot", "");
 static string Cs(string value) => "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";

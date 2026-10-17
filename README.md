@@ -34,22 +34,25 @@ Release archives include a small shared progress helper (about 80 KB) that runs 
 
 ## Features
 
+ePlugin works with plugins that have a `plugin.cfg` in their folder below `res://addons` (`res://addons/<slug>/plugin.cfg`), whatever their type: ePlugins, plain C#, GDScript and GDExtension plugins. Add-ons without one, such as a bare GDExtension, a script library or an asset pack, are not supported.
+
 For plugin authors:
 
 - **Declarative plugin recipes** install NuGet packages, C# projects and project references, autoloads, and managed directories on activation, then reverse those changes on deactivation. Declarations are checked when the recipe is created, so a mistake fails the activation with a clear message. Removing something that is already gone counts as done. NuGet sources are recorded in the project-root `nuget.config` for reproducible restores.
-- **Managed directories** keep plugin code that needs those packages or projects hidden (for example as `.src`) until the plugin is enabled, so the plugin's root code always compiles.
-- **Plugin dependencies** enable required C# or GDScript plugins first, check version constraints, and disable dependants when a required plugin is disabled. Dependency cycles fail the activation instead of stalling it.
+- **Managed directories** keep plugin code that needs those packages or projects hidden (for example as `.src`) until the plugin is enabled, so the plugin's root code always compiles. They cannot hold a GDExtension.
+- **Plugin dependencies** enable required C#, GDScript or GDExtension plugins first, check version constraints, and disable dependants when a required plugin is disabled. Dependency cycles fail the activation instead of stalling it.
 - **Optional dependencies** apply a nested resource recipe only while another plugin is enabled and matches its version, in whichever order the two are enabled. They never enable the other plugin or fail the declaring plugin's activation.
 - **Licenses, welcome pages, and links** can be declared in the recipe or in `plugin.cfg`; by default the plugin's `LICENSE` and README are used. `documentation_url` and `source_url` appear in the ePlugin Manager.
 - **Startup initializers** let code in managed directories run `IInitialize` callbacks once the framework is ready.
 - **Progress and logging APIs**: `EPlugin.Progress` shows a C# plugin's own long-running editor work in the progress window, and a logging plugin can take over ePlugin's logging.
 - **Updatable releases** need only an `update_url` in `plugin.cfg` pointing at GitHub or GitLab releases or a Git repository.
 - **GDScript plugins** get updates, licenses, welcome pages, links, and can be dependencies of ePlugins, with only keys in `plugin.cfg` and no code. See [GDScript plugins](docs/gdscript-plugins.md).
+- **GDExtension plugins** (plugins with a `plugin.cfg` that ship native libraries) get the same, and ePlugins can ship a GDExtension too. Updates replace the libraries the editor has loaded and reload them in place or restart the editor. GDExtensions without a `plugin.cfg` are not supported. See [GDExtension plugins](docs/gdextension-plugins.md).
 
 For everyone working on the project:
 
-- **ePlugin Manager** lists every plugin below `res://addons` (ePlugins, plain C# and GDScript plugins) with its state, enables and disables them, checks for updates, selects versions (including downgrades and reinstalls), manages local package directories and update sites, and retries interrupted or failed work. Plugin details link the license, welcome page, documentation, source, and update site of each plugin. Its toolbar button turns green while an update can be installed and red while a plugin failed or waits for **Retry failed**.
-- **Plugin updates** support GitHub and GitLab releases (including self-hosted GitLab), Git tags and branches, and ZIP packages in user-configured local directories. Updates are downloaded and validated as a batch, backed up, built, and rolled back on failure; dependent plugins are installed together and independent ones separately, so one failing update does not undo the others. Packages with warnings or a new update host are shown for review before installation.
+- **ePlugin Manager** lists every plugin below `res://addons` (ePlugins, plain C#, GDScript and GDExtension plugins) with its state, enables and disables them, checks for updates, selects versions (including downgrades and reinstalls), manages local package directories and update sites, and retries interrupted or failed work. Plugin details link the license, welcome page, documentation, source, and update site of each plugin. Its toolbar button turns green while an update can be installed and red while a plugin failed or waits for **Retry failed**.
+- **Plugin updates** support GitHub and GitLab releases (including self-hosted GitLab), Git tags and branches, and ZIP packages in user-configured local directories. Updates are downloaded and validated as a batch, backed up, built, and rolled back on failure. Native GDExtension libraries are replaced next to the copies the editor has loaded; dependent plugins are installed together and independent ones separately, so one failing update does not undo the others. Packages with warnings or a new update host are shown for review before installation.
 - **Updates that only break the project's code** are kept: when a new version changes an API the project's own scripts use but every plugin still compiles, the update stays installed so the project can be adapted to it. The plugin's details list the remaining errors and can roll the update back. See [Updating plugins](docs/updating-plugins.md#updates-that-only-break-the-projects-code).
 - **Update sites** come from a project's committed `addons/eplugin-update-sites.json`, a plugin's own `update_url`, or a built-in list of popular Godot add-ons, tried in that order. A site that fails or is unsupported falls back to the next one, so add-ons without an `update_url` can be updated too.
 - **Plugin licenses** can be required before a plugin is enabled or updated. Accepted licenses are recorded per project, and dependencies enabled together are reviewed in one dialog.
@@ -70,6 +73,7 @@ Screenshots show the repository's sample plugins and example update packages.
 
 - [Create an ePlugin](docs/creating-plugins.md): starter code, recipe resources, dependencies, helpers, and initializers.
 - [GDScript plugins](docs/gdscript-plugins.md): what ePlugin offers a GDScript plugin without code (updates, licenses, welcome pages, links, dependencies) and how to set it up.
+- [GDExtension plugins](docs/gdextension-plugins.md): plugins and ePlugins that ship a GDExtension, how updates replace native libraries the editor has loaded, and how to publish them.
 - [ePlugin Manager](docs/eplugin-manager.md): inspect and control plugins, check updates, manage local sources and update sites, and retry failed work.
 - [Progress dialog](docs/progress-dialog.md): automatic progress feedback, the public reporting API, shared windows, restarts, and failure handling.
 - [Updating plugins](docs/updating-plugins.md): configure update sources, project and built-in update sites, publish packages, and understand review, validation, builds, kept updates, and recovery.
@@ -85,7 +89,9 @@ Godot plugins do not provide a built-in way to manage C# project references or N
 
 Godot currently needs project-managed resource IDs for assets such as scenes, models, and scripts, so the framework cannot manage those assets outside the project. Plugin activation and deactivation can also freeze the editor while project changes are built. On supported desktop platforms the separate progress window remains responsive during that work. A failure in the middle of installing or removing a recipe can leave the project in a state that does not build; fix the cause and use **Retry failed** in the ePlugin Manager (see [Plugin state files](docs/plugin-state.md)).
 
-Updates replace whole addon folders. They do not install missing plugins or resolve dependencies from remote sources, and plugins containing GDExtensions are not updated. Update builds compile only C#, so an update that breaks GDScript code is not detected.
+Only plugins with a `plugin.cfg` are supported, whatever their type. Add-ons without one are not listed in the ePlugin Manager, cannot be updated, enabled or required as a dependency, and get no license or welcome page.
+
+Updates replace whole addon folders. They do not install missing plugins or resolve dependencies from remote sources. GDExtensions are updated only as part of a plugin, and not inside directories managed with `AddDirectory`. Update builds compile only C#, so an update that breaks GDScript code is not detected.
 
 ## Testing
 

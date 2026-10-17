@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using Enaweg.Plugin.Internal.Kinds;
 
 namespace Enaweg.Plugin.Internal.Update;
 
@@ -20,9 +21,13 @@ internal sealed record LocalZipPackageRef(string Path) : UpdatePackageRef;
 /// <param name="UpdateUrl">The plugin.cfg update_url; null when only local plugin directories can update the plugin.</param>
 /// <param name="OverrideUrl">The update site the project sets for the plugin, which is tried before the plugin.cfg one.</param>
 /// <param name="KnownUrl">The update site of ePlugin's built-in list, the last one tried.</param>
+/// <param name="Kind">
+/// What the editor knows of the installed plugin: <see cref="PluginKind.Framework"/>, <see cref="PluginKind.EPlugin"/>, or
+/// <see cref="PluginKind.Unknown"/> for every other plugin, whose kind validation reads from its files.
+/// </param>
 internal sealed record PluginUpdateTarget(string Slug, string Name, string InstalledVersion, string? UpdateUrl,
     string Directory, bool IsBlocked = false, bool StoreReadOnly = false, string? RecordedVersion = null,
-    string? OverrideUrl = null, string? KnownUrl = null)
+    string? OverrideUrl = null, string? KnownUrl = null, PluginKind Kind = PluginKind.Unknown)
 {
     /// <summary>
     /// The update sites to try, in order: the project's, the plugin.cfg update_url, then the built-in one. A candidate

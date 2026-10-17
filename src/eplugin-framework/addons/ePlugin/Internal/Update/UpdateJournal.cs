@@ -24,6 +24,22 @@ internal sealed class UpdatePluginJournal
     public bool SwapStarted { get; set; }
     public List<string> Preserved { get; set; } = [];
     public Dictionary<string, string> Uids { get; set; } = [];
+    /// <summary>
+    /// The <see cref="Kinds.PluginKind"/> whose workflow updates the plugin, by name; null in journals written before it
+    /// was recorded, which <see cref="Kinds.PluginKinds.Workflow(UpdatePluginJournal)"/> derives from <see cref="IsEPlugin"/>.
+    /// </summary>
+    public string? Kind { get; set; }
+    /// <summary>
+    /// The installed or the new version ships a GDExtension, so its files are replaced one by one (see
+    /// <see cref="Kinds.EPluginWorkflow"/>); a GDExtension plugin always is.
+    /// </summary>
+    public bool NativeExtension { get; set; }
+    /// <summary>The editor has to restart to load the plugin's native libraries as they are now (GDExtension plugins).</summary>
+    public bool RestartRequired { get; set; }
+    /// <summary>The new native libraries were reloaded in place, so the editor runs them although it did not restart.</summary>
+    public bool ReloadedInPlace { get; set; }
+    /// <summary>The editor process <see cref="RestartRequired"/> and <see cref="ReloadedInPlace"/> refer to.</summary>
+    public string? NativeSession { get; set; }
 }
 internal sealed record JournalBuild(string Name, int ExitCode, string LogFile);
 internal sealed class UpdateJournal
@@ -70,6 +86,8 @@ internal sealed class UpdateJournal
     [JsonIgnore] public string Directory { get; set; } = "";
     public string Backup(string slug) => PackageFiles.Inside(Path.Combine(Directory, "backup"), slug);
     public string Staging(string slug) => PackageFiles.Inside(Path.Combine(Directory, "staging"), slug);
+    /// <summary>Where files go that were still in use and could only be moved, not deleted; removed with the journal.</summary>
+    public string Discarded(string slug) => PackageFiles.Inside(Path.Combine(Directory, "discarded"), slug);
     public bool IsActive => State is not (UpdatePhase.RolledBack or UpdatePhase.Committed or UpdatePhase.CommittedWithErrors or UpdatePhase.Failed);
     public void Save(UpdatePhase? state = null) { if (state is not null) State = state.Value; AtomicJson.Write(Path.Combine(Directory, "journal.json"), this); }
     public static UpdateJournal Load(string directory)

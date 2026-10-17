@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Enaweg.Plugin.Internal.Kinds;
 using Enaweg.Plugin.Internal.Update;
 using Godot;
 
@@ -28,8 +29,9 @@ internal sealed partial class EGlobal
     }
 
     /// <summary>
-    /// What the project already rules out for these updates before anything is downloaded: an installed GDExtension, or
-    /// an enabled plugin's version constraint on an updated plugin.
+    /// What the project already rules out for these updates before anything is downloaded: a GDExtension in the installed
+    /// framework (every other plugin updates its own, see <see cref="GDExtensionPluginWorkflow"/>), or an enabled plugin's
+    /// version constraint on an updated plugin.
     /// </summary>
     internal IReadOnlyList<Finding> UpdatePreflightFindings(IReadOnlyList<UpdateCandidate> candidates)
     {
@@ -37,7 +39,8 @@ internal sealed partial class EGlobal
         foreach (var candidate in candidates)
         {
             var directory = ProjectSettings.GlobalizePath(_host.PluginDirectory(candidate.Slug));
-            if (Directory.Exists(directory) && AddonPackageValidator.NativeExtension(PackageFiles.Files(directory)) is { } native) findings.Add(native);
+            if (candidate.Slug == FrameworkSlug && Directory.Exists(directory) &&
+                PluginKindWorkflow.RefuseNativeExtension(PackageFiles.Files(directory)) is { } native) findings.Add(native);
         }
         var updated = candidates.ToDictionary(c => c.Slug, StringComparer.Ordinal);
         foreach (var context in _contexts.Where(c => c.Plugin is not null && c.State == EEditorPluginState.Activated))

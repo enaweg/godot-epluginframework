@@ -1,6 +1,6 @@
 # ePlugin for GDScript plugins
 
-ePlugin Framework is written in C#, but most of what it offers works for every plugin below `res://addons`, GDScript plugins included. A GDScript plugin needs no code for it: it opts in with keys in `plugin.cfg` and with files in its folder. Godot ignores keys it does not know, so the same plugin keeps working unchanged in projects without ePlugin.
+ePlugin Framework is written in C#, but most of what it offers works for every plugin below `res://addons`, GDScript plugins included. Like every plugin, a GDScript plugin needs a `plugin.cfg` in its folder; scripts without one are not supported. A GDScript plugin needs no code for it: it opts in with keys in `plugin.cfg` and with files in its folder. Godot ignores keys it does not know, so the same plugin keeps working unchanged in projects without ePlugin.
 
 The project using the plugin needs the Godot .NET editor and a .NET SDK, because ePlugin itself is a C# plugin (see [Requirements and installation](../README.md#requirements-and-installation)). The GDScript plugin stays pure GDScript.
 
@@ -120,7 +120,7 @@ Attach the ZIP to a GitHub or GitLab release, or put it in a [local plugin direc
 
 - Raise `version` in `plugin.cfg` for every release. Versions have two to four numbers (`1.2`, `1.2.0`, `1.2.0.1`), optionally a leading `v` and a prerelease suffix such as `-beta.1`. Name the release or tag after the same version.
 - Keep the folder name stable. It is the plugin's slug, which update sites and dependencies refer to.
-- Do not include `project.godot`, `nuget.config`, symlinks or submodules. Plugins with a GDExtension (`.gdextension` files) are not updated.
+- Do not include `project.godot`, `nuget.config`, symlinks or submodules. A plugin with a GDExtension (`.gdextension` files) is a [GDExtension plugin](gdextension-plugins.md), which has a few more rules.
 
 All rules are in [Publish an updatable release](updating-plugins.md#publish-an-updatable-release).
 

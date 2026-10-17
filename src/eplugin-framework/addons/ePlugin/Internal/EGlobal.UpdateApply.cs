@@ -387,6 +387,13 @@ internal sealed partial class EGlobal
             if (global._restartDeferrals > 0) { global._restartDeferred = true; return; }
             global.RestartForUpdate();
         }
+        public bool ReloadExtension(string resourcePath)
+        {
+            var status = GDExtensionManager.IsExtensionLoaded(resourcePath)
+                ? GDExtensionManager.ReloadExtension(resourcePath) : GDExtensionManager.LoadExtension(resourcePath);
+            if (status != GDExtensionManager.LoadStatus.Ok) Log($"Godot could not reload {resourcePath}: {status}.");
+            return status == GDExtensionManager.LoadStatus.Ok;
+        }
         public bool Verify(UpdatePluginJournal plugin)
         {
             var metadata = EditorPluginExtensions.ReadMetadata($"{global._host.PluginDirectory(plugin.Slug)}/plugin.cfg");

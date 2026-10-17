@@ -6,6 +6,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Enaweg.Plugin.Internal.Kinds;
 using Enaweg.Plugin.Internal.Update;
 using GdUnit4;
 
@@ -60,12 +61,15 @@ public class UpdatePackageTests
     [TestCase]
     public void SymlinksAndGitFilesAreSkippedButGitmodulesRefused()
     {
-        var zip = Zip(("plugin.cfg", Config("2.0.0")), (".git/config", "bad"), ("link", "../outside"));
+        var zip = Zip(("plugin.cfg", Config("2.0.0")), (".git/config", "bad"), ("link", "../outside"), ("bin/~native.dll", "runtime copy"), ("bin/native.dll", "library"));
         using (var archive = ZipFile.Open(zip, ZipArchiveMode.Update)) archive.GetEntry("link")!.ExternalAttributes = 0xA000 << 16;
         var stage = Path.Combine(_root, "plugin");
         SafeZipExtractor.Extract(zip, "plugin", stage, CancellationToken.None);
         Assertions.AssertBool(File.Exists(Path.Combine(stage, "link"))).IsFalse();
         Assertions.AssertBool(Directory.Exists(Path.Combine(stage, ".git"))).IsFalse();
+        // Godot's runtime copy of a GDExtension library is never part of a package
+        Assertions.AssertBool(File.Exists(Path.Combine(stage, "bin/~native.dll"))).IsFalse();
+        Assertions.AssertBool(File.Exists(Path.Combine(stage, "bin/native.dll"))).IsTrue();
         var forbidden = Zip(("plugin.cfg", Config("2.0.0")), (".gitmodules", "bad"));
         Assertions.AssertBool(Refused(() => SafeZipExtractor.Extract(forbidden, "plugin", Path.Combine(_root, "refused"), CancellationToken.None))).IsTrue();
     }
@@ -84,7 +88,15 @@ public class UpdatePackageTests
         var validator = new AddonPackageValidator();
         Assertions.AssertBool(validator.Validate(new(target, candidate, stage)).IsValid).IsTrue();
         File.WriteAllText(Path.Combine(stage, "native.gdextension"), "native");
-        Assertions.AssertBool(validator.Validate(new(target, candidate, stage)).Findings.Any(f => f.Code == "R10")).IsTrue();
+        // a plugin without a recipe becomes a GDExtension plugin, an ePlugin stays one; only the framework is refused
+        var native = validator.Validate(new(target, candidate, stage));
+        Assertions.AssertObject(native.Kind).IsEqual(PluginKind.GDExtension);
+        Assertions.AssertBool(native.Findings.Any(f => f.Code == "R10")).IsFalse();
+        var managed = validator.Validate(new(target with { Kind = PluginKind.EPlugin }, candidate, stage));
+        Assertions.AssertObject(managed.Kind).IsEqual(PluginKind.EPlugin);
+        Assertions.AssertBool(managed.Findings.Any(f => f.Code == "R10")).IsFalse();
+        Assertions.AssertString(managed.Findings.Single(f => f.Code == "R21").Message).Contains("restarts");
+        Assertions.AssertBool(validator.Validate(new(target with { Kind = PluginKind.Framework }, candidate, stage)).Findings.Any(f => f.Code == "R10")).IsTrue();
         File.Delete(Path.Combine(stage, "native.gdextension"));
         File.WriteAllText(Path.Combine(stage, "plugin.cfg"), Config("1.0.0").Replace("plugin.gd", "../outside.gd"));
         var refused = validator.Validate(new(target with { IsBlocked = true }, candidate, stage));
