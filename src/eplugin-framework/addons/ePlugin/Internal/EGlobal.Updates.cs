@@ -65,7 +65,7 @@ internal sealed partial class EGlobal
         ReloadUpdateSites();
         return GetEnabledPluginSlugs().Select(slug =>
         {
-            var directory = $"res://addons/{slug}";
+            var directory = _host.PluginDirectory(slug);
             var metadata = EditorPluginExtensions.ReadMetadata(directory + "/plugin.cfg");
             return metadata is null ? null : new PluginUpdateTarget(slug, metadata.Name,
                 metadata.Version, metadata.UpdateUrl, ProjectSettings.GlobalizePath(directory),

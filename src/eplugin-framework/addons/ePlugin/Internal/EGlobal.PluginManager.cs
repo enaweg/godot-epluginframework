@@ -55,7 +55,7 @@ internal sealed partial class EGlobal
     internal void InvalidateManagerStatus() { _managerStatusKey = null; _nextManagerStatusCheck = 0; }
 
     /// <summary>
-    /// Every addon with a plugin.cfg directly below res://addons, enabled or not, plus plugins that only remain as a
+    /// Every addon with a plugin.cfg directly below the addons folder, enabled or not, plus plugins that only remain as a
     /// failed local attempt.
     /// </summary>
     internal IReadOnlyList<PluginInfo> CollectPlugins()
@@ -66,10 +66,10 @@ internal sealed partial class EGlobal
         var types = PluginTypes.All;
         var framework = _ePluginContext?.GetPluginSlug() ?? "ePlugin";
         var plugins = new List<PluginInfo>();
-        using var addons = DirAccess.Open("res://addons");
+        using var addons = DirAccess.Open(_host.AddonsDirectory);
         foreach (var slug in addons?.GetDirectories() ?? [])
         {
-            var directory = $"res://addons/{slug}";
+            var directory = _host.PluginDirectory(slug);
             if (!FileAccess.FileExists(directory + "/plugin.cfg")) continue;
             using var config = new ConfigFile();
             if (config.Load(directory + "/plugin.cfg") != Error.Ok) continue;

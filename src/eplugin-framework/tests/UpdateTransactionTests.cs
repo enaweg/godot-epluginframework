@@ -392,6 +392,77 @@ public class UpdateTransactionTests
     }
 
     [TestCase]
+    public void ARollbackWhoseBuildFailsStaysBlockedUntilRetryRollsBackAgain()
+    {
+        _host.Managed = true;
+        _host.Builds.Enqueue(new(1, ["compile error"]));
+        _host.Builds.Enqueue(new(1, ["restored project does not build"]));
+        var package = Package(true);
+
+        Assertions.AssertObject(_applier.Apply([package.Package], package.Directory)).IsEqual(UpdateOutcome.KeptWithErrors);
+        var journal = UpdateJournal.Load(package.Directory);
+        Assertions.AssertObject(journal.State).IsEqual(UpdatePhase.RollingBack);
+        Assertions.AssertString(journal.Failure).Contains("rollback failed: Restored project failed to build.");
+        Assertions.AssertString(_store.GetLocal("plugin")!.Reason).IsEqual("update_rollback_failed");
+        // the files were restored before the build failed
+        Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/plugin/plugin.cfg")).Contains("1.0.0")).IsTrue();
+
+        // the project was repaired; its backup is gone, but the installed version shows the files are restored
+        Assertions.AssertObject(_applier.Retry(journal)).IsEqual(UpdateOutcome.RolledBack);
+        Assertions.AssertInt(_store.LocalAttempts.Count).IsEqual(0);
+        Assertions.AssertObject(UpdateJournal.Load(package.Directory).State).IsEqual(UpdatePhase.RolledBack);
+        Assertions.AssertString(_store.GetShared("plugin")!.Version).IsEqual("0.9.0");
+    }
+
+    [TestCase]
+    public void ARollbackWithoutTheBackupLeavesTheNewFilesAndAsksForManualRepair()
+    {
+        _host.HasUi = true; _host.Policy = "ask"; _host.Builds.Enqueue(new(1, ["error CS0246"]));
+        var package = Package(true);
+        Assertions.AssertObject(_applier.Apply([package.Package], package.Directory, askOnBuildFailure: true)).IsEqual(UpdateOutcome.AwaitingDecision);
+        var journal = UpdateJournal.Load(package.Directory);
+        Assertions.AssertObject(_applier.Keep(journal)).IsEqual(UpdateOutcome.KeptWithErrors);
+        Directory.Delete(journal.Backup("plugin"), true);
+
+        Assertions.AssertObject(_applier.RollbackKept(UpdateJournal.Load(package.Directory))).IsEqual(UpdateOutcome.KeptWithErrors);
+
+        Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/plugin/plugin.cfg")).Contains("2.0.0")).IsTrue();
+        Assertions.AssertString(_store.GetLocal("plugin")!.Reason).IsEqual("update_rollback_failed");
+        Assertions.AssertString(UpdateJournal.Load(package.Directory).Failure).Contains("Backup for plugin is missing");
+    }
+
+    [TestCase]
+    public void RetryRollsBackAnUpdateWhosePluginsNoLongerVerify()
+    {
+        // a commit that failed
+        _host.OnScan = () => File.AppendAllText(_shared, " ");
+        var package = Package();
+        Assertions.AssertObject(_applier.Apply([package.Package], package.Directory)).IsEqual(UpdateOutcome.KeptWithErrors);
+        Assertions.AssertString(_store.GetLocal("plugin")!.Reason).IsEqual("update_commit_failed");
+        _host.OnScan = null;
+        _host.Verified = false;
+
+        Assertions.AssertObject(_applier.Retry(UpdateJournal.Load(package.Directory))).IsEqual(UpdateOutcome.RolledBack);
+        Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/plugin/plugin.cfg")).Contains("1.0.0")).IsTrue();
+        Assertions.AssertString(UpdateJournal.Load(package.Directory).Failure).IsEqual("Retry verification failed.");
+
+        // an update kept after reconciling whose project builds now, but whose plugin does not load
+        Cleanup(); Setup();
+        Defaults();
+        package = Package(true);
+        _host.OnPrepareJournal = journal => journal.Recipes["plugin"] = new() { Old = new() { Nugets = [new("Shared", "1.0", null)] }, Applied = new() };
+        _host.OnReconcile = journal => journal.Recipes["plugin"].Target = new() { Nugets = [new("Shared", "2.0", null)] };
+        Assertions.AssertObject(_applier.Apply([package.Package], package.Directory)).IsEqual(UpdateOutcome.AwaitingReload);
+        _host.Builds.Enqueue(ProjectError());
+        Assertions.AssertObject(_applier.Resume(UpdateJournal.Load(package.Directory))).IsEqual(UpdateOutcome.KeptWithErrors);
+        _host.Verified = false;
+
+        Assertions.AssertObject(_applier.Retry(UpdateJournal.Load(package.Directory))).IsEqual(UpdateOutcome.RolledBack);
+        Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/plugin/plugin.cfg")).Contains("1.0.0")).IsTrue();
+        Assertions.AssertInt(_store.LocalAttempts.Count).IsEqual(0);
+    }
+
+    [TestCase]
     public void JournalsWithoutTheBuildFailureFieldsStillLoad()
     {
         var directory = Path.Combine(_root, ".godot/eplugin/updates", "older");
@@ -563,7 +634,8 @@ public class UpdateTransactionTests
         public void Scan() => OnScan?.Invoke();
         public BuildOutcome Build() { BuildCount++; return Builds.Count > 0 ? Builds.Dequeue() : new(0, []); }
         public void RequestReload(UpdateJournal journal) { Reloads++; }
-        public bool Verify(UpdatePluginJournal plugin) => true;
+        public bool Verified = true;
+        public bool Verify(UpdatePluginJournal plugin) => Verified;
         public void Log(string message) { }
     }
 }

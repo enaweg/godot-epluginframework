@@ -395,6 +395,25 @@ public class EGlobalLifecycleTests
     }
 
     [TestCase]
+    public void RetryingADeactivationDisablesAPluginTheEditorStillHasEnabled()
+    {
+        // e.g. the deactivation failed and the editor restarted with the plugin still enabled
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"));
+        _fixture.Enable("app");
+        Assertions.AssertBool(_fixture.Store.TryBeginAttempt("app", "1.0.0", PersistedPluginState.Deactivated, out var id)).IsTrue();
+        Assertions.AssertBool(_fixture.Store.TryFail(id, PersistedPluginState.Failed, "recipe_operation_failed")).IsTrue();
+        var start = _fixture.Operations.Count;
+
+        _fixture.Global.RetryFailedPlugins();
+
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Deactivated);
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsFalse();
+        Assertions.AssertThat(OperationsSince(start)).ContainsExactly("remove-nuget App.Package", "build");
+        Assertions.AssertObject(_fixture.Store.GetLocal("app")).IsNull();
+        Assertions.AssertObject(_fixture.Store.GetShared("app")!.State).IsEqual(PersistedPluginState.Deactivated);
+    }
+
+    [TestCase]
     public void RetryRecreatesAnEPluginThatHasNoEditorInstance()
     {
         // e.g. after a restart: the failed attempt is on disk, but the plugin is disabled

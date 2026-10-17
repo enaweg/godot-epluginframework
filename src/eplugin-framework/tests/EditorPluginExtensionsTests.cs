@@ -80,6 +80,10 @@ public class EditorPluginExtensionsTests
             Assertions.AssertObject(sparse.UpdateUrl).IsNull();
             Assertions.AssertObject(sparse.DocumentationUrl).IsNull();
             Assertions.AssertObject(EditorPluginExtensions.ReadMetadata(Path.Combine(directory, "missing.cfg"))).IsNull();
+
+            var broken = Path.Combine(directory, "broken.cfg");
+            File.WriteAllText(broken, "[plugin\nname=\"Broken");
+            Assertions.AssertObject(EditorPluginExtensions.ReadMetadata(broken)).IsNull();
         }
         finally
         {

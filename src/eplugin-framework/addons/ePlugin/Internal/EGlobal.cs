@@ -70,6 +70,17 @@ internal sealed partial class EGlobal
         _host = host;
     }
 
+    /// <summary>
+    /// Makes <paramref name="global"/> the <see cref="Instance"/> until the result is disposed, for tests of the public
+    /// API, which reaches the framework only through <see cref="Instance"/>.
+    /// </summary>
+    internal static IDisposable UseInstance(EGlobal global)
+    {
+        var previous = _instance;
+        _instance = global;
+        return new Deferral(() => _instance = previous);
+    }
+
     /// <summary>The plugin contexts, for tests.</summary>
     internal List<PluginContext> Contexts => _contexts;
 
@@ -278,7 +289,7 @@ internal sealed partial class EGlobal
         _instance = null;
     }
 
-    private void RecordFrameworkEnabled(EPluginPlugin plugin)
+    internal void RecordFrameworkEnabled(EPluginPlugin plugin)
     {
         if (_stateStore is null || _stateStore.IsReadOnly)
         {
@@ -1353,11 +1364,10 @@ internal sealed partial class EGlobal
     /// <summary>
     /// If assembly reload is triggered based on code changes the contexts are lost. Need to rebuild it from active plugins.
     /// </summary>
-    private void ReloadContexts(ILoggerFactory? loggerFactory, bool changeTriggered)
+    internal void ReloadContexts(ILoggerFactory? loggerFactory, bool changeTriggered)
     {
         var logger = loggerFactory?.CreateLogger(GetType().FullName ?? "UNKNOWN");
-        var parentNode = EditorInterface.Singleton.GetBaseControl().GetParent();
-        var children = parentNode.GetChildren();
+        var children = _host.PluginNodes();
 
         if (_ePluginContext is null)
         {

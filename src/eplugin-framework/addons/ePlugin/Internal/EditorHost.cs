@@ -23,8 +23,17 @@ internal interface IEditorHost
     /// <summary>The slugs of the plugins below <c>res://addons</c> that <c>editor_plugins/enabled</c> lists.</summary>
     IReadOnlySet<string> EnabledPluginSlugs();
 
+    /// <summary>The project's folder (<c>res://</c>) as an absolute path, where update journals and backups are kept.</summary>
+    string ProjectRoot { get; }
+
+    /// <summary>The folder holding every plugin's directory, as a path Godot's file APIs can read.</summary>
+    string AddonsDirectory { get; }
+
     /// <summary>The directory of a plugin, which holds its <c>plugin.cfg</c>, as a path Godot's file APIs can read.</summary>
     string PluginDirectory(string slug);
+
+    /// <summary>The nodes Godot adds the editor plugins to, read after an assembly reload dropped their contexts.</summary>
+    IReadOnlyList<Node> PluginNodes();
 
     /// <summary>
     /// Whether the plugin is an ePlugin. Disabled plugins have no editor instance, so this is told by their compiled
@@ -62,7 +71,13 @@ internal sealed class EditorHost : IEditorHost
     public IReadOnlySet<string> EnabledPluginSlugs() =>
         ParseEnabledPlugins(ProjectSettings.GetSetting("editor_plugins/enabled", Array.Empty<string>()).AsStringArray());
 
-    public string PluginDirectory(string slug) => $"res://addons/{slug}";
+    public string ProjectRoot => ProjectSettings.GlobalizePath("res://");
+
+    public string AddonsDirectory => "res://addons";
+
+    public string PluginDirectory(string slug) => $"{AddonsDirectory}/{slug}";
+
+    public IReadOnlyList<Node> PluginNodes() => EditorInterface.Singleton.GetBaseControl().GetParent().GetChildren();
 
     public bool IsEPlugin(string slug) => PluginTypes.HasEPluginBelow(PluginDirectory(slug));
 

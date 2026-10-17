@@ -28,12 +28,19 @@ internal sealed partial class EGlobal
     private bool _scanDeferred;
     // Plugins rolled back since this assembly was loaded: it still holds their new code until the editor restarts.
     private readonly HashSet<string> _rolledBackUpdates = new(StringComparer.Ordinal);
-    private static string UpdateProjectRoot => ProjectSettings.GlobalizePath("res://");
-    private void InitializeUpdateJournals() => _updateJournals = new(Path.Combine(UpdateProjectRoot, ".godot/eplugin/updates"), message => _ePluginContext?.Logger.Error(message));
+    private IUpdateHost? _updateHost;
+    private string UpdateProjectRoot => _host.ProjectRoot;
+    /// <summary>What update transactions need from the editor; tests set a fake before the first transaction.</summary>
+    internal IUpdateHost UpdateHost
+    {
+        get => _updateHost ??= new GodotUpdateHost(this);
+        set => _updateHost = value;
+    }
+    internal void InitializeUpdateJournals() => _updateJournals = new(Path.Combine(UpdateProjectRoot, ".godot/eplugin/updates"), message => _ePluginContext?.Logger.Error(message));
     private UpdateApplier Applier()
     {
         if (_stateStore is null || _updateCache is null) throw new InvalidOperationException("Update system is not initialized.");
-        return _updateApplier ??= new(UpdateProjectRoot, _stateStore, new GodotUpdateHost(this), _updateCache);
+        return _updateApplier ??= new(UpdateProjectRoot, _stateStore, UpdateHost, _updateCache);
     }
 
     /// <summary>
@@ -98,7 +105,7 @@ internal sealed partial class EGlobal
     /// <summary>What a build failure does to an update of this plugin started from its details: ask, keep or rollback.</summary>
     internal string DetailsBuildFailurePolicy(string slug)
     {
-        var host = new GodotUpdateHost(this);
+        var host = UpdateHost;
         return UpdateFailureDecision.Choose(slug == "ePlugin", UpdateFailureDecision.Policy(host.BuildFailurePolicy, false, true), host.UiAvailable);
     }
 
@@ -181,7 +188,8 @@ internal sealed partial class EGlobal
         var result = keep ? Applier().Keep(journal) : Applier().Rollback(journal, "User requested rollback.");
         HandleUpdateOutcome(journal.Directory, result);
     }
-    private void ResumeUpdates()
+    /// <summary>Finishes or rolls back the update transactions an editor restart interrupted; called once at startup.</summary>
+    internal void ResumeUpdates()
     {
         if (_updateJournals is null || _stateStore is null) return;
         // Cache is needed by recovery before the first scheduled check.
@@ -227,7 +235,7 @@ internal sealed partial class EGlobal
                     result = attempts.Length == 0 ? Applier().Rollback(journal, "Update marker was lost.") : Applier().Resume(journal);
                     break;
                 case UpdatePhase.AwaitingDecision:
-                    result = new GodotUpdateHost(this).UiAvailable ? UpdateOutcome.AwaitingDecision : Applier().Rollback(journal, "Cannot show the build-failure dialog.");
+                    result = UpdateHost.UiAvailable ? UpdateOutcome.AwaitingDecision : Applier().Rollback(journal, "Cannot show the build-failure dialog.");
                     break;
                 case UpdatePhase.Swapped:
                 case UpdatePhase.RollingBack:
@@ -327,7 +335,7 @@ internal sealed partial class EGlobal
         public void Bridge(UpdateJournal journal, UpdatePluginJournal plugin)
         {
             if (!plugin.IsEPlugin || !journal.Recipes.TryGetValue(plugin.Slug, out var recipe)) return;
-            plugin.Preserved = InterimBridge.Restore(plugin.Slug, recipe.Old, journal.Backup(plugin.Slug), Path.Combine(UpdateProjectRoot, "addons", plugin.Slug));
+            plugin.Preserved = InterimBridge.Restore(plugin.Slug, recipe.Old, journal.Backup(plugin.Slug), Path.Combine(global.UpdateProjectRoot, "addons", plugin.Slug));
             journal.Save();
         }
         public void Reconcile(UpdateJournal journal, bool rollback) => global.ReconcileUpdateRecipes(journal, rollback);
@@ -365,28 +373,7 @@ internal sealed partial class EGlobal
             return (global.GetOrCreateContext(global._ePluginContext!).Cli as ICheckedDotnetCli)?.TryBuild() ?? new(1, ["Checked dotnet CLI is unavailable."]);
         }
         public bool KeepOnProjectErrors => ProjectSettings.GetSetting("eplugin/updates/keep_on_project_errors", true).AsBool();
-        public IReadOnlyList<string> PluginCodeRoots(UpdateJournal journal)
-        {
-            var roots = new List<string>();
-            var addons = Path.Combine(UpdateProjectRoot, "addons");
-            // A linked addon may be reported with the path it points to.
-            if (Directory.Exists(addons))
-                foreach (var directory in new DirectoryInfo(addons).EnumerateDirectories())
-                {
-                    try { if (directory.LinkTarget is not null && directory.ResolveLinkTarget(true) is { } target) roots.Add(target.FullName); }
-                    catch (IOException) { }
-                }
-            foreach (var recipe in journal.Recipes.Values)
-                foreach (var project in new[] { recipe.Old, recipe.Applied, recipe.Target }.Where(r => r is not null).SelectMany(r => r!.Projects))
-                {
-                    var path = project.Path.StartsWith("res://", StringComparison.Ordinal) ? ProjectSettings.GlobalizePath(project.Path) : Path.Combine(UpdateProjectRoot, project.Path);
-                    if (Path.GetDirectoryName(Path.GetFullPath(path)) is { } directory) roots.Add(directory);
-                }
-            // A project in the project directory (or above it) would make all of the project's code plugin code.
-            var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(UpdateProjectRoot)) + Path.DirectorySeparatorChar;
-            return roots.Select(r => Path.TrimEndingDirectorySeparator(Path.GetFullPath(r)) + Path.DirectorySeparatorChar)
-                .Where(r => !root.StartsWith(r, StringComparison.OrdinalIgnoreCase)).Distinct(StringComparer.Ordinal).ToArray();
-        }
+        public IReadOnlyList<string> PluginCodeRoots(UpdateJournal journal) => PluginCode.Roots(global.UpdateProjectRoot, journal);
         public BuildOutcome BuildPluginsOnly(PluginsOnlyBuild build)
         {
             ActivationProgress.SetText("Building the plugins without the project's code...");
@@ -402,7 +389,7 @@ internal sealed partial class EGlobal
         }
         public bool Verify(UpdatePluginJournal plugin)
         {
-            var metadata = EditorPluginExtensions.ReadMetadata($"res://addons/{plugin.Slug}/plugin.cfg");
+            var metadata = EditorPluginExtensions.ReadMetadata($"{global._host.PluginDirectory(plugin.Slug)}/plugin.cfg");
             return (plugin.Slug != "ePlugin" || global.IsValid()) && IsEnabled(plugin.Slug) && metadata?.Version == plugin.NewVersion &&
                 global._contexts.FirstOrDefault(c => c.Slug == plugin.Slug)?.State != EEditorPluginState.Error;
         }
