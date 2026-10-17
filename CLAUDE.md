@@ -74,7 +74,9 @@ Note: gdUnit4 editor tests are not currently possible in Godot (upstream
 [gdUnit4#911](https://github.com/MikeSchulze/gdUnit4/issues/911)), so tests exercise framework internals
 directly. `EGlobal` reaches the editor only through `IEditorHost` (`Internal/EditorHost.cs`); the lifecycle tests use
 `tests/LifecycleFixture.cs`, whose `FakeEditorHost` runs a plugin's enable/disable callback inside the toggle like
-Godot, with plugins in a temporary addons folder, a `RecordingCli` and real state files. Tests are compiled into the
+Godot, with plugins in a temporary addons folder, a `RecordingCli` and real state files. Update transactions go through
+`EGlobal.UpdateHost` (`GodotUpdateHost` in the editor), which tests replace with a fake, and `EGlobal.UseInstance`
+lets tests drive the public `EnableEPlugin`/`DisableEPlugin` extensions against a fixture. Tests are compiled into the
 project assembly, so they use `internal` members; don't reach private ones through reflection. Known failures on
 Windows: two `ProgressSessionTests` read a command file another handle keeps open.
 
@@ -116,8 +118,9 @@ enable/disable state machine (`EEditorPluginState`: `Created → Activated`/`Dea
 plugin dependencies (enabling/version-checking them before the dependent plugin), and applies/reverses each
 plugin's install recipe.
 
-Lifecycle code calls the editor only through `IEditorHost` (toggling plugins, the enabled list, plugin directories,
-whether a slug is an ePlugin and the recipe of a disabled one, autoloads, filesystem scans, whether dialogs can show);
+Lifecycle code calls the editor only through `IEditorHost` (toggling plugins, the enabled list, the project root, the
+addons folder and plugin directories, the plugin nodes an assembly reload rebuilds contexts from, whether a slug is an
+ePlugin and the recipe of a disabled one, autoloads, filesystem scans, whether dialogs can show);
 keep new lifecycle code behind it so it stays testable. Recipes are created through `TryEnsureRecipe`, which puts the
 plugin in error and discards a half-built recipe when `CreateRecipe` throws. `FindDependencyCycle` fails an activation
 whose hard dependencies lead back to the plugin (otherwise it waits for itself forever). Godot frees a plugin's instance

@@ -158,7 +158,16 @@ internal sealed class FakeEditorHost(LifecycleFixture fixture) : IEditorHost
 
     public IReadOnlySet<string> EnabledPluginSlugs() => Enabled.ToHashSet(StringComparer.Ordinal);
 
+    /// <summary>The nodes an assembly reload finds the editor plugins among.</summary>
+    public List<Node> Nodes { get; } = [];
+
+    public string ProjectRoot => fixture.Root;
+
+    public string AddonsDirectory => Path.Combine(fixture.Root, "addons").Replace('\\', '/');
+
     public string PluginDirectory(string slug) => fixture.Addon(slug).Replace('\\', '/');
+
+    public IReadOnlyList<Node> PluginNodes() => Nodes;
 
     public bool IsEPlugin(string slug) => fixture.IsEPlugin(slug);
 
