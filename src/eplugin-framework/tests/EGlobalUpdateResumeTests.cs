@@ -17,7 +17,7 @@ namespace Enaweg.Plugin.Tests;
 /// </summary>
 [TestSuite]
 [RequireGodotRuntime]
-public class EGlobalUpdateResumeTests
+public class EGlobalUpdateResumeTests : IDisposable
 {
     private LifecycleFixture _fixture = null!;
     private RecordingUpdateHost _updates = null!;
@@ -34,7 +34,13 @@ public class EGlobalUpdateResumeTests
     }
 
     [AfterTest]
-    public void Cleanup() => _fixture.Dispose();
+    public void Cleanup() => Dispose();
+
+    public void Dispose()
+    {
+        _fixture?.Dispose();
+        GC.SuppressFinalize(this);
+    }
 
     private string Installed => File.ReadAllText(Path.Combine(_fixture.Addon("tool"), "plugin.cfg"));
 

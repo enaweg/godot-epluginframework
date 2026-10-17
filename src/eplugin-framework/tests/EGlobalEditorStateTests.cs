@@ -18,7 +18,7 @@ namespace Enaweg.Plugin.Tests;
 /// </summary>
 [TestSuite]
 [RequireGodotRuntime]
-public class EGlobalEditorStateTests
+public class EGlobalEditorStateTests : IDisposable
 {
     private LifecycleFixture _fixture = null!;
     private readonly List<GodotObject> _objects = [];
@@ -27,11 +27,14 @@ public class EGlobalEditorStateTests
     public void Setup() => _fixture = new LifecycleFixture();
 
     [AfterTest]
-    public void Cleanup()
+    public void Cleanup() => Dispose();
+
+    public void Dispose()
     {
         foreach (var obj in _objects.Where(GodotObject.IsInstanceValid)) obj.Free();
         _objects.Clear();
-        _fixture.Dispose();
+        _fixture?.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     private T Track<T>(T obj) where T : GodotObject
