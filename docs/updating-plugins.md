@@ -14,7 +14,7 @@ script="MyPlugin.cs"
 update_url="https://github.com/owner/repository/releases"
 ```
 
-This works for enabled ePlugins, plain Godot GDScript or C# plugins, and ePlugin Framework itself. Checks compare the source version with the version in the installed `plugin.cfg`, independently of the last working version in `addons/eplugin-state.json`. A manual version edit does not block checks; an unfinished local attempt does. The `update_url` is read from the installed `plugin.cfg`, so each release must declare it again. To use a different update site for a plugin, for example one without an `update_url` or someone else's plugin, set it for the project instead; see [Project update sites](#project-update-sites).
+This works for enabled ePlugins, plain Godot GDScript, C# or [GDExtension](gdextension-plugins.md) plugins, and ePlugin Framework itself. Every one of them needs a `plugin.cfg` in its folder below `res://addons`; add-ons without one are not updated. Checks compare the source version with the version in the installed `plugin.cfg`, independently of the last working version in `addons/eplugin-state.json`. A manual version edit does not block checks; an unfinished local attempt does. The `update_url` is read from the installed `plugin.cfg`, so each release must declare it again. To use a different update site for a plugin, for example one without an `update_url` or someone else's plugin, set it for the project instead; see [Project update sites](#project-update-sites).
 
 Supported source examples:
 

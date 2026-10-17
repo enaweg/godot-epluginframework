@@ -237,6 +237,9 @@ as before.
 
 ### Plugin kinds
 
+Only plugins with a `plugin.cfg` in their folder below `res://addons` are supported, whatever their kind; add-ons
+without one (a bare GDExtension, a script library) are neither listed, updated, toggled nor resolved as dependencies.
+
 `Internal/Kinds/` distinguishes `PluginKind`s (Framework, EPlugin, CSharp, GDScript, GDExtension, Unknown) and gives each
 an explicit sealed `PluginKindWorkflow` (`FrameworkPluginWorkflow`, `EPluginWorkflow`, `CSharpPluginWorkflow`,
 `GDScriptPluginWorkflow`, `GDExtensionPluginWorkflow`, `UnknownPluginWorkflow`), so the kind-specific steps of a

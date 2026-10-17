@@ -34,6 +34,8 @@ Release archives include a small shared progress helper (about 80 KB) that runs 
 
 ## Features
 
+ePlugin works with plugins that have a `plugin.cfg` in their folder below `res://addons` (`res://addons/<slug>/plugin.cfg`), whatever their type: ePlugins, plain C#, GDScript and GDExtension plugins. Add-ons without one, such as a bare GDExtension, a script library or an asset pack, are not supported.
+
 For plugin authors:
 
 - **Declarative plugin recipes** install NuGet packages, C# projects and project references, autoloads, and managed directories on activation, then reverse those changes on deactivation. Declarations are checked when the recipe is created, so a mistake fails the activation with a clear message. Removing something that is already gone counts as done. NuGet sources are recorded in the project-root `nuget.config` for reproducible restores.
@@ -87,7 +89,9 @@ Godot plugins do not provide a built-in way to manage C# project references or N
 
 Godot currently needs project-managed resource IDs for assets such as scenes, models, and scripts, so the framework cannot manage those assets outside the project. Plugin activation and deactivation can also freeze the editor while project changes are built. On supported desktop platforms the separate progress window remains responsive during that work. A failure in the middle of installing or removing a recipe can leave the project in a state that does not build; fix the cause and use **Retry failed** in the ePlugin Manager (see [Plugin state files](docs/plugin-state.md)).
 
-Updates replace whole addon folders. They do not install missing plugins or resolve dependencies from remote sources. GDExtensions are updated only as part of a plugin with a `plugin.cfg`, and not inside directories managed with `AddDirectory`. Update builds compile only C#, so an update that breaks GDScript code is not detected.
+Only plugins with a `plugin.cfg` are supported, whatever their type. Add-ons without one are not listed in the ePlugin Manager, cannot be updated, enabled or required as a dependency, and get no license or welcome page.
+
+Updates replace whole addon folders. They do not install missing plugins or resolve dependencies from remote sources. GDExtensions are updated only as part of a plugin, and not inside directories managed with `AddDirectory`. Update builds compile only C#, so an update that breaks GDScript code is not detected.
 
 ## Testing
 

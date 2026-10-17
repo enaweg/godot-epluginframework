@@ -1,6 +1,6 @@
 # ePlugin for GDScript plugins
 
-ePlugin Framework is written in C#, but most of what it offers works for every plugin below `res://addons`, GDScript plugins included. A GDScript plugin needs no code for it: it opts in with keys in `plugin.cfg` and with files in its folder. Godot ignores keys it does not know, so the same plugin keeps working unchanged in projects without ePlugin.
+ePlugin Framework is written in C#, but most of what it offers works for every plugin below `res://addons`, GDScript plugins included. Like every plugin, a GDScript plugin needs a `plugin.cfg` in its folder; scripts without one are not supported. A GDScript plugin needs no code for it: it opts in with keys in `plugin.cfg` and with files in its folder. Godot ignores keys it does not know, so the same plugin keeps working unchanged in projects without ePlugin.
 
 The project using the plugin needs the Godot .NET editor and a .NET SDK, because ePlugin itself is a C# plugin (see [Requirements and installation](../README.md#requirements-and-installation)). The GDScript plugin stays pure GDScript.
 

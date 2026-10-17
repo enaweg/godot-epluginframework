@@ -2,7 +2,7 @@
 
 A GDExtension plugin is a plugin below `res://addons` with a `plugin.cfg` that also ships a GDExtension: a `.gdextension` file and the native libraries it names. Its entry script can be GDScript or C#. The ePlugin Manager lists such a plugin with the type *GDExtension plugin*.
 
-Only GDExtensions with a `plugin.cfg` are supported, like every other plugin. A GDExtension without a `plugin.cfg` is not a plugin for Godot or ePlugin: the manager does not list it and ePlugin does not update it.
+Only GDExtensions with a `plugin.cfg` are supported: ePlugin supports only plugins with a `plugin.cfg`, whatever their type. A GDExtension without one is not a plugin for Godot or ePlugin: the manager does not list it and ePlugin does not update it.
 
 An ePlugin (a C# plugin with a recipe) can ship a GDExtension too. It is listed as an ePlugin, and its updates replace the libraries the same way (see [ePlugins with a GDExtension](#eplugins-with-a-gdextension)).
 
