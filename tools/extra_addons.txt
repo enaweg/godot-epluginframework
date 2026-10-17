@@ -7,7 +7,8 @@
 # as "-beta.1"), or it is left out.
 
 global_asset_manager;https://github.com/sn1ks0h/Global-Asset-Manager
-# Its release ZIP ships a GDExtension, which ePlugin cannot update yet, so the generator leaves it out for now.
+# A GDExtension plugin whose libraries are built by CI: they are in the release ZIP but not in the repository, so its
+# update site must be the releases page (which build_godot_addons.cs takes for any GitHub repository with releases).
 rider-plugin;https://github.com/JetBrains/godot-support
 # Its release ZIP ships a GDExtension without a plugin.cfg, which ePlugin cannot update yet, so the generator leaves it
 # out for now.
