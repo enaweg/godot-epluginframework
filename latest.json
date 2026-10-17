@@ -1,8 +1,8 @@
 {
- "commit": "736827c1a81fe9a1d0974f7b4b69d82be89cd3d6",
- "date": "2026-10-17T09:41:35Z",
- "covered": 7044,
- "coverable": 9213,
+ "commit": "6ff9d4b729e3bfaacd8544a36ffb26408e059a0c",
+ "date": "2026-10-17T09:59:02Z",
+ "covered": 7289,
+ "coverable": 9223,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -17,11 +17,11 @@
    266
   ],
   "src/eplugin-framework/addons/ePlugin/EditorPluginExtensions.cs": [
-   46,
+   52,
    61
   ],
   "src/eplugin-framework/addons/ePlugin/IEEditorPluginExtensions.cs": [
-   0,
+   15,
    15
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/ActivationProgress.cs": [
@@ -37,7 +37,7 @@
    18
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/BuildOutputGuard.cs": [
-   40,
+   49,
    50
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetCli10.cs": [
@@ -101,7 +101,7 @@
    145
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.PluginManager.cs": [
-   12,
+   60,
    64
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.RecipeOperations.cs": [
@@ -109,8 +109,8 @@
    69
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateApply.cs": [
-   31,
-   275
+   101,
+   259
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateRecipes.cs": [
    184,
@@ -125,7 +125,7 @@
    7
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Updates.cs": [
-   80,
+   86,
    113
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Welcomes.cs": [
@@ -133,16 +133,16 @@
    72
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.cs": [
-   850,
-   996
+   873,
+   1000
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EPluginProgress.cs": [
    1,
    1
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EditorHost.cs": [
-   9,
-   42
+   34,
+   45
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Licenses/LicenseReview.cs": [
    47,
@@ -237,7 +237,7 @@
    13
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PluginTypes.cs": [
-   13,
+   15,
    18
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/ProgressSession.cs": [
@@ -297,8 +297,12 @@
    61
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/PackageFiles.cs": [
-   94,
+   103,
    104
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/PluginCode.cs": [
+   18,
+   19
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/RecipeReconciler.cs": [
    50,
@@ -325,7 +329,7 @@
    10
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateApplier.cs": [
-   360,
+   374,
    407
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateGroups.cs": [
