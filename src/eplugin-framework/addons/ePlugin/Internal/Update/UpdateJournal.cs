@@ -29,6 +29,11 @@ internal sealed class UpdatePluginJournal
     /// was recorded, which <see cref="Kinds.PluginKinds.Workflow(UpdatePluginJournal)"/> derives from <see cref="IsEPlugin"/>.
     /// </summary>
     public string? Kind { get; set; }
+    /// <summary>
+    /// The installed or the new version ships a GDExtension, so its files are replaced one by one (see
+    /// <see cref="Kinds.EPluginWorkflow"/>); a GDExtension plugin always is.
+    /// </summary>
+    public bool NativeExtension { get; set; }
     /// <summary>The editor has to restart to load the plugin's native libraries as they are now (GDExtension plugins).</summary>
     public bool RestartRequired { get; set; }
     /// <summary>The new native libraries were reloaded in place, so the editor runs them although it did not restart.</summary>

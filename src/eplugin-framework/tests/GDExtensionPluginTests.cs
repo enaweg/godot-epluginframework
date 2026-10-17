@@ -71,14 +71,15 @@ public class GDExtensionPluginTests
         macos = "bin/libnative.dylib"
         """;
 
-    private (ValidatedPackage Package, string Directory) Stage(string version, string library, bool reloadable, Action<string>? change = null)
+    private (ValidatedPackage Package, string Directory) Stage(string version, string library, bool reloadable, Action<string>? change = null,
+        PluginKind installedKind = PluginKind.Unknown)
     {
         var directory = Path.Combine(_root, ".godot/eplugin/updates/" + Guid.NewGuid().ToString("N")[..8]);
         var stage = Path.Combine(directory, "staging", Slug);
         WritePlugin(stage, version, library, reloadable);
         change?.Invoke(stage);
         var candidate = new UpdateCandidate(Slug, "Native", "1.0.0", version, "https://example.org/releases", null, null, new ZipPackageRef("https://example.org/native.zip", Slug));
-        var validated = new AddonPackageValidator().Validate(new(new(Slug, "Native", "1.0.0", null, Installed), candidate, stage));
+        var validated = new AddonPackageValidator().Validate(new(new(Slug, "Native", "1.0.0", null, Installed, Kind: installedKind), candidate, stage));
         Assertions.AssertBool(validated.IsValid).OverrideFailureMessage(string.Join("; ", validated.Findings.Select(f => f.Message))).IsTrue();
         return (validated, directory);
     }
@@ -291,6 +292,36 @@ public class GDExtensionPluginTests
     }
 
     [TestCase]
+    public void AnEPluginWithAGDExtensionSwapsItsFilesAndRestartsIntoTheNewAssembly()
+    {
+        _host.Managed = true;
+        var (package, directory) = Stage("2.0.0", "new library", reloadable: true,
+            stage => File.WriteAllText(Path.Combine(stage, "Plugin.cs"), "// ePlugin"), PluginKind.EPlugin);
+        Assertions.AssertObject(package.Kind).IsEqual(PluginKind.EPlugin);
+
+        using (new FileStream(Path.Combine(Installed, "bin/~native.dll"), FileMode.Open, FileAccess.Read, FileShare.Read))
+            Assertions.AssertObject(_applier.Apply([package], directory)).IsEqual(UpdateOutcome.AwaitingReload);
+
+        Assertions.AssertString(File.ReadAllText(Path.Combine(Installed, "bin/native.dll"))).IsEqual("new library");
+        Assertions.AssertString(File.ReadAllText(Path.Combine(Installed, "bin/~native.dll"))).IsEqual("runtime copy");
+        var plugin = UpdateJournal.Load(directory).Plugins.Single();
+        Assertions.AssertString(plugin.Kind).IsEqual("EPlugin");
+        Assertions.AssertBool(plugin.NativeExtension).IsTrue();
+        // stays enabled, and the restart into the interim build loads the new library: nothing is reloaded in place
+        Assertions.AssertInt(_host.Toggles.Count).IsEqual(0);
+        Assertions.AssertInt(_host.Reloaded.Count).IsEqual(0);
+        Assertions.AssertInt(_host.Builds).IsEqual(1);
+        Assertions.AssertInt(_host.Restarts).IsEqual(1);
+
+        // a rollback restores the files the same way and restarts again
+        Assertions.AssertObject(_applier.Rollback(UpdateJournal.Load(directory), "test")).IsEqual(UpdateOutcome.RolledBack);
+        Assertions.AssertString(File.ReadAllText(Path.Combine(Installed, "bin/native.dll"))).IsEqual("old library");
+        Assertions.AssertBool(File.Exists(Path.Combine(Installed, "Plugin.cs"))).IsFalse();
+        Assertions.AssertString(File.ReadAllText(Path.Combine(Installed, "bin/~native.dll"))).IsEqual("runtime copy");
+        Assertions.AssertInt(_host.Restarts).IsEqual(2);
+    }
+
+    [TestCase]
     public static void JournalsWithoutAKnownKindFallBackToWhatTheyRecorded()
     {
         // a journal written before kinds were recorded still rolls back with the folder swap of a plain plugin
@@ -339,7 +370,8 @@ public class GDExtensionPluginTests
         public string BuildFailurePolicy => "rollback";
         public bool RestartAlways => false;
         public bool IsEnabled(string slug) => true;
-        public bool IsManaged(string slug) => false;
+        public bool Managed;
+        public bool IsManaged(string slug) => Managed;
         public void Preflight(IReadOnlyList<ValidatedPackage> packages) { }
         public void PrepareJournal(UpdateJournal journal) { }
         public void Bridge(UpdateJournal journal, UpdatePluginJournal plugin) => OnSwap?.Invoke();

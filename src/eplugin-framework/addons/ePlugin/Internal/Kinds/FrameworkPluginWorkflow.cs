@@ -18,7 +18,8 @@ internal sealed class FrameworkPluginWorkflow : PluginKindWorkflow
 
     public override IEnumerable<Finding> Validate(KindValidation validation)
     {
-        // UpdateRecovery restores the framework by moving folders before any C# code could unload a library.
+        // The framework ships no GDExtension. UpdateRecovery restores its folder at startup, when Godot has loaded every
+        // extension already, so one inside it could not be replaced.
         if (RefuseNativeExtension(validation) is { } native) yield return native;
     }
 }

@@ -30,8 +30,8 @@ internal abstract class PluginKindWorkflow
     /// </summary>
     public abstract bool DisabledDuringSwap { get; }
 
-    /// <summary>How an update replaces the plugin's folder.</summary>
-    public virtual IAddonSwap Swap => AddonFolderSwap.Instance;
+    /// <summary>How an update replaces the folder of <paramref name="plugin"/>.</summary>
+    public virtual IAddonSwap Swap(UpdatePluginJournal plugin) => AddonFolderSwap.Instance;
 
     /// <summary>Findings of this kind about a staged package, added to the general rules of <see cref="AddonPackageValidator"/>.</summary>
     public virtual IEnumerable<Finding> Validate(KindValidation validation) => [];
@@ -53,10 +53,13 @@ internal abstract class PluginKindWorkflow
     /// <summary>R10: a GDExtension in a kind whose updates cannot replace one.</summary>
     protected static Finding? RefuseNativeExtension(KindValidation validation) => RefuseNativeExtension(validation.StagedFiles.Concat(validation.InstalledFiles));
 
-    /// <summary>R10 when <paramref name="files"/> contain a GDExtension, which updates of ePlugins cannot replace yet.</summary>
+    /// <summary>
+    /// R10 when <paramref name="files"/> of ePlugin Framework contain a GDExtension: the framework ships none, and its early
+    /// recovery replaces its folder at startup, after Godot loaded every extension.
+    /// </summary>
     public static Finding? RefuseNativeExtension(IEnumerable<string> files) =>
         files.Any(GDExtensionConfig.IsExtensionFile)
-            ? new("R10", FindingSeverity.Error, "ePlugins with a GDExtension are not supported by ePlugin updates yet; only plugins without a recipe can ship one.")
+            ? new("R10", FindingSeverity.Error, "ePlugin Framework does not ship a GDExtension; a package of it with one is refused.")
             : null;
 }
 #endif

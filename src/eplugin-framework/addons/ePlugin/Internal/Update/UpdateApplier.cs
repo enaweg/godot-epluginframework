@@ -181,7 +181,8 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             var next = PluginIni.Parse(File.ReadAllText(Path.Combine(package.StagingDir, "plugin.cfg"))).GetValueOrDefault("version")!;
             var managed = host.IsManaged(slug);
             journal.Plugins.Add(new() { Slug = slug, OldVersion = old!, NewVersion = next, IsEPlugin = managed,
-                Kind = PluginKinds.ForJournal(slug, managed, package.Kind).ToString(), WasEnabled = true, ContainsCSharp = package.ContainsCSharp, SourceUrl = package.Candidate.Origin, Revision = package.Candidate.ResolvedRevision,
+                Kind = PluginKinds.ForJournal(slug, managed, package.Kind).ToString(), WasEnabled = true,
+                NativeExtension = PluginKinds.HasNativeExtension(package.StagingDir) || PluginKinds.HasNativeExtension(Installed(slug)), ContainsCSharp = package.ContainsCSharp, SourceUrl = package.Candidate.Origin, Revision = package.Candidate.ResolvedRevision,
                 Uids = UidMap.Collect(Installed(slug)) });
         }
         host.PrepareJournal(journal);
@@ -209,9 +210,10 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                 workflow.BeforeSwap(plugin);
                 plugin.SwapStarted = true;
                 journal.Save();
-                host.Log($"{workflow.Name} {plugin.Slug}: installing {plugin.NewVersion} ({workflow.Swap.Name}).");
+                var swap = workflow.Swap(plugin);
+                host.Log($"{workflow.Name} {plugin.Slug}: installing {plugin.NewVersion} ({swap.Name}).");
                 if (workflow.DisabledDuringSwap) host.SetPlainEnabled(plugin.Slug, false);
-                var discarded = workflow.Swap.Install(Installed(plugin.Slug), journal.Staging(plugin.Slug), journal.Backup(plugin.Slug), journal.Discarded(plugin.Slug));
+                var discarded = swap.Install(Installed(plugin.Slug), journal.Staging(plugin.Slug), journal.Backup(plugin.Slug), journal.Discarded(plugin.Slug));
                 UidMap.Restore(Installed(plugin.Slug), plugin.Uids);
                 host.Bridge(journal, plugin);
                 workflow.AfterSwap(new(host, journal, plugin, Installed(plugin.Slug), discarded));
@@ -347,9 +349,10 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                 if (System.IO.Directory.Exists(journal.Backup(plugin.Slug)))
                 {
                     var workflow = PluginKinds.Workflow(plugin);
-                    host.Log($"{workflow.Name} {plugin.Slug}: restoring {plugin.OldVersion} ({workflow.Swap.Name}).");
+                    var swap = workflow.Swap(plugin);
+                    host.Log($"{workflow.Name} {plugin.Slug}: restoring {plugin.OldVersion} ({swap.Name}).");
                     if (workflow.DisabledDuringSwap && host.IsEnabled(plugin.Slug)) host.SetPlainEnabled(plugin.Slug, false);
-                    var discarded = workflow.Swap.Restore(installed, journal.Backup(plugin.Slug), journal.Discarded(plugin.Slug));
+                    var discarded = swap.Restore(installed, journal.Backup(plugin.Slug), journal.Discarded(plugin.Slug));
                     workflow.AfterRestore(new(host, journal, plugin, installed, discarded));
                     journal.Save();
                 }

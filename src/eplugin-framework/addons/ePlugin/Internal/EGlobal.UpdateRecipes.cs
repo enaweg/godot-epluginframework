@@ -29,9 +29,9 @@ internal sealed partial class EGlobal
     }
 
     /// <summary>
-    /// What the project already rules out for these updates before anything is downloaded: a GDExtension in an installed
-    /// ePlugin (plugins without a recipe update theirs, see <see cref="GDExtensionPluginWorkflow"/>), or an enabled
-    /// plugin's version constraint on an updated plugin.
+    /// What the project already rules out for these updates before anything is downloaded: a GDExtension in the installed
+    /// framework (every other plugin updates its own, see <see cref="GDExtensionPluginWorkflow"/>), or an enabled plugin's
+    /// version constraint on an updated plugin.
     /// </summary>
     internal IReadOnlyList<Finding> UpdatePreflightFindings(IReadOnlyList<UpdateCandidate> candidates)
     {
@@ -39,7 +39,7 @@ internal sealed partial class EGlobal
         foreach (var candidate in candidates)
         {
             var directory = ProjectSettings.GlobalizePath(_host.PluginDirectory(candidate.Slug));
-            if ((candidate.Slug == FrameworkSlug || IsManagedPlugin(candidate.Slug)) && Directory.Exists(directory) &&
+            if (candidate.Slug == FrameworkSlug && Directory.Exists(directory) &&
                 PluginKindWorkflow.RefuseNativeExtension(PackageFiles.Files(directory)) is { } native) findings.Add(native);
         }
         var updated = candidates.ToDictionary(c => c.Slug, StringComparer.Ordinal);

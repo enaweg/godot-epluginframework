@@ -20,7 +20,9 @@ namespace Enaweg.Plugin.Internal.Kinds;
 /// (<see cref="IUpdateHost.ReloadExtension"/>); any other change (an extension added, removed or not reloadable, a library
 /// still in use) keeps the old library loaded until the editor restarts, which the update then requests.</item>
 /// </list>
-/// The plugin's entry script is GDScript or C#; a C# one is built like a C# plugin's.
+/// The plugin's entry script is GDScript or C#; a C# one is built like a C# plugin's. An ePlugin that ships a GDExtension
+/// stays an <see cref="EPluginWorkflow"/>, which swaps its files the same way. GDExtensions in recipe directories
+/// (<c>AddDirectory</c>) are not supported: showing and hiding renames the folder, which the runtime copies keep open.
 /// </summary>
 internal sealed class GDExtensionPluginWorkflow : PluginKindWorkflow
 {
@@ -28,7 +30,7 @@ internal sealed class GDExtensionPluginWorkflow : PluginKindWorkflow
     public override PluginKind Kind => PluginKind.GDExtension;
     public override string Name => "GDExtension plugin";
     public override bool DisabledDuringSwap => true;
-    public override IAddonSwap Swap => AddonFileSwap.Instance;
+    public override IAddonSwap Swap(UpdatePluginJournal plugin) => AddonFileSwap.Instance;
 
     /// <summary>
     /// Identifies this editor process, so a journal tells whether the libraries it changed were loaded by this editor or
@@ -44,42 +46,13 @@ internal sealed class GDExtensionPluginWorkflow : PluginKindWorkflow
 
     public override IEnumerable<Finding> Validate(KindValidation validation)
     {
-        var context = validation.Context;
-        var slug = context.Installed.Slug;
-        if (Directory.Exists(context.Installed.Directory) && (File.GetAttributes(context.Installed.Directory) & FileAttributes.ReparsePoint) != 0)
-            yield return new("R20", FindingSeverity.Error, "The plugin folder is a link; update the GDExtension plugin where it points to.");
-        var after = GDExtensionConfig.ReadAll(context.StagingDir);
-        var before = GDExtensionConfig.ReadAll(context.Installed.Directory);
-        foreach (var (file, config) in after)
-        {
-            if (config is null)
-            {
-                yield return new("R18", FindingSeverity.Error, $"Cannot read {file}.");
-                continue;
-            }
-            foreach (var library in config.Libraries.Concat(config.Dependencies))
-                if (GDExtensionConfig.InsidePlugin(slug, file, library.Path) is null)
-                    yield return new("R18", FindingSeverity.Error, $"{file} loads {library.Path} from outside the plugin folder; an update cannot replace it.");
-            var forThisEditor = config.Libraries.Where(l => GDExtensionConfig.MatchesThisEditor(l.Feature)).ToArray();
-            if (forThisEditor.Length == 0)
-                yield return new("R19", FindingSeverity.Warning, $"{file} has no library for this editor's platform; Godot will not load the extension.");
-            else if (!forThisEditor.Any(l => GDExtensionConfig.InsidePlugin(slug, file, l.Path) is { } path && Exists(context.StagingDir, path)))
-                yield return new("R19", FindingSeverity.Error, $"The library of {file} for this platform is missing from the package: {forThisEditor[0].Path}.");
-        }
+        foreach (var finding in GDExtensionRules.Validate(validation)) yield return finding;
+        var before = GDExtensionConfig.ReadAll(validation.Context.Installed.Directory);
+        var after = GDExtensionConfig.ReadAll(validation.Context.StagingDir);
         if (GDExtensionConfig.ReloadsInPlace(before, after))
             yield return new("R21", FindingSeverity.Info, "The GDExtension is reloaded in place; the editor does not restart for it.");
         else
             yield return new("R21", FindingSeverity.Info, "The editor restarts after the update to load the new GDExtension libraries: " + RestartReason(before, after) + ".");
-    }
-
-    private static bool Exists(string root, string relative)
-    {
-        try
-        {
-            var path = PackageFiles.Inside(root, relative);
-            return File.Exists(path) || Directory.Exists(path);
-        }
-        catch (InvalidDataException) { return false; }
     }
 
     private static string RestartReason(IReadOnlyDictionary<string, GDExtensionConfig?> before, IReadOnlyDictionary<string, GDExtensionConfig?> after)

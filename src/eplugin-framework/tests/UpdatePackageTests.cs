@@ -88,11 +88,15 @@ public class UpdatePackageTests
         var validator = new AddonPackageValidator();
         Assertions.AssertBool(validator.Validate(new(target, candidate, stage)).IsValid).IsTrue();
         File.WriteAllText(Path.Combine(stage, "native.gdextension"), "native");
-        // a plugin without a recipe becomes a GDExtension plugin; only an ePlugin with a GDExtension is refused
+        // a plugin without a recipe becomes a GDExtension plugin, an ePlugin stays one; only the framework is refused
         var native = validator.Validate(new(target, candidate, stage));
         Assertions.AssertObject(native.Kind).IsEqual(PluginKind.GDExtension);
         Assertions.AssertBool(native.Findings.Any(f => f.Code == "R10")).IsFalse();
-        Assertions.AssertBool(validator.Validate(new(target with { Kind = PluginKind.EPlugin }, candidate, stage)).Findings.Any(f => f.Code == "R10")).IsTrue();
+        var managed = validator.Validate(new(target with { Kind = PluginKind.EPlugin }, candidate, stage));
+        Assertions.AssertObject(managed.Kind).IsEqual(PluginKind.EPlugin);
+        Assertions.AssertBool(managed.Findings.Any(f => f.Code == "R10")).IsFalse();
+        Assertions.AssertString(managed.Findings.Single(f => f.Code == "R21").Message).Contains("restarts");
+        Assertions.AssertBool(validator.Validate(new(target with { Kind = PluginKind.Framework }, candidate, stage)).Findings.Any(f => f.Code == "R10")).IsTrue();
         File.Delete(Path.Combine(stage, "native.gdextension"));
         File.WriteAllText(Path.Combine(stage, "plugin.cfg"), Config("1.0.0").Replace("plugin.gd", "../outside.gd"));
         var refused = validator.Validate(new(target with { IsBlocked = true }, candidate, stage));
