@@ -1,0 +1,71 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/ePlugin/Internal/Manager/AboutDialog.cs" id="1_script"]
+
+[node name="AboutDialog" type="AcceptDialog"]
+auto_translate_mode = 2
+title = "About ePlugin Framework"
+initial_position = 2
+size = Vector2i(520, 400)
+min_size = Vector2i(440, 340)
+ok_button_text = "Close"
+script = ExtResource("1_script")
+
+[node name="AboutBox" type="VBoxContainer" parent="."]
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 512.0
+offset_bottom = 351.0
+theme_override_constants/separation = 8
+
+[node name="AboutLogo" type="TextureRect" parent="AboutBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+stretch_mode = 5
+
+[node name="AboutName" type="Label" parent="AboutBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HeaderLarge"
+text = "ePlugin Framework"
+horizontal_alignment = 1
+
+[node name="AboutVersion" type="Label" parent="AboutBox"]
+unique_name_in_owner = true
+modulate = Color(1, 1, 1, 0.7)
+layout_mode = 2
+text = "Version"
+horizontal_alignment = 1
+
+[node name="AboutDescription" type="Label" parent="AboutBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(420, 0)
+layout_mode = 2
+size_flags_vertical = 3
+text = "Description"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="AboutSeparator" type="HSeparator" parent="AboutBox"]
+layout_mode = 2
+
+[node name="AboutLinks" type="HBoxContainer" parent="AboutBox"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 24
+
+[node name="StoreLink" type="LinkButton" parent="AboutBox/AboutLinks"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Store page"
+
+[node name="SourceLink" type="LinkButton" parent="AboutBox/AboutLinks"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Source code"
+
+[node name="DocumentationLink" type="LinkButton" parent="AboutBox/AboutLinks"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Documentation"

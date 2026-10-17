@@ -121,6 +121,11 @@ public partial class DocScreenshots : Node
             global.RemoveUpdateSite("gdUnit4");
             global.RemoveLocalDirectory(_releases);
         }
+
+        manager.GetNode<Button>("%AboutButton").EmitSignal(BaseButton.SignalName.Pressed);
+        var about = manager.GetNode<Window>("%AboutDialog");
+        await Shot("eplugin-about", about);
+        about.Hide();
         manager.Hide();
         await Seconds(0.5);
     }
