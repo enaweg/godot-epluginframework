@@ -1,8 +1,8 @@
 {
- "commit": "7b94ccdc2ce811f3293f97e3c21b77515fffcf2c",
- "date": "2026-10-17T12:59:17Z",
- "covered": 7289,
- "coverable": 9223,
+ "commit": "d6fa7e2bf3286e8cc0eb8b5330d6bb917aef2c8f",
+ "date": "2026-10-17T14:41:24Z",
+ "covered": 7647,
+ "coverable": 9614,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -110,11 +110,11 @@
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateApply.cs": [
    101,
-   259
+   265
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateRecipes.cs": [
    184,
-   186
+   187
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateSites.cs": [
    9,
@@ -125,8 +125,8 @@
    7
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Updates.cs": [
-   86,
-   113
+   87,
+   114
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Welcomes.cs": [
    67,
@@ -143,6 +143,46 @@
   "src/eplugin-framework/addons/ePlugin/Internal/EditorHost.cs": [
    34,
    45
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Kinds/CSharpPluginWorkflow.cs": [
+   1,
+   4
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Kinds/EPluginWorkflow.cs": [
+   13,
+   14
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Kinds/FrameworkPluginWorkflow.cs": [
+   6,
+   7
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Kinds/GDExtensionConfig.cs": [
+   89,
+   90
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Kinds/GDExtensionPluginWorkflow.cs": [
+   73,
+   77
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Kinds/GDExtensionRules.cs": [
+   22,
+   27
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Kinds/GDScriptPluginWorkflow.cs": [
+   2,
+   4
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Kinds/PluginKindWorkflow.cs": [
+   13,
+   13
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Kinds/PluginKinds.cs": [
+   42,
+   43
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Kinds/UnknownPluginWorkflow.cs": [
+   3,
+   4
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Licenses/LicenseReview.cs": [
    47,
@@ -197,8 +237,8 @@
    4
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/PluginCatalog.cs": [
-   23,
-   25
+   10,
+   10
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/PluginManagerViewModel.cs": [
    240,
@@ -257,8 +297,12 @@
    47
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/AddonPackageValidator.cs": [
+   91,
+   92
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/AddonSwap.cs": [
    92,
-   93
+   103
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/BuildDiagnostics.cs": [
    52,
@@ -297,8 +341,8 @@
    61
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/PackageFiles.cs": [
-   103,
-   104
+   104,
+   105
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/PluginCode.cs": [
    18,
@@ -329,8 +373,8 @@
    10
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateApplier.cs": [
-   374,
-   407
+   387,
+   418
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateGroups.cs": [
    20,
@@ -341,8 +385,8 @@
    72
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateJournal.cs": [
-   57,
-   60
+   58,
+   61
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateModels.cs": [
    34,
