@@ -45,6 +45,7 @@ For plugin authors:
 - **Progress and logging APIs**: `EPlugin.Progress` shows a C# plugin's own long-running editor work in the progress window, and a logging plugin can take over ePlugin's logging.
 - **Updatable releases** need only an `update_url` in `plugin.cfg` pointing at GitHub or GitLab releases or a Git repository.
 - **GDScript plugins** get updates, licenses, welcome pages, links, and can be dependencies of ePlugins, with only keys in `plugin.cfg` and no code. See [GDScript plugins](docs/gdscript-plugins.md).
+- **GDExtension plugins** (plugins with a `plugin.cfg` that ship native libraries) get the same, and their updates replace the libraries the editor has loaded, reloading them in place or restarting the editor. See [GDExtension plugins](docs/gdextension-plugins.md).
 
 For everyone working on the project:
 
@@ -70,6 +71,7 @@ Screenshots show the repository's sample plugins and example update packages.
 
 - [Create an ePlugin](docs/creating-plugins.md): starter code, recipe resources, dependencies, helpers, and initializers.
 - [GDScript plugins](docs/gdscript-plugins.md): what ePlugin offers a GDScript plugin without code (updates, licenses, welcome pages, links, dependencies) and how to set it up.
+- [GDExtension plugins](docs/gdextension-plugins.md): how updates replace native libraries the editor has loaded, and how to publish a GDExtension plugin.
 - [ePlugin Manager](docs/eplugin-manager.md): inspect and control plugins, check updates, manage local sources and update sites, and retry failed work.
 - [Progress dialog](docs/progress-dialog.md): automatic progress feedback, the public reporting API, shared windows, restarts, and failure handling.
 - [Updating plugins](docs/updating-plugins.md): configure update sources, project and built-in update sites, publish packages, and understand review, validation, builds, kept updates, and recovery.
@@ -85,7 +87,7 @@ Godot plugins do not provide a built-in way to manage C# project references or N
 
 Godot currently needs project-managed resource IDs for assets such as scenes, models, and scripts, so the framework cannot manage those assets outside the project. Plugin activation and deactivation can also freeze the editor while project changes are built. On supported desktop platforms the separate progress window remains responsive during that work. A failure in the middle of installing or removing a recipe can leave the project in a state that does not build; fix the cause and use **Retry failed** in the ePlugin Manager (see [Plugin state files](docs/plugin-state.md)).
 
-Updates replace whole addon folders. They do not install missing plugins or resolve dependencies from remote sources, and plugins containing GDExtensions are not updated. Update builds compile only C#, so an update that breaks GDScript code is not detected.
+Updates replace whole addon folders. They do not install missing plugins or resolve dependencies from remote sources. GDExtensions are updated only in plugins without a recipe, and only when they have a `plugin.cfg`. Update builds compile only C#, so an update that breaks GDScript code is not detected.
 
 ## Testing
 

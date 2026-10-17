@@ -235,6 +235,18 @@ the `.csproj`/`.sln`/`.slnx` through `ProjectReferences` (pure, tested): an inva
 an absent entry succeeds with a warning, and anything it cannot tell (unreadable file, MSBuild properties) runs the CLI
 as before.
 
+### Plugin kinds
+
+`Internal/Kinds/` distinguishes `PluginKind`s (Framework, EPlugin, CSharp, GDScript, GDExtension, Unknown) and gives each
+an explicit sealed `PluginKindWorkflow` (`FrameworkPluginWorkflow`, `EPluginWorkflow`, `CSharpPluginWorkflow`,
+`GDScriptPluginWorkflow`, `GDExtensionPluginWorkflow`, `UnknownPluginWorkflow`), so the kind-specific steps of a
+workflow live in one class and log with the kind's name. Put new per-kind behavior there rather than as kind checks in
+`UpdateApplier`. A GDExtension plugin is a plugin without a recipe that has a `plugin.cfg` and a `.gdextension` file;
+only those are supported. Its updates use `AddonFileSwap`, because the editor on Windows loads each library from a
+`~<library>` copy in the same folder that cannot be moved (`PackageFiles.IsRuntimeCopy` keeps those copies out of
+packages, backups and deletions), and reload reloadable extensions in place or restart the editor. ePlugins with a
+GDExtension are refused (R10). See `docs/internals/update-system.md` and `docs/gdextension-plugins.md`.
+
 ### Update system
 
 `Internal/Update/` holds the pure update pipeline (checks and sources, ZIP and sparse-git staging, validation, the

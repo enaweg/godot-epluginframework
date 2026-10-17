@@ -120,7 +120,7 @@ Attach the ZIP to a GitHub or GitLab release, or put it in a [local plugin direc
 
 - Raise `version` in `plugin.cfg` for every release. Versions have two to four numbers (`1.2`, `1.2.0`, `1.2.0.1`), optionally a leading `v` and a prerelease suffix such as `-beta.1`. Name the release or tag after the same version.
 - Keep the folder name stable. It is the plugin's slug, which update sites and dependencies refer to.
-- Do not include `project.godot`, `nuget.config`, symlinks or submodules. Plugins with a GDExtension (`.gdextension` files) are not updated.
+- Do not include `project.godot`, `nuget.config`, symlinks or submodules. A plugin with a GDExtension (`.gdextension` files) is a [GDExtension plugin](gdextension-plugins.md), which has a few more rules.
 
 All rules are in [Publish an updatable release](updating-plugins.md#publish-an-updatable-release).
 
