@@ -4,18 +4,19 @@ Line coverage of `src/eplugin-framework/addons/ePlugin` on `main`, recorded by t
 
 ![Line coverage](badge.svg)
 
-**76.67%** (7024 of 9161 lines) at [73f8104](https://github.com/enaweg/godot-epluginframework/commit/73f8104ae916ade392b7d2fffa7cddf1fd75b81c), 2026-10-17.
+**76.46%** (7044 of 9213 lines) at [736827c](https://github.com/enaweg/godot-epluginframework/commit/736827c1a81fe9a1d0974f7b4b69d82be89cd3d6), 2026-10-17.
 
 ```mermaid
 xychart-beta
-    title "Line coverage on main (last 11 pushes)"
-    x-axis ["659bbaa", "fc57fee", "ce064dc", "7cfc8b2", "b7e2f25", "caa9da2", "bd7e681", "ff903cf", "10401ac", "e44d91f", "73f8104"]
+    title "Line coverage on main (last 12 pushes)"
+    x-axis ["659bbaa", "fc57fee", "ce064dc", "7cfc8b2", "b7e2f25", "caa9da2", "bd7e681", "ff903cf", "10401ac", "e44d91f", "73f8104", "736827c"]
     y-axis "Line coverage (%)" 67 --> 79
-    line [69.50, 69.48, 69.48, 69.48, 76.80, 76.80, 76.80, 76.80, 76.64, 76.67, 76.67]
+    line [69.50, 69.48, 69.48, 69.48, 76.80, 76.80, 76.80, 76.80, 76.64, 76.67, 76.67, 76.46]
 ```
 
 | Date | Commit | Line coverage | Change |
 |:--|:--|--:|--:|
+| 2026-10-17 | [736827c](https://github.com/enaweg/godot-epluginframework/commit/736827c1a81fe9a1d0974f7b4b69d82be89cd3d6) | 76.46% | -0.21 pp |
 | 2026-10-17 | [73f8104](https://github.com/enaweg/godot-epluginframework/commit/73f8104ae916ade392b7d2fffa7cddf1fd75b81c) | 76.67% | +0.00 pp |
 | 2026-10-16 | [e44d91f](https://github.com/enaweg/godot-epluginframework/commit/e44d91f69afe69c46752ee3db6c85e90fa6c8822) | 76.67% | +0.03 pp |
 | 2026-10-16 | [10401ac](https://github.com/enaweg/godot-epluginframework/commit/10401ac5c5d5370fabf3b0c53da57356d306e0e3) | 76.64% | -0.16 pp |
@@ -30,7 +31,7 @@ xychart-beta
 
 All measurements: [history.csv](history.csv).
 
-<details><summary>Files at 73f8104 (94)</summary>
+<details><summary>Files at 736827c (95)</summary>
 
 | File | Line coverage | Covered lines |
 |:--|--:|--:|
@@ -39,7 +40,7 @@ All measurements: [history.csv](history.csv).
 | `Internal/Manager/UpdateFailureDialog.cs` | 0.0% | 0 of 57 |
 | `Internal/Manager/LicenseDialog.cs` | 7.5% | 12 of 161 |
 | `Internal/Manager/UpdateSitesDialog.cs` | 8.2% | 16 of 194 |
-| `Internal/Manager/EPluginManagerDialog.cs` | 8.7% | 52 of 600 |
+| `Internal/Manager/EPluginManagerDialog.cs` | 8.8% | 53 of 604 |
 | `Internal/ProjectSettingsDialog.cs` | 9.4% | 5 of 53 |
 | `Internal/EGlobal.UpdateApply.cs` | 11.3% | 31 of 275 |
 | `Internal/Manager/LocalSourcesDialog.cs` | 18.0% | 16 of 89 |
@@ -48,11 +49,12 @@ All measurements: [history.csv](history.csv).
 | `Internal/EditorHost.cs` | 21.4% | 9 of 42 |
 | `Internal/Manager/EditorWindows.cs` | 33.3% | 18 of 54 |
 | `Internal/AssemblyUnloadCleanup.cs` | 38.9% | 7 of 18 |
+| `Internal/Manager/AboutDialog.cs` | 40.4% | 19 of 47 |
 | `EPlugin.cs` | 44.4% | 4 of 9 |
 | `Internal/EGlobal.UpdateSites.cs` | 47.4% | 9 of 19 |
 | `Internal/EGlobal.LocalSources.cs` | 54.4% | 31 of 57 |
 | `EPluginPlugin.cs` | 62.8% | 167 of 266 |
-| `Internal/Manager/EditorIcons.cs` | 69.8% | 30 of 43 |
+| `Internal/Manager/EditorIcons.cs` | 68.2% | 30 of 44 |
 | `Internal/EGlobal.Updates.cs` | 70.8% | 80 of 113 |
 | `Internal/PluginTypes.cs` | 72.2% | 13 of 18 |
 | `EditorPluginExtensions.cs` | 75.4% | 46 of 61 |
