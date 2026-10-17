@@ -6,6 +6,11 @@
 # The add-on still needs a release or version tag (an optional "v", then 1.2 or 1.2.3, optionally a prerelease suffix such
 # as "-beta.1"), or it is left out.
 
+# ePlugins listed in the README. Their repositories also carry the add-ons they depend on (ePlugin, eLogger, eContainer,
+# gdUnit4), so the slug names the plugin's own folder.
+eContainer;https://github.com/enaweg/godot-econtainer
+eLogger;https://github.com/enaweg/godot-elogger
+eMessagePipe;https://github.com/enaweg/godot-emessagepipe
 global_asset_manager;https://github.com/sn1ks0h/Global-Asset-Manager
 # A GDExtension plugin whose libraries are built by CI: they are in the release ZIP but not in the repository, so its
 # update site must be the releases page (which build_godot_addons.cs takes for any GitHub repository with releases).
