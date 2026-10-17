@@ -87,7 +87,7 @@ Godot plugins do not provide a built-in way to manage C# project references or N
 
 Godot currently needs project-managed resource IDs for assets such as scenes, models, and scripts, so the framework cannot manage those assets outside the project. Plugin activation and deactivation can also freeze the editor while project changes are built. On supported desktop platforms the separate progress window remains responsive during that work. A failure in the middle of installing or removing a recipe can leave the project in a state that does not build; fix the cause and use **Retry failed** in the ePlugin Manager (see [Plugin state files](docs/plugin-state.md)).
 
-Updates replace whole addon folders. They do not install missing plugins or resolve dependencies from remote sources. GDExtensions are updated only in plugins without a recipe, and only when they have a `plugin.cfg`. Update builds compile only C#, so an update that breaks GDScript code is not detected.
+Updates replace whole addon folders. They do not install missing plugins or resolve dependencies from remote sources. GDExtensions are updated only as part of a plugin with a `plugin.cfg`, and not inside directories managed with `AddDirectory`. Update builds compile only C#, so an update that breaks GDScript code is not detected.
 
 ## Testing
 

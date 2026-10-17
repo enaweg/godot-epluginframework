@@ -78,7 +78,9 @@ interim bridge, `AfterSwap`; on rollback `Swap.Restore` and `AfterRestore`; `Nee
 a `.gdextension` file below its folder, otherwise by the entry script). Updates use `ForPackage` (the installed
 framework or ePlugin keeps its kind, a `.gdextension` in the installed or staged version makes it a GDExtension plugin)
 and record the kind by name in `UpdatePluginJournal.Kind`. Journals without it, or with a kind this version does not
-know, fall back to `IsEPlugin` (Framework, EPlugin or Unknown), which all use the folder swap.
+know, fall back to `IsEPlugin` (Framework, EPlugin or Unknown). The swap is chosen per plugin (`Swap(plugin)`): the
+GDExtension workflow always uses `AddonFileSwap`, the ePlugin workflow when `UpdatePluginJournal.NativeExtension` says
+the installed or staged version has a `.gdextension`, every other case the folder swap.
 
 ### GDExtension plugins
 
@@ -96,10 +98,13 @@ version: the same files, all `reloadable` in both, and nothing discarded reload 
 `IUpdateHost.ReloadExtension` (`GDExtensionManager.ReloadExtension`); anything else sets `RestartRequired`, and `Commit`
 restarts the editor. `NativeSession` names the editor process the flags refer to: after a rollback, an editor that
 neither reloaded nor restarted since the swap still runs the restored libraries and needs nothing; otherwise the restored
-extension is reloaded in place or the editor restarts. Validation refuses libraries outside the plugin folder (R18), a
-missing library for the editor's platform (R19), a linked plugin folder (R20) and GDExtensions in ePlugins (R10), and
-says whether the update reloads or restarts (R21). Early self-update recovery is unaffected: the framework ships no
-GDExtension.
+extension is reloaded in place or the editor restarts. `GDExtensionRules` refuses libraries outside the plugin folder
+(R18), a missing library for the editor's platform (R19) and a linked plugin folder (R20), for GDExtension plugins and
+ePlugins alike; R21 says whether the update reloads or restarts. An ePlugin with a GDExtension needs no reload logic: its
+update always builds and restarts, which loads the new libraries, and so does its rollback. Only the framework refuses a
+GDExtension (R10): it ships none, and early self-update recovery replaces its folder at startup, after Godot loaded
+every extension. GDExtensions in `AddDirectory` directories are not supported: showing and hiding renames the folder,
+which the runtime copies keep open on Windows.
 
 ## Staging and swapping
 

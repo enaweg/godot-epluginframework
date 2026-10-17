@@ -242,10 +242,13 @@ an explicit sealed `PluginKindWorkflow` (`FrameworkPluginWorkflow`, `EPluginWork
 `GDScriptPluginWorkflow`, `GDExtensionPluginWorkflow`, `UnknownPluginWorkflow`), so the kind-specific steps of a
 workflow live in one class and log with the kind's name. Put new per-kind behavior there rather than as kind checks in
 `UpdateApplier`. A GDExtension plugin is a plugin without a recipe that has a `plugin.cfg` and a `.gdextension` file;
-only those are supported. Its updates use `AddonFileSwap`, because the editor on Windows loads each library from a
-`~<library>` copy in the same folder that cannot be moved (`PackageFiles.IsRuntimeCopy` keeps those copies out of
-packages, backups and deletions), and reload reloadable extensions in place or restart the editor. ePlugins with a
-GDExtension are refused (R10). See `docs/internals/update-system.md` and `docs/gdextension-plugins.md`.
+GDExtensions without a `plugin.cfg` are not supported. Its updates use `AddonFileSwap`, because the editor on Windows
+loads each library from a `~<library>` copy in the same folder that cannot be moved (`PackageFiles.IsRuntimeCopy` keeps
+those copies out of packages, backups and deletions), and reload reloadable extensions in place or restart the editor.
+An ePlugin with a GDExtension stays an ePlugin and swaps its files the same way (`UpdatePluginJournal.NativeExtension`);
+its update restarts anyway. ePlugin Framework ships no GDExtension (R10 refuses one), and GDExtensions inside
+`AddDirectory` directories are not supported, because the runtime copies keep the folder from being renamed. See
+`docs/internals/update-system.md` and `docs/gdextension-plugins.md`.
 
 ### Update system
 
