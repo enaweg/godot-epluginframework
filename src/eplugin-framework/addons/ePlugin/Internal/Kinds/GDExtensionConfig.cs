@@ -18,10 +18,15 @@ internal sealed record GDExtensionLibrary(string Feature, string Path);
 /// What ePlugin reads from a <c>.gdextension</c> file: whether Godot can reload it in place and which native files it
 /// loads. Pure; it reads the text like Godot's ConfigFile, tolerating values it does not need.
 /// </summary>
-internal sealed record GDExtensionConfig(bool Reloadable, IReadOnlyList<GDExtensionLibrary> Libraries, IReadOnlyList<GDExtensionLibrary> Dependencies)
+internal sealed partial record GDExtensionConfig(bool Reloadable, IReadOnlyList<GDExtensionLibrary> Libraries, IReadOnlyList<GDExtensionLibrary> Dependencies)
 {
     public const string Extension = ".gdextension";
-    private static readonly Regex QuotedString = new("\"((?:[^\"\\\\]|\\\\.)*)\"", RegexOptions.CultureInvariant);
+    // A quoted string with backslash escapes; group 1 is its text without the quotes.
+    [GeneratedRegex("\"((?:[^\"\\\\]|\\\\.)*)\"", RegexOptions.CultureInvariant)]
+    private static partial Regex QuotedString();
+
+    [GeneratedRegex(@"\\(.)", RegexOptions.CultureInvariant)]
+    private static partial Regex Escape();
     private static readonly string[] Architectures = ["x86_64", "x86_32", "arm64", "arm32", "rv64", "ppc64", "wasm32", "universal"];
 
     public static bool IsExtensionFile(string path) => path.EndsWith(Extension, StringComparison.OrdinalIgnoreCase);
@@ -50,11 +55,11 @@ internal sealed record GDExtensionConfig(bool Reloadable, IReadOnlyList<GDExtens
                     reloadable = value.Split(';')[0].Trim() == "true";
                     break;
                 case "libraries":
-                    if (QuotedString.Match(value) is { Success: true } path) libraries.Add(new(key, Unescape(path.Groups[1].Value)));
+                    if (QuotedString().Match(value) is { Success: true } path) libraries.Add(new(key, Unescape(path.Groups[1].Value)));
                     break;
                 case "dependencies":
                     // { "res://bin/dep.dll" : "", "dep2.dll" : "subdir" }: the keys are the files, the values export folders.
-                    var strings = QuotedString.Matches(value).Select(m => Unescape(m.Groups[1].Value)).ToArray();
+                    var strings = QuotedString().Matches(value).Select(m => Unescape(m.Groups[1].Value)).ToArray();
                     for (var s = 0; s < strings.Length; s += 2) if (strings[s].Length > 0) dependencies.Add(new(key, strings[s]));
                     break;
             }
@@ -78,7 +83,7 @@ internal sealed record GDExtensionConfig(bool Reloadable, IReadOnlyList<GDExtens
         return depth;
     }
 
-    private static string Unescape(string value) => Regex.Replace(value, @"\\(.)", "$1");
+    private static string Unescape(string value) => Escape().Replace(value, "$1");
 
     /// <summary>Every readable <c>.gdextension</c> file below <paramref name="root"/>, keyed by its path relative to it ('/').</summary>
     public static IReadOnlyDictionary<string, GDExtensionConfig?> ReadAll(string root)
