@@ -4,6 +4,8 @@ Open **ePlugin Manager** with the ePlugin button at the right of the editor's ma
 
 ![The ePlugin button at the right end of the editor's main toolbar, after the run buttons](images/eplugin-toolbar-button.png)
 
+The puzzle piece of the button turns red while a plugin failed or a failed attempt waits for **Retry failed**, and green while an update can be installed. Red takes precedence. Updates that cannot be installed leave the button unchanged.
+
 ![ePlugin Manager listing the installed plugins, with the details of the selected SamplePlugin: status, missing license, welcome page and update source](images/eplugin-manager.png)
 
 The overview above uses the repository's sample plugins in Godot's default dark editor theme.
@@ -18,6 +20,7 @@ Select a plugin to see its status, author, documentation and source links, licen
 - **Check for updates** checks immediately regardless of the scheduled interval and indexes local plugin directories again.
 - **Local directories...** adds, removes, or rescans folders containing plugin ZIP packages. The folders are user-wide settings; see [Updating plugins](updating-plugins.md#local-plugin-directories).
 - **Update sites...** adds, edits, or removes update sites the project sets for its plugins. They replace a plugin's `update_url`, which is still used when the site does not work. They are saved in the project; see [Updating plugins](updating-plugins.md#project-update-sites). The dialog also lists ePlugin's read-only [built-in update sites](updating-plugins.md#built-in-update-sites).
+- **About** shows the installed ePlugin Framework's logo, version, and description, with links to its page in the Godot Asset Store, its source code, and its documentation. The links open in the system browser.
 - **Update** installs the checked updates after validation and confirmation. See [Updating plugins](updating-plugins.md). Independent plugins are installed one after another, so a plugin that fails is rolled back without the others; a build failure is rolled back without asking. The manager stays open and reports the installed versions, and the plugins that were rolled back or skipped with their reason, when the update finishes; an update that restarts the editor reopens it afterwards.
 - **Retry failed** retries activation, deactivation, or update work that failed or was interrupted. See [Plugin state files](plugin-state.md).
 - A plugin whose update was kept although the project does not build with it, for example because only the project's own code has to be adapted, shows a **Kept update** section in its details: the versions, why it was kept, the remaining errors in the project's code, and a **Roll back to** link that restores the previous version. See [Updates that only break the project's code](updating-plugins.md#updates-that-only-break-the-projects-code).

@@ -24,6 +24,8 @@ internal static class EditorIcons
     private static readonly Dictionary<(string Path, bool LightIcons, float Scale, bool Tintable, string? Piece), Texture2D?> Cache = [];
 
     public static Texture2D? Logo => Get(LogoPath);
+    /// <summary>The colored ePlugin logo at eight times its icon size, for the About dialog.</summary>
+    public static Texture2D? LargeLogo => Get(LogoPath, EditorInterface.Singleton.GetEditorTheme(), EditorInterface.Singleton.GetEditorScale() * 8);
     public static Texture2D? EPlugin => Get(EPluginPath);
     public static Texture2D? Update => Get(UpdatePath);
     /// <summary>A white update mask, so status colors can tint it without multiplying by the icon palette.</summary>

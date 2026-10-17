@@ -267,7 +267,7 @@ the view model when pending updates, enabled plugins or their states changed; th
 `EGlobal.RestartRequested` writes `ManagerReopenMarker` (`.godot/eplugin/manager-open`, renewed by an interim restart,
 expires after an hour); the start that requests no further restart wraps `Initialize` in one `ActivationProgress` scope,
 reopens the manager and closes that progress window a few frames later. Every dialog is its own scene (`EPluginManagerDialog.tscn`,
-`LocalSourcesDialog.tscn`, `UpdateFailureDialog.tscn`); scripts only bind `%`-unique nodes and set what a scene cannot
+`LocalSourcesDialog.tscn`, `UpdateFailureDialog.tscn`, `AboutDialog.tscn`); scripts only bind `%`-unique nodes and set what a scene cannot
 store (e.g. Tree column titles/widths). Keep layout changes in the scenes. Close dialogs with `EditorWindows.Release`, never `QueueFree` in the frame that hides them: freeing a window from its
 own button, or right after a reload while it has focus and the mouse, crashed Godot 4.7.2 on the next window message
 (use-after-free in its message handling). Release hides it now and frees it 0.25 s later through a native callable.
