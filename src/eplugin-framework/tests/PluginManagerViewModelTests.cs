@@ -299,6 +299,28 @@ public class PluginManagerViewModelTests
         Assertions.AssertString(details).Contains("and 2 more, see the build log in /updates/a");
         Assertions.AssertString(details).Contains($"[url={PluginManagerViewModel.RollbackKeptMeta}]Roll back to a 1.0.0[/url]");
     }
+    [TestCase]
+    public static void TheAboutDialogShowsTheFrameworksPluginCfgAndLeavesOutLinksThatAreNoWebUrls()
+    {
+        var framework = Plugin("ePlugin", PluginKind.Framework) with
+        {
+            Version = "0.11.0", Author = "Enaweg", Description = " Declarative setup. ",
+            SourceUrl = "https://example.org/source", DocumentationUrl = "res://docs"
+        };
+        var about = AboutInfo.From(framework);
+        Assertions.AssertString(about.VersionLine).IsEqual("Version 0.11.0 · by Enaweg");
+        Assertions.AssertString(about.Description).IsEqual("Declarative setup.");
+        Assertions.AssertString(about.StoreUrl).IsEqual(AboutInfo.StorePage);
+        Assertions.AssertString(about.SourceUrl).IsEqual("https://example.org/source");
+        Assertions.AssertString(about.DocumentationUrl).IsNull();
+
+        // Without the framework's entry, e.g. a removed plugin.cfg, the repository's links remain.
+        var fallback = AboutInfo.From(null);
+        Assertions.AssertString(fallback.VersionLine).IsEqual("Version unknown");
+        Assertions.AssertString(fallback.Description).IsEmpty();
+        Assertions.AssertString(fallback.SourceUrl).IsEqual(AboutInfo.DefaultSource);
+        Assertions.AssertString(fallback.DocumentationUrl).IsEqual(AboutInfo.DefaultDocumentation);
+    }
     private static ValidatedPackage Package(string slug)
     {
         Assertions.AssertBool(SemVer.TryParse("2.0.0", out var version)).IsTrue();

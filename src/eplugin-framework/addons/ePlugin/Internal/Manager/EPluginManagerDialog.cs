@@ -51,6 +51,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private UpdateJournal? _keptUpdate;
     private LocalSourcesDialog _localSources = null!;
     private UpdateSitesDialog _updateSites = null!;
+    private AboutDialog _about = null!;
     // Checking, loading versions, staging and installing; this dialog shows what they report.
     private UpdateFlow _updates = null!;
     private IReadOnlyList<PluginUpdateTarget> _targets = [];
@@ -112,6 +113,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _rollbackKeptConfirm = GetNode<ConfirmationDialog>("%RollbackKeptConfirm");
         _localSources = GetNode<LocalSourcesDialog>("%LocalSourcesDialog"); _localSources.Initialize(global);
         _updateSites = GetNode<UpdateSitesDialog>("%UpdateSitesDialog"); _updateSites.Initialize(global);
+        _about = GetNode<AboutDialog>("%AboutDialog"); _about.Initialize();
         _locationRow = GetNode<Control>("%LocationRow"); _locationLink = GetNode<LinkButton>("%LocationLink"); _openFolder = GetNode<Button>("%OpenFolderButton");
         RefreshTheme();
         _signals.Connect(this, Control.SignalName.ThemeChanged, Callable.From(() => CallDeferred(nameof(RefreshTheme))));
@@ -129,6 +131,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _signals.Connect(_check, BaseButton.SignalName.Pressed, Callable.From(CheckNow));
         _signals.Connect(GetNode<Button>("%LocalSourcesButton"), BaseButton.SignalName.Pressed, Callable.From(_localSources.Open));
         _signals.Connect(GetNode<Button>("%UpdateSitesButton"), BaseButton.SignalName.Pressed, Callable.From(_updateSites.Open));
+        _signals.Connect(GetNode<Button>("%AboutButton"), BaseButton.SignalName.Pressed,
+            Callable.From(() => _about.Open(_model.Plugins.FirstOrDefault(r => r.Plugin.Kind == PluginKind.Framework)?.Plugin)));
         _signals.Connect(_retry, BaseButton.SignalName.Pressed, Callable.From(RetryFailed));
         _signals.Connect(_release, BaseButton.SignalName.Pressed, Callable.From(OpenRelease));
         _signals.Connect(_locationLink, BaseButton.SignalName.Pressed, Callable.From(() => { if (_selectedSlug is not null) EditorInterface.Singleton.SelectFile(PluginDirectory(_selectedSlug)); }));
