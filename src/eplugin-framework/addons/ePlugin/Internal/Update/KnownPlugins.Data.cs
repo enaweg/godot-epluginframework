@@ -1,12 +1,12 @@
 #if TOOLS
 namespace Enaweg.Plugin.Internal.Update;
 
-// Generated on 2026-10-10 by tools/generate_known_plugins.cs from godot_addons_active_20_stars.json (built by
+// Generated on 2026-10-17 by tools/generate_known_plugins.cs from godot_addons_active_20_stars.json (built by
 // tools/build_godot_addons.cs): popular add-ons with at least 20 stars and a commit within the last two years, plus those
 // in tools/extra_addons.txt, with a release or version tag. Each slug is the one extra_addons.txt gives, else
 // the plugin folder in the latest release's ZIP, else the add-on's slug in the previous list, else the plugin folder in
-// the repository at that release or tag. Add-ons without a plugin folder, with a GDExtension or with a release ZIP the
-// updater refuses are left out. The packages were not installed or validated.
+// the repository at that release or tag. Add-ons without a plugin folder or with a release ZIP the updater refuses are
+// left out. The packages were not installed or validated.
 internal static partial class KnownPlugins
 {
     private static KnownPlugin[] Entries() =>
@@ -83,6 +83,9 @@ internal static partial class KnownPlugins
         // https://github.com/thiagola92/bone-ik, latest release 0.0.3
         new("bone_ik", "LaIK", "https://github.com/thiagola92/bone-ik/releases",
             "https://github.com/thiagola92/bone-ik#readme", "https://github.com/thiagola92/bone-ik", "https://github.com/thiagola92/bone-ik"),
+        // https://github.com/niklas2902/py4godot, latest tag 4.3
+        new("build_resources", "Python for Godot", "https://github.com/niklas2902/py4godot/tags",
+            "https://github.com/niklas2902/py4godot#readme", "https://github.com/niklas2902/py4godot", "https://github.com/niklas2902/py4godot"),
         // https://github.com/jospete/godot-addon-cables, latest tag 2.3.0
         new("cables", "Cables", "https://github.com/jospete/godot-addon-cables/tags",
             "https://github.com/jospete/godot-addon-cables#readme", "https://github.com/jospete/godot-addon-cables", "https://github.com/jospete/godot-addon-cables"),
@@ -161,6 +164,9 @@ internal static partial class KnownPlugins
         // https://github.com/SnekOfSpice/dialog-editor, latest tag v0.6.3
         new("diisis", "DIISIS", "https://github.com/SnekOfSpice/dialog-editor/tags",
             "https://github.com/SnekOfSpice/dialog-editor#readme", "https://github.com/SnekOfSpice/dialog-editor", "https://github.com/SnekOfSpice/dialog-editor"),
+        // https://github.com/DiscordGodot-mirror/RPC-Legacy, latest tag 3.2
+        new("discord-sdk-gd", "4.1+ Discord  RPC / Editor Presence Plugin", "https://github.com/DiscordGodot-mirror/RPC-Legacy/tags",
+            "https://github.com/DiscordGodot-mirror/RPC-Legacy#readme", "https://github.com/DiscordGodot-mirror/RPC-Legacy", "https://github.com/DiscordGodot-mirror/RPC-Legacy"),
         // https://github.com/3ddelano/discord.gd, latest release 2.0.6
         new("discord_gd", "Discord.gd", "https://github.com/3ddelano/discord.gd/releases",
             "https://github.com/3ddelano/discord.gd#readme", "https://github.com/3ddelano/discord.gd", "https://github.com/3ddelano/discord.gd"),
@@ -188,6 +194,9 @@ internal static partial class KnownPlugins
         // https://github.com/dynamder/Godot-EasyTrajectory, latest release v0.3.0
         new("easy_trajectory", "EasyTrajectory", "https://github.com/dynamder/Godot-EasyTrajectory/releases",
             "https://github.com/dynamder/Godot-EasyTrajectory#readme", "https://github.com/dynamder/Godot-EasyTrajectory", "https://github.com/dynamder/Godot-EasyTrajectory"),
+        // https://github.com/3ddelano/epic-online-services-godot, latest release 2.3.1
+        new("epic-online-services-godot", "Epic Online Services Godot (EOSG)", "https://github.com/3ddelano/epic-online-services-godot/releases",
+            "https://github.com/3ddelano/epic-online-services-godot#readme", "https://3ddelano.github.io/epic-online-services-godot/", "https://github.com/3ddelano/epic-online-services-godot"),
         // https://github.com/bbbscarter/event-audio-godot, latest tag 1.0.0
         new("event_audio", "Event Audio", "https://github.com/bbbscarter/event-audio-godot/tags",
             "https://github.com/bbbscarter/event-audio-godot#readme", "https://github.com/bbbscarter/event-audio-godot", "https://github.com/bbbscarter/event-audio-godot"),
@@ -200,6 +209,9 @@ internal static partial class KnownPlugins
         // https://github.com/mharitsnf/ExtraSnaps, latest release v1.1.1
         new("extra_snaps", "Extra Snaps", "https://github.com/mharitsnf/ExtraSnaps/releases",
             "https://github.com/mharitsnf/ExtraSnaps#readme", "https://github.com/mharitsnf/ExtraSnaps", "https://github.com/mharitsnf/ExtraSnaps"),
+        // https://github.com/iiMidknightii/EzFSM, latest release v1.0.4
+        new("EzFsm", "EzFSM", "https://github.com/iiMidknightii/EzFSM/releases",
+            "https://github.com/iiMidknightii/EzFSM#readme", "https://github.com/iiMidknightii/EzFSM", "https://github.com/iiMidknightii/EzFSM"),
         // https://github.com/RoyasDev/EzNet, latest release v1.0.2
         new("EzNet", "EzNet", "https://github.com/RoyasDev/EzNet/releases",
             "https://github.com/RoyasDev/EzNet#readme", "https://github.com/RoyasDev/EzNet", "https://github.com/RoyasDev/EzNet"),
@@ -236,6 +248,9 @@ internal static partial class KnownPlugins
         // https://github.com/WagnerGFX/gdscript_utilities, latest release v1.2.0
         new("gdscript_utilities", "GDScript Utilities for Classes and Scenes", "https://github.com/WagnerGFX/gdscript_utilities/releases",
             "https://github.com/WagnerGFX/gdscript_utilities#readme", "https://github.com/WagnerGFX/gdscript_utilities", "https://github.com/WagnerGFX/gdscript_utilities"),
+        // https://github.com/markeel/gdterm, latest release v1.0.2
+        new("gdterm", "GDTerm (Godot In-Editor Terminal)", "https://github.com/markeel/gdterm/releases",
+            "https://github.com/markeel/gdterm#readme", "https://github.com/markeel/gdterm", "https://github.com/markeel/gdterm"),
         // https://github.com/MikeSchulze/gdUnit3, latest release v2.4.3
         new("gdUnit3", "GdUnit3 - Unit Testing Framework", "https://github.com/MikeSchulze/gdUnit3/releases",
             "https://github.com/MikeSchulze/gdUnit3#readme", "https://github.com/MikeSchulze/gdUnit3", "https://github.com/MikeSchulze/gdUnit3"),
@@ -275,9 +290,15 @@ internal static partial class KnownPlugins
         // https://github.com/kuma-gee/godot-css-theme, latest tag v4.5.0
         new("godot-css-theme", "Godot CSS Theme", "https://github.com/kuma-gee/godot-css-theme/tags",
             "https://github.com/kuma-gee/godot-css-theme#readme", "https://godotengine.org/asset-library/asset/1038", "https://github.com/kuma-gee/godot-css-theme"),
+        // https://github.com/citizenll/godot-flexbox, latest release 4.1
+        new("godot-flexbox", "Flexbox layout", "https://github.com/citizenll/godot-flexbox/releases",
+            "https://github.com/citizenll/godot-flexbox#readme", "https://github.com/citizenll/godot-flexbox", "https://github.com/citizenll/godot-flexbox"),
         // https://github.com/neth392/godot-improved-json, latest release v1.2.2
         new("godot-improved-json", "Godot Improved JSON", "https://github.com/neth392/godot-improved-json/releases",
             "https://github.com/neth392/godot-improved-json#readme", "https://github.com/neth392/godot-improved-json", "https://github.com/neth392/godot-improved-json"),
+        // https://github.com/2shady4u/godot-krita-importer, latest release v0.6
+        new("godot-krita-importer", "Godot Krita Importer", "https://github.com/2shady4u/godot-krita-importer/releases",
+            "https://github.com/2shady4u/godot-krita-importer#readme", "https://github.com/2shady4u/godot-krita-importer", "https://github.com/2shady4u/godot-krita-importer"),
         // https://github.com/folt-a/godot-live-debugger, latest release v1.1.3
         new("godot-live-debugger", "LiveDebugger", "https://github.com/folt-a/godot-live-debugger/releases",
             "https://github.com/folt-a/godot-live-debugger#readme", "https://github.com/folt-a/godot-live-debugger", "https://github.com/folt-a/godot-live-debugger"),
@@ -296,6 +317,9 @@ internal static partial class KnownPlugins
         // https://github.com/msabaeian/godot-socketio, latest release 0.1.1
         new("godot-socketio", "Socket.IO", "https://github.com/msabaeian/godot-socketio/releases",
             "https://github.com/msabaeian/godot-socketio#readme", "https://github.com/msabaeian/godot-socketio", "https://github.com/msabaeian/godot-socketio"),
+        // https://github.com/2shady4u/godot-sqlite, latest release v4.9
+        new("godot-sqlite", "Godot SQLite", "https://github.com/2shady4u/godot-sqlite/releases",
+            "https://github.com/2shady4u/godot-sqlite#readme", "https://github.com/2shady4u/godot-sqlite", "https://github.com/2shady4u/godot-sqlite"),
         // https://github.com/Earewien/godot-traits, latest release 2.0.1
         new("godot-traits", "Godot Traits", "https://github.com/Earewien/godot-traits/releases",
             "https://github.com/Earewien/godot-traits#readme", "https://github.com/Earewien/godot-traits", "https://github.com/Earewien/godot-traits"),
@@ -320,6 +344,9 @@ internal static partial class KnownPlugins
         // https://github.com/OctoD/godot-gameplay-systems, latest release 0.20.5
         new("godot_gameplay_systems", "Godot Gameplay Systems", "https://github.com/OctoD/godot-gameplay-systems/releases",
             "https://github.com/OctoD/godot-gameplay-systems#readme", "https://github.com/OctoD/godot-gameplay-systems", "https://github.com/OctoD/godot-gameplay-systems"),
+        // https://github.com/nlaha/godot-midi, latest release 0.3.0
+        new("godot_midi", "Godot Midi", "https://github.com/nlaha/godot-midi/releases",
+            "https://github.com/nlaha/godot-midi#readme", "https://github.com/nlaha/godot-midi", "https://github.com/nlaha/godot-midi"),
         // https://github.com/Cretezy/godot-object-serializer, latest release v0.3.0
         new("godot_object_serializer", "Godot Object Serializer", "https://github.com/Cretezy/godot-object-serializer/releases",
             "https://github.com/Cretezy/godot-object-serializer#readme", "https://godotengine.org/asset-library/asset/3940", "https://github.com/Cretezy/godot-object-serializer"),
@@ -329,18 +356,30 @@ internal static partial class KnownPlugins
         // https://github.com/derkork/godot-resource-groups, latest release v0.4.2
         new("godot_resource_groups", "Godot Resource Groups", "https://github.com/derkork/godot-resource-groups/releases",
             "https://github.com/derkork/godot-resource-groups#readme", "https://github.com/derkork/godot-resource-groups", "https://github.com/derkork/godot-resource-groups"),
+        // https://github.com/libriscv/godot-sandbox, latest release v0.60
+        new("godot_sandbox", "Godot Sandbox", "https://github.com/libriscv/godot-sandbox/releases",
+            "https://github.com/libriscv/godot-sandbox#readme", "https://libriscv.no/docs/host_langs/godot_integration/godot_docs/design", "https://github.com/libriscv/godot-sandbox"),
         // https://github.com/wojtossfm/godot_scml_importer, latest release v1.0.5
         new("godot_scml_importer", "SCML importer", "https://github.com/wojtossfm/godot_scml_importer/releases",
             "https://github.com/wojtossfm/godot_scml_importer#readme", "https://github.com/wojtossfm/godot_scml_importer", "https://github.com/wojtossfm/godot_scml_importer"),
         // https://github.com/derkork/godot-statecharts, latest release v0.22.5
         new("godot_state_charts", "Godot State Charts", "https://github.com/derkork/godot-statecharts/releases",
             "https://github.com/derkork/godot-statecharts#readme", "https://derkork.github.io/godot-statecharts/", "https://github.com/derkork/godot-statecharts"),
+        // https://github.com/tefusion/godot-subdiv, latest release 0.4.1
+        new("godot_subdiv", "Godot Subdiv", "https://github.com/tefusion/godot-subdiv/releases",
+            "https://github.com/tefusion/godot-subdiv#readme", "https://godotengine.org/asset-library/asset/1488", "https://github.com/tefusion/godot-subdiv"),
         // https://github.com/BudzioT/Godot_Super-Wakatime, latest release v2.0.1
         new("godot_super-wakatime", "Godot Super Wakatime", "https://github.com/BudzioT/Godot_Super-Wakatime/releases",
             "https://github.com/BudzioT/Godot_Super-Wakatime#readme", "https://github.com/BudzioT/Godot_Super-Wakatime", "https://github.com/BudzioT/Godot_Super-Wakatime"),
+        // https://github.com/EclipsingLines/GodotSynth, latest release v0.95.1
+        new("godot_synth", "Godot Synth", "https://github.com/EclipsingLines/GodotSynth/releases",
+            "https://github.com/EclipsingLines/GodotSynth#readme", "https://eclipsinglines.github.io/GodotSynth/", "https://github.com/EclipsingLines/GodotSynth"),
         // https://github.com/Malcolmnixon/GodotXRVmcTracker, latest release 1.2.0
         new("godot_vmc_tracker", "Godot XR VMC Tracker", "https://github.com/Malcolmnixon/GodotXRVmcTracker/releases",
             "https://github.com/Malcolmnixon/GodotXRVmcTracker#readme", "https://github.com/Malcolmnixon/GodotXRVmcTracker", "https://github.com/Malcolmnixon/GodotXRVmcTracker"),
+        // https://github.com/appsinacup/godot-whisper, latest release v2.0.3
+        new("godot_whisper", "Godot Whisper - Speech to Text", "https://github.com/appsinacup/godot-whisper/releases",
+            "https://github.com/appsinacup/godot-whisper#readme", "https://whisper.appsinacup.com", "https://github.com/appsinacup/godot-whisper"),
         // https://github.com/Burloe/GoLogger, latest release 1.3.1
         new("GoLogger", "GoLogger", "https://github.com/Burloe/GoLogger/releases",
             "https://github.com/Burloe/GoLogger#readme", "https://godotengine.org/asset-library/asset/3365", "https://github.com/Burloe/GoLogger"),
@@ -395,6 +434,9 @@ internal static partial class KnownPlugins
         // https://github.com/PiCode9560/Godot-Inspector-Tabs, latest release v0.7
         new("inspector_tabs", "Inspector Tabs", "https://github.com/PiCode9560/Godot-Inspector-Tabs/releases",
             "https://github.com/PiCode9560/Godot-Inspector-Tabs#readme", "https://github.com/PiCode9560/Godot-Inspector-Tabs", "https://github.com/PiCode9560/Godot-Inspector-Tabs"),
+        // https://github.com/iree-gd/iree.gd, latest release v0.1.0
+        new("iree-gd", "IREE runtime - Run machine learning models", "https://github.com/iree-gd/iree.gd/releases",
+            "https://github.com/iree-gd/iree.gd#readme", "https://github.com/iree-gd/iree.gd", "https://github.com/iree-gd/iree.gd"),
         // https://github.com/HolonProduction/godot_kanban_tasks, latest release v2.2.0
         new("kanban_tasks", "Kanban Tasks - Todo Manager", "https://github.com/HolonProduction/godot_kanban_tasks/releases",
             "https://github.com/HolonProduction/godot_kanban_tasks#readme", "https://github.com/HolonProduction/godot_kanban_tasks", "https://github.com/HolonProduction/godot_kanban_tasks"),
@@ -410,6 +452,9 @@ internal static partial class KnownPlugins
         // https://github.com/ReunMedia/godot-levelblock, latest release 3.0.2
         new("level_block", "LevelBlock", "https://github.com/ReunMedia/godot-levelblock/releases",
             "https://github.com/ReunMedia/godot-levelblock#readme", "https://github.com/ReunMedia/godot-levelblock", "https://github.com/ReunMedia/godot-levelblock"),
+        // https://github.com/Brawmario/libsm64-godot, latest release v2.7.2
+        new("libsm64_godot", "Libsm64 Godot", "https://github.com/Brawmario/libsm64-godot/releases",
+            "https://github.com/Brawmario/libsm64-godot#readme", "https://github.com/Brawmario/libsm64-godot", "https://github.com/Brawmario/libsm64-godot"),
         // https://github.com/SpockBauru/LightmapProbeGrid, latest release v2.2.1
         new("lightmap_probe_grid", "LightmapProbeGrid", "https://github.com/SpockBauru/LightmapProbeGrid/releases",
             "https://github.com/SpockBauru/LightmapProbeGrid#readme", "https://github.com/SpockBauru/LightmapProbeGrid", "https://github.com/SpockBauru/LightmapProbeGrid"),
@@ -419,6 +464,9 @@ internal static partial class KnownPlugins
         // https://github.com/limbonaut/limbo_console, latest release v0.8.0
         new("limbo_console", "LimboConsole: in-game dev console", "https://github.com/limbonaut/limbo_console/releases",
             "https://github.com/limbonaut/limbo_console#readme", "https://github.com/limbonaut/limbo_console", "https://github.com/limbonaut/limbo_console"),
+        // https://github.com/Kaifungamedev/godot_local_assets_browser, latest release v2.0.0
+        new("local_assets", "Local Asset browser", "https://github.com/Kaifungamedev/godot_local_assets_browser/releases",
+            "https://github.com/Kaifungamedev/godot_local_assets_browser#readme", "https://github.com/Kaifungamedev/godot_local_assets_browser", "https://github.com/Kaifungamedev/godot_local_assets_browser"),
         // https://github.com/locker-godot/locker, latest release v1.1.2
         new("locker", "Locker - Saver, loader and storage manager", "https://github.com/locker-godot/locker/releases",
             "https://github.com/locker-godot/locker#readme", "https://locker-docs.readthedocs.io/", "https://github.com/locker-godot/locker"),
@@ -437,6 +485,9 @@ internal static partial class KnownPlugins
         // https://github.com/fcazalet/loggot, latest release v2.0.0
         new("loggot", "Loggot", "https://github.com/fcazalet/loggot/releases",
             "https://github.com/fcazalet/loggot#readme", "https://github.com/fcazalet/loggot", "https://github.com/fcazalet/loggot"),
+        // https://github.com/gilzoide/lua-gdextension, latest release 0.8.2
+        new("lua-gdextension", "Lua GDExtension", "https://github.com/gilzoide/lua-gdextension/releases",
+            "https://github.com/gilzoide/lua-gdextension#readme", "https://godotengine.org/asset-library/asset/2330", "https://github.com/gilzoide/lua-gdextension"),
         // https://github.com/Maaack/Godot-Options-Menus, latest release v1.6.0
         new("maaacks_options_menus", "Maaack's Options Menus", "https://github.com/Maaack/Godot-Options-Menus/releases",
             "https://github.com/Maaack/Godot-Options-Menus#readme", "https://github.com/Maaack/Godot-Options-Menus", "https://github.com/Maaack/Godot-Options-Menus"),
@@ -467,6 +518,9 @@ internal static partial class KnownPlugins
         // https://github.com/CodeNameTwister/Multi-Split-Container, latest release 1.3
         new("multi_spliter_container", "Multi Split Container", "https://github.com/CodeNameTwister/Multi-Split-Container/releases",
             "https://github.com/CodeNameTwister/Multi-Split-Container#readme", "https://github.com/CodeNameTwister/Multi-Split-Container", "https://github.com/CodeNameTwister/Multi-Split-Container"),
+        // https://github.com/pixelpen-dev/pixelpen, latest release v1.2.0
+        new("net.yarvis.pixel_pen", "PixelPen | PixelArt Drawing and Animation", "https://github.com/pixelpen-dev/pixelpen/releases",
+            "https://github.com/pixelpen-dev/pixelpen#readme", "https://pixelpen-dev.github.io", "https://github.com/pixelpen-dev/pixelpen"),
         // https://github.com/foxssake/netfox, latest release v1.35.3
         new("netfox", "netfox", "https://github.com/foxssake/netfox/releases",
             "https://github.com/foxssake/netfox#readme", "https://foxssake.github.io/netfox/", "https://github.com/foxssake/netfox"),
@@ -503,6 +557,9 @@ internal static partial class KnownPlugins
         // https://github.com/NodotProject/nodot, latest tag v0.3.0
         new("nodot", "Nodot", "https://github.com/NodotProject/nodot/tags",
             "https://github.com/NodotProject/nodot#readme", "https://nodotproject.github.io/nodot/", "https://github.com/NodotProject/nodot"),
+        // https://github.com/Ivorforce/NumDot, latest release v0.12
+        new("numdot", "NumDot: Tensor Math and Scientific Computation", "https://github.com/Ivorforce/NumDot/releases",
+            "https://github.com/Ivorforce/NumDot#readme", "https://numdot.readthedocs.io", "https://github.com/Ivorforce/NumDot"),
         // https://github.com/lowlevel-1989/object_state_machine, latest tag 1.0.0
         new("object_state_machine", "Object State Machine", "https://github.com/lowlevel-1989/object_state_machine/tags",
             "https://github.com/lowlevel-1989/object_state_machine#readme", "https://github.com/lowlevel-1989/object_state_machine", "https://github.com/lowlevel-1989/object_state_machine"),
@@ -512,6 +569,9 @@ internal static partial class KnownPlugins
         // https://github.com/Ark2000/PankuConsole, latest release v1.7.9
         new("panku_console", "Panku Console", "https://github.com/Ark2000/PankuConsole/releases",
             "https://github.com/Ark2000/PankuConsole#readme", "https://ark2000.github.io/PankuConsole/", "https://github.com/Ark2000/PankuConsole"),
+        // https://github.com/iiMidknightii/PathMesh3D, latest release v1.7.0
+        new("PathMesh3D", "PathMesh3D", "https://github.com/iiMidknightii/PathMesh3D/releases",
+            "https://github.com/iiMidknightii/PathMesh3D#readme", "https://github.com/iiMidknightii/PathMesh3D", "https://github.com/iiMidknightii/PathMesh3D"),
         // https://github.com/paulloz/godot-colorblindness, latest release v1.6
         new("paulloz.colorblindness", "Colorblindness", "https://github.com/paulloz/godot-colorblindness/releases",
             "https://github.com/paulloz/godot-colorblindness#readme", "https://github.com/paulloz/godot-colorblindness", "https://github.com/paulloz/godot-colorblindness"),
@@ -557,6 +617,9 @@ internal static partial class KnownPlugins
         // https://github.com/nathanhoad/godot_puzzle_dependencies, latest release v3.0.1
         new("puzzle_dependencies", "Puzzle Dependencies", "https://github.com/nathanhoad/godot_puzzle_dependencies/releases",
             "https://github.com/nathanhoad/godot_puzzle_dependencies#readme", "https://github.com/nathanhoad/godot_puzzle_dependencies", "https://github.com/nathanhoad/godot_puzzle_dependencies"),
+        // https://github.com/erayzesen/godot-quarkphysics, latest release v1.0.7
+        new("quarkphysics", "QuarkPhysics", "https://github.com/erayzesen/godot-quarkphysics/releases",
+            "https://github.com/erayzesen/godot-quarkphysics#readme", "https://github.com/erayzesen/godot-quarkphysics", "https://github.com/erayzesen/godot-quarkphysics"),
         // https://github.com/shomykohai/quest-system, latest release 1.7.1
         new("quest_system", "Quest System", "https://github.com/shomykohai/quest-system/releases",
             "https://github.com/shomykohai/quest-system#readme", "https://godotengine.org/asset-library/asset/3809", "https://github.com/shomykohai/quest-system"),
@@ -575,12 +638,18 @@ internal static partial class KnownPlugins
         // https://github.com/chairfull/GodotRichTextLabel2, latest release v1.14
         new("richtext2", "RichTextLabel2", "https://github.com/chairfull/GodotRichTextLabel2/releases",
             "https://github.com/chairfull/GodotRichTextLabel2#readme", "https://github.com/chairfull/GodotRichTextLabel2", "https://github.com/chairfull/GodotRichTextLabel2"),
+        // https://github.com/JetBrains/godot-support, latest release v1.5.0
+        new("rider-plugin", "godot-support", "https://github.com/JetBrains/godot-support/releases",
+            "https://github.com/JetBrains/godot-support#readme", "https://github.com/JetBrains/godot-support", "https://github.com/JetBrains/godot-support"),
         // https://github.com/SirRamEsq/SmartShape2D, latest release 3.3.2
         new("rmsmartshape", "RMSmartShape2D", "https://github.com/SirRamEsq/SmartShape2D/releases",
             "https://github.com/SirRamEsq/SmartShape2D#readme", "https://github.com/SirRamEsq/SmartShape2D", "https://github.com/SirRamEsq/SmartShape2D"),
         // https://github.com/TheDuckCow/godot-road-generator, latest release 0.9.4
         new("road-generator", "Godot Road Generator", "https://github.com/TheDuckCow/godot-road-generator/releases",
             "https://github.com/TheDuckCow/godot-road-generator#readme", "https://github.com/TheDuckCow/godot-road-generator", "https://github.com/TheDuckCow/godot-road-generator"),
+        // https://github.com/mphe/GDNative-Ropesim, latest release v1.9.1
+        new("ropesim", "GDNative-Ropesim", "https://github.com/mphe/GDNative-Ropesim/releases",
+            "https://github.com/mphe/GDNative-Ropesim#readme", "https://github.com/mphe/GDNative-Ropesim", "https://github.com/mphe/GDNative-Ropesim"),
         // https://github.com/dominiks/rpc-await, latest release v1.4
         new("rpc-await", "rpc-await", "https://github.com/dominiks/rpc-await/releases",
             "https://github.com/dominiks/rpc-await#readme", "https://github.com/dominiks/rpc-await", "https://github.com/dominiks/rpc-await"),
@@ -659,6 +728,12 @@ internal static partial class KnownPlugins
         // https://github.com/appsinacup/godot-softbody2d, latest release v1.7.0
         new("softbody2d", "SoftBody2D", "https://github.com/appsinacup/godot-softbody2d/releases",
             "https://github.com/appsinacup/godot-softbody2d#readme", "https://softbody2d.appsinacup.com", "https://github.com/appsinacup/godot-softbody2d"),
+        // https://github.com/Virus-Axel/godot-solana-sdk, latest release v1.4.5
+        new("SolanaSDK", "Godot Solana SDK", "https://github.com/Virus-Axel/godot-solana-sdk/releases",
+            "https://github.com/Virus-Axel/godot-solana-sdk#readme", "https://github.com/Virus-Axel/godot-solana-sdk", "https://github.com/Virus-Axel/godot-solana-sdk"),
+        // https://github.com/ardazishvili/Sota, latest release v0.12
+        new("sota", "Sota - hexagonal grids", "https://github.com/ardazishvili/Sota/releases",
+            "https://github.com/ardazishvili/Sota#readme", "https://github.com/ardazishvili/Sota", "https://github.com/ardazishvili/Sota"),
         // https://github.com/nathanhoad/godot_sound_manager, latest release v2.6.2
         new("sound_manager", "Sound Manager", "https://github.com/nathanhoad/godot_sound_manager/releases",
             "https://github.com/nathanhoad/godot_sound_manager#readme", "https://github.com/nathanhoad/godot_sound_manager", "https://github.com/nathanhoad/godot_sound_manager"),
@@ -734,6 +809,9 @@ internal static partial class KnownPlugins
         // https://github.com/Wesley-Source/versatile-mobile-joystick, latest release 1.0.1
         new("versatile-mobile-joystick", "Versatile Mobile Joystick", "https://github.com/Wesley-Source/versatile-mobile-joystick/releases",
             "https://github.com/Wesley-Source/versatile-mobile-joystick#readme", "https://github.com/Wesley-Source/versatile-mobile-joystick", "https://github.com/Wesley-Source/versatile-mobile-joystick"),
+        // https://github.com/rothiotome/godot-very-simple-twitch, latest release v0.1.0
+        new("very-simple-twitch", "Very Simple Twitch", "https://github.com/rothiotome/godot-very-simple-twitch/releases",
+            "https://github.com/rothiotome/godot-very-simple-twitch#readme", "https://github.com/rothiotome/godot-very-simple-twitch", "https://github.com/rothiotome/godot-very-simple-twitch"),
         // https://github.com/d-bucur/godot-vision-cone, latest tag 0.2.0
         new("vision_cone_2d", "Vision Cone 2D", "https://github.com/d-bucur/godot-vision-cone/tags",
             "https://github.com/d-bucur/godot-vision-cone#readme", "https://godotengine.org/asset-library/asset/1568", "https://github.com/d-bucur/godot-vision-cone"),
@@ -758,6 +836,9 @@ internal static partial class KnownPlugins
         // https://github.com/detomon/wigglebone, latest release v3.0.0
         new("wigglebone", "WiggleBone", "https://github.com/detomon/wigglebone/releases",
             "https://github.com/detomon/wigglebone#readme", "https://github.com/detomon/wigglebone", "https://github.com/detomon/wigglebone"),
+        // https://github.com/fimbul-works/godot-yaml, latest release v2.2.1
+        new("yaml", "Godot YAML", "https://github.com/fimbul-works/godot-yaml/releases",
+            "https://github.com/fimbul-works/godot-yaml#readme", "https://github.com/fimbul-works/godot-yaml", "https://github.com/fimbul-works/godot-yaml"),
         // https://github.com/Mattiny/yamms, latest release V1.2.0
         new("yamms", "Yamms - Yet another MultiMesh Scatter", "https://github.com/Mattiny/yamms/releases",
             "https://github.com/Mattiny/yamms#readme", "https://github.com/Mattiny/yamms", "https://github.com/Mattiny/yamms"),
