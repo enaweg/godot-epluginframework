@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Enaweg.Plugin.Internal.Kinds;
 using Enaweg.Plugin.Internal.Manager;
 using Enaweg.Plugin.Internal.Update;
 using GdUnit4;

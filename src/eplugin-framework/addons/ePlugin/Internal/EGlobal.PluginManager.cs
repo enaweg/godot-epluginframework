@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Enaweg.Plugin.Internal.Kinds;
 using Enaweg.Plugin.Internal.Manager;
 using Godot;
 using FileAccess = Godot.FileAccess;
@@ -78,7 +79,7 @@ internal sealed partial class EGlobal
             var context = _contexts.FirstOrDefault(c => c.Slug == slug && c.Plugin is not null);
             var name = Value("name");
             plugins.Add(new PluginInfo(slug, name.Length > 0 ? name : slug,
-                PluginCatalog.Classify(script, slug == framework, types), enabled.Contains(slug))
+                PluginKinds.Classify(script, slug == framework, types, PluginKinds.HasNativeExtension(ProjectSettings.GlobalizePath(directory))), enabled.Contains(slug))
             {
                 Version = Value("version"), Author = Value("author"), Description = Value("description"),
                 UpdateUrl = Value("update_url") is { Length: > 0 } url ? url : null, UpdateSite = UpdateSiteOf(slug), Known = KnownPluginOf(slug), Script = script,

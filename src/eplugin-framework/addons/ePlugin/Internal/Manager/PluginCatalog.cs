@@ -3,12 +3,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using Enaweg.Plugin.Internal.Kinds;
 using Enaweg.Plugin.Internal.Update;
 using Godot;
 
 namespace Enaweg.Plugin.Internal.Manager;
-
-internal enum PluginKind { Framework, EPlugin, CSharp, GDScript, Unknown }
 
 /// <summary>What the ePlugin Manager knows about one addon, enabled or not.</summary>
 internal sealed record PluginInfo(string Slug, string Name, PluginKind Kind, bool Enabled)
@@ -40,34 +39,13 @@ internal sealed record PluginInfo(string Slug, string Name, PluginKind Kind, boo
 
 internal static class PluginCatalog
 {
-    public static string KindName(PluginKind kind) => kind switch
-    {
-        PluginKind.Framework => "ePlugin Framework",
-        PluginKind.EPlugin => "ePlugin",
-        PluginKind.CSharp => "C# plugin",
-        PluginKind.GDScript => "GDScript plugin",
-        _ => "Plugin"
-    };
+    public static string KindName(PluginKind kind) => PluginKinds.Name(kind);
 
     /// <summary>The <c>script</c> key of plugin.cfg is relative to the plugin directory unless it is a res:// path.</summary>
     public static string? ResolveScript(string directory, string script)
     {
         if (string.IsNullOrWhiteSpace(script)) return null;
         return script.StartsWith("res://", StringComparison.Ordinal) ? script : directory.TrimEnd('/') + "/" + script.TrimStart('/');
-    }
-
-    /// <summary>
-    /// Disabled plugins have no editor instance, so a C# plugin is recognized as an ePlugin by its compiled script
-    /// type, which carries the script path Godot generated for it.
-    /// </summary>
-    public static PluginKind Classify(string? script, bool isFramework, IEnumerable<Type> types)
-    {
-        if (isFramework) return PluginKind.Framework;
-        if (script is null) return PluginKind.Unknown;
-        if (script.EndsWith(".gd", StringComparison.OrdinalIgnoreCase)) return PluginKind.GDScript;
-        if (!script.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)) return PluginKind.Unknown;
-        var type = types.FirstOrDefault(t => ScriptPaths(t).Contains(script));
-        return type is not null && typeof(IEEditorPlugin).IsAssignableFrom(type) ? PluginKind.EPlugin : PluginKind.CSharp;
     }
 
     /// <summary>

@@ -3,8 +3,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Threading;
 using Enaweg.Plugin.Internal.Dotnet;
+using Enaweg.Plugin.Internal.Kinds;
 
 namespace Enaweg.Plugin.Internal.Update;
 
@@ -45,6 +45,11 @@ internal interface IUpdateHost
     /// <summary>Builds the project with only plugin code, see <see cref="PluginsOnlyBuild"/>.</summary>
     BuildOutcome BuildPluginsOnly(PluginsOnlyBuild build) => new(1, ["A plugins-only build is not available."]);
     void RequestReload(UpdateJournal journal);
+    /// <summary>
+    /// Reloads the reloadable GDExtension at <paramref name="resourcePath"/> in place (loads it when it is not loaded);
+    /// false when Godot could not, so the editor has to restart. Used by <see cref="GDExtensionPluginWorkflow"/>.
+    /// </summary>
+    bool ReloadExtension(string resourcePath) => false;
     bool Verify(UpdatePluginJournal plugin);
     void Log(string message);
 }
@@ -174,8 +179,9 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             var old = PluginIni.Parse(File.ReadAllText(Path.Combine(Installed(slug), "plugin.cfg"))).GetValueOrDefault("version");
             if (old != package.Candidate.InstalledVersion) throw new InvalidOperationException($"Plugin {slug} changed since the update check; check again.");
             var next = PluginIni.Parse(File.ReadAllText(Path.Combine(package.StagingDir, "plugin.cfg"))).GetValueOrDefault("version")!;
-            journal.Plugins.Add(new() { Slug = slug, OldVersion = old!, NewVersion = next, IsEPlugin = host.IsManaged(slug),
-                WasEnabled = true, ContainsCSharp = package.ContainsCSharp, SourceUrl = package.Candidate.Origin, Revision = package.Candidate.ResolvedRevision,
+            var managed = host.IsManaged(slug);
+            journal.Plugins.Add(new() { Slug = slug, OldVersion = old!, NewVersion = next, IsEPlugin = managed,
+                Kind = PluginKinds.ForJournal(slug, managed, package.Kind).ToString(), WasEnabled = true, ContainsCSharp = package.ContainsCSharp, SourceUrl = package.Candidate.Origin, Revision = package.Candidate.ResolvedRevision,
                 Uids = UidMap.Collect(Installed(slug)) });
         }
         host.PrepareJournal(journal);
@@ -198,14 +204,18 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             journal.Save(UpdatePhase.Swapped);
             foreach (var plugin in journal.Plugins)
             {
+                // Each kind replaces its files its own way; see the PluginKindWorkflow implementations.
+                var workflow = PluginKinds.Workflow(plugin);
+                workflow.BeforeSwap(plugin);
                 plugin.SwapStarted = true;
                 journal.Save();
-                if (!plugin.IsEPlugin) host.SetPlainEnabled(plugin.Slug, false);
-                System.IO.Directory.CreateDirectory(Path.GetDirectoryName(journal.Backup(plugin.Slug))!);
-                Move(Installed(plugin.Slug), journal.Backup(plugin.Slug));
-                Move(journal.Staging(plugin.Slug), Installed(plugin.Slug));
+                host.Log($"{workflow.Name} {plugin.Slug}: installing {plugin.NewVersion} ({workflow.Swap.Name}).");
+                if (workflow.DisabledDuringSwap) host.SetPlainEnabled(plugin.Slug, false);
+                var discarded = workflow.Swap.Install(Installed(plugin.Slug), journal.Staging(plugin.Slug), journal.Backup(plugin.Slug), journal.Discarded(plugin.Slug));
                 UidMap.Restore(Installed(plugin.Slug), plugin.Uids);
                 host.Bridge(journal, plugin);
+                workflow.AfterSwap(new(host, journal, plugin, Installed(plugin.Slug), discarded));
+                journal.Save();
             }
             host.Scan();
             if (journal.Plugins.Any(p => p.ContainsCSharp) || host.RestartAlways)
@@ -215,7 +225,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                 {
                     var decision = Decision(journal);
                     if (decision == "rollback") return Rollback(journal, "Build failed.");
-                    foreach (var plugin in journal.Plugins.Where(p => !p.IsEPlugin)) host.SetPlainEnabled(plugin.Slug, true);
+                    foreach (var plugin in journal.Plugins.Where(p => PluginKinds.Workflow(p).DisabledDuringSwap)) host.SetPlainEnabled(plugin.Slug, true);
                     // The editor cannot load the new code, so the recipes are reconciled once the project builds again.
                     journal.BeforeReconcile = true;
                     journal.Failure = journal.KeptForProjectCode ? ProjectCodeFailure(journal)
@@ -224,11 +234,11 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                     return Keep(journal);
                 }
                 journal.Save(UpdatePhase.InterimBuilt);
-                foreach (var plugin in journal.Plugins.Where(p => !p.IsEPlugin)) host.SetPlainEnabled(plugin.Slug, true);
+                foreach (var plugin in journal.Plugins.Where(p => PluginKinds.Workflow(p).DisabledDuringSwap)) host.SetPlainEnabled(plugin.Slug, true);
                 host.RequestReload(journal);
                 return UpdateOutcome.AwaitingReload;
             }
-            foreach (var plugin in journal.Plugins.Where(p => !p.IsEPlugin)) host.SetPlainEnabled(plugin.Slug, true);
+            foreach (var plugin in journal.Plugins.Where(p => PluginKinds.Workflow(p).DisabledDuringSwap)) host.SetPlainEnabled(plugin.Slug, true);
             journal.Save(UpdatePhase.InterimBuilt);
             return Resume(journal);
         }
@@ -242,7 +252,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             journal.Save(UpdatePhase.Reconciling);
             host.Reconcile(journal, false);
             journal.Save(UpdatePhase.Reconciled);
-            foreach (var plugin in journal.Plugins.Where(p => !p.IsEPlugin))
+            foreach (var plugin in journal.Plugins.Where(p => PluginKinds.Workflow(p).DisabledDuringSwap))
                 if (!host.IsEnabled(plugin.Slug)) host.SetPlainEnabled(plugin.Slug, true);
             host.Scan();
             // A plain C# batch already passed its single build gate. Managed recipes need a final build, unless reconciling
@@ -303,6 +313,12 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             try { host.RequestReload(journal); }
             catch (Exception ex) { host.Log("Update committed. Reopen the editor to load the final assembly: " + ex.Message); }
         }
+        else if (journal.Plugins.FirstOrDefault(p => PluginKinds.Workflow(p).NeedsRestart(p)) is { } native)
+        {
+            journal.State = UpdatePhase.Committed;
+            try { host.RequestReload(journal); }
+            catch (Exception ex) { host.Log($"Update committed. Reopen the editor to load the new native libraries of {native.Slug}: " + ex.Message); }
+        }
         return UpdateOutcome.Completed;
     }
 
@@ -330,9 +346,12 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                 var installed = Installed(plugin.Slug);
                 if (System.IO.Directory.Exists(journal.Backup(plugin.Slug)))
                 {
-                    if (!plugin.IsEPlugin && host.IsEnabled(plugin.Slug)) host.SetPlainEnabled(plugin.Slug, false);
-                    if (System.IO.Directory.Exists(installed)) System.IO.Directory.Delete(installed, true);
-                    Move(journal.Backup(plugin.Slug), installed);
+                    var workflow = PluginKinds.Workflow(plugin);
+                    host.Log($"{workflow.Name} {plugin.Slug}: restoring {plugin.OldVersion} ({workflow.Swap.Name}).");
+                    if (workflow.DisabledDuringSwap && host.IsEnabled(plugin.Slug)) host.SetPlainEnabled(plugin.Slug, false);
+                    var discarded = workflow.Swap.Restore(installed, journal.Backup(plugin.Slug), journal.Discarded(plugin.Slug));
+                    workflow.AfterRestore(new(host, journal, plugin, installed, discarded));
+                    journal.Save();
                 }
                 else if (plugin.SwapStarted && (!File.Exists(Path.Combine(installed, "plugin.cfg")) ||
                     PluginIni.Parse(File.ReadAllText(Path.Combine(installed, "plugin.cfg"))).GetValueOrDefault("version") != plugin.OldVersion))
@@ -340,7 +359,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             }
             try { host.Reconcile(journal, true); }
             finally { RestoreProject(journal); }
-            foreach (var plugin in journal.Plugins.Where(p => !p.IsEPlugin)) host.SetPlainEnabled(plugin.Slug, plugin.WasEnabled);
+            foreach (var plugin in journal.Plugins.Where(p => PluginKinds.Workflow(p).DisabledDuringSwap)) host.SetPlainEnabled(plugin.Slug, plugin.WasEnabled);
             host.Scan();
             if (journal.Plugins.Any(p => p.ContainsCSharp) && Build(journal, "rollback").ExitCode != 0) throw new IOException("Restored project failed to build.");
             if (store.LocalAttempts.Any(a => a.AttemptId == journal.AttemptId) && !store.TryAbandonAttempt(journal.AttemptId)) throw new IOException("Cannot clear the rollback marker.");
@@ -353,7 +372,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             }
             cache.Save();
             host.Log($"Update rolled back: {reason}. Logs: {journal.Directory}");
-            if (journal.Plugins.Any(p => p.ContainsCSharp)) host.RequestReload(journal);
+            if (journal.Plugins.Any(p => p.ContainsCSharp || PluginKinds.Workflow(p).NeedsRestart(p))) host.RequestReload(journal);
             return UpdateOutcome.RolledBack;
         }
         catch (Exception ex)
@@ -581,13 +600,6 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         foreach (var file in journal.ProjectFiles.Where(f => f != "project.godot")) File.Copy(PackageFiles.Inside(Path.Combine(journal.Directory, "backup-project"), file), PackageFiles.Inside(projectRoot, file), true);
         if (!journal.ProjectFiles.Any(p => p.Equals("nuget.config", StringComparison.OrdinalIgnoreCase)) && File.Exists(Path.Combine(projectRoot, "nuget.config"))) File.Delete(Path.Combine(projectRoot, "nuget.config"));
     }
-    private static void Move(string from, string to)
-    {
-        for (var attempt = 0; ; attempt++)
-        {
-            try { System.IO.Directory.Move(from, to); return; }
-            catch (IOException) when (attempt < 2) { Thread.Sleep(200); }
-        }
-    }
+    private static void Move(string from, string to) => AddonFiles.MoveDirectory(from, to);
 }
 #endif

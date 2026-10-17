@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Enaweg.Plugin.Internal.Kinds;
 using Enaweg.Plugin.Internal;
 using Enaweg.Plugin.Internal.Manager;
 using Enaweg.Plugin.Sample;

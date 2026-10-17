@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using Enaweg.Plugin.Internal.Kinds;
 using Enaweg.Plugin.Internal.Licenses;
 using Enaweg.Plugin.Internal.Update;
 using Enaweg.Plugin.Internal.Welcomes;

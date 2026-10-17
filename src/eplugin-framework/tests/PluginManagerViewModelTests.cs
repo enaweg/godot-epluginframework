@@ -1,6 +1,7 @@
 #if TOOLS
 using System;
 using System.Linq;
+using Enaweg.Plugin.Internal.Kinds;
 using Enaweg.Plugin.Internal;
 using Enaweg.Plugin.Internal.Manager;
 using Enaweg.Plugin.Internal.Update;
@@ -184,11 +185,16 @@ public class PluginManagerViewModelTests
     public static void ClassifiesPluginScripts()
     {
         var types = typeof(PluginCatalog).Assembly.GetTypes();
-        Assertions.AssertObject(PluginCatalog.Classify("res://addons/sample_plugin/SamplePlugin.cs", false, types)).IsEqual(PluginKind.EPlugin);
-        Assertions.AssertObject(PluginCatalog.Classify("res://addons/ePlugin/EPluginPlugin.cs", true, types)).IsEqual(PluginKind.Framework);
-        Assertions.AssertObject(PluginCatalog.Classify("res://addons/gdUnit4/plugin.gd", false, types)).IsEqual(PluginKind.GDScript);
-        Assertions.AssertObject(PluginCatalog.Classify("res://addons/none/Missing.cs", false, types)).IsEqual(PluginKind.CSharp);
-        Assertions.AssertObject(PluginCatalog.Classify(null, false, types)).IsEqual(PluginKind.Unknown);
+        Assertions.AssertObject(PluginKinds.Classify("res://addons/sample_plugin/SamplePlugin.cs", false, types)).IsEqual(PluginKind.EPlugin);
+        Assertions.AssertObject(PluginKinds.Classify("res://addons/ePlugin/EPluginPlugin.cs", true, types)).IsEqual(PluginKind.Framework);
+        Assertions.AssertObject(PluginKinds.Classify("res://addons/gdUnit4/plugin.gd", false, types)).IsEqual(PluginKind.GDScript);
+        Assertions.AssertObject(PluginKinds.Classify("res://addons/none/Missing.cs", false, types)).IsEqual(PluginKind.CSharp);
+        Assertions.AssertObject(PluginKinds.Classify(null, false, types)).IsEqual(PluginKind.Unknown);
+        // a GDExtension makes any plugin without a recipe a GDExtension plugin, an ePlugin stays one
+        Assertions.AssertObject(PluginKinds.Classify("res://addons/native/plugin.gd", false, types, true)).IsEqual(PluginKind.GDExtension);
+        Assertions.AssertObject(PluginKinds.Classify("res://addons/none/Missing.cs", false, types, true)).IsEqual(PluginKind.GDExtension);
+        Assertions.AssertObject(PluginKinds.Classify("res://addons/sample_plugin/SamplePlugin.cs", false, types, true)).IsEqual(PluginKind.EPlugin);
+        Assertions.AssertString(PluginCatalog.KindName(PluginKind.GDExtension)).IsEqual("GDExtension plugin");
         Assertions.AssertString(PluginCatalog.ResolveScript("res://addons/x", "Plugin.cs")).IsEqual("res://addons/x/Plugin.cs");
         Assertions.AssertString(PluginCatalog.ResolveScript("res://addons/x", "res://other/Plugin.cs")).IsEqual("res://other/Plugin.cs");
     }
@@ -198,8 +204,8 @@ public class PluginManagerViewModelTests
         // a script class deriving from another one inherits its base's ScriptPath next to its own
         var types = new[] { typeof(BaseScript), typeof(DerivedScript) };
         Assertions.AssertArray(PluginCatalog.ScriptPaths(typeof(DerivedScript)).ToArray()).ContainsExactly("res://addons/x/Derived.cs");
-        Assertions.AssertObject(PluginCatalog.Classify("res://addons/x/Derived.cs", false, types)).IsEqual(PluginKind.CSharp);
-        Assertions.AssertObject(PluginCatalog.Classify("res://addons/x/Base.cs", false, types)).IsEqual(PluginKind.CSharp);
+        Assertions.AssertObject(PluginKinds.Classify("res://addons/x/Derived.cs", false, types)).IsEqual(PluginKind.CSharp);
+        Assertions.AssertObject(PluginKinds.Classify("res://addons/x/Base.cs", false, types)).IsEqual(PluginKind.CSharp);
     }
     [Godot.ScriptPath("res://addons/x/Base.cs")]
     private class BaseScript;

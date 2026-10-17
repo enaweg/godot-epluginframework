@@ -53,14 +53,22 @@ public class EGlobalUpdateRecipeTests : IDisposable
     }
 
     [TestCase]
-    public void PreflightRefusesAnInstalledNativeExtension()
+    public void PreflightRefusesANativeExtensionOnlyInAnEPlugin()
     {
+        // a plugin without a recipe updates its GDExtension like a GDExtension plugin
         _fixture.AddPlainPlugin("native");
         File.WriteAllText(Path.Combine(_fixture.Addon("native"), "native.gdextension"), "[configuration]");
+        _fixture.Enable("native");
+        Assertions.AssertInt(_fixture.Global.UpdatePreflightFindings([Candidate("native")]).Count).IsEqual(0);
 
-        var findings = _fixture.Global.UpdatePreflightFindings([Candidate("native")]);
+        _fixture.AddEPlugin("managed", _ => { });
+        File.WriteAllText(Path.Combine(_fixture.Addon("managed"), "managed.gdextension"), "[configuration]");
+        _fixture.Enable("managed");
+
+        var findings = _fixture.Global.UpdatePreflightFindings([Candidate("managed")]);
 
         Assertions.AssertInt(findings.Count).IsEqual(1);
+        Assertions.AssertString(findings[0].Code).IsEqual("R10");
         Assertions.AssertObject(findings[0].Severity).IsEqual(FindingSeverity.Error);
         Assertions.AssertString(findings[0].Message).Contains("GDExtension");
     }

@@ -108,7 +108,15 @@ internal static class PackageFiles
             throw new InvalidDataException("Unsafe package path: " + path);
         return string.Join('/', parts);
     }
-    public static bool Skip(string path) => path.Split('/').Any(p => (p.StartsWith(".git", StringComparison.OrdinalIgnoreCase) && !p.Equals(".gitmodules", StringComparison.OrdinalIgnoreCase)) || p is "__MACOSX" or ".DS_Store" or "Thumbs.db");
+    public static bool Skip(string path) => path.Split('/').Any(p => (p.StartsWith(".git", StringComparison.OrdinalIgnoreCase) && !p.Equals(".gitmodules", StringComparison.OrdinalIgnoreCase)) || p is "__MACOSX" or ".DS_Store" or "Thumbs.db" || IsRuntimeCopy(p));
+
+    /// <summary>
+    /// A copy of a GDExtension library (and its debug symbols) that the editor on Windows loads instead of the original,
+    /// named like it with a leading '~' and kept in the same folder. It is never part of a plugin: packages and installed
+    /// folders leave it out, and updates neither back it up nor delete it.
+    /// </summary>
+    public static bool IsRuntimeCopy(string name) =>
+        name.StartsWith('~') && System.IO.Path.GetExtension(name).ToLowerInvariant() is ".dll" or ".pdb" or ".so" or ".dylib";
     public static string Inside(string root, string relative)
     {
         var prefix = System.IO.Path.GetFullPath(root).TrimEnd(System.IO.Path.DirectorySeparatorChar) + System.IO.Path.DirectorySeparatorChar;

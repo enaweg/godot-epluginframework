@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Enaweg.Plugin.Internal.Kinds;
 using Enaweg.Plugin.Internal.Update;
 using Godot;
 
@@ -70,7 +71,8 @@ internal sealed partial class EGlobal
             return metadata is null ? null : new PluginUpdateTarget(slug, metadata.Name,
                 metadata.Version, metadata.UpdateUrl, ProjectSettings.GlobalizePath(directory),
                 _stateStore?.IsBlocked(slug) == true, _stateStore?.IsReadOnly != false, _stateStore?.GetShared(slug)?.Version,
-                UpdateSiteOf(slug), KnownPluginOf(slug)?.UpdateUrl);
+                UpdateSiteOf(slug), KnownPluginOf(slug)?.UpdateUrl,
+                slug == FrameworkSlug ? PluginKind.Framework : IsManagedPlugin(slug) ? PluginKind.EPlugin : PluginKind.Unknown);
         }).Where(t => t is not null).Cast<PluginUpdateTarget>().ToArray();
     }
 

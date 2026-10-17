@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Enaweg.Plugin.Internal.Kinds;
 
 namespace Enaweg.Plugin.Internal.Update;
 
@@ -16,18 +17,14 @@ internal sealed record Finding(string Code, FindingSeverity Severity, string Mes
 internal sealed record ValidationContext(PluginUpdateTarget Installed, UpdateCandidate Candidate, string StagingDir, bool AllowDowngrade = false,
     bool AllowReinstall = false);
 internal interface IAddonRule { IEnumerable<Finding> Check(ValidationContext context); }
+/// <param name="Kind">The kind whose workflow installs the package, see <see cref="PluginKinds.ForPackage"/>.</param>
 internal sealed record ValidatedPackage(UpdateCandidate Candidate, string StagingDir, SemVer NewVersion,
-    string? NewUpdateUrl, bool ContainsCSharp, IReadOnlyList<Finding> Findings)
+    string? NewUpdateUrl, bool ContainsCSharp, IReadOnlyList<Finding> Findings, PluginKind Kind = PluginKind.Unknown)
 {
     public bool IsValid => Findings.All(f => f.Severity != FindingSeverity.Error);
 }
 internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules = null)
 {
-    /// <summary>R10 when the files contain a GDExtension, which ePlugin updates cannot replace yet.</summary>
-    public static Finding? NativeExtension(IEnumerable<string> files) =>
-        files.Any(f => f.EndsWith(".gdextension", StringComparison.OrdinalIgnoreCase))
-            ? new("R10", FindingSeverity.Error, "GDExtension plugins are not supported by ePlugin updates yet.") : null;
-
     public ValidatedPackage Validate(ValidationContext context)
     {
         var findings = new List<Finding>();
@@ -94,7 +91,9 @@ internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules 
                 Add("R9", FindingSeverity.Warning, "Update source changed: " + (newUrl ?? "removed"), !string.IsNullOrWhiteSpace(newUrl) && oldHost != newHost);
         }
         var installedFiles = Directory.Exists(installed.Directory) ? PackageFiles.Files(installed.Directory).ToArray() : [];
-        if (NativeExtension(files.Concat(installedFiles)) is { } native) findings.Add(native);
+        // What differs between plugin kinds, e.g. the native libraries of a GDExtension plugin.
+        var kind = PluginKinds.ForPackage(installed, script, files, installedFiles);
+        findings.AddRange(PluginKinds.Workflow(kind).Validate(new(context, files, installedFiles)));
         long bytes = 0;
         foreach (var file in files)
         {
@@ -120,7 +119,7 @@ internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules 
             Add("R14", FindingSeverity.Warning, "Major version change: your project code may need changes.");
         if (installed.IsBlocked || installed.StoreReadOnly) Add("R17", FindingSeverity.Error, "Resolve local state using Retry failed in the ePlugin Manager first.");
         foreach (var rule in extraRules ?? []) findings.AddRange(rule.Check(context));
-        return new(candidate, stage, version, newUrl, files.Concat(installedFiles).Any(f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)), findings);
+        return new(candidate, stage, version, newUrl, files.Concat(installedFiles).Any(f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)), findings, kind);
     }
 }
 #endif
