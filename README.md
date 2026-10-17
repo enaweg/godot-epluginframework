@@ -4,18 +4,19 @@ Line coverage of `src/eplugin-framework/addons/ePlugin` on `main`, recorded by t
 
 ![Line coverage](badge.svg)
 
-**79.54%** (7647 of 9614 lines) at [4c0596e](https://github.com/enaweg/godot-epluginframework/commit/4c0596e4b1ad1201ecc0253c9e74554ab7409529), 2026-10-17.
+**79.71%** (7728 of 9695 lines) at [93563f4](https://github.com/enaweg/godot-epluginframework/commit/93563f44708413d616cde9989497630a71c069b0), 2026-10-17.
 
 ```mermaid
 xychart-beta
-    title "Line coverage on main (last 17 pushes)"
-    x-axis ["659bbaa", "fc57fee", "ce064dc", "7cfc8b2", "b7e2f25", "caa9da2", "bd7e681", "ff903cf", "10401ac", "e44d91f", "73f8104", "736827c", "6ff9d4b", "dd42316", "7b94ccd", "d6fa7e2", "4c0596e"]
+    title "Line coverage on main (last 18 pushes)"
+    x-axis ["659bbaa", "fc57fee", "ce064dc", "7cfc8b2", "b7e2f25", "caa9da2", "bd7e681", "ff903cf", "10401ac", "e44d91f", "73f8104", "736827c", "6ff9d4b", "dd42316", "7b94ccd", "d6fa7e2", "4c0596e", "93563f4"]
     y-axis "Line coverage (%)" 67 --> 82
-    line [69.50, 69.48, 69.48, 69.48, 76.80, 76.80, 76.80, 76.80, 76.64, 76.67, 76.67, 76.46, 79.03, 79.03, 79.03, 79.54, 79.54]
+    line [69.50, 69.48, 69.48, 69.48, 76.80, 76.80, 76.80, 76.80, 76.64, 76.67, 76.67, 76.46, 79.03, 79.03, 79.03, 79.54, 79.54, 79.71]
 ```
 
 | Date | Commit | Line coverage | Change |
 |:--|:--|--:|--:|
+| 2026-10-17 | [93563f4](https://github.com/enaweg/godot-epluginframework/commit/93563f44708413d616cde9989497630a71c069b0) | 79.71% | +0.17 pp |
 | 2026-10-17 | [4c0596e](https://github.com/enaweg/godot-epluginframework/commit/4c0596e4b1ad1201ecc0253c9e74554ab7409529) | 79.54% | +0.00 pp |
 | 2026-10-17 | [d6fa7e2](https://github.com/enaweg/godot-epluginframework/commit/d6fa7e2bf3286e8cc0eb8b5330d6bb917aef2c8f) | 79.54% | +0.51 pp |
 | 2026-10-17 | [7b94ccd](https://github.com/enaweg/godot-epluginframework/commit/7b94ccdc2ce811f3293f97e3c21b77515fffcf2c) | 79.03% | +0.00 pp |
@@ -36,7 +37,7 @@ xychart-beta
 
 All measurements: [history.csv](history.csv).
 
-<details><summary>Files at 4c0596e (107)</summary>
+<details><summary>Files at 93563f4 (107)</summary>
 
 | File | Line coverage | Covered lines |
 |:--|--:|--:|
@@ -135,7 +136,7 @@ All measurements: [history.csv](history.csv).
 | `Internal/PluginToggles.cs` | 100.0% | 13 of 13 |
 | `Internal/RecipeEntries.cs` | 100.0% | 69 of 69 |
 | `Internal/ShowHideHelper.cs` | 100.0% | 47 of 47 |
-| `Internal/Update/KnownPlugins.Data.cs` | 100.0% | 764 of 764 |
+| `Internal/Update/KnownPlugins.Data.cs` | 100.0% | 845 of 845 |
 | `Internal/Update/KnownPlugins.cs` | 100.0% | 6 of 6 |
 | `Internal/Update/LocalSourceSettings.cs` | 100.0% | 46 of 46 |
 | `Internal/Update/PackageFetcher.cs` | 100.0% | 61 of 61 |
