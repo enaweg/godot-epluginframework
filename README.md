@@ -4,18 +4,19 @@ Line coverage of `src/eplugin-framework/addons/ePlugin` on `main`, recorded by t
 
 ![Line coverage](badge.svg)
 
-**80.12%** (8025 of 10016 lines) at [3a28294](https://github.com/enaweg/godot-epluginframework/commit/3a28294b5aa43b9e7e8df8146a9c415d26b917f3), 2026-10-20.
+**80.16%** (8035 of 10024 lines) at [c71e7ca](https://github.com/enaweg/godot-epluginframework/commit/c71e7caf68d2df5741f61283d47ee68f1aacb6f7), 2026-10-20.
 
 ```mermaid
 xychart-beta
-    title "Line coverage on main (last 21 pushes)"
-    x-axis ["659bbaa", "fc57fee", "ce064dc", "7cfc8b2", "b7e2f25", "caa9da2", "bd7e681", "ff903cf", "10401ac", "e44d91f", "73f8104", "736827c", "6ff9d4b", "dd42316", "7b94ccd", "d6fa7e2", "4c0596e", "93563f4", "67755d2", "dda54cb", "3a28294"]
+    title "Line coverage on main (last 22 pushes)"
+    x-axis ["659bbaa", "fc57fee", "ce064dc", "7cfc8b2", "b7e2f25", "caa9da2", "bd7e681", "ff903cf", "10401ac", "e44d91f", "73f8104", "736827c", "6ff9d4b", "dd42316", "7b94ccd", "d6fa7e2", "4c0596e", "93563f4", "67755d2", "dda54cb", "3a28294", "c71e7ca"]
     y-axis "Line coverage (%)" 67 --> 83
-    line [69.50, 69.48, 69.48, 69.48, 76.80, 76.80, 76.80, 76.80, 76.64, 76.67, 76.67, 76.46, 79.03, 79.03, 79.03, 79.54, 79.54, 79.71, 79.78, 79.78, 80.12]
+    line [69.50, 69.48, 69.48, 69.48, 76.80, 76.80, 76.80, 76.80, 76.64, 76.67, 76.67, 76.46, 79.03, 79.03, 79.03, 79.54, 79.54, 79.71, 79.78, 79.78, 80.12, 80.16]
 ```
 
 | Date | Commit | Line coverage | Change |
 |:--|:--|--:|--:|
+| 2026-10-20 | [c71e7ca](https://github.com/enaweg/godot-epluginframework/commit/c71e7caf68d2df5741f61283d47ee68f1aacb6f7) | 80.16% | +0.04 pp |
 | 2026-10-20 | [3a28294](https://github.com/enaweg/godot-epluginframework/commit/3a28294b5aa43b9e7e8df8146a9c415d26b917f3) | 80.12% | +0.34 pp |
 | 2026-10-20 | [dda54cb](https://github.com/enaweg/godot-epluginframework/commit/dda54cbc1e267058c4b9cdd58984c55d2bf5c38e) | 79.78% | +0.00 pp |
 | 2026-10-17 | [67755d2](https://github.com/enaweg/godot-epluginframework/commit/67755d2720b48fb97fc589b1fff88d94ad56925c) | 79.78% | +0.07 pp |
@@ -40,7 +41,7 @@ xychart-beta
 
 All measurements: [history.csv](history.csv).
 
-<details><summary>Files at 3a28294 (109)</summary>
+<details><summary>Files at c71e7ca (109)</summary>
 
 | File | Line coverage | Covered lines |
 |:--|--:|--:|
@@ -75,8 +76,8 @@ All measurements: [history.csv](history.csv).
 | `Internal/AssemblyReload.cs` | 85.7% | 24 of 28 |
 | `Internal/Kinds/FrameworkPluginWorkflow.cs` | 85.7% | 6 of 7 |
 | `Internal/Kinds/GDExtensionRules.cs` | 86.1% | 31 of 36 |
-| `Internal/EGlobal.cs` | 87.3% | 876 of 1003 |
 | `Internal/EGlobal.PlainPlugins.cs` | 87.6% | 127 of 145 |
+| `Internal/EGlobal.cs` | 87.6% | 886 of 1011 |
 | `Internal/Welcomes/PluginWelcome.cs` | 87.9% | 29 of 33 |
 | `Internal/Update/AddonSwap.cs` | 89.3% | 92 of 103 |
 | `Internal/Kinds/NativeExtensionStatus.cs` | 89.7% | 26 of 29 |
