@@ -237,21 +237,32 @@ as before.
 
 ### Plugin kinds
 
-Only plugins with a `plugin.cfg` in their folder below `res://addons` are supported, whatever their kind; add-ons
-without one (a bare GDExtension, a script library) are neither listed, updated, toggled nor resolved as dependencies.
+Only plugins with a `plugin.cfg` in their folder below `res://addons` are supported, whatever their kind, plus
+GDExtension add-ons (below); other add-ons without one (a script library) are neither listed, updated, toggled nor
+resolved as dependencies.
 
-`Internal/Kinds/` distinguishes `PluginKind`s (Framework, EPlugin, CSharp, GDScript, GDExtension, Unknown) and gives each
-an explicit sealed `PluginKindWorkflow` (`FrameworkPluginWorkflow`, `EPluginWorkflow`, `CSharpPluginWorkflow`,
-`GDScriptPluginWorkflow`, `GDExtensionPluginWorkflow`, `UnknownPluginWorkflow`), so the kind-specific steps of a
+`Internal/Kinds/` distinguishes `PluginKind`s (Framework, EPlugin, CSharp, GDScript, GDExtension, Unknown,
+GDExtensionAddon) and gives each an explicit sealed `PluginKindWorkflow` (`FrameworkPluginWorkflow`, `EPluginWorkflow`,
+`CSharpPluginWorkflow`, `GDScriptPluginWorkflow`, `GDExtensionPluginWorkflow`, `UnknownPluginWorkflow`,
+`GDExtensionAddonWorkflow`; the two GDExtension ones share `NativeExtensionWorkflow`), so the kind-specific steps of a
 workflow live in one class and log with the kind's name. Put new per-kind behavior there rather than as kind checks in
-`UpdateApplier`. A GDExtension plugin is a plugin without a recipe that has a `plugin.cfg` and a `.gdextension` file;
-GDExtensions without a `plugin.cfg` are not supported. Its updates use `AddonFileSwap`, because the editor on Windows
+`UpdateApplier`. A GDExtension plugin is a plugin without a recipe that has a `plugin.cfg` and a `.gdextension` file.
+Its updates use `AddonFileSwap`, because the editor on Windows
 loads each library from a `~<library>` copy in the same folder that cannot be moved (`PackageFiles.IsRuntimeCopy` keeps
 those copies out of packages, backups and deletions), and reload reloadable extensions in place or restart the editor.
+`GDExtensionRules` also refuses an extension the editor's Godot version cannot load (R22, `GDExtensionConfig.EditorVersion`
+is asked from Godot lazily; suites without a Godot runtime set it) and warns about dropped platforms (R23).
 An ePlugin with a GDExtension stays an ePlugin and swaps its files the same way (`UpdatePluginJournal.NativeExtension`);
-its update restarts anyway. ePlugin Framework ships no GDExtension (R10 refuses one), and GDExtensions inside
-`AddDirectory` directories are not supported, because the runtime copies keep the folder from being renamed. See
-`docs/internals/update-system.md` and `docs/gdextension-plugins.md`.
+its update restarts anyway. ePlugin Framework ships no GDExtension (R10 refuses one). GDExtensions inside `AddDirectory`
+directories must be reloadable: `ShowHideHelper` loads them after showing and unloads them before hiding through
+`IEditorHost`, and refuses to show one that is not reloadable.
+
+A GDExtension add-on is a folder below `res://addons` without `plugin.cfg` that has a `.gdextension` outside hidden
+folders (`EGlobal.ExtensionAddons.cs`). Godot always loads it, so it is never toggled, counts as an available
+dependency (`IsDependencyAvailable`), and is listed as always loaded. Its version is the one the shared state recorded
+when an update installed it ("" until then, when checks skip it but the manager installs a chosen version). The manager
+shows each extension's load state (`NativeExtensionStatus`); one Godot should load but did not marks the plugin as
+needing attention. See `docs/internals/update-system.md` and `docs/gdextension-plugins.md`.
 
 ### Update system
 
