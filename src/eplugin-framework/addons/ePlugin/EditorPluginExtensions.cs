@@ -76,6 +76,11 @@ public static class EditorPluginExtensions
     /// when the framework has not yet been initialized (for example, during the very early stages
     /// of an assembly reload before <c>_Process</c> re-runs the bootstrap).
     /// </returns>
+    /// <remarks>
+    /// The framework keeps a context for every plugin it has seen; calling this registers one for
+    /// <paramref name="plugin"/> if it has none yet, also for a plugin that does not implement
+    /// <see cref="IEEditorPlugin"/>.
+    /// </remarks>
     public static IDotnetCli? Cli(this EditorPlugin plugin)
     {
         var context = EGlobal.Instance.GetOrCreateContext(plugin);

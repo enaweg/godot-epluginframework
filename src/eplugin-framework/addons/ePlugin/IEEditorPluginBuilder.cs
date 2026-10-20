@@ -68,19 +68,21 @@ public interface IEEditorPluginBuilder : IEEditorPluginRecipeBuilder
     IEEditorPluginBuilder SetWelcome(string welcome);
 
     /// <summary>
-    /// Declares a dependency on another plugin (C# or GDScript). The framework enables the
+    /// Declares a dependency on another plugin (C#, GDScript or GDExtension). The framework enables the
     /// dependency before activating this plugin and, when a version constraint is given, verifies
-    /// the installed dependency satisfies it.
+    /// the installed dependency satisfies it. A GDExtension without <c>plugin.cfg</c> is always loaded,
+    /// so it is never enabled; only its version is checked.
     /// </summary>
     /// <param name="pluginSlug">
     /// The directory name of the required plugin under <c>addons/</c>
     /// (e.g. <c>"my-dependency"</c> for <c>addons/my-dependency/</c>).
     /// </param>
     /// <param name="version">
-    /// Optional version constraint matched against the dependency's <c>plugin.cfg</c>.
-    /// Use an exact version (<c>"1.2.3"</c>) or a minimum (<c>"&gt;=1.2.0"</c>, this version or higher; the older
-    /// form <c>"&gt;1.2.0"</c> means the same). Versions are written like <c>plugin.cfg</c> versions: an optional
-    /// <c>v</c>, two to four numbers, a prerelease suffix and build metadata. Only the numbers are compared, so
+    /// Optional version constraint matched against the dependency's <c>plugin.cfg</c> (for a GDExtension without one,
+    /// the version ePlugin installed). Use an exact version (<c>"1.2.3"</c>) or a minimum (<c>"&gt;=1.2.0"</c>, this
+    /// version or higher; the older form <c>"&gt;1.2.0"</c> means the same). Versions are written like
+    /// <c>plugin.cfg</c> versions: an optional <c>v</c>, two to four numbers, a prerelease suffix and build metadata.
+    /// Only the numbers are compared, so
     /// <c>1.2</c> equals <c>1.2.0</c> and <c>1.2.3-beta.1</c> satisfies <c>1.2.3</c>. When <see langword="null"/>,
     /// any installed version is accepted.
     /// </param>
