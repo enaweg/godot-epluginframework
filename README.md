@@ -45,7 +45,7 @@ For plugin authors:
 - **Licenses, welcome pages, and links** can be declared in the recipe or in `plugin.cfg`; by default the plugin's `LICENSE` and README are used. `documentation_url` and `source_url` appear in the ePlugin Manager.
 - **Startup initializers** let code in managed directories run `IInitialize` callbacks once the framework is ready.
 - **Progress and logging APIs**: `EPlugin.Progress` shows a C# plugin's own long-running editor work in the progress window, and a logging plugin can take over ePlugin's logging.
-- **Updatable releases** need only an `update_url` in `plugin.cfg` pointing at GitHub, GitLab or Forgejo (Codeberg) releases or a Git repository.
+- **Updatable releases** need only an `update_url` in `plugin.cfg` pointing at GitHub, GitLab, Forgejo or Gitea (Codeberg) releases or a Git repository.
 - **GDScript plugins** get updates, licenses, welcome pages, links, and can be dependencies of ePlugins, with only keys in `plugin.cfg` and no code. See [GDScript plugins](docs/gdscript-plugins.md).
 - **GDExtension plugins** (plugins with a `plugin.cfg` that ship native libraries) get the same, and ePlugins can ship a GDExtension too. Updates replace the libraries the editor has loaded and reload them in place or restart the editor, after checking the Godot versions and platforms the new libraries support. GDExtensions without a `plugin.cfg` are listed and updated too, with the version ePlugin installed. See [GDExtension plugins](docs/gdextension-plugins.md).
 

@@ -83,7 +83,7 @@ Enabling or disabling it, in the manager or in **Project Settings > Plugins**, i
 Add `update_url` to `plugin.cfg` to receive updates. Any [supported source](updating-plugins.md#configure-an-update-source) works:
 
 ```ini
-; GitHub, GitLab or Forgejo (Codeberg) releases
+; GitHub, GitLab, Forgejo or Gitea (Codeberg) releases
 update_url="https://github.com/owner/my_tool/releases"
 
 ; Git tags, for repositories that tag versions without release ZIPs
@@ -116,7 +116,7 @@ The folder can also sit at the ZIP's root (`my_tool/plugin.cfg`) or inside one w
 zip -r my_tool-1.2.0.zip addons/my_tool
 ```
 
-Attach the ZIP to a GitHub, GitLab or Forgejo (Codeberg) release, or put it in a [local plugin directory](updating-plugins.md#local-plugin-directories). Without a ZIP asset, the release's source archive is used; repositories that only tag their versions use the tag source above.
+Attach the ZIP to a GitHub, GitLab, Forgejo or Gitea (Codeberg) release, or put it in a [local plugin directory](updating-plugins.md#local-plugin-directories). Without a ZIP asset, the release's source archive is used; repositories that only tag their versions use the tag source above.
 
 - Raise `version` in `plugin.cfg` for every release. Versions have two to four numbers (`1.2`, `1.2.0`, `1.2.0.1`), optionally a leading `v` and a prerelease suffix such as `-beta.1`. Name the release or tag after the same version.
 - Keep the folder name stable. It is the plugin's slug, which update sites and dependencies refer to.

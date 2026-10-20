@@ -73,7 +73,7 @@ internal sealed class UpdateSiteSettings(string path)
         url = url.Trim();
         if (!UpdateSourceFactory.IsSupported(url))
             throw new ArgumentException(
-                "Enter a GitHub, GitLab or Forgejo (Codeberg) releases URL, a repository's tag page ending in /tags, or a Git repository URL ending in .git or with ?path=.", nameof(url));
+                "Enter a GitHub, GitLab, Forgejo or Gitea (Codeberg) releases URL, a repository's tag page ending in /tags, or a Git repository URL ending in .git or with ?path=.", nameof(url));
         return Change(sites => sites.Any(s => s.Slug == slug && s.Url == url) ? null
             : [.. sites.Where(s => s.Slug != slug), new UpdateSiteEntry { Slug = slug, Url = url }]);
     }

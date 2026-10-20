@@ -82,6 +82,8 @@ public class UpdateSourceTests
         Assertions.AssertArray(listed.Select(c => c.NewVersion).ToArray()).ContainsExactly("v1.3.0", "v1.2.0");
         Assertions.AssertString(((ZipPackageRef)listed[1].Package).Url).IsEqual("https://codeberg.org/owner/repo/archive/v1.2.0.zip");
 
+        // Gitea serves the same API as Forgejo.
+        Assertions.AssertBool(new UpdateSourceFactory().Create("https://gitea.com/owner/repo/releases") is ForgejoReleaseSource).IsTrue();
         // A release page pins the source; other paths below /releases are no update sites.
         var pinned = new UpdateSourceFactory(new UpdateHttp(client)).Create("https://git.example/owner/repo/releases/tag/v1.3.0");
         Assertions.AssertObject(await pinned.CheckAsync(Target(), new(), CancellationToken.None)).IsNull();

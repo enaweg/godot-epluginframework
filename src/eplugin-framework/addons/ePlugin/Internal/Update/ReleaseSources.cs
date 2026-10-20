@@ -143,12 +143,13 @@ internal sealed class GitLabReleaseSource(UpdateHttp http, string host, string p
             link ?? $"https://{host}/{project}/-/releases/{Uri.EscapeDataString(tag)}", tag, new ZipPackageRef(download, target.Slug));
     }
 }
-/// <summary>Releases of Forgejo and Gitea, such as Codeberg's: https://host/owner/repository/releases.</summary>
+/// <summary>Releases of Forgejo and Gitea, which share their API, such as Codeberg's: https://host/owner/repository/releases.</summary>
 internal sealed class ForgejoReleaseSource(UpdateHttp http, string host, string owner, string repository, bool pinned = false) : IUpdateSource, IVersionListSource
 {
     // Forgejo and Gitea return at most 50 releases per page.
     private const int PageSize = 50;
-    public static string? Token => Environment.GetEnvironmentVariable("EPLUGIN_FORGEJO_TOKEN") ?? Environment.GetEnvironmentVariable("FORGEJO_TOKEN");
+    public static string? Token => Environment.GetEnvironmentVariable("EPLUGIN_FORGEJO_TOKEN") ?? Environment.GetEnvironmentVariable("FORGEJO_TOKEN") ??
+        Environment.GetEnvironmentVariable("GITEA_TOKEN");
     private async Task<JsonElement[]> Releases(int pages, CancellationToken ct)
     {
         var releases = new List<JsonElement>();
