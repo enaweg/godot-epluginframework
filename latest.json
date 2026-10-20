@@ -1,8 +1,8 @@
 {
- "commit": "d64116fa3ba1059566dc786edd418299095281d7",
- "date": "2026-10-20T18:16:47Z",
- "covered": 8073,
- "coverable": 10063,
+ "commit": "a313d02449633cff9b165c5577f3bb9bdda3e507",
+ "date": "2026-10-20T19:37:07Z",
+ "covered": 8097,
+ "coverable": 10085,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -13,8 +13,8 @@
    9
   ],
   "src/eplugin-framework/addons/ePlugin/EPluginPlugin.cs": [
-   167,
-   266
+   173,
+   272
   ],
   "src/eplugin-framework/addons/ePlugin/EditorPluginExtensions.cs": [
    52,
@@ -101,8 +101,8 @@
    57
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.PlainPlugins.cs": [
-   127,
-   145
+   128,
+   146
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.PluginManager.cs": [
    73,
@@ -137,8 +137,8 @@
    75
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.cs": [
-   886,
-   1011
+   892,
+   1014
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EPluginProgress.cs": [
    1,
@@ -277,8 +277,8 @@
    14
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PluginStateStore.cs": [
-   412,
-   417
+   394,
+   399
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PluginToggles.cs": [
    13,
@@ -317,8 +317,8 @@
    54
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/GitSource.cs": [
-   203,
-   206
+   214,
+   218
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/InterimBridge.cs": [
    41,
@@ -365,8 +365,8 @@
    26
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/ReleaseSources.cs": [
-   135,
-   137
+   133,
+   135
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/SafeZipExtractor.cs": [
    78,
@@ -389,8 +389,8 @@
    20
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateHttp.cs": [
-   72,
-   73
+   95,
+   96
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateJournal.cs": [
    60,
@@ -401,8 +401,8 @@
    38
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateRecovery.cs": [
-   143,
-   147
+   138,
+   142
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateService.cs": [
    88,
@@ -417,8 +417,8 @@
    50
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateStateStore.cs": [
-   37,
-   38
+   39,
+   40
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/VersionConstraint.cs": [
    25,
