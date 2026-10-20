@@ -58,6 +58,40 @@ public class UpdateSourceTests
     }
 
     [TestCase]
+    public static async Task ForgejoReleasesUseTheirAssetOrSourceArchive()
+    {
+        // Codeberg and other Forgejo or Gitea hosts publish releases at GitHub's path, read through their own API.
+        var requested = new List<string>();
+        using var client = new HttpClient(new Handler(request => { requested.Add(request.RequestUri!.AbsoluteUri); return Json("""
+            [{"tag_name":"v1.3.0","draft":false,"prerelease":false,"html_url":"https://codeberg.org/owner/repo/releases/tag/v1.3.0",
+              "zipball_url":"https://codeberg.org/owner/repo/archive/v1.3.0.zip",
+              "assets":[{"name":"addon.zip","browser_download_url":"https://codeberg.org/owner/repo/releases/download/v1.3.0/addon.zip"},
+                        {"name":"demo.tar.xz","browser_download_url":"https://codeberg.org/owner/repo/releases/download/v1.3.0/demo.tar.xz"}]},
+             {"tag_name":"v1.2.0","draft":false,"prerelease":false,"zipball_url":"https://codeberg.org/owner/repo/archive/v1.2.0.zip","assets":[]},
+             {"tag_name":"v4.0.0","draft":true,"assets":[]},
+             {"tag_name":"nightly","draft":false,"assets":[]}]
+            """); }));
+        var source = new UpdateSourceFactory(new UpdateHttp(client)).Create("https://codeberg.org/owner/repo/releases");
+        Assertions.AssertBool(source is ForgejoReleaseSource).IsTrue();
+        var result = await source.CheckAsync(Target(), new(), CancellationToken.None);
+        Assertions.AssertString(requested[0]).IsEqual("https://codeberg.org/api/v1/repos/owner/repo/releases?limit=50&page=1");
+        Assertions.AssertString(result!.NewVersion).IsEqual("v1.3.0");
+        Assertions.AssertString(result.ReleaseUrl!).IsEqual("https://codeberg.org/owner/repo/releases/tag/v1.3.0");
+        Assertions.AssertString(((ZipPackageRef)result.Package).Url).IsEqual("https://codeberg.org/owner/repo/releases/download/v1.3.0/addon.zip");
+        var listed = await ((IVersionListSource)source).ListAsync(Target(), new(), CancellationToken.None);
+        Assertions.AssertArray(listed.Select(c => c.NewVersion).ToArray()).ContainsExactly("v1.3.0", "v1.2.0");
+        Assertions.AssertString(((ZipPackageRef)listed[1].Package).Url).IsEqual("https://codeberg.org/owner/repo/archive/v1.2.0.zip");
+
+        // Gitea serves the same API as Forgejo.
+        Assertions.AssertBool(new UpdateSourceFactory().Create("https://gitea.com/owner/repo/releases") is ForgejoReleaseSource).IsTrue();
+        // A release page pins the source; other paths below /releases are no update sites.
+        var pinned = new UpdateSourceFactory(new UpdateHttp(client)).Create("https://git.example/owner/repo/releases/tag/v1.3.0");
+        Assertions.AssertObject(await pinned.CheckAsync(Target(), new(), CancellationToken.None)).IsNull();
+        foreach (var url in new[] { "https://git.example/owner/repo/releases/download/v1/a.zip", "https://git.example/owner/releases", "http://codeberg.org/owner/repo/releases" })
+            Assertions.AssertBool(UpdateSourceFactory.IsSupported(url)).IsFalse();
+    }
+
+    [TestCase]
     public static async Task RedirectDropsCredentialsAndRefusesHttp()
     {
         var calls = 0;

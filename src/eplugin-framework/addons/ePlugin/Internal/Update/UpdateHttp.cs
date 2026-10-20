@@ -77,6 +77,7 @@ internal sealed class UpdateHttp
             gitlab = source.AbsolutePath.Contains("/-/", StringComparison.Ordinal);
             if (source.Host == "github.com") token = Environment.GetEnvironmentVariable("EPLUGIN_GITHUB_TOKEN") ?? Environment.GetEnvironmentVariable("GITHUB_TOKEN");
             else if (gitlab) token = Environment.GetEnvironmentVariable("EPLUGIN_GITLAB_TOKEN") ?? Environment.GetEnvironmentVariable("GITLAB_TOKEN");
+            else if (source.AbsolutePath.Contains("/releases", StringComparison.Ordinal)) token = ForgejoReleaseSource.Token;
         }
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromMinutes(5));

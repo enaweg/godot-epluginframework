@@ -6,7 +6,7 @@ A GDExtension without a `plugin.cfg`, in its own folder below `res://addons`, is
 
 An ePlugin (a C# plugin with a recipe) can ship a GDExtension too. It is listed as an ePlugin, and its updates replace the libraries the same way (see [ePlugins with a GDExtension](#eplugins-with-a-gdextension)).
 
-Everything [GDScript plugins](gdscript-plugins.md) get works the same way for GDExtension plugins: the manager, updates from GitHub, GitLab, Git or local ZIP packages, licenses, welcome pages, links, plugin state, and being a dependency of an ePlugin. This page describes only what is different.
+Everything [GDScript plugins](gdscript-plugins.md) get works the same way for GDExtension plugins: the manager, updates from GitHub, GitLab, Forgejo, Git or local ZIP packages, licenses, welcome pages, links, plugin state, and being a dependency of an ePlugin. This page describes only what is different.
 
 ## Example plugin
 
@@ -61,7 +61,7 @@ ePlugin treats every folder directly below `res://addons` that has no `plugin.cf
 
 - **Manager.** It is listed with the type *GDExtension add-on* and the status *Always loaded*: Godot loads it whatever is enabled, so there is nothing to enable or disable. Its name is the folder name, or the name in ePlugin's built-in list. Its license is its `LICENSE` file and its README is linked as its welcome page, but neither is ever asked for or shown on its own.
 - **Version.** Its files name no version. ePlugin records the version it installs in `addons/eplugin-state.json`, like the versions of plugins. Until ePlugin has installed one, the version is *unknown*.
-- **Updates.** Its update site is the one the project sets for it under **Update sites**, or the one of ePlugin's [built-in list](updating-plugins.md#built-in-update-sites). The version is the release's or tag's, so it can be updated from GitHub and GitLab releases and from version tags, but not from a pinned branch or from local plugin directories. While its version is unknown, checks offer no update for it: choose a version in its details and install it, and from then on updates are found as for any plugin. An add-on whose new version brings a `plugin.cfg` becomes a plugin with that update; enable it afterwards.
+- **Updates.** Its update site is the one the project sets for it under **Update sites**, or the one of ePlugin's [built-in list](updating-plugins.md#built-in-update-sites). The version is the release's or tag's, so it can be updated from GitHub, GitLab and Forgejo releases and from version tags, but not from a pinned branch or from local plugin directories. While its version is unknown, checks offer no update for it: choose a version in its details and install it, and from then on updates are found as for any plugin. An add-on whose new version brings a `plugin.cfg` becomes a plugin with that update; enable it afterwards.
 - **Dependencies.** An ePlugin can require it with `AddPluginDependency` or `AddOptionalPluginDependency`. It is always available, so it is never enabled for it. A version constraint is checked against the recorded version; while that is unknown, an activation with a constraint fails and says so.
 
 A release of a GDExtension add-on puts the add-on in a folder named like its slug, at any depth (`addons/godot_servo/` in the ZIP or the repository). Without a `plugin.cfg`, nothing else identifies it. Otherwise the [rules for releases](#publish-a-release) apply as for GDExtension plugins.

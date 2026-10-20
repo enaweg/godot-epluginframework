@@ -12,7 +12,8 @@
 // 3. the slug it already has in the list, so the key stays stable;
 // 4. the plugin folder in its repository at its latest release or version tag, read with git (git 2.25 or newer on PATH).
 // A plugin folder holds a plugin.cfg; without any, the folder of a GDExtension add-on (its .gdextension below addons/)
-// counts, which the updater installs without plugin.cfg.
+// counts, which the updater installs without plugin.cfg. An add-on found by GitLab's or Codeberg's search is only listed
+// when its slug is named like its repository, since a search also finds games that hold other add-ons.
 // No token is needed.
 using System.Collections.Concurrent;
 using System.Diagnostics;
@@ -117,6 +118,14 @@ foreach (var addon in addons)
         if (zip?.Error is { } failed) note = (note.Length == 0 ? "" : note + "; ") + $"release ZIP {zip.Asset} not used: {failed}";
         if (slug is null) { leftOut.Add($"{addon.Repository}: {note}"); continue; }
     }
+    // A search also finds games and projects that hold someone else's add-on; only a plugin named like its repository is
+    // the repository's own.
+    if (addon.Searched && addon.Slug is null && !NamedLike(slug, repositoryName))
+    {
+        leftOut.Add($"{addon.Repository}: found by a search, and its plugin {slug} is not named like the repository; " +
+            "list it in extra_addons.txt if it is the repository's own");
+        continue;
+    }
     chosen.Add((slug, addon, note));
 }
 
@@ -136,11 +145,12 @@ var text = new StringBuilder($$"""
     namespace Enaweg.Plugin.Internal.Update;
 
     // Generated on {{DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}} by tools/generate_known_plugins.cs from {{Path.GetFileName(input)}} (built by
-    // tools/build_godot_addons.cs): popular add-ons with at least {{stars}} stars and a commit within the last two years, plus those
-    // in tools/extra_addons.txt, with a release or version tag. Each slug is the one extra_addons.txt gives, else
-    // the plugin folder in the latest release's ZIP, else the add-on's slug in the previous list, else the plugin folder in
-    // the repository at that release or tag. Add-ons without a plugin folder or with a release ZIP the updater refuses are
-    // left out. The packages were not installed or validated.
+    // tools/build_godot_addons.cs): popular add-ons with at least {{stars}} stars on GitHub (fewer on GitLab and Codeberg) and a
+    // commit within the last two years, plus those in tools/extra_addons.txt, with a release or version tag. Add-ons found by
+    // GitLab's or Codeberg's search are listed only with a slug named like their repository. Each slug is the one
+    // extra_addons.txt gives, else the plugin folder in the latest release's ZIP, else the add-on's slug in the previous list,
+    // else the plugin folder in the repository at that release or tag. Add-ons without a plugin folder or with a release ZIP
+    // the updater refuses are left out. The packages were not installed or validated.
     internal static partial class KnownPlugins
     {
         private static KnownPlugin[] Entries() =>
@@ -342,6 +352,9 @@ static string[] ExtensionFolders(IEnumerable<string> files) =>
         .Where(f => f.Length > 0).Distinct(StringComparer.Ordinal).ToArray();
 static string Plain(string name, bool keepGodot = false) => keepGodot ? Regex.Replace(name.ToLowerInvariant(), "[-_. ]", "")
     : Regex.Replace(name.ToLowerInvariant(), "[-_. ]", "").Replace("godot", "");
+// Whether a plugin folder is named like the repository, as one is part of the other ("sculptor" of godot-sculptor).
+static bool NamedLike(string slug, string repositoryName) => Plain(slug) is { Length: > 0 } plugin &&
+    Plain(repositoryName) is { Length: > 0 } repository && (repository.Contains(plugin) || plugin.Contains(repository));
 static string Cs(string value) => "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
 static void Report(string title, IEnumerable<string> lines)
 {
@@ -354,9 +367,10 @@ static void Report(string title, IEnumerable<string> lines)
 /// <param name="Slug">The slug extra_addons.txt gives the add-on, which wins over every other.</param>
 /// <param name="ReleaseAssets">The ZIP assets of the latest release; null in JSON written before they were listed.</param>
 /// <param name="GithubUrl">The repository in JSON written before build_godot_addons.cs read other hosts.</param>
+/// <param name="Searched">Found by GitLab's or Codeberg's search rather than in a curated ranking.</param>
 record Addon(string Name, int Stars, string? UpdateUrl, string? UpdateSource, string? LatestVersion, string WebsiteUrl,
     string DocumentationUrl, string? RepositoryUrl = null, string? GitUrl = null, string? GithubUrl = null,
-    string? Slug = null, ReleaseAsset[]? ReleaseAssets = null)
+    string? Slug = null, ReleaseAsset[]? ReleaseAssets = null, bool Searched = false)
 {
     public string Repository => RepositoryUrl ?? GithubUrl ?? "";
     public string CloneUrl => GitUrl ?? Repository + ".git";
