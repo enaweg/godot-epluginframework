@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Enaweg.Plugin.Internal.Update;
 using Enaweg.Plugin.Logging;
 
 namespace Enaweg.Plugin.Internal;
@@ -448,7 +449,7 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
                 Unknown = _sharedExtras.Document
             };
             var bytes = Serialize(document);
-            AtomicWrite(_sharedPath, bytes);
+            AtomicFile.Write(_sharedPath, bytes);
             _shared = states;
             _licenses = licenses;
             _welcomes = welcomes;
@@ -493,7 +494,7 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
                     }).ToList(),
                 Unknown = _localExtras.Document
             };
-            AtomicWrite(_localPath, Serialize(document));
+            AtomicFile.Write(_localPath, Serialize(document));
             return true;
         }
         catch (Exception ex)
@@ -505,29 +506,6 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
 
     private static byte[] Serialize<T>(T document) =>
         Encoding.UTF8.GetBytes(JsonSerializer.Serialize(document, JsonOptions) + "\n");
-
-    private static void AtomicWrite(string path, byte[] bytes)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var temporaryPath = path + ".tmp-" + Guid.NewGuid().ToString("N");
-        try
-        {
-            using (var stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-            {
-                stream.Write(bytes);
-                stream.Flush(flushToDisk: true);
-            }
-
-            File.Move(temporaryPath, path, overwrite: true);
-        }
-        finally
-        {
-            if (File.Exists(temporaryPath))
-            {
-                File.Delete(temporaryPath);
-            }
-        }
-    }
 
     private static void CleanTemporaryFiles(string path)
     {
