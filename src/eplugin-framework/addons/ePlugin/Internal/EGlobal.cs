@@ -812,12 +812,22 @@ internal sealed partial class EGlobal
 
         if (refreshAtEnd)
         {
-            // trigger install for waiting plugins
+            // Trigger install for waiting plugins, in rounds: each takes them off the stack first, because one whose
+            // dependency is still not activated pushes itself back, and popping until empty would never end. A round
+            // that resumes none of them leaves them waiting for their dependencies' activation callbacks.
             while (_toCheckEnable.Count > 0)
             {
-                var nextPlugin = _toCheckEnable.Pop();
+                var waiting = _toCheckEnable.ToArray();
+                _toCheckEnable.Clear();
+                foreach (var nextPlugin in waiting)
+                {
+                    EnableEPlugin(nextPlugin, false);
+                }
 
-                EnableEPlugin(nextPlugin, false);
+                if (_toCheckEnable.ToHashSet().SetEquals(waiting) && waiting.All(c => c.State == EEditorPluginState.Created))
+                {
+                    break;
+                }
             }
 
             if (FinishTransition())

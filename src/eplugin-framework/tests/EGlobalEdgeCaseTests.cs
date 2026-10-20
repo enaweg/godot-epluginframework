@@ -97,6 +97,25 @@ public partial class EGlobalEdgeCaseTests : IDisposable
     }
 
     [TestCase]
+    public void APluginWaitingForADependencyThatNeverCallsBackDoesNotStopOthers()
+    {
+        _fixture.AddEPlugin("base", b => b.AddNuget("Base.Package"));
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package").AddPluginDependency("base"));
+        _fixture.AddEPlugin("other", b => b.AddNuget("Other.Package"));
+        _fixture.Enable("base");
+        // like an ePlugin whose _EnablePlugin does not call EnableEPlugin: enabled, but never activated
+        _fixture.Context("base")!.State = EEditorPluginState.Created;
+        _fixture.Enable("app");
+
+        // resumes the waiting app, which waits again; this used to pop and push it back forever
+        _fixture.Enable("other");
+
+        Assertions.AssertObject(_fixture.State("other")).IsEqual(EEditorPluginState.Activated);
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Created);
+        Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsTrue();
+    }
+
+    [TestCase]
     public void CallbacksForAPluginThatIsDoneOrFailedChangeNothing()
     {
         _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"));
