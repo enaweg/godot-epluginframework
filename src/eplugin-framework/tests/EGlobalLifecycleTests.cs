@@ -91,6 +91,31 @@ public class EGlobalLifecycleTests
     }
 
     [TestCase]
+    public void RetryActivatesAPluginOnceItsDependencyHasAMatchingVersion()
+    {
+        _fixture.AddPlainPlugin("tool", "1.1");
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package").AddPluginDependency("tool", ">=1.2"));
+        _fixture.Enable("app");
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Error);
+        var logged = _fixture.Log.Count;
+        var start = _fixture.Operations.Count;
+
+        _fixture.AddPlainPlugin("tool", "1.4");
+        _fixture.Global.RetryFailedPlugins();
+
+        var log = "log: " + string.Join(" | ", _fixture.Log.Skip(logged));
+        Assertions.AssertObject(_fixture.State("app")).OverrideFailureMessage(log).IsEqual(EEditorPluginState.Activated);
+        Assertions.AssertBool(_fixture.Host.Enabled.IsSupersetOf(["app", "tool"])).IsTrue();
+        // installed once, by the new editor instance
+        Assertions.AssertThat(OperationsSince(start)).ContainsExactly("add-nuget App.Package", "build");
+        Assertions.AssertObject(_fixture.Store.GetLocal("app")).IsNull();
+        Assertions.AssertObject(_fixture.Store.GetShared("app")!.State).IsEqual(PersistedPluginState.Activated);
+        Assertions.AssertBool(_fixture.Log.Skip(logged).Any(l => l.StartsWith("error", StringComparison.Ordinal))).OverrideFailureMessage(log).IsFalse();
+        // one editor instance, the one Godot created when the retry enabled the plugin again
+        Assertions.AssertInt(_fixture.Global.Contexts.Count(c => c.Slug == "app" && c.Plugin is not null)).IsEqual(1);
+    }
+
+    [TestCase]
     public void ADependencyThatCannotBeEnabledFailsTheActivation()
     {
         _fixture.AddEPlugin("app", b => b.AddPluginDependency("missing"));
