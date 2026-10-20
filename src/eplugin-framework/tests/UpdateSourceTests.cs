@@ -112,6 +112,27 @@ public class UpdateSourceTests
     }
 
     [TestCase]
+    public static void ForgeTokensGoOnlyToTheHostsTheyBelongTo()
+    {
+        // an update_url comes from a plugin's plugin.cfg: a host it names must not receive a token meant for another
+        var environment = new Dictionary<string, string?>
+        {
+            ["GITHUB_TOKEN"] = "github", ["GITLAB_TOKEN"] = "gitlab", ["GITEA_TOKEN"] = "gitea",
+            ["EPLUGIN_GITLAB_HOSTS"] = " git.example.org ,, other.example", ["EPLUGIN_FORGEJO_HOSTS"] = ""
+        };
+        string? Read(string name) => environment.GetValueOrDefault(name);
+        Assertions.AssertString(ForgeTokens.For(ForgeTokens.Forge.GitHub, "api.github.com", Read)).IsEqual("github");
+        Assertions.AssertString(ForgeTokens.For(ForgeTokens.Forge.GitHub, "github.example", Read)).IsNull();
+        Assertions.AssertString(ForgeTokens.For(ForgeTokens.Forge.GitLab, "gitlab.com", Read)).IsEqual("gitlab");
+        Assertions.AssertString(ForgeTokens.For(ForgeTokens.Forge.GitLab, "GIT.example.org", Read)).IsEqual("gitlab");
+        Assertions.AssertString(ForgeTokens.For(ForgeTokens.Forge.GitLab, "evil.example", Read)).IsNull();
+        Assertions.AssertString(ForgeTokens.For(ForgeTokens.Forge.Forgejo, "codeberg.org", Read)).IsEqual("gitea");
+        Assertions.AssertString(ForgeTokens.For(ForgeTokens.Forge.Forgejo, "git.example.org", Read)).IsNull();
+        environment["EPLUGIN_FORGEJO_TOKEN"] = "forgejo";
+        Assertions.AssertString(ForgeTokens.For(ForgeTokens.Forge.Forgejo, "codeberg.org", Read)).IsEqual("forgejo");
+    }
+
+    [TestCase]
     public static async Task RateLimitFallsBackToLatestRedirect()
     {
         using var client = new HttpClient(new Handler(request =>

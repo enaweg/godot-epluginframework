@@ -1,6 +1,7 @@
 #if TOOLS
 using System;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -12,6 +13,38 @@ namespace Enaweg.Plugin.Internal.Update;
 internal sealed class UpdateHttpException(string message, bool rateLimited = false) : IOException(message)
 {
     public bool RateLimited { get; } = rateLimited;
+}
+
+/// <summary>
+/// The tokens for private release APIs, read from the editor's environment. Each goes only to the hosts it belongs to:
+/// an update_url comes from a plugin's plugin.cfg, so any installed add-on could otherwise name a host that receives it.
+/// GitHub's token goes to GitHub, GitLab's to gitlab.com and Forgejo's to codeberg.org, the last two also to the hosts
+/// listed in EPLUGIN_GITLAB_HOSTS or EPLUGIN_FORGEJO_HOSTS (host names separated by commas, e.g. a self-hosted instance).
+/// </summary>
+internal static class ForgeTokens
+{
+    internal enum Forge { GitHub, GitLab, Forgejo }
+
+    public static string? GitHub(Uri uri) => For(Forge.GitHub, uri.Host, Environment.GetEnvironmentVariable);
+    public static string? GitLab(Uri uri) => For(Forge.GitLab, uri.Host, Environment.GetEnvironmentVariable);
+    public static string? Forgejo(Uri uri) => For(Forge.Forgejo, uri.Host, Environment.GetEnvironmentVariable);
+
+    /// <summary>The token of <paramref name="forge"/> for <paramref name="host"/>, or null when the host is not trusted with it.</summary>
+    internal static string? For(Forge forge, string host, Func<string, string?> environment)
+    {
+        var rule = forge switch
+        {
+            Forge.GitHub => new Rule(["github.com", "api.github.com", "raw.githubusercontent.com"], null, ["EPLUGIN_GITHUB_TOKEN", "GITHUB_TOKEN"]),
+            Forge.GitLab => new Rule(["gitlab.com"], "EPLUGIN_GITLAB_HOSTS", ["EPLUGIN_GITLAB_TOKEN", "GITLAB_TOKEN"]),
+            _ => new Rule(["codeberg.org"], "EPLUGIN_FORGEJO_HOSTS", ["EPLUGIN_FORGEJO_TOKEN", "FORGEJO_TOKEN", "GITEA_TOKEN"])
+        };
+        var trusted = rule.Hosts.Concat((rule.HostsVariable is null ? null : environment(rule.HostsVariable))?
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? []);
+        if (!trusted.Contains(host, StringComparer.OrdinalIgnoreCase)) return null;
+        return rule.TokenVariables.Select(environment).FirstOrDefault(token => !string.IsNullOrEmpty(token));
+    }
+
+    private sealed record Rule(string[] Hosts, string? HostsVariable, string[] TokenVariables);
 }
 
 internal sealed class UpdateHttp
@@ -75,9 +108,9 @@ internal sealed class UpdateHttp
         if (Uri.TryCreate(sourceUrl, UriKind.Absolute, out var source) && new Uri(url).Host == source.Host)
         {
             gitlab = source.AbsolutePath.Contains("/-/", StringComparison.Ordinal);
-            if (source.Host == "github.com") token = Environment.GetEnvironmentVariable("EPLUGIN_GITHUB_TOKEN") ?? Environment.GetEnvironmentVariable("GITHUB_TOKEN");
-            else if (gitlab) token = Environment.GetEnvironmentVariable("EPLUGIN_GITLAB_TOKEN") ?? Environment.GetEnvironmentVariable("GITLAB_TOKEN");
-            else if (source.AbsolutePath.Contains("/releases", StringComparison.Ordinal)) token = ForgejoReleaseSource.Token;
+            if (source.Host == "github.com") token = ForgeTokens.GitHub(source);
+            else if (gitlab) token = ForgeTokens.GitLab(source);
+            else if (source.AbsolutePath.Contains("/releases", StringComparison.Ordinal)) token = ForgeTokens.Forgejo(source);
         }
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromMinutes(5));

@@ -241,14 +241,14 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
             var path = repo.AbsolutePath.Trim('/');
             if (path.EndsWith(".git", StringComparison.Ordinal)) path = path[..^4];
             metadata = await http.ReadTextAsync($"https://raw.githubusercontent.com/{path}/{commit}/{url.Path}/plugin.cfg", ct,
-                Environment.GetEnvironmentVariable("EPLUGIN_GITHUB_TOKEN") ?? Environment.GetEnvironmentVariable("GITHUB_TOKEN")).ConfigureAwait(false);
+                ForgeTokens.GitHub(repo)).ConfigureAwait(false);
         }
         else if (repo?.Host == "gitlab.com")
         {
             var path = repo.AbsolutePath.Trim('/');
             if (path.EndsWith(".git", StringComparison.Ordinal)) path = path[..^4];
             metadata = await http.ReadTextAsync($"https://{repo.Authority}/{path}/-/raw/{commit}/{url.Path}/plugin.cfg", ct,
-                Environment.GetEnvironmentVariable("EPLUGIN_GITLAB_TOKEN") ?? Environment.GetEnvironmentVariable("GITLAB_TOKEN"), true).ConfigureAwait(false);
+                ForgeTokens.GitLab(repo), true).ConfigureAwait(false);
         }
         else
         {
