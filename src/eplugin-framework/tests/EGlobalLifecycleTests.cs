@@ -13,7 +13,7 @@ namespace Enaweg.Plugin.Tests;
 /// </summary>
 [TestSuite]
 [RequireGodotRuntime]
-public class EGlobalLifecycleTests
+public class EGlobalLifecycleTests : IDisposable
 {
     private LifecycleFixture _fixture = null!;
 
@@ -21,7 +21,13 @@ public class EGlobalLifecycleTests
     public void Setup() => _fixture = new LifecycleFixture();
 
     [AfterTest]
-    public void Cleanup() => _fixture.Dispose();
+    public void Cleanup() => Dispose();
+
+    public void Dispose()
+    {
+        _fixture.Dispose();
+        GC.SuppressFinalize(this);
+    }
 
     private string[] OperationsSince(int start) => _fixture.Operations.Skip(start).ToArray();
 

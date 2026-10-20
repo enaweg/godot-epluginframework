@@ -1,5 +1,6 @@
 #if TOOLS
 using System;
+using System.Diagnostics.CodeAnalysis;
 using Enaweg.Plugin.Internal;
 using GdUnit4;
 
@@ -37,6 +38,8 @@ public class EEditorPluginBuilderTests
     }
 
     [TestCase]
+    [SuppressMessage("Performance", "CA1859:Use concrete types when possible for improved performance",
+        Justification = "The interface is what plugins call, so its overloads are what must compile.")]
     public static void EveryDocumentedAddProjectFormCompiles()
     {
         // Compiling this test is the check: one argument was ambiguous between both overloads (CS0121).

@@ -1,6 +1,7 @@
 #if TOOLS
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -17,6 +18,8 @@ namespace Enaweg.Plugin.Internal;
 /// as well as provides some global values.
 /// </summary>
 [Tool]
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable",
+    Justification = "The singleton lives as long as the assembly; its indexing token sources have no timer or wait handle to release.")]
 internal sealed partial class EGlobal
 {
     private static EGlobal? _instance;

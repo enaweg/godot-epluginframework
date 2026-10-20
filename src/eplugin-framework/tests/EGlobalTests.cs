@@ -13,7 +13,7 @@ namespace Enaweg.Plugin.Tests;
 /// <summary>Transitions, baselines, retries and optional recipe resolution of <see cref="EGlobal"/>.</summary>
 [TestSuite]
 [RequireGodotRuntime]
-public class EGlobalTests
+public class EGlobalTests : IDisposable
 {
     private LifecycleFixture _fixture = null!;
     private readonly List<EditorPlugin> _createdPlugins = [];
@@ -22,11 +22,14 @@ public class EGlobalTests
     public void Setup() => _fixture = new LifecycleFixture();
 
     [AfterTest]
-    public void Cleanup()
+    public void Cleanup() => Dispose();
+
+    public void Dispose()
     {
         foreach (var plugin in _createdPlugins) plugin.Free();
         _createdPlugins.Clear();
         _fixture.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     private PluginContext Context(string slug, IEEditorPlugin? plugin = null, string? version = "1.0.0",
