@@ -1,17 +1,15 @@
 #if TOOLS
-using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using Enaweg.Plugin.Internal.Update;
 
 namespace Enaweg.Plugin.Internal.Kinds;
 
 /// <summary>
-/// A plugin without a recipe that ships a GDExtension next to its <c>plugin.cfg</c> (only such plugins are supported; an
-/// extension without a <c>plugin.cfg</c> is no plugin). Godot loads the extension whether the plugin is enabled or not, so
-/// an update has to replace native libraries the editor uses:
+/// What every kind whose update replaces a GDExtension without restarting into a new assembly shares
+/// (<see cref="GDExtensionPluginWorkflow"/> and <see cref="GDExtensionAddonWorkflow"/>). Godot loads the extension
+/// whether the plugin is enabled or not, so an update has to replace native libraries the editor uses:
 /// <list type="bullet">
 /// <item>On Windows the editor loads each library from a copy named <c>~&lt;library&gt;</c> in the same folder and keeps it
 /// open, so the folder cannot be moved. The files are replaced one by one (<see cref="AddonFileSwap"/>), leaving the
@@ -20,16 +18,12 @@ namespace Enaweg.Plugin.Internal.Kinds;
 /// (<see cref="IUpdateHost.ReloadExtension"/>); any other change (an extension added, removed or not reloadable, a library
 /// still in use) keeps the old library loaded until the editor restarts, which the update then requests.</item>
 /// </list>
-/// The plugin's entry script is GDScript or C#; a C# one is built like a C# plugin's. An ePlugin that ships a GDExtension
-/// stays an <see cref="EPluginWorkflow"/>, which swaps its files the same way. GDExtensions in recipe directories
-/// (<c>AddDirectory</c>) are not supported: showing and hiding renames the folder, which the runtime copies keep open.
+/// An ePlugin that ships a GDExtension stays an <see cref="EPluginWorkflow"/>, which swaps its files the same way but
+/// restarts anyway. GDExtensions in recipe directories (<c>AddDirectory</c>) must be reloadable, see
+/// <see cref="ShowHideHelper"/>.
 /// </summary>
-internal sealed class GDExtensionPluginWorkflow : PluginKindWorkflow
+internal abstract class NativeExtensionWorkflow : PluginKindWorkflow
 {
-    public static readonly GDExtensionPluginWorkflow Instance = new();
-    public override PluginKind Kind => PluginKind.GDExtension;
-    public override string Name => "GDExtension plugin";
-    public override bool DisabledDuringSwap => true;
     public override IAddonSwap Swap(UpdatePluginJournal plugin) => AddonFileSwap.Instance;
 
     /// <summary>
@@ -41,7 +35,7 @@ internal sealed class GDExtensionPluginWorkflow : PluginKindWorkflow
     private static string CurrentProcess()
     {
         using var process = Process.GetCurrentProcess();
-        return $"{Environment.ProcessId}:{process.StartTime.ToUniversalTime().Ticks}";
+        return $"{System.Environment.ProcessId}:{process.StartTime.ToUniversalTime().Ticks}";
     }
 
     public override IEnumerable<Finding> Validate(KindValidation validation)
@@ -131,5 +125,31 @@ internal sealed class GDExtensionPluginWorkflow : PluginKindWorkflow
 
     private static string Describe(IReadOnlyDictionary<string, GDExtensionConfig?> configs) => configs.Count == 0 ? "none"
         : string.Join(", ", configs.Select(c => c.Key + (c.Value is null ? " (unreadable)" : c.Value.Reloadable ? " (reloadable)" : " (not reloadable)")));
+}
+
+/// <summary>
+/// A plugin without a recipe that ships a GDExtension next to its <c>plugin.cfg</c>. Its entry script is GDScript or C#;
+/// a C# one is built like a C# plugin's. It is disabled while its files are replaced; see
+/// <see cref="NativeExtensionWorkflow"/> for how they are.
+/// </summary>
+internal sealed class GDExtensionPluginWorkflow : NativeExtensionWorkflow
+{
+    public static readonly GDExtensionPluginWorkflow Instance = new();
+    public override PluginKind Kind => PluginKind.GDExtension;
+    public override string Name => "GDExtension plugin";
+    public override bool DisabledDuringSwap => true;
+}
+
+/// <summary>
+/// A GDExtension in its own folder below <c>res://addons</c> without a <c>plugin.cfg</c>. Godot loads it and nothing
+/// enables it, so nothing is disabled while its files are replaced; see <see cref="NativeExtensionWorkflow"/> for how
+/// they are. Its version is not in its files: the update records the installed version in the shared plugin state.
+/// </summary>
+internal sealed class GDExtensionAddonWorkflow : NativeExtensionWorkflow
+{
+    public static readonly GDExtensionAddonWorkflow Instance = new();
+    public override PluginKind Kind => PluginKind.GDExtensionAddon;
+    public override string Name => "GDExtension add-on";
+    public override bool DisabledDuringSwap => false;
 }
 #endif

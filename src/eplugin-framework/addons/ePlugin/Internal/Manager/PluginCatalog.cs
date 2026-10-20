@@ -35,6 +35,8 @@ internal sealed record PluginInfo(string Slug, string Name, PluginKind Kind, boo
     /// <summary>The recipe, when the plugin already created it in this session.</summary>
     public EEditorPluginRecipe? Recipe { get; init; }
     public bool Missing { get; init; }
+    /// <summary>The GDExtensions the plugin ships, as the editor runs them.</summary>
+    public IReadOnlyList<NativeExtensionStatus> Extensions { get; init; } = [];
 }
 
 internal static class PluginCatalog

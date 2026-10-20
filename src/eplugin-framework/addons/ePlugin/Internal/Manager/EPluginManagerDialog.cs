@@ -211,7 +211,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             item.SetCellMode(EnabledColumn, TreeItem.TreeCellMode.Check);
             item.SetChecked(EnabledColumn, plugin.Enabled);
             item.SetEditable(EnabledColumn, row.CanToggle && editable);
-            item.SetTooltipText(EnabledColumn, !row.CanToggle ? "The plugin folder or its plugin.cfg is missing."
+            item.SetTooltipText(EnabledColumn, plugin.Kind == PluginKind.GDExtensionAddon ? "Godot always loads a GDExtension without plugin.cfg; there is nothing to enable or disable."
+                : !row.CanToggle ? "The plugin folder or its plugin.cfg is missing."
                 : plugin.Enabled ? "Enabled. Uncheck to disable the plugin." : "Disabled. Check to enable the plugin.");
             item.SetText(NameColumn, plugin.Name);
             var updateState = PluginManagerViewModel.UpdateState(row);
@@ -233,13 +234,13 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
                 item.SetCellMode(VersionColumn, TreeItem.TreeCellMode.Check);
                 item.SetEditable(VersionColumn, !update.HasError && editable);
                 item.SetChecked(VersionColumn, update.Selected);
-                item.SetText(VersionColumn, $"{plugin.Version} → {update.Candidate.NewVersion}");
+                item.SetText(VersionColumn, $"{PluginManagerViewModel.VersionText(plugin)} → {update.Candidate.NewVersion}");
                 if (update.HasError) item.SetCustomColor(VersionColumn, ErrorColor());
                 item.SetTooltipText(VersionColumn, update.HasError ? "This update cannot be installed, see details." : "Check to include this update in Update.");
             }
             else
             {
-                item.SetText(VersionColumn, plugin.Version);
+                item.SetText(VersionColumn, PluginManagerViewModel.VersionText(plugin));
                 item.SetTooltipText(VersionColumn, PluginManagerViewModel.StatusText(plugin));
             }
             if (plugin.Slug == _selectedSlug) selected = item;
@@ -370,7 +371,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _versionSelect.Clear(); _versionOptions = []; _versionNote = null;
         var target = visible ? _targets.FirstOrDefault(t => t.Slug == row!.Plugin.Slug) : null;
         if (!visible) { }
-        else if (!row!.Plugin.Enabled || target is null) SetVersionPlaceholder(row.Plugin.Version + " (installed)", "Enable the plugin to change its version.");
+        else if (!row!.Plugin.Enabled || target is null) SetVersionPlaceholder(PluginManagerViewModel.VersionText(row.Plugin) + " (installed)", "Enable the plugin to change its version.");
         else
         {
             var local = _global.ListLocalVersions(target);
@@ -384,7 +385,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             if (local.Count == 0 && missing is not null)
             {
                 var loading = _updates.IsLoadingVersions(target.Slug);
-                SetVersionPlaceholder(loading ? "Loading versions..." : row.Plugin.Version + " (installed)", loading ? null : missing);
+                SetVersionPlaceholder(loading ? "Loading versions..." : PluginManagerViewModel.VersionText(row.Plugin) + " (installed)", loading ? null : missing);
             }
             else
             {
@@ -397,7 +398,10 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
                     if (PluginManagerViewModel.VersionSource(option) is { } source) _versionSelect.SetItemTooltip(i, source);
                     if (option.Installed) _versionSelect.Select(i);
                 }
-                _versionSelect.Disabled = Busy || _versionOptions.Count < 2;
+                // A GDExtension add-on of unknown version lists no installed version; the latest is preselected instead.
+                var installed = _versionOptions.Any(o => o.Installed);
+                if (!installed && latest is not null) _versionSelect.Select(_versionOptions.ToList().IndexOf(latest));
+                _versionSelect.Disabled = Busy || installed && _versionOptions.Count < 2 || _versionOptions.Count == 0;
                 _versionNote = missing;
             }
         }

@@ -41,12 +41,15 @@ public class GDExtensionPluginTests
         _host = new NativeHost();
         _applier = new(_root, _store, _host, new MemoryStore());
         GDExtensionPluginWorkflow.EditorSession = "this-editor";
+        // the suite runs without a Godot runtime to ask
+        GDExtensionConfig.EditorVersion = (4, 4, 0);
     }
 
     [AfterTest]
     public void Cleanup()
     {
         GDExtensionPluginWorkflow.EditorSession = "this-editor";
+        GDExtensionConfig.ResetEditorVersion();
         Directory.Delete(_root, true);
     }
 
@@ -110,6 +113,183 @@ public class GDExtensionPluginTests
         Assertions.AssertArray(config.Dependencies.Select(l => l.Path).ToArray()).ContainsExactly("res://addons/native/bin/dep.dll", "bin/other.dll");
         Assertions.AssertBool(GDExtensionConfig.Parse("[configuration]\nreloadable = false\n").Reloadable).IsFalse();
         Assertions.AssertBool(GDExtensionConfig.Parse("[configuration]\n").Reloadable).IsFalse();
+    }
+
+    [TestCase]
+    public static void ChecksTheGodotVersionLimitsLikeGodot()
+    {
+        try
+        {
+            GDExtensionConfig.EditorVersion = (4, 5, 1);
+            GDExtensionConfig Config(string configuration) => GDExtensionConfig.Parse("[configuration]\n" + configuration + "\n");
+            Assertions.AssertObject(Config("compatibility_minimum = \"4.4\"").CompatibilityProblem()).IsNull();
+            Assertions.AssertObject(Config("compatibility_minimum = \"4.5.1\"").CompatibilityProblem()).IsNull();
+            Assertions.AssertObject(Config("compatibility_minimum = 4.1 ; a number works too").CompatibilityProblem()).IsNull();
+            Assertions.AssertString(Config("compatibility_minimum = \"4.5.2\"").CompatibilityProblem()).Contains("needs Godot 4.5.2 or newer");
+            Assertions.AssertString(Config("compatibility_minimum = \"4.6\"").CompatibilityProblem()).Contains("this editor is 4.5.1");
+            Assertions.AssertString(Config("compatibility_minimum = \"4.0\"").CompatibilityProblem()).Contains("older than 4.1");
+            Assertions.AssertString(Config("reloadable = true").CompatibilityProblem()).Contains("no compatibility_minimum");
+            // missing parts of the maximum mean any version
+            Assertions.AssertObject(Config("compatibility_minimum = \"4.1\"\ncompatibility_maximum = \"4.5\"").CompatibilityProblem()).IsNull();
+            Assertions.AssertString(Config("compatibility_minimum = \"4.1\"\ncompatibility_maximum = \"4.4.9\"").CompatibilityProblem()).Contains("up to 4.4.9");
+            Assertions.AssertString(Config("compatibility_minimum = \"4.1\"\ncompatibility_maximum = \"4.5.0\"").CompatibilityProblem()).Contains("up to 4.5.0");
+        }
+        finally { GDExtensionConfig.EditorVersion = (4, 4, 0); }
+    }
+
+    [TestCase]
+    public static void FindsPlatformsAndReleaseLibrariesANewVersionDrops()
+    {
+        var before = GDExtensionConfig.Parse("""
+            [libraries]
+            windows.x86_64 = "bin/a.dll"
+            linux.debug.x86_64 = "bin/a.debug.so"
+            linux.release.x86_64 = "bin/a.so"
+            macos = "bin/a.framework"
+            android.arm64 = "bin/a.android.so"
+            """);
+        var after = GDExtensionConfig.Parse("""
+            [libraries]
+            windows.debug.x86_64 = "bin/a.dll"
+            linux.x86_64 = "bin/a.so"
+            macos.arm64 = "bin/a.framework"
+            """);
+
+        Assertions.AssertArray(GDExtensionConfig.DroppedPlatforms(before, after).ToArray())
+            .ContainsExactlyInAnyOrder("a release library for windows.x86_64", "android.arm64");
+        Assertions.AssertArray(GDExtensionConfig.DroppedPlatforms(after, before).ToArray()).IsEmpty();
+        Assertions.AssertString(GDExtensionConfig.PlatformName("windows.template_debug.x86_64")).IsEqual("windows.x86_64");
+        Assertions.AssertString(GDExtensionConfig.PlatformName("macos.debug")).IsEqual("macos");
+    }
+
+    [TestCase]
+    public void ValidationRefusesAVersionThisEditorCannotLoadAndWarnsAboutDroppedPlatformsAndIcons()
+    {
+        GDExtensionConfig.EditorVersion = (4, 4, 0);
+        var newer = Validate(stage => File.WriteAllText(Path.Combine(stage, "native.gdextension"), Extension(true).Replace("\"4.4\"", "\"4.5\"")));
+        Assertions.AssertBool(newer.Findings.Any(f => f.Code == "R22" && f.Severity == FindingSeverity.Error && f.Message.Contains("needs Godot 4.5"))).IsTrue();
+
+        var dropped = Validate(stage => File.WriteAllText(Path.Combine(stage, "native.gdextension"),
+            Extension(true).Replace("linux = \"bin/libnative.so\"\n", "") + "\n[icons]\nNative = \"res://icons/native.svg\"\nOwn = \"icons/own.svg\"\n"));
+        Assertions.AssertBool(dropped.IsValid).IsTrue();
+        Assertions.AssertString(dropped.Findings.Single(f => f.Code == "R23").Message).Contains("no longer ships linux");
+        Assertions.AssertString(dropped.Findings.Single(f => f.Code == "R18").Message).Contains("res://icons/native.svg");
+        Assertions.AssertBool(dropped.Findings.Single(f => f.Code == "R18").Severity == FindingSeverity.Warning).IsTrue();
+    }
+
+    [TestCase]
+    public static void ChoosesTheReleaseZipOfTheAddonAmongDemosAndOtherSpellings()
+    {
+        static string? Select(string slug, params string[] names) =>
+            ReleaseAssets.Select(names.Select(n => (n, "https://example.org/" + n)), slug)?["https://example.org/".Length..];
+        Assertions.AssertString(Select("godot_servo", "godot-servo-demo-v1.2.0.zip", "godot-servo-v1.2.0.zip")).IsEqual("godot-servo-v1.2.0.zip");
+        Assertions.AssertString(Select("tweens_gd", "tweens.gd-0.2.4-beta.zip", "tweens.gd-tutorial.zip", "tweens.gd.0.2.4-beta.nupkg")).IsEqual("tweens.gd-0.2.4-beta.zip");
+        // an exact name still wins, and two add-on ZIPs leave the choice open
+        Assertions.AssertString(Select("my_plugin", "my_plugin.zip", "my-plugin-extras.zip")).IsEqual("my_plugin.zip");
+        Assertions.AssertObject(Select("native", "native-windows.zip", "native-linux.zip")).IsNull();
+    }
+
+    [TestCase]
+    public static void FindsTheFolderOfAGDExtensionWithoutPluginCfgByItsName()
+    {
+        string[] repository = ["servo-1.0/README.md", "servo-1.0/demo/addons/servo/servo.gdextension", "servo-1.0/addons/servo/servo.gdextension",
+            "servo-1.0/addons/servo/bin/servo.dll", "servo-1.0/addons/other/plugin.cfg"];
+        Assertions.AssertString(SafeZipExtractor.PackageRoot(repository, "servo")).IsEqual("servo-1.0/addons/servo/");
+        Assertions.AssertString(SafeZipExtractor.PackageRoot(["servo/servo.gdextension", "servo/bin/servo.dll"], "servo")).IsEqual("servo/");
+        // a nested folder of the add-on that is named like it does not count
+        Assertions.AssertString(SafeZipExtractor.PackageRoot(["addons/servo/servo/x.gdextension", "addons/servo/bin/a.dll"], "servo")).IsEqual("addons/servo/");
+        // a plugin keeps its plugin.cfg root
+        Assertions.AssertString(SafeZipExtractor.PackageRoot(["native/plugin.cfg", "native/native.gdextension"], "native")).IsEqual("native/");
+        Assertions.AssertThrown(() => SafeZipExtractor.PackageRoot(["bin/servo.dll", "servo.gdextension"], "servo"))
+            .IsInstanceOf<InvalidDataException>().StartsWithMessage("The package contains no plugin.cfg and no folder named 'servo'");
+        Assertions.AssertThrown(() => SafeZipExtractor.PackageRoot(["a/servo/x.gdextension", "b/servo/x.gdextension"], "servo"))
+            .IsInstanceOf<InvalidDataException>().StartsWithMessage("Ambiguous package, it has several GDExtension folders");
+    }
+
+    [TestCase]
+    public void AGDExtensionWithoutPluginCfgIsInstalledOverAnUnknownVersionAndThenUpdated()
+    {
+        const string addon = "servo";
+        var installed = Path.Combine(_root, "addons", addon);
+        WriteAddon(installed, "old library");
+        File.WriteAllText(Path.Combine(installed, "bin/~servo.dll"), "runtime copy");
+
+        // nothing recorded a version: any version can replace the one installed by hand
+        var (package, directory) = StageAddon(addon, installed, "", "2.0.0", "new library");
+        Assertions.AssertObject(package.Kind).IsEqual(PluginKind.GDExtensionAddon);
+        Assertions.AssertString(package.Findings.Single(f => f.Code == "R6").Message).Contains("installed version is unknown");
+        Assertions.AssertObject(_applier.Apply([package], directory)).IsEqual(UpdateOutcome.Completed);
+
+        Assertions.AssertString(File.ReadAllText(Path.Combine(installed, "bin/servo.dll"))).IsEqual("new library");
+        Assertions.AssertString(File.ReadAllText(Path.Combine(installed, "bin/~servo.dll"))).IsEqual("runtime copy");
+        Assertions.AssertArray(_host.Reloaded.ToArray()).ContainsExactly("res://addons/servo/servo.gdextension");
+        // nothing to disable or enable, and its version is now known
+        Assertions.AssertInt(_host.Toggles.Count).IsEqual(0);
+        Assertions.AssertString(_store.GetShared(addon)!.Version).IsEqual("2.0.0");
+        Assertions.AssertBool(File.Exists(Path.Combine(installed, "plugin.cfg"))).IsFalse();
+
+        (package, directory) = StageAddon(addon, installed, "2.0.0", "3.0.0", "newer library");
+        Assertions.AssertBool(package.Findings.Any(f => f.Code == "R6")).IsFalse();
+        Assertions.AssertObject(_applier.Apply([package], directory)).IsEqual(UpdateOutcome.Completed);
+        Assertions.AssertString(_store.GetShared(addon)!.Version).IsEqual("3.0.0");
+        Assertions.AssertBool(_host.Logs.Any(l => l.StartsWith("GDExtension add-on servo: installing 3.0.0", StringComparison.Ordinal))).IsTrue();
+
+        // an older one only as a chosen downgrade
+        var older = new AddonPackageValidator().Validate(new(new(addon, addon, "3.0.0", null, installed, Kind: PluginKind.GDExtensionAddon),
+            new UpdateCandidate(addon, addon, "3.0.0", "1.0.0", null, null, null, new ZipPackageRef("https://example.org/servo.zip", addon)), directory));
+        Assertions.AssertBool(older.Findings.Any(f => f.Code == "R6" && f.Severity == FindingSeverity.Error)).IsTrue();
+    }
+
+    [TestCase]
+    public void AGDExtensionWithoutPluginCfgThatGainsOneBecomesAPluginAfterTheUpdate()
+    {
+        const string addon = "servo";
+        var installed = Path.Combine(_root, "addons", addon);
+        WriteAddon(installed, "old library");
+
+        var (package, directory) = StageAddon(addon, installed, "", "2.0.0", "new library", stage =>
+        {
+            File.WriteAllText(Path.Combine(stage, "plugin.cfg"), "[plugin]\nname=\"Servo\"\nversion=\"2.0.0\"\nscript=\"plugin.gd\"\n");
+            File.WriteAllText(Path.Combine(stage, "plugin.gd"), "@tool\nextends EditorPlugin\n");
+        });
+        Assertions.AssertBool(package.Findings.Any(f => f.Code == "R24")).IsTrue();
+        Assertions.AssertObject(_applier.Apply([package], directory)).IsEqual(UpdateOutcome.Completed);
+        Assertions.AssertBool(File.Exists(Path.Combine(installed, "plugin.cfg"))).IsTrue();
+        // never enabled before, so it is not enabled by the update
+        Assertions.AssertInt(_host.Toggles.Count).IsEqual(0);
+
+        var missing = StageAddonValidation(addon, installed, stage => File.Delete(Path.Combine(stage, "servo.gdextension")));
+        Assertions.AssertBool(missing.Findings.Any(f => f.Code == "R2" && f.Severity == FindingSeverity.Error)).IsTrue();
+    }
+
+    private static void WriteAddon(string directory, string library)
+    {
+        Directory.CreateDirectory(Path.Combine(directory, "bin"));
+        File.WriteAllText(Path.Combine(directory, "servo.gdextension"), Extension(true).Replace("native", "servo"));
+        foreach (var name in new[] { "servo.dll", "libservo.so", "libservo.dylib" }) File.WriteAllText(Path.Combine(directory, "bin", name), library);
+    }
+
+    private (ValidatedPackage Package, string Directory) StageAddon(string slug, string installed, string installedVersion, string version,
+        string library, Action<string>? change = null)
+    {
+        var directory = Path.Combine(_root, ".godot/eplugin/updates/" + Guid.NewGuid().ToString("N")[..8]);
+        var stage = Path.Combine(directory, "staging", slug);
+        WriteAddon(stage, library);
+        change?.Invoke(stage);
+        var candidate = new UpdateCandidate(slug, slug, installedVersion, version, "https://example.org/releases", null, null, new ZipPackageRef("https://example.org/servo.zip", slug));
+        var validated = new AddonPackageValidator().Validate(new(new(slug, slug, installedVersion, null, installed, Kind: PluginKind.GDExtensionAddon), candidate, stage));
+        Assertions.AssertBool(validated.IsValid).OverrideFailureMessage(string.Join("; ", validated.Findings.Select(f => f.Message))).IsTrue();
+        return (validated, directory);
+    }
+
+    private ValidatedPackage StageAddonValidation(string slug, string installed, Action<string> change)
+    {
+        var stage = Path.Combine(_root, "validate", slug);
+        if (Directory.Exists(stage)) Directory.Delete(stage, true);
+        WriteAddon(stage, "library");
+        change(stage);
+        var candidate = new UpdateCandidate(slug, slug, "", "4.0.0", null, null, null, new ZipPackageRef("https://example.org/servo.zip", slug));
+        return new AddonPackageValidator().Validate(new(new(slug, slug, "", null, installed, Kind: PluginKind.GDExtensionAddon), candidate, stage));
     }
 
     [TestCase]

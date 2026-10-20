@@ -80,6 +80,13 @@ internal sealed partial class EGlobal
     }
     private void EnsureUpdateDependency(EEditorPluginRecipe.Plugin dependency)
     {
+        // Godot always runs a GDExtension add-on; only its recorded version can fail the dependency.
+        if (IsExtensionAddon(dependency.Slug))
+        {
+            if (dependency.Version is not null && (ExtensionAddonVersion(dependency.Slug) is not { } version || !MatchesVersion(version, dependency.Version, _ePluginContext?.Logger)))
+                throw new InvalidOperationException($"Dependency {dependency.Slug} {ExtensionAddonVersion(dependency.Slug) ?? "(unknown version)"} does not match {dependency.Version}.");
+            return;
+        }
         var metadata = ReadInstalledMetadata(dependency.Slug) ?? throw new InvalidOperationException($"Plugin now requires missing dependency {dependency.Slug}.");
         if (dependency.Version is not null && !MatchesVersion(metadata.Version, dependency.Version, _ePluginContext?.Logger))
             throw new InvalidOperationException($"Dependency {dependency.Slug} {metadata.Version} does not match {dependency.Version}.");

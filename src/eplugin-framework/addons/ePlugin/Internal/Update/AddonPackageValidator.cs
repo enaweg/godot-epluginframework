@@ -35,22 +35,36 @@ internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules 
         var metadata = new Dictionary<string, string>();
         var files = Directory.Exists(stage) ? PackageFiles.Files(stage).ToArray() : [];
         if (files.Length == 0) Add("R1", FindingSeverity.Error, "Staging folder is missing or empty.");
-        try
+        // A GDExtension add-on has no plugin.cfg: its version is the announced one, and it has no entry script.
+        var addon = installed.Kind == PluginKind.GDExtensionAddon;
+        var configless = addon && !File.Exists(Path.Combine(stage, "plugin.cfg"));
+        if (configless)
         {
-            metadata = PluginIni.Parse(File.ReadAllText(Path.Combine(stage, "plugin.cfg")));
-            if (metadata.Count == 0) throw new InvalidDataException("Missing [plugin] section.");
+            if (!files.Any(GDExtensionConfig.IsExtensionFile)) Add("R2", FindingSeverity.Error, "The package has neither a plugin.cfg nor a .gdextension file.");
         }
-        catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or UnauthorizedAccessException)
-        { Add("R2", FindingSeverity.Error, "Cannot parse staged plugin.cfg: " + ex.Message); }
-        foreach (var key in new[] { "name", "version", "script" })
-            if (string.IsNullOrWhiteSpace(metadata.GetValueOrDefault(key))) Add("R3", FindingSeverity.Error, $"plugin.cfg has no {key}.");
+        else
+        {
+            try
+            {
+                metadata = PluginIni.Parse(File.ReadAllText(Path.Combine(stage, "plugin.cfg")));
+                if (metadata.Count == 0) throw new InvalidDataException("Missing [plugin] section.");
+            }
+            catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or UnauthorizedAccessException)
+            { Add("R2", FindingSeverity.Error, "Cannot parse staged plugin.cfg: " + ex.Message); }
+            foreach (var key in new[] { "name", "version", "script" })
+                if (string.IsNullOrWhiteSpace(metadata.GetValueOrDefault(key))) Add("R3", FindingSeverity.Error, $"plugin.cfg has no {key}.");
+            if (addon) Add("R24", FindingSeverity.Info, "The new version has a plugin.cfg, so it becomes a plugin. Enable it in the ePlugin Manager after the update.");
+        }
         var script = metadata.GetValueOrDefault("script") ?? "";
-        try { if (!File.Exists(PackageFiles.Inside(stage, script))) Add("R4", FindingSeverity.Error, "Plugin script is missing."); }
+        try { if (!configless && !File.Exists(PackageFiles.Inside(stage, script))) Add("R4", FindingSeverity.Error, "Plugin script is missing."); }
         catch (InvalidDataException) { Add("R4", FindingSeverity.Error, "Plugin script must be a relative path inside the addon."); }
         if (candidate.Slug != installed.Slug || Path.GetFileName(stage) != installed.Slug)
             Add("R5", FindingSeverity.Error, "Staged addon slug differs from the installed slug.");
-        var validNew = SemVer.TryParse(metadata.GetValueOrDefault("version"), out var version);
-        var versionProblem = $"Package plugin.cfg version '{metadata.GetValueOrDefault("version") ?? "missing"}' must be newer than installed version '{installed.InstalledVersion}' (announced: '{candidate.NewVersion}').";
+        var packageVersion = configless ? candidate.NewVersion : metadata.GetValueOrDefault("version");
+        var validNew = SemVer.TryParse(packageVersion, out var version);
+        var versionProblem = configless
+            ? $"Announced version '{candidate.NewVersion}' must be newer than installed version '{installed.InstalledVersion}'."
+            : $"Package plugin.cfg version '{packageVersion ?? "missing"}' must be newer than installed version '{installed.InstalledVersion}' (announced: '{candidate.NewVersion}').";
         var validAnnounced = SemVer.TryParse(candidate.NewVersion, out var announced);
         var validOld = SemVer.TryParse(installed.InstalledVersion, out var old);
         // A release announced as an update whose plugin.cfg still names the installed or an older version, usually because
@@ -58,7 +72,13 @@ internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules 
         // because it cannot finish or recover the update transaction that installs it.
         var mislabeled = validNew && validOld && validAnnounced && announced.CompareTo(old) > 0 && version.CompareTo(old) <= 0 &&
                          !context.AllowReinstall && !context.AllowDowngrade && (version.CompareTo(old) == 0 || installed.Slug != "ePlugin");
-        if (!validNew || !validOld)
+        if (addon && string.IsNullOrWhiteSpace(installed.InstalledVersion))
+        {
+            // Installed by hand: ePlugin never recorded its version, so any version may replace it.
+            if (validNew) Add("R6", FindingSeverity.Info, $"The installed version is unknown, because the add-on has no plugin.cfg and ePlugin did not install it. Installing {version} replaces it.");
+            else Add("R6", FindingSeverity.Error, $"Package version '{packageVersion ?? "missing"}' cannot be compared.");
+        }
+        else if (!validNew || !validOld)
             Add("R6", FindingSeverity.Error, versionProblem);
         else if (mislabeled)
             Add("R6", FindingSeverity.Warning, version.CompareTo(old) == 0
@@ -78,7 +98,8 @@ internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules 
         // The R6 warning of a mislabeled release already says how the versions differ.
         if (validNew && validAnnounced && version.CompareTo(announced) != 0 && !mislabeled)
             Add("R7", FindingSeverity.Warning, "Package version differs from the announced version.");
-        if (metadata.GetValueOrDefault("name") != installed.Name) Add("R8", FindingSeverity.Warning, "Plugin name changed.");
+        // An add-on's name is its slug or the built-in list's name, never one from its files.
+        if (!addon && metadata.GetValueOrDefault("name") != installed.Name) Add("R8", FindingSeverity.Warning, "Plugin name changed.");
         var newUrl = metadata.GetValueOrDefault("update_url");
         if (newUrl != installed.UpdateUrl)
         {

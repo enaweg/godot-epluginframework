@@ -59,6 +59,15 @@ internal interface IEditorHost
     void AddAutoload(EditorPlugin plugin, string name, string path);
 
     void RemoveAutoload(EditorPlugin plugin, string name);
+
+    /// <summary>Whether Godot has loaded the GDExtension whose <c>.gdextension</c> file is <paramref name="file"/> (a file system path).</summary>
+    bool IsExtensionLoaded(string file);
+
+    /// <summary>Loads the GDExtension of <paramref name="file"/>; false when Godot could not.</summary>
+    bool LoadExtension(string file);
+
+    /// <summary>Unloads the GDExtension of <paramref name="file"/>, which closes its libraries; false when Godot could not.</summary>
+    bool UnloadExtension(string file);
 }
 
 /// <summary>The Godot editor.</summary>
@@ -129,6 +138,15 @@ internal sealed class EditorHost : IEditorHost
     public void AddAutoload(EditorPlugin plugin, string name, string path) => plugin.AddAutoloadSingleton(name, path);
 
     public void RemoveAutoload(EditorPlugin plugin, string name) => plugin.RemoveAutoloadSingleton(name);
+
+    public bool IsExtensionLoaded(string file) => GDExtensionManager.IsExtensionLoaded(ResourcePath(file));
+
+    public bool LoadExtension(string file) => GDExtensionManager.LoadExtension(ResourcePath(file)) == GDExtensionManager.LoadStatus.Ok;
+
+    public bool UnloadExtension(string file) => GDExtensionManager.UnloadExtension(ResourcePath(file)) == GDExtensionManager.LoadStatus.Ok;
+
+    // GDExtensionManager knows the extensions it loaded by their res:// path.
+    private static string ResourcePath(string file) => ProjectSettings.LocalizePath(file.Replace('\\', '/'));
 
     /// <summary>The plugin slugs of <c>editor_plugins/enabled</c> entries (<c>res://addons/&lt;slug&gt;/plugin.cfg</c>).</summary>
     internal static IReadOnlySet<string> ParseEnabledPlugins(IEnumerable<string> paths) =>

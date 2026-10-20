@@ -75,6 +75,20 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
     private string Installed(string slug) => PackageFiles.Inside(Path.Combine(projectRoot, "addons"), slug);
 
     /// <summary>
+    /// The installed version: the plugin.cfg's, or for a GDExtension add-on, which has none, the one the shared state
+    /// recorded when ePlugin installed it ("" when it did not).
+    /// </summary>
+    private string? InstalledVersion(string slug, PluginKind kind) =>
+        kind == PluginKind.GDExtensionAddon ? store.GetShared(slug)?.Version ?? ""
+        : PluginIni.Parse(File.ReadAllText(Path.Combine(Installed(slug), "plugin.cfg"))).GetValueOrDefault("version");
+
+    /// <summary>The version a package installs: its plugin.cfg's, or the announced one of an add-on without plugin.cfg.</summary>
+    internal static string PackageVersion(ValidatedPackage package) =>
+        File.Exists(Path.Combine(package.StagingDir, "plugin.cfg"))
+            ? PluginIni.Parse(File.ReadAllText(Path.Combine(package.StagingDir, "plugin.cfg"))).GetValueOrDefault("version")!
+            : package.NewVersion.ToString();
+
+    /// <summary>
     /// Installs the groups of one staged batch one after another, each as its own transaction: a group that fails is
     /// rolled back alone and the next group is still installed on top of the ones that succeeded. A batch of one group
     /// is applied exactly like <see cref="Apply"/>, including its exceptions.
@@ -176,9 +190,9 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         {
             var slug = package.Candidate.Slug;
             if (!host.IsEnabled(slug)) throw new InvalidOperationException($"Plugin {slug} is no longer enabled.");
-            var old = PluginIni.Parse(File.ReadAllText(Path.Combine(Installed(slug), "plugin.cfg"))).GetValueOrDefault("version");
+            var old = InstalledVersion(slug, package.Kind);
             if (old != package.Candidate.InstalledVersion) throw new InvalidOperationException($"Plugin {slug} changed since the update check; check again.");
-            var next = PluginIni.Parse(File.ReadAllText(Path.Combine(package.StagingDir, "plugin.cfg"))).GetValueOrDefault("version")!;
+            var next = PackageVersion(package);
             var managed = host.IsManaged(slug);
             journal.Plugins.Add(new() { Slug = slug, OldVersion = old!, NewVersion = next, IsEPlugin = managed,
                 Kind = PluginKinds.ForJournal(slug, managed, package.Kind).ToString(), WasEnabled = true,
@@ -301,6 +315,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                 cache.State.Revisions[plugin.Slug] = new(plugin.SourceUrl, plugin.Revision, DateTimeOffset.UtcNow, plugin.NewVersion);
                 cache.State.Results.RemoveAll(c => c.Slug == plugin.Slug);
                 host.Log(plugin.OldVersion == plugin.NewVersion ? $"Reinstalled {plugin.Slug} {plugin.NewVersion}."
+                    : plugin.OldVersion.Length == 0 ? $"Installed {plugin.Slug} {plugin.NewVersion} over a version ePlugin did not know."
                     : $"Updated {plugin.Slug} {plugin.OldVersion} -> {plugin.NewVersion}.");
             }
             cache.Save();
@@ -356,7 +371,8 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                     workflow.AfterRestore(new(host, journal, plugin, installed, discarded));
                     journal.Save();
                 }
-                else if (plugin.SwapStarted && (!File.Exists(Path.Combine(installed, "plugin.cfg")) ||
+                // A GDExtension add-on has no plugin.cfg to tell; its file swap backs up everything before it changes a file.
+                else if (plugin.SwapStarted && PluginKinds.Workflow(plugin) is not GDExtensionAddonWorkflow && (!File.Exists(Path.Combine(installed, "plugin.cfg")) ||
                     PluginIni.Parse(File.ReadAllText(Path.Combine(installed, "plugin.cfg"))).GetValueOrDefault("version") != plugin.OldVersion))
                     throw new IOException($"Backup for {plugin.Slug} is missing; restore manually.");
             }

@@ -115,7 +115,10 @@ internal sealed partial class EGlobal
     }
 
     /// <summary>The welcome page the ePlugin Manager links in a plugin's details; null when the plugin has none.</summary>
-    internal WelcomeEntry? DescribeWelcome(string slug) => ReadInstalledWelcome(slug, RecipeOf(slug));
+    internal WelcomeEntry? DescribeWelcome(string slug) => ReadInstalledWelcome(slug, RecipeOf(slug)) ??
+        // a GDExtension add-on has no plugin.cfg, but may have a README; it is linked, never shown on its own
+        (IsExtensionAddon(slug) ? PluginWelcome.FromConfig(slug, KnownPluginOf(slug)?.Name ?? slug, ExtensionAddonVersion(slug) ?? "", null,
+            ProjectSettings.GlobalizePath(_host.PluginDirectory(slug))) : null);
 
     /// <summary>Records the welcome pages of a closed welcome dialog as shown, so they are not shown again.</summary>
     internal void CompleteWelcomes(IEnumerable<WelcomeEntry> shown)

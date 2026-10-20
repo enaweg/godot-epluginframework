@@ -159,7 +159,8 @@ internal sealed partial class EGlobal
         _plainPluginObserver = new PlainPluginObserver(_stateStore, GetEnabledPluginSlugs,
             InstalledVersion,
             IsManagedPlugin,
-            slug => _updateJournals?.OwnedSlugs.Contains(slug) == true,
+            // a GDExtension add-on is recorded as activated, but never enabled
+            slug => _updateJournals?.OwnedSlugs.Contains(slug) == true || IsExtensionAddon(slug),
             plugin.Logger);
         RefreshPlainPlugins();
         InitializePluginToggles();
@@ -762,12 +763,12 @@ internal sealed partial class EGlobal
         var recipe = context.Builder.PluginRecipe;
         foreach (var dependency in recipe.PluginDependencies)
         {
-            if (_recipeUpdateJournal is not null && !_host.IsPluginEnabled(dependency.Slug))
+            if (_recipeUpdateJournal is not null && !IsDependencyAvailable(dependency.Slug))
             {
                 EnsureUpdateDependency(dependency);
             }
 
-            if (!_host.IsPluginEnabled(dependency.Slug))
+            if (!IsDependencyAvailable(dependency.Slug))
             {
                 if (IsManagedPlugin(dependency.Slug))
                 {
@@ -791,9 +792,11 @@ internal sealed partial class EGlobal
                 var dependencyVersion = dependencyContext?.Metadata?.Version ?? InstalledVersion(dependency.Slug);
                 if (dependencyVersion is null)
                 {
-                    context.Logger?.Warn($"Plugin {dependency.Slug} not found!");
+                    var unknown = $"The version of the GDExtension {dependency.Slug} is unknown, so it cannot be checked against {dependency.Version}. Install a version of it in the ePlugin Manager.";
+                    var addon = IsExtensionAddon(dependency.Slug);
+                    context.Logger?.Warn(addon ? unknown : $"Plugin {dependency.Slug} not found!");
                     _toCheckEnable.Push(context);
-                    FailAllUncheckedPluginsAndRefresh($"Plugin dependency {dependency.Slug} not found!");
+                    FailAllUncheckedPluginsAndRefresh(addon ? unknown : $"Plugin dependency {dependency.Slug} not found!");
                     return;
                 }
 
@@ -919,7 +922,8 @@ internal sealed partial class EGlobal
         return true;
     }
 
-    private string? InstalledVersion(string slug) => ReadInstalledMetadata(slug)?.Version;
+    /// <summary>The version in a plugin's plugin.cfg, or the recorded one of a GDExtension add-on; null when neither is known.</summary>
+    private string? InstalledVersion(string slug) => ReadInstalledMetadata(slug)?.Version ?? (IsExtensionAddon(slug) ? ExtensionAddonVersion(slug) : null);
 
     /// <summary>The plugin.cfg of a plugin below addons, enabled or not; null when it cannot be read.</summary>
     private EEditorPluginMetadata? ReadInstalledMetadata(string slug) =>
@@ -981,7 +985,7 @@ internal sealed partial class EGlobal
                 continue;
             }
 
-            if (optional.Slug != assumeEnabledSlug && !_host.IsPluginEnabled(optional.Slug))
+            if (optional.Slug != assumeEnabledSlug && !IsDependencyAvailable(optional.Slug))
             {
                 context.Logger?.Log(
                     $"Optional dependency {optional.Slug} not enabled, skipping its recipe for {context.Slug}.");
@@ -1170,7 +1174,7 @@ internal sealed partial class EGlobal
         {
             foreach (var nuget in recipe.Nugets) TrackRecipeOperation(context, new(RecipeOperationKind.AddNuget, Nuget: nuget), () => ApplyNuget(context, nuget));
             foreach (var project in recipe.Projects) TrackRecipeOperation(context, new(RecipeOperationKind.AddProject, Project: project), () => ApplyProject(context, project));
-            foreach (var directory in recipe.Directories) TrackRecipeOperation(context, new(RecipeOperationKind.ShowDirectory, Directory: directory), () => ShowHideHelper.ShowDirectory(context, directory));
+            foreach (var directory in recipe.Directories) TrackRecipeOperation(context, new(RecipeOperationKind.ShowDirectory, Directory: directory), () => ShowHideHelper.ShowDirectory(context, directory, _host));
             foreach (var autoload in recipe.Autoloads) TrackRecipeOperation(context, new(RecipeOperationKind.AddAutoload, Autoload: autoload), () => ApplyAutoload(context, autoload));
         }
         catch (Exception ex)
@@ -1334,7 +1338,7 @@ internal sealed partial class EGlobal
     private void ReverseRecipe(PluginContext context, EEditorPluginRecipe recipe)
     {
         foreach (var autoload in recipe.Autoloads) ReverseAutoload(context, autoload);
-        foreach (var directory in recipe.Directories) ShowHideHelper.HideDirectory(context, directory);
+        foreach (var directory in recipe.Directories) ShowHideHelper.HideDirectory(context, directory, _host);
         foreach (var project in recipe.Projects) ReverseProject(context, project);
         foreach (var nuget in recipe.Nugets) ReverseNuget(context, nuget);
     }
