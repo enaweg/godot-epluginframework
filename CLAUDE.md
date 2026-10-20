@@ -60,8 +60,9 @@ The progress helper's command handling has plain xUnit tests that need no Godot:
 dotnet test "src/activation-progress.Tests/ActivationProgress.Tests.csproj"
 ```
 Repository tooling is C# on .NET 10, not Python or shell scripts: single-file apps in `tools/` (`dotnet run tools/<name>.cs
--- <args>`: `coverage.cs`, `progress_smoke.cs`, `screenshots/capture.cs`, the known-plugins generators) and the CI
-reports project `tools/ci-reports` (coverage comment and `coverage` branch, static-analysis summary), tested with:
+-- <args>`: `coverage.cs`, `progress_smoke.cs`, `package_release.cs` (a test build of the release archive),
+`screenshots/capture.cs`, the known-plugins generators) and the CI reports project `tools/ci-reports` (coverage comment
+and `coverage` branch, static-analysis summary), tested with:
 ```
 dotnet test "tools/ci-reports.Tests/CiReports.Tests.csproj"
 ```
