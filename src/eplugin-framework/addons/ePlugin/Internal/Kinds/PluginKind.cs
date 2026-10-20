@@ -25,6 +25,11 @@ internal enum PluginKind
     /// </summary>
     GDExtension,
     /// <summary>A plugin whose entry script is missing or neither GDScript nor C#.</summary>
-    Unknown
+    Unknown,
+    /// <summary>
+    /// A GDExtension in its own folder below <c>res://addons</c> without a <c>plugin.cfg</c>. Godot loads it, nothing
+    /// enables or disables it, and its version is the one ePlugin recorded when it installed it.
+    /// </summary>
+    GDExtensionAddon
 }
 #endif

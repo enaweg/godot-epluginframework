@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Enaweg.Plugin.Internal.Dotnet;
+using Enaweg.Plugin.Internal.Kinds;
 using Enaweg.Plugin.Internal.Update;
 using Godot;
 
@@ -313,7 +314,8 @@ internal sealed partial class EGlobal
         public bool UiAvailable => global.LicenseUiAvailable;
         public string BuildFailurePolicy => ProjectSettings.GetSetting("eplugin/updates/on_build_failure", "ask").AsString();
         public bool RestartAlways => ProjectSettings.GetSetting("eplugin/updates/restart_policy", "auto").AsString() == "always";
-        public bool IsEnabled(string slug) => global._host.IsPluginEnabled(slug);
+        // A GDExtension add-on is never enabled, but Godot always runs it.
+        public bool IsEnabled(string slug) => global._host.IsPluginEnabled(slug) || global.IsExtensionAddon(slug);
         public bool IsManaged(string slug) => global.IsManagedPlugin(slug);
         public void Preflight(IReadOnlyList<ValidatedPackage> packages)
         {
@@ -324,7 +326,7 @@ internal sealed partial class EGlobal
             foreach (var package in packages.Where(p => IsManaged(p.Candidate.Slug)))
                 if (global._contexts.FirstOrDefault(c => c.Slug == package.Candidate.Slug)?.State != EEditorPluginState.Activated)
                     throw new InvalidOperationException($"Finish enabling {package.Candidate.Slug} before updating it.");
-            var findings = global.UpdatePreflightFindings(packages.Select(p => p.Candidate with { NewVersion = PluginIni.Parse(File.ReadAllText(Path.Combine(p.StagingDir, "plugin.cfg")))["version"] }).ToArray());
+            var findings = global.UpdatePreflightFindings(packages.Select(p => p.Candidate with { NewVersion = UpdateApplier.PackageVersion(p) }).ToArray());
             if (findings.Any(f => f.Severity == FindingSeverity.Error)) throw new InvalidOperationException(string.Join("; ", findings.Where(f => f.Severity == FindingSeverity.Error).Select(f => f.Message)));
             foreach (var warning in findings.Where(f => f.Severity == FindingSeverity.Warning)) Log(warning.Message);
             if (global._toCheckEnable.Count > 0 || global._toCheckDisable.Count > 0) throw new InvalidOperationException("Finish plugin transitions before updating.");
@@ -396,6 +398,9 @@ internal sealed partial class EGlobal
         }
         public bool Verify(UpdatePluginJournal plugin)
         {
+            // An add-on has no version in its files; what is there to check is that it is still a GDExtension or became a plugin.
+            if (PluginKinds.Workflow(plugin) is GDExtensionAddonWorkflow)
+                return global.IsExtensionAddon(plugin.Slug) || File.Exists(Path.Combine(ProjectSettings.GlobalizePath(global._host.PluginDirectory(plugin.Slug)), "plugin.cfg"));
             var metadata = EditorPluginExtensions.ReadMetadata($"{global._host.PluginDirectory(plugin.Slug)}/plugin.cfg");
             return (plugin.Slug != "ePlugin" || global.IsValid()) && IsEnabled(plugin.Slug) && metadata?.Version == plugin.NewVersion &&
                 global._contexts.FirstOrDefault(c => c.Slug == plugin.Slug)?.State != EEditorPluginState.Error;

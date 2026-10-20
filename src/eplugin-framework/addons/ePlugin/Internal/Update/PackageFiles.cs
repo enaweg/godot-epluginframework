@@ -92,7 +92,8 @@ internal static class PluginIni
 internal static class PackageFiles
 {
     public const int MaximumFiles = 20000;
-    public const long MaximumTotal = 512L * 1024 * 1024;
+    // GDExtensions ship a library per platform; one of over 100 MiB each already extracts to more than 512 MiB.
+    public const long MaximumTotal = 1024L * 1024 * 1024;
     public const long MaximumFile = 256L * 1024 * 1024;
     /// <summary>How the local file system compares paths: case-insensitively on Windows only.</summary>
     public static readonly StringComparison PathComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;

@@ -68,18 +68,20 @@ installed, `UpdateService.WithoutInstalled` hides it using the revision and vers
 ## Plugin kinds
 
 `Internal/Kinds/` tells the kinds of plugins apart (`PluginKind`: Framework, EPlugin, CSharp, GDScript, GDExtension,
-Unknown) and gives each its own sealed `PluginKindWorkflow`, so the update steps that differ between kinds are in one
+Unknown, GDExtensionAddon) and gives each its own sealed `PluginKindWorkflow`, so the update steps that differ between kinds are in one
 class per kind and every decision is logged with the kind's name (`GDExtension plugin native: ...`). `UpdateApplier`
 runs the same steps for every kind: `BeforeSwap`, disable (`DisabledDuringSwap`), `Swap.Install`, the uid map and the
 interim bridge, `AfterSwap`; on rollback `Swap.Restore` and `AfterRestore`; `NeedsRestart` after commit and rollback.
 `Validate` adds the kind's findings to `AddonPackageValidator`.
 
 `PluginKinds.Classify` is the manager's classification (an ePlugin by its compiled script type, a GDExtension plugin by
-a `.gdextension` file below its folder, otherwise by the entry script). Updates use `ForPackage` (the installed
-framework or ePlugin keeps its kind, a `.gdextension` in the installed or staged version makes it a GDExtension plugin)
+a `.gdextension` file below its folder, otherwise by the entry script); a folder without `plugin.cfg` whose
+`.gdextension` lies outside hidden folders is a GDExtension add-on (`PluginKinds.IsExtensionAddon`, `EGlobal.ExtensionAddons.cs`).
+Updates use `ForPackage` (the installed framework, ePlugin or GDExtension add-on keeps its kind, a `.gdextension` in the
+installed or staged version makes it a GDExtension plugin)
 and record the kind by name in `UpdatePluginJournal.Kind`. Journals without it, or with a kind this version does not
-know, fall back to `IsEPlugin` (Framework, EPlugin or Unknown). The swap is chosen per plugin (`Swap(plugin)`): the
-GDExtension workflow always uses `AddonFileSwap`, the ePlugin workflow when `UpdatePluginJournal.NativeExtension` says
+know, fall back to `IsEPlugin` (Framework, EPlugin or Unknown). The swap is chosen per plugin (`Swap(plugin)`): both
+GDExtension workflows always use `AddonFileSwap`, the ePlugin workflow when `UpdatePluginJournal.NativeExtension` says
 the installed or staged version has a `.gdextension`, every other case the folder swap.
 
 ### GDExtension plugins
@@ -93,18 +95,37 @@ changes; then it deletes the old files (one that cannot be deleted but can be re
 directly, goes to `discarded/<slug>`), moves the staged files in, and removes the folders left empty. Restoring deletes
 the new files and copies the backup back, so an interrupted swap or restore can be repeated.
 
-`GDExtensionPluginWorkflow.AfterSwap` compares the `.gdextension` files (`GDExtensionConfig`) of the backup and the new
+`NativeExtensionWorkflow.AfterSwap` (the base of `GDExtensionPluginWorkflow` and `GDExtensionAddonWorkflow`, which
+differ only in `DisabledDuringSwap`) compares the `.gdextension` files (`GDExtensionConfig`) of the backup and the new
 version: the same files, all `reloadable` in both, and nothing discarded reload in place through
 `IUpdateHost.ReloadExtension` (`GDExtensionManager.ReloadExtension`); anything else sets `RestartRequired`, and `Commit`
 restarts the editor. `NativeSession` names the editor process the flags refer to: after a rollback, an editor that
 neither reloaded nor restarted since the swap still runs the restored libraries and needs nothing; otherwise the restored
 extension is reloaded in place or the editor restarts. `GDExtensionRules` refuses libraries outside the plugin folder
-(R18), a missing library for the editor's platform (R19) and a linked plugin folder (R20), for GDExtension plugins and
-ePlugins alike; R21 says whether the update reloads or restarts. An ePlugin with a GDExtension needs no reload logic: its
+(R18, a warning for icons), a missing library for the editor's platform (R19), a linked plugin folder (R20) and an
+extension outside the editor's Godot version limits (R22, `GDExtensionConfig.CompatibilityProblem`, which follows
+Godot's own check), and warns about platforms or release libraries the installed version had and the new one drops
+(R23, `DroppedPlatforms`), for every kind with a GDExtension; R21 says whether the update reloads or restarts. An
+ePlugin with a GDExtension needs no reload logic: its
 update always builds and restarts, which loads the new libraries, and so does its rollback. Only the framework refuses a
 GDExtension (R10): it ships none, and early self-update recovery replaces its folder at startup, after Godot loaded
-every extension. GDExtensions in `AddDirectory` directories are not supported: showing and hiding renames the folder,
-which the runtime copies keep open on Windows.
+every extension. GDExtensions in `AddDirectory` directories must be reloadable: `ShowHideHelper` unloads them through
+`IEditorHost.UnloadExtension` before hiding (which closes the runtime copies that keep the folder from being renamed on
+Windows), loads them after showing, and refuses to show a directory with one that is not reloadable.
+
+### GDExtension add-ons
+
+A GDExtension add-on has no `plugin.cfg`, so nothing in its files names a version or an update site. Its installed
+version is the one the shared state recorded (`PluginStateStore.GetShared`), written by `TryAcknowledgeVersions` like
+any update's; until then it is "" and `CheckForUpdatesAsync` leaves it out (`Checked`), while versions are still listed
+and installed from the manager. `AddonPackageValidator` takes the announced version for a package without `plugin.cfg`
+(R6 is informational while the installed version is unknown, R24 when the new version brings a `plugin.cfg`), and
+`UpdateApplier` reads the old version from the store (`InstalledVersion`) and the new one from the package
+(`PackageVersion`). The add-on is never disabled, `IUpdateHost.IsEnabled` counts it as enabled, and verification only
+checks that it is still an add-on or became a plugin. Staging finds its folder with `SafeZipExtractor.PackageRoot` /
+`ExtensionRoot` (the shallowest folder named like the slug holding a `.gdextension`), also in git; a git source pinned
+to a branch cannot name its version, so only tags and releases update it. `PlainPluginObserver` treats it as owned, so
+its activated shared entry is not reported as a disabled plugin.
 
 ## Staging and swapping
 

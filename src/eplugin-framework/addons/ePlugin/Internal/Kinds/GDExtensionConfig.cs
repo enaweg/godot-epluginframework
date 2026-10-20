@@ -21,6 +21,35 @@ internal sealed record GDExtensionLibrary(string Feature, string Path);
 internal sealed partial record GDExtensionConfig(bool Reloadable, IReadOnlyList<GDExtensionLibrary> Libraries, IReadOnlyList<GDExtensionLibrary> Dependencies)
 {
     public const string Extension = ".gdextension";
+    /// <summary>The <c>compatibility_minimum</c> of <c>[configuration]</c> as written, null without one.</summary>
+    public string? CompatibilityMinimum { get; init; }
+    /// <summary>The <c>compatibility_maximum</c> of <c>[configuration]</c> as written, null without one.</summary>
+    public string? CompatibilityMaximum { get; init; }
+    /// <summary>The <c>[icons]</c> entries: the class name as feature, the icon path as path.</summary>
+    public IReadOnlyList<GDExtensionLibrary> Icons { get; init; } = [];
+
+    private static (int Major, int Minor, int Patch)? _editorVersion;
+
+    /// <summary>
+    /// The version of the editor running here (major, minor, patch), asked from Godot when first needed. Settable so tests,
+    /// also those without a Godot runtime, check the version limits of <see cref="CompatibilityProblem"/> against a known
+    /// version; <see cref="ResetEditorVersion"/> asks Godot again.
+    /// </summary>
+    internal static (int Major, int Minor, int Patch) EditorVersion
+    {
+        get => _editorVersion ??= ReadEditorVersion();
+        set => _editorVersion = value;
+    }
+
+    internal static void ResetEditorVersion() => _editorVersion = null;
+
+    private static (int, int, int) ReadEditorVersion()
+    {
+        var info = Godot.Engine.GetVersionInfo();
+        return (info["major"].AsInt32(), info["minor"].AsInt32(), info["patch"].AsInt32());
+    }
+
+    private static readonly string[] BuildTags = ["debug", "release", "editor", "template", "template_debug", "template_release", "double", "single"];
     // A quoted string with backslash escapes; group 1 is its text without the quotes.
     [GeneratedRegex("\"((?:[^\"\\\\]|\\\\.)*)\"", RegexOptions.CultureInvariant)]
     private static partial Regex QuotedString();
@@ -34,8 +63,10 @@ internal sealed partial record GDExtensionConfig(bool Reloadable, IReadOnlyList<
     public static GDExtensionConfig Parse(string text)
     {
         var reloadable = false;
+        string? minimum = null, maximum = null;
         var libraries = new List<GDExtensionLibrary>();
         var dependencies = new List<GDExtensionLibrary>();
+        var icons = new List<GDExtensionLibrary>();
         var section = "";
         var lines = text.Replace("\r\n", "\n").Split('\n');
         for (var i = 0; i < lines.Length; i++)
@@ -54,8 +85,17 @@ internal sealed partial record GDExtensionConfig(bool Reloadable, IReadOnlyList<
                 case "configuration" when key == "reloadable":
                     reloadable = value.Split(';')[0].Trim() == "true";
                     break;
+                case "configuration" when key == "compatibility_minimum":
+                    minimum = Text(value);
+                    break;
+                case "configuration" when key == "compatibility_maximum":
+                    maximum = Text(value);
+                    break;
                 case "libraries":
                     if (QuotedString().Match(value) is { Success: true } path) libraries.Add(new(key, Unescape(path.Groups[1].Value)));
+                    break;
+                case "icons":
+                    if (QuotedString().Match(value) is { Success: true } icon) icons.Add(new(key, Unescape(icon.Groups[1].Value)));
                     break;
                 case "dependencies":
                     // { "res://bin/dep.dll" : "", "dep2.dll" : "subdir" }: the keys are the files, the values export folders.
@@ -64,7 +104,80 @@ internal sealed partial record GDExtensionConfig(bool Reloadable, IReadOnlyList<
                     break;
             }
         }
-        return new(reloadable, libraries, dependencies);
+        return new(reloadable, libraries, dependencies) { CompatibilityMinimum = minimum, CompatibilityMaximum = maximum, Icons = icons };
+    }
+
+    // A quoted string's text, or an unquoted value (such as 4.1 written as a number) without its comment.
+    private static string Text(string value) =>
+        QuotedString().Match(value) is { Success: true } quoted ? Unescape(quoted.Groups[1].Value) : value.Split(';')[0].Trim();
+
+    /// <summary>
+    /// Why the editor running here refuses to load the extension because of its version limits, or null when it loads
+    /// it. Like Godot: <c>compatibility_minimum</c> is required and at least 4.1, missing parts of it count as 0 and missing
+    /// parts of <c>compatibility_maximum</c> as any version.
+    /// </summary>
+    public string? CompatibilityProblem()
+    {
+        if (string.IsNullOrWhiteSpace(CompatibilityMinimum)) return "it names no compatibility_minimum, which Godot requires";
+        var minimum = Parts(CompatibilityMinimum, 0);
+        if (minimum[0] < 4 || minimum[0] == 4 && minimum[1] == 0) return $"its compatibility_minimum {CompatibilityMinimum} is older than 4.1, which Godot does not load";
+        var editor = EditorVersion;
+        var current = new[] { editor.Major, editor.Minor, editor.Patch };
+        var text = $"{editor.Major}.{editor.Minor}.{editor.Patch}";
+        if (Compare(current, minimum) < 0) return $"it needs Godot {CompatibilityMinimum} or newer, and this editor is {text}";
+        if (!string.IsNullOrWhiteSpace(CompatibilityMaximum) && Compare(current, Parts(CompatibilityMaximum, int.MaxValue)) > 0)
+            return $"it supports Godot up to {CompatibilityMaximum}, and this editor is {text}";
+        return null;
+
+        static int[] Parts(string version, int missing)
+        {
+            var parts = version.Trim().Split('.');
+            return Enumerable.Range(0, 3).Select(i => i < parts.Length && int.TryParse(parts[i], out var part) && part >= 0 ? part : missing).ToArray();
+        }
+        static int Compare(int[] left, int[] right)
+        {
+            for (var i = 0; i < 3; i++) if (left[i] != right[i]) return left[i].CompareTo(right[i]);
+            return 0;
+        }
+    }
+
+    /// <summary>
+    /// The platforms <paramref name="before"/> loads a library on that <paramref name="after"/> no longer does, as messages
+    /// such as "linux.x86_64" or "a release library for windows.x86_64". A platform is an operating system with an
+    /// optional architecture; one without an architecture covers every architecture, and a universal macOS library is
+    /// covered by any macOS one. A release library is any library not limited to debug or editor builds.
+    /// </summary>
+    public static IReadOnlyList<string> DroppedPlatforms(GDExtensionConfig before, GDExtensionConfig after)
+    {
+        var dropped = new List<string>();
+        var old = before.Libraries.Select(l => Platform(l.Feature)).Where(p => p.Os is not null).ToArray();
+        var next = after.Libraries.Select(l => Platform(l.Feature)).Where(p => p.Os is not null).ToArray();
+        foreach (var group in old.GroupBy(p => (p.Os, p.Architecture)))
+        {
+            var name = group.Key.Architecture is null ? group.Key.Os! : $"{group.Key.Os}.{group.Key.Architecture}";
+            var covering = next.Where(p => Covers(p, group.Key.Os!, group.Key.Architecture)).ToArray();
+            if (covering.Length == 0) dropped.Add(name);
+            else if (group.Any(p => p.Release) && !covering.Any(p => p.Release)) dropped.Add("a release library for " + name);
+        }
+        return dropped;
+
+        static bool Covers((string? Os, string? Architecture, bool Release) platform, string os, string? architecture) =>
+            platform.Os == os && (platform.Architecture is null || platform.Architecture == architecture ||
+                                  architecture is null || os == "macos" && architecture == "universal");
+    }
+
+    /// <summary>The platform of a library entry, such as "linux.x86_64" or "macos"; null when it names no operating system.</summary>
+    public static string? PlatformName(string feature) =>
+        Platform(feature) is { Os: { } os } platform ? platform.Architecture is null ? os : $"{os}.{platform.Architecture}" : null;
+
+    /// <summary>The operating system and architecture a library entry is for, and whether release builds load it.</summary>
+    private static (string? Os, string? Architecture, bool Release) Platform(string feature)
+    {
+        var tags = feature.Split('.');
+        var os = tags.FirstOrDefault(t => !Architectures.Contains(t, StringComparer.Ordinal) && !BuildTags.Contains(t, StringComparer.Ordinal));
+        var architecture = tags.FirstOrDefault(t => Architectures.Contains(t, StringComparer.Ordinal));
+        var release = !tags.Any(t => t is "debug" or "editor" or "template_debug");
+        return (os, architecture, release);
     }
 
     private static int Depth(string value)

@@ -20,6 +20,7 @@ internal static class PluginKinds
         PluginKind.CSharp => CSharpPluginWorkflow.Instance,
         PluginKind.GDScript => GDScriptPluginWorkflow.Instance,
         PluginKind.GDExtension => GDExtensionPluginWorkflow.Instance,
+        PluginKind.GDExtensionAddon => GDExtensionAddonWorkflow.Instance,
         _ => UnknownPluginWorkflow.Instance
     };
 
@@ -51,14 +52,15 @@ internal static class PluginKinds
     }
 
     /// <summary>
-    /// The kind an update treats a package as: an installed framework or ePlugin keeps its kind; otherwise a
-    /// <c>.gdextension</c> in the installed or the staged version makes it a GDExtension plugin, so its libraries are
-    /// replaced like one's; otherwise the staged entry script decides.
+    /// The kind an update treats a package as: an installed framework, ePlugin or GDExtension add-on keeps its kind (an
+    /// add-on whose new version brings a plugin.cfg becomes a plugin only after the update, since nothing enabled it);
+    /// otherwise a <c>.gdextension</c> in the installed or the staged version makes it a GDExtension plugin, so its
+    /// libraries are replaced like one's; otherwise the staged entry script decides.
     /// </summary>
     public static PluginKind ForPackage(PluginUpdateTarget installed, string? stagedScript, IEnumerable<string> stagedFiles, IEnumerable<string> installedFiles)
     {
         if (installed.Kind == PluginKind.Framework || installed.Slug == FrameworkSlug) return PluginKind.Framework;
-        if (installed.Kind == PluginKind.EPlugin) return PluginKind.EPlugin;
+        if (installed.Kind is PluginKind.EPlugin or PluginKind.GDExtensionAddon) return installed.Kind;
         if (stagedFiles.Concat(installedFiles).Any(GDExtensionConfig.IsExtensionFile)) return PluginKind.GDExtension;
         return ByScript(stagedScript);
     }
@@ -71,6 +73,22 @@ internal static class PluginKinds
         slug == FrameworkSlug ? PluginKind.Framework
         : managed ? PluginKind.EPlugin
         : validated is PluginKind.Framework or PluginKind.EPlugin ? PluginKind.Unknown : validated;
+
+    /// <summary>
+    /// Whether <paramref name="directory"/> (a file system path) is a GDExtension add-on: a folder without a
+    /// <c>plugin.cfg</c> that contains a <c>.gdextension</c> file outside hidden folders.
+    /// </summary>
+    public static bool IsExtensionAddon(string directory)
+    {
+        try
+        {
+            return !File.Exists(Path.Combine(directory, "plugin.cfg")) && Directory.Exists(directory) &&
+                   Directory.EnumerateFiles(directory, "*" + GDExtensionConfig.Extension, new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint })
+                       .Select(f => Path.GetRelativePath(directory, f).Replace('\\', '/'))
+                       .Any(f => !PackageFiles.Skip(f) && !f.Split('/').Any(part => part.StartsWith('.')));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+    }
 
     /// <summary>Whether <paramref name="directory"/> (a file system path) contains a <c>.gdextension</c> file.</summary>
     public static bool HasNativeExtension(string directory)

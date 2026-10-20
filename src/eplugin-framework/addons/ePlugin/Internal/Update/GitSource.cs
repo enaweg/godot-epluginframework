@@ -212,6 +212,12 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
         {
             var named = files.Where(SafeZipExtractor.IsPluginConfig).Select(f => f[..^"plugin.cfg".Length])
                 .Where(f => SafeZipExtractor.RootSlug(f) == slug).GroupBy(f => f.Count(c => c == '/')).MinBy(g => g.Key)?.ToArray() ?? [];
+            // A GDExtension add-on has no plugin.cfg; its folder is the one named like it that holds a .gdextension file.
+            string? extension = null;
+            if (named.Length == 0)
+                try { extension = SafeZipExtractor.ExtensionRoot(files, slug); }
+                catch (InvalidDataException) { }
+            if (extension is not null) named = [extension];
             if (named.Length != 1)
                 throw new InvalidDataException((named.Length == 0 ? $"The repository has no plugin folder named '{slug}'."
                     : "The repository has several plugin folders named '" + slug + "': " + string.Join(", ", named) + ".") +
@@ -225,6 +231,8 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
     /// <summary>The candidate of <paramref name="commit"/>, announcing the version in its plugin.cfg.</summary>
     private async Task<UpdateCandidate> Candidate(string work, PluginUpdateTarget target, string commit, CancellationToken ct)
     {
+        if (target.Kind == Kinds.PluginKind.GDExtensionAddon)
+            throw new IOException("A GDExtension without plugin.cfg has no version in its files; it can only be updated from version tags or releases.");
         string metadata;
         // Without a path, the plugin folder is only known from the repository's file list, so it is read with git.
         var repo = url.Path.Length > 0 && Uri.TryCreate(url.Repository, UriKind.Absolute, out var repository) ? repository : null;

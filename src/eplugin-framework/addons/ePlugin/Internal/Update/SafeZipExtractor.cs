@@ -21,7 +21,7 @@ internal static class SafeZipExtractor
         if (slug.Contains('/')) throw new InvalidDataException("Invalid addon slug.");
         using var archive = ZipFile.OpenRead(archivePath);
         var entries = Inspect(archive);
-        var root = PluginRoot(entries.Select(e => e.Path));
+        var root = PackageRoot(entries.Select(e => e.Path), slug);
         if (RootSlug(root) != slug && (requireSlugFolder || root.Count(c => c == '/') > 1))
             throw new InvalidDataException($"The plugin root '{(root.Length == 0 ? "/" : root)}' of the package is not a folder named '{slug}'.");
         if (entries.Any(e => e.Path.StartsWith(root, StringComparison.Ordinal) && e.Path.Split('/').Last().Equals(".gitmodules", StringComparison.OrdinalIgnoreCase)))
@@ -86,6 +86,44 @@ internal static class SafeZipExtractor
         if (outside is not null) throw new InvalidDataException($"Ambiguous package, {outside}plugin.cfg is outside the plugin root {roots[0]}.");
         return roots[0];
         static int Depth(string folder) => folder.Count(c => c == '/');
+    }
+
+    /// <summary>
+    /// The folder of the package to install as <paramref name="slug"/>: its plugin root (see <see cref="PluginRoot"/>),
+    /// unless that is a deeper folder named otherwise and the package has a GDExtension add-on of that name (see
+    /// <see cref="ExtensionRoot"/>), or the package has no plugin.cfg at all.
+    /// </summary>
+    internal static string PackageRoot(IEnumerable<string> paths, string slug)
+    {
+        var all = paths.ToArray();
+        string? plugin = null;
+        try { plugin = PluginRoot(all); }
+        catch (InvalidDataException) when (!all.Any(IsPluginConfig)) { }
+        if (plugin is not null && (RootSlug(plugin) == slug || plugin.Count(c => c == '/') <= 1)) return plugin;
+        try { return ExtensionRoot(all, slug); }
+        catch (InvalidDataException) when (plugin is not null) { return plugin; }
+    }
+
+    /// <summary>
+    /// The root of a GDExtension add-on, which has no plugin.cfg: the shallowest folder named <paramref name="slug"/>
+    /// that contains a <c>.gdextension</c> file. Nothing else identifies the add-on, so its folder must be named like it;
+    /// several such folders at the same depth make the package ambiguous and it is refused.
+    /// </summary>
+    internal static string ExtensionRoot(IEnumerable<string> paths, string slug)
+    {
+        var folders = paths.Where(p => Kinds.GDExtensionConfig.IsExtensionFile(p) && !PackageFiles.Skip(p))
+            .SelectMany(p => Ancestors(p).Where(folder => RootSlug(folder) == slug)).Distinct(StringComparer.Ordinal).ToArray();
+        if (folders.Length == 0) throw new InvalidDataException($"The package contains no plugin.cfg and no folder named '{slug}' with a GDExtension.");
+        var depth = folders.Min(f => f.Count(c => c == '/'));
+        var roots = folders.Where(f => f.Count(c => c == '/') == depth).ToArray();
+        if (roots.Length > 1) throw new InvalidDataException($"Ambiguous package, it has several GDExtension folders named '{slug}': " + string.Join(", ", roots));
+        return roots[0];
+
+        // "a/b/c.gdextension" has the folders "a/" and "a/b/".
+        static IEnumerable<string> Ancestors(string path)
+        {
+            for (var slash = path.IndexOf('/'); slash >= 0; slash = path.IndexOf('/', slash + 1)) yield return path[..(slash + 1)];
+        }
     }
 
     /// <summary>The slug a plugin root names: its folder name, or null for a plugin at the archive root.</summary>

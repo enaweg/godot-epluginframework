@@ -28,9 +28,14 @@ internal sealed class PluginRow(PluginInfo plugin, UpdateRow? update)
     public bool IsUpdatable => Plugin.UpdateUrl is not null || Plugin.UpdateSite is not null || Plugin.Known is not null ||
                                Plugin.LocalPackages > 0 || Update is not null;
     public bool HasUpdate => Update is not null;
-    public bool CanToggle => !Plugin.Missing;
-    /// <summary>The plugin failed or a failed attempt of it waits for Retry failed.</summary>
-    public bool NeedsAttention => Plugin.FailedAttempt is not null || Plugin.State == EEditorPluginState.Error;
+    /// <summary>Godot loads a GDExtension add-on whatever is enabled, so it has nothing to enable or disable.</summary>
+    public bool CanToggle => !Plugin.Missing && Plugin.Kind != PluginKind.GDExtensionAddon;
+    /// <summary>
+    /// The plugin failed, a failed attempt of it waits for Retry failed, or Godot does not run one of its GDExtensions
+    /// although it should.
+    /// </summary>
+    public bool NeedsAttention => Plugin.FailedAttempt is not null || Plugin.State == EEditorPluginState.Error ||
+                                  Plugin.Extensions.Any(e => e.Problem is not null);
 }
 /// <summary>What the toolbar button of the ePlugin Manager shows with the color of its puzzle piece.</summary>
 internal enum ManagerStatus { Normal, UpdatesAvailable, NeedsAttention }
@@ -110,7 +115,8 @@ internal sealed class PluginManagerViewModel
             var current = known && valid && version.CompareTo(installed) == 0;
             return new VersionOption(candidate.NewVersion, candidate, current, known && valid && version.CompareTo(installed) < 0);
         }).ToList();
-        if (!options.Any(o => o.Installed)) options.Add(new(installedVersion, null, true, false));
+        // A GDExtension add-on ePlugin did not install has no known version to list.
+        if (!options.Any(o => o.Installed) && installedVersion.Length > 0) options.Add(new(installedVersion, null, true, false));
         return options.OrderByDescending(o => SemVer.TryParse(o.Version, out var v) ? v : default).ToArray();
     }
 
@@ -146,10 +152,14 @@ internal sealed class PluginManagerViewModel
         return null;
     }
 
+    /// <summary>The installed version as the manager shows it: "unknown" for a GDExtension add-on ePlugin did not install.</summary>
+    public static string VersionText(PluginInfo plugin) =>
+        plugin.Version.Length == 0 && plugin.Kind == PluginKind.GDExtensionAddon ? "unknown" : plugin.Version;
+
     public static string StatusText(PluginInfo plugin)
     {
         if (plugin.Missing) return "Missing (no plugin.cfg)";
-        var text = plugin.Enabled ? "Enabled" : "Disabled";
+        var text = plugin.Kind == PluginKind.GDExtensionAddon ? "Always loaded (no plugin.cfg to enable)" : plugin.Enabled ? "Enabled" : "Disabled";
         if (plugin.State is { } state && state != EEditorPluginState.Created) text += $" ({state})";
         if (plugin.FailedAttempt is { } attempt) text += $", needs retry: {attempt.Reason}";
         return text;
@@ -252,6 +262,27 @@ internal sealed class PluginManagerViewModel
         return text.ToString();
     }
 
+    /// <summary>
+    /// The GDExtensions of a plugin: per <c>.gdextension</c> file whether Godot loaded it, whether it is reloadable, the
+    /// platforms it has libraries for, and why Godot does not run it; empty without one.
+    /// </summary>
+    public static string ExtensionSection(IReadOnlyList<NativeExtensionStatus> extensions)
+    {
+        if (extensions.Count == 0) return "";
+        var text = new StringBuilder("\n[b]GDExtension[/b]\n");
+        foreach (var extension in extensions)
+        {
+            var state = extension.Config is null ? "" : !extension.ForThisPlatform ? "not for this platform"
+                : extension.Loaded ? "loaded" : "[color=#ff7070]not loaded[/color]";
+            var reload = extension.Config is null ? "" : extension.Config.Reloadable ? "reloadable" : "not reloadable";
+            var details = string.Join(", ", new[] { state, reload }.Where(d => d.Length > 0));
+            text.Append(CultureInfo.CurrentCulture, $"{Escape(extension.File)}{(details.Length > 0 ? ": " + details : "")}\n");
+            if (extension.Platforms.Count > 0) text.Append("Platforms: ").Append(Escape(string.Join(", ", extension.Platforms))).Append('\n');
+            if (extension.Problem is { } problem) text.Append(CultureInfo.CurrentCulture, $"[color=#ff7070]{Escape(problem)}[/color]\n");
+        }
+        return text.ToString();
+    }
+
     /// <summary>The details pane as BBCode. All plugin supplied text is escaped.</summary>
     /// <param name="reviewed">Findings of a staged package for an explicitly chosen version, awaiting confirmation.</param>
     /// <param name="kept">The plugin's update kept with build errors, see <see cref="KeptUpdateSection"/>.</param>
@@ -267,7 +298,7 @@ internal sealed class PluginManagerViewModel
         }
         Line("Type", PluginCatalog.KindName(plugin.Kind));
         Line("Status", StatusText(plugin));
-        Line("Version", plugin.Version);
+        Line("Version", VersionText(plugin));
         Line("Author", plugin.Author);
         // ePlugin's built-in list fills in what plugin.cfg does not set
         Link("Documentation", plugin.DocumentationUrl ?? plugin.Known?.DocumentationUrl);
@@ -278,6 +309,7 @@ internal sealed class PluginManagerViewModel
         text.Append(WelcomeLine(welcome));
         if (!string.IsNullOrWhiteSpace(plugin.Description)) text.Append('\n').Append(Escape(plugin.Description)).Append('\n');
         if (plugin.Error is not null) text.Append(CultureInfo.CurrentCulture, $"\n[color=#ff7070]{Escape(plugin.Error)}[/color]\n");
+        text.Append(ExtensionSection(plugin.Extensions));
         if (kept is not null) text.Append(KeptUpdateSection(kept));
 
         text.Append("\n[b]Update[/b]\n");
@@ -291,9 +323,15 @@ internal sealed class PluginManagerViewModel
             if (update.Failed is { } failed) text.Append(CultureInfo.CurrentCulture, $"[color=#ff7070]Previously failed {failed.Utc:u}:[/color] {Escape(failed.Reason)}\n");
         }
         else if ((plugin.UpdateSite ?? plugin.UpdateUrl ?? plugin.Known?.UpdateUrl) is { } site) Link("Update site", site);
+        else if (plugin.Kind == PluginKind.GDExtensionAddon)
+            text.Append("Not updatable: the add-on has no plugin.cfg to name an update site, the project sets none, and ePlugin's " +
+                        "built-in list does not know it. Add an update site for it under Update sites.\n");
         else if (plugin.LocalPackages == 0)
             text.Append("Not updatable: plugin.cfg has no update_url, the project sets no update site, ePlugin's built-in list does " +
                         "not know it, and no local plugin directory holds a package of it.\n");
+        if (plugin.Kind == PluginKind.GDExtensionAddon && plugin.Version.Length == 0 && row.IsUpdatable)
+            text.Append("ePlugin does not know the installed version, because the add-on has no plugin.cfg and ePlugin did not " +
+                        "install it, so no update is offered. Choose a version and install it; from then on, updates are found.\n");
         if (plugin.UpdateSite is not null)
         {
             var replaced = plugin.UpdateUrl is not null && plugin.UpdateUrl != plugin.UpdateSite;

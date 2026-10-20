@@ -13,11 +13,10 @@ eLogger;https://github.com/enaweg/godot-elogger
 eMessagePipe;https://github.com/enaweg/godot-emessagepipe
 global_asset_manager;https://github.com/sn1ks0h/Global-Asset-Manager
 # A GDExtension whose libraries are built by CI (only in the release ZIP). Neither the ZIP nor the repository has a
-# plugin.cfg yet, which ePlugin cannot update, so the generator leaves it out until one ships.
+# plugin.cfg, so ePlugin updates it as a GDExtension add-on, found by its folder name.
 godot_servo;https://github.com/shiena/godot-servo
 # A GDExtension plugin whose libraries are built by CI: they are in the release ZIP but not in the repository, so its
 # update site must be the releases page (which build_godot_addons.cs takes for any GitHub repository with releases).
 rider-plugin;https://github.com/JetBrains/godot-support
-# Its release ZIP ships a GDExtension without a plugin.cfg, which ePlugin cannot update yet, so the generator leaves it
-# out for now.
+# Its release ZIP ships a GDExtension without a plugin.cfg, which ePlugin updates as a GDExtension add-on.
 tweens_gd;https://github.com/outfox/tweens.gd

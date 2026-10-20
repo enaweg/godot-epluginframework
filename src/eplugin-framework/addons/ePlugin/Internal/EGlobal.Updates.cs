@@ -57,8 +57,9 @@ internal sealed partial class EGlobal
     }
 
     /// <summary>
-    /// Every enabled plugin with a readable plugin.cfg, with the update site the project sets for it. Plugins without
-    /// an update site can still be updated from the local plugin directories; remote checks skip them.
+    /// Every enabled plugin with a readable plugin.cfg and every GDExtension add-on, with the update site the project sets
+    /// for it. Plugins without an update site can still be updated from the local plugin directories; remote checks skip
+    /// them.
     /// </summary>
     internal IReadOnlyList<PluginUpdateTarget> CollectUpdateTargets()
     {
@@ -73,8 +74,15 @@ internal sealed partial class EGlobal
                 _stateStore?.IsBlocked(slug) == true, _stateStore?.IsReadOnly != false, _stateStore?.GetShared(slug)?.Version,
                 UpdateSiteOf(slug), KnownPluginOf(slug)?.UpdateUrl,
                 slug == FrameworkSlug ? PluginKind.Framework : IsManagedPlugin(slug) ? PluginKind.EPlugin : PluginKind.Unknown);
-        }).Where(t => t is not null).Cast<PluginUpdateTarget>().ToArray();
+        }).Where(t => t is not null).Cast<PluginUpdateTarget>().Concat(ExtensionAddonSlugs().Select(ExtensionAddonTarget)).ToArray();
     }
+
+    /// <summary>
+    /// The targets a check looks for updates of: not GDExtension add-ons whose version ePlugin does not know, since any
+    /// release would look like an update of them. Their versions are listed and installed from the ePlugin Manager.
+    /// </summary>
+    private static PluginUpdateTarget[] Checked(IReadOnlyList<PluginUpdateTarget> targets) =>
+        targets.Where(t => t.Kind != PluginKind.GDExtensionAddon || t.InstalledVersion.Length > 0).ToArray();
 
     public async Task<UpdateCheckResult> CheckForUpdatesAsync(bool force = false)
     {
@@ -101,7 +109,7 @@ internal sealed partial class EGlobal
                 return cached;
             }
             var service = _updateService;
-            var result = await Task.Run(() => service.CheckAsync(targets, new(), ct), ct).ConfigureAwait(false);
+            var result = await Task.Run(() => service.CheckAsync(Checked(targets), new(), ct), ct).ConfigureAwait(false);
             await OnEditorThread(() => { _remoteUpdates = result.Updates; result = result with { Updates = PendingUpdates }; PrintUpdates(result, force); }, ct).ConfigureAwait(false);
             return result;
         }

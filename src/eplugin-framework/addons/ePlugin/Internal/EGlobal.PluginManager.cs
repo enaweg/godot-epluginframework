@@ -12,14 +12,18 @@ namespace Enaweg.Plugin.Internal;
 internal sealed partial class EGlobal
 {
     private const int ManagerStatusCheckFrames = 30;
+    private const int NativeExtensionCheckFrames = 600;
     private ulong _nextManagerStatusCheck;
     private string? _managerStatusKey;
     private ManagerStatus _managerStatus;
+    private ulong _nextNativeExtensionCheck;
+    private string _nativeExtensionProblems = "";
 
     /// <summary>
     /// What the toolbar button of the ePlugin Manager shows, as the manager would list it. Called every frame; looks again
     /// every <see cref="ManagerStatusCheckFrames"/> frames, and reads the plugins only when the pending updates, the
-    /// enabled plugins or their states changed. While plugins are being changed it keeps the last status.
+    /// enabled plugins, their states or the GDExtensions Godot does not run changed. While plugins are being changed it
+    /// keeps the last status.
     /// </summary>
     internal ManagerStatus CurrentManagerStatus()
     {
@@ -29,15 +33,16 @@ internal sealed partial class EGlobal
         var pending = PendingUpdates;
         var attempts = _stateStore?.LocalAttempts ?? [];
         var states = _contexts.Where(c => c.Plugin is not null).Select(c => $"{c.Slug}:{c.State}").ToArray();
+        var native = NativeExtensionProblems(frame);
         // Nothing can need attention or be updated: no need to read the plugins.
-        if (pending.Count == 0 && attempts.Count == 0 && !_contexts.Any(c => c.Plugin is not null && c.State == EEditorPluginState.Error))
+        if (pending.Count == 0 && attempts.Count == 0 && native.Length == 0 && !_contexts.Any(c => c.Plugin is not null && c.State == EEditorPluginState.Error))
         {
             _managerStatusKey = null;
             return _managerStatus = ManagerStatus.Normal;
         }
         var key = string.Join("\n", pending.Select(c => $"{c.Slug} {c.NewVersion} {c.SourceUrl}")) + "\n#" +
                   string.Join(",", attempts.Select(a => a.AttemptId)) + "\n#" + string.Join(",", states) + "\n#" +
-                  string.Join(",", GetEnabledPluginSlugs().Order(StringComparer.Ordinal));
+                  string.Join(",", GetEnabledPluginSlugs().Order(StringComparer.Ordinal)) + "\n#" + native;
         if (key == _managerStatusKey) return _managerStatus;
         _managerStatusKey = key;
         try
@@ -53,11 +58,33 @@ internal sealed partial class EGlobal
     }
 
     /// <summary>Reads the plugins again for the next <see cref="CurrentManagerStatus"/>, e.g. after the ePlugin Manager changed update sites.</summary>
-    internal void InvalidateManagerStatus() { _managerStatusKey = null; _nextManagerStatusCheck = 0; }
+    internal void InvalidateManagerStatus() { _managerStatusKey = null; _nextManagerStatusCheck = 0; _nextNativeExtensionCheck = 0; }
 
     /// <summary>
-    /// Every addon with a plugin.cfg directly below the addons folder, enabled or not, plus plugins that only remain as a
-    /// failed local attempt.
+    /// The <c>.gdextension</c> files below the addons folder that Godot does not run although it should (see
+    /// <see cref="NativeExtensionStatus.Problem"/>), joined into one key; empty when there is none. Reading them means
+    /// walking every addon folder, so they are read again only every <see cref="NativeExtensionCheckFrames"/> frames.
+    /// </summary>
+    private string NativeExtensionProblems(ulong frame)
+    {
+        if (frame < _nextNativeExtensionCheck) return _nativeExtensionProblems;
+        _nextNativeExtensionCheck = frame + NativeExtensionCheckFrames;
+        try
+        {
+            using var addons = DirAccess.Open(_host.AddonsDirectory);
+            return _nativeExtensionProblems = string.Join(",", (addons?.GetDirectories() ?? [])
+                .SelectMany(slug => NativeExtensionStatus.Read(_host.ProjectRoot, slug, _host.IsExtensionLoaded)
+                    .Where(e => e.Problem is not null).Select(e => $"{slug}/{e.File}")));
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+        {
+            return _nativeExtensionProblems = "";
+        }
+    }
+
+    /// <summary>
+    /// Every addon with a plugin.cfg directly below the addons folder, enabled or not, every GDExtension add-on, plus
+    /// plugins that only remain as a failed local attempt.
     /// </summary>
     internal IReadOnlyList<PluginInfo> CollectPlugins()
     {
@@ -88,9 +115,11 @@ internal sealed partial class EGlobal
                 State = context?.State, Error = context?.ErrorDetail?.Message,
                 FailedAttempt = _stateStore?.GetLocal(slug),
                 Recipe = context is { IsRecipeCreated: true } ? context.Builder.PluginRecipe : null,
-                LocalPackages = LocalIndex.Matching(slug).Count()
+                LocalPackages = LocalIndex.Matching(slug).Count(),
+                Extensions = NativeExtensionStatus.Read(_host.ProjectRoot, slug, _host.IsExtensionLoaded)
             });
         }
+        plugins.AddRange(ExtensionAddonSlugs().Select(ExtensionAddonInfo));
         foreach (var attempt in _stateStore?.LocalAttempts ?? [])
         {
             if (plugins.Any(p => p.Slug == attempt.Slug)) continue;

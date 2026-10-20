@@ -11,6 +11,8 @@
 // 2. the plugin folder in its latest release's ZIP, chosen and read like ePlugin's updater does (only the file list);
 // 3. the slug it already has in the list, so the key stays stable;
 // 4. the plugin folder in its repository at its latest release or version tag, read with git (git 2.25 or newer on PATH).
+// A plugin folder holds a plugin.cfg; without any, the folder of a GDExtension add-on (its .gdextension below addons/)
+// counts, which the updater installs without plugin.cfg.
 // No token is needed.
 using System.Collections.Concurrent;
 using System.Diagnostics;
@@ -66,7 +68,7 @@ await Parallel.ForEachAsync(addons, new ParallelOptions { MaxDegreeOfParallelism
     var tree = trees[addon] = await ReadTree(addon, ct);
     // The updater chooses among several ZIP assets by the plugin's slug.
     var hint = addon.Slug ?? existing.GetValueOrDefault(addon.Repository) ?? (tree.Plugins.Length == 1 ? Name(tree.Plugins[0]) : null);
-    if (SelectAsset(addon.ReleaseAssets ?? [], hint) is { } asset) zips[addon] = await ReadZip(asset, ct);
+    if (SelectAsset(addon.ReleaseAssets ?? [], hint) is { } asset) zips[addon] = await ReadZip(asset, hint, ct);
     Console.Error.Write($"\rRead {Interlocked.Increment(ref done)}/{addons.Length} repositories");
 });
 Console.Error.WriteLine();
@@ -102,7 +104,7 @@ foreach (var addon in addons)
     else
     {
         if (tree.Error is not null) { leftOut.Add($"{addon.Repository}: {tree.Error}"); continue; }
-        if (tree.Plugins.Length == 0) { leftOut.Add($"{addon.Repository}: no plugin.cfg"); continue; }
+        if (tree.Plugins.Length == 0) { leftOut.Add($"{addon.Repository}: no plugin.cfg and no GDExtension in addons/"); continue; }
         var (folder, chosenNote) = Choose(addon, tree, repositoryName);
         slug = folder is null || folder.Length == 0 ? null : Name(folder);
         note = chosenNote;
@@ -181,22 +183,33 @@ Report("Left out", leftOut);
     return (folder, note);
 }
 
-// The ZIP asset ePlugin's updater downloads (ReleaseAssets.Select): the only one, else the one named like the slug, else
-// the one named like an add-on or plugin. Without one it downloads the source archive, which the repository stands for.
+// The ZIP asset ePlugin's updater downloads (ReleaseAssets.Select): the only one, else the one named like the slug (also
+// with '-', '_' and '.' mixed up), else the one named like an add-on or plugin, leaving out demo, example, sample and
+// tutorial projects among several. Without one it downloads the source archive, which the repository stands for.
 static ReleaseAsset? SelectAsset(ReleaseAsset[] assets, string? slug)
 {
     var zips = assets.Where(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
                                  Uri.TryCreate(a.Url, UriKind.Absolute, out var uri) && uri.AbsolutePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)).ToArray();
     if (zips.Length == 1) return zips[0];
-    var named = slug is null ? [] : zips.Where(a => a.Name.Contains(slug, StringComparison.OrdinalIgnoreCase)).ToArray();
-    if (named.Length == 1) return named[0];
-    var plugin = zips.Where(a => a.Name.Contains("addon", StringComparison.OrdinalIgnoreCase) || a.Name.Contains("plugin", StringComparison.OrdinalIgnoreCase)).ToArray();
-    return plugin.Length == 1 ? plugin[0] : null;
+    foreach (var matches in new Func<string, bool>[]
+             {
+                 name => slug is not null && name.Contains(slug, StringComparison.OrdinalIgnoreCase),
+                 name => slug is not null && Plain(name, keepGodot: true).Contains(Plain(slug, keepGodot: true), StringComparison.Ordinal),
+                 name => name.Contains("addon", StringComparison.OrdinalIgnoreCase) || name.Contains("plugin", StringComparison.OrdinalIgnoreCase)
+             })
+    {
+        var named = zips.Where(a => matches(a.Name)).ToArray();
+        if (named.Length > 1)
+            named = named.Where(a => !new[] { "demo", "example", "sample", "tutorial" }.Any(extra => a.Name.Contains(extra, StringComparison.OrdinalIgnoreCase))).ToArray();
+        if (named.Length == 1) return named[0];
+    }
+    return null;
 }
 
-// The file list and plugin root of a release ZIP, found like the updater's SafeZipExtractor.PluginRoot: the folder of the
-// shallowest plugin.cfg, refused when several are equally shallow or one lies outside it.
-async Task<Package> ReadZip(ReleaseAsset asset, CancellationToken ct)
+// The file list and plugin root of a release ZIP, found like the updater's SafeZipExtractor.PackageRoot: the folder of the
+// shallowest plugin.cfg, refused when several are equally shallow or one lies outside it. A ZIP without plugin.cfg holds
+// a GDExtension add-on, whose root is the folder named like its slug that holds a .gdextension file (ExtensionRoot).
+async Task<Package> ReadZip(ReleaseAsset asset, string? slug, CancellationToken ct)
 {
     var file = Path.Combine(Path.GetTempPath(), "eplugin-known-" + Guid.NewGuid().ToString("N") + ".zip");
     try
@@ -225,7 +238,16 @@ async Task<Package> ReadZip(ReleaseAsset asset, CancellationToken ct)
         catch (InvalidDataException) { return new(asset.Name, null, [], "is not a readable ZIP", true); }
         var folders = paths.Where(p => p == "plugin.cfg" || p.EndsWith("/plugin.cfg", StringComparison.Ordinal))
             .Select(p => p[..^"plugin.cfg".Length]).ToArray();
-        if (folders.Length == 0) return new(asset.Name, null, paths, "has no plugin.cfg; the updater refuses it", true);
+        if (folders.Length == 0)
+        {
+            var extensions = ExtensionFolders(paths);
+            // The updater looks for the folder named like the slug; without one known, the ZIP's only add-on folder names it.
+            var named = slug is null ? extensions : extensions.Where(f => Name(f) == slug).ToArray();
+            if (named.Length == 0) return new(asset.Name, null, paths, "has no plugin.cfg and no GDExtension folder" + (slug is null ? "" : $" named {slug}") + "; the updater refuses it", true);
+            var shallowest = named.Where(f => Depth(f) == named.Min(Depth)).ToArray();
+            if (shallowest.Length > 1) return new(asset.Name, null, paths, "holds several GDExtensions (" + string.Join(", ", shallowest) + "); the updater refuses it", true);
+            return new(asset.Name, shallowest[0], paths, null, false);
+        }
         var depth = folders.Min(Depth);
         var roots = folders.Where(f => Depth(f) == depth).ToArray();
         if (roots.Length > 1 || folders.Any(f => !f.StartsWith(roots[0], StringComparison.Ordinal)))
@@ -237,8 +259,6 @@ async Task<Package> ReadZip(ReleaseAsset asset, CancellationToken ct)
         return new(asset.Name, null, [], "cannot be downloaded: " + ex.Message, false);
     }
     finally { try { File.Delete(file); } catch (IOException) { } }
-
-    static int Depth(string folder) => folder.Count(c => c == '/');
 }
 
 // The slug a ZIP's plugin root names: its folder, unless the plugin is at the ZIP's root or in a source archive's
@@ -267,9 +287,11 @@ async Task<Tree> ReadTree(Addon addon, CancellationToken ct)
         var (exit, listing, failure) = await Git(work, ["ls-tree", "-r", "-z", "--name-only", "FETCH_HEAD"], ct);
         if (exit != 0) return new([], [], "git ls-tree failed: " + failure.Trim());
         var files = listing.Split('\0', StringSplitOptions.RemoveEmptyEntries);
-        // Every plugin.cfg folder that is not inside another one; nested ones are sub-plugins of it.
+        // Every plugin.cfg folder that is not inside another one; nested ones are sub-plugins of it. Without any, the
+        // add-on folders of its GDExtensions, which the updater installs without plugin.cfg.
         var folders = files.Where(f => f == "plugin.cfg" || f.EndsWith("/plugin.cfg", StringComparison.Ordinal))
             .Select(f => f[..^"plugin.cfg".Length]).ToArray();
+        if (folders.Length == 0) folders = ExtensionFolders(files);
         var plugins = folders.Where(f => !folders.Any(o => o != f && f.StartsWith(o, StringComparison.Ordinal))).Order(StringComparer.Ordinal).ToArray();
         return new(plugins, files, null);
     }
@@ -303,7 +325,23 @@ static async Task<(int Code, string Output, string Error)> Git(string directory,
 }
 
 static string Name(string folder) => folder.TrimEnd('/').Split('/')[^1];
-static string Plain(string name) => Regex.Replace(name.ToLowerInvariant(), "[-_. ]", "").Replace("godot", "");
+static int Depth(string folder) => folder.Count(c => c == '/');
+
+// The folders of the GDExtension add-ons among the files: the folder below an addons/ folder that holds a .gdextension
+// file ("x/addons/servo/bin/servo.gdextension" is in "x/addons/servo/"), else the folder of the file itself. Hidden
+// folders are left out, Godot does not load extensions in them.
+static string[] ExtensionFolders(IEnumerable<string> files) =>
+    files.Where(f => f.EndsWith(".gdextension", StringComparison.OrdinalIgnoreCase) && !f.Split('/').Any(p => p.StartsWith('.')))
+        .Select(f =>
+        {
+            var parts = f.Split('/');
+            var addons = parts.Length < 2 ? -1 : Array.LastIndexOf(parts, "addons", parts.Length - 2);
+            return addons >= 0 && addons + 2 < parts.Length ? string.Join('/', parts[..(addons + 2)]) + "/"
+                : parts.Length > 1 ? string.Join('/', parts[..^1]) + "/" : "";
+        })
+        .Where(f => f.Length > 0).Distinct(StringComparer.Ordinal).ToArray();
+static string Plain(string name, bool keepGodot = false) => keepGodot ? Regex.Replace(name.ToLowerInvariant(), "[-_. ]", "")
+    : Regex.Replace(name.ToLowerInvariant(), "[-_. ]", "").Replace("godot", "");
 static string Cs(string value) => "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
 static void Report(string title, IEnumerable<string> lines)
 {

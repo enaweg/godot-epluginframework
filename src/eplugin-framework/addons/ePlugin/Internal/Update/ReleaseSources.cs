@@ -12,16 +12,37 @@ namespace Enaweg.Plugin.Internal.Update;
 
 internal static class ReleaseAssets
 {
+    /// <summary>
+    /// The ZIP asset of a release to install as <paramref name="slug"/>: the only one, else the one named like the slug
+    /// (also with '-', '_' and '.' mixed up, as in "godot-servo-1.2.zip" for godot_servo), else the one named like an
+    /// add-on or plugin. Among several, a demo, example, sample or tutorial project released next to the add-on is left
+    /// out. Null when that leaves none or several, and the source archive is installed instead.
+    /// </summary>
     public static string? Select(IEnumerable<(string Name, string Url)> assets, string slug)
     {
         var zips = assets.Where(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
             new Uri(a.Url).AbsolutePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)).ToArray();
         if (zips.Length == 1) return zips[0].Url;
-        var named = zips.Where(a => a.Name.Contains(slug, StringComparison.OrdinalIgnoreCase)).ToArray();
-        if (named.Length == 1) return named[0].Url;
-        var plugin = zips.Where(a => a.Name.Contains("addon", StringComparison.OrdinalIgnoreCase) || a.Name.Contains("plugin", StringComparison.OrdinalIgnoreCase)).ToArray();
-        return plugin.Length == 1 ? plugin[0].Url : null;
+        foreach (var matches in new Func<string, bool>[]
+                 {
+                     name => name.Contains(slug, StringComparison.OrdinalIgnoreCase),
+                     name => Plain(name).Contains(Plain(slug), StringComparison.Ordinal),
+                     name => name.Contains("addon", StringComparison.OrdinalIgnoreCase) || name.Contains("plugin", StringComparison.OrdinalIgnoreCase)
+                 })
+        {
+            var named = zips.Where(a => matches(a.Name)).ToArray();
+            if (named.Length > 1) named = named.Where(a => !IsExtra(a.Name)).ToArray();
+            if (named.Length == 1) return named[0].Url;
+        }
+        return null;
     }
+
+    private static string Plain(string name) => new(name.Where(c => c is not ('-' or '_' or '.' or ' ')).Select(char.ToLowerInvariant).ToArray());
+
+    private static readonly string[] Extras = ["demo", "example", "sample", "tutorial"];
+
+    /// <summary>A project released next to the add-on rather than the add-on itself.</summary>
+    private static bool IsExtra(string name) => Extras.Any(extra => name.Contains(extra, StringComparison.OrdinalIgnoreCase));
     public static string? String(JsonElement element, string property) => element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
     public static bool Flag(JsonElement element, string property) => element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.True;
     public static JsonElement[] Array(JsonElement element, string property) => element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Array ? value.EnumerateArray().ToArray() : [];

@@ -187,6 +187,15 @@ internal sealed class FakeEditorHost(LifecycleFixture fixture) : IEditorHost
     public void AddAutoload(EditorPlugin plugin, string name, string path) => Autoloads[name] = path;
 
     public void RemoveAutoload(EditorPlugin plugin, string name) => Autoloads.Remove(name);
+
+    /// <summary>The <c>.gdextension</c> files Godot has loaded, as file system paths with '/'.</summary>
+    public HashSet<string> Extensions { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public bool IsExtensionLoaded(string file) => Extensions.Contains(file.Replace('\\', '/'));
+
+    public bool LoadExtension(string file) => Extensions.Add(file.Replace('\\', '/'));
+
+    public bool UnloadExtension(string file) => Extensions.Remove(file.Replace('\\', '/'));
 }
 
 /// <summary>A dotnet CLI that records what it is asked to do and fails what it is told to.</summary>

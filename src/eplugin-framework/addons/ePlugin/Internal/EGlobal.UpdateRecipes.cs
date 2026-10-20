@@ -215,8 +215,8 @@ internal sealed partial class EGlobal
         {
             case RecipeOperationKind.RemoveAutoload: ReverseAutoload(context, operation.Autoload!); break;
             case RecipeOperationKind.RemoveProject: ReverseProject(context, operation.Project!); break;
-            case RecipeOperationKind.HideDirectory: ShowHideHelper.HideDirectory(context, operation.Directory!); break;
-            case RecipeOperationKind.ShowDirectory: ShowHideHelper.ShowDirectory(context, operation.Directory!); break;
+            case RecipeOperationKind.HideDirectory: ShowHideHelper.HideDirectory(context, operation.Directory!, _host); break;
+            case RecipeOperationKind.ShowDirectory: ShowHideHelper.ShowDirectory(context, operation.Directory!, _host); break;
             case RecipeOperationKind.RemoveNuget: ReverseNuget(context, operation.Nuget!); break;
             case RecipeOperationKind.AddNuget: ApplyNuget(context, operation.Nuget!); break;
             case RecipeOperationKind.AddProject: ApplyProject(context, operation.Project!); break;

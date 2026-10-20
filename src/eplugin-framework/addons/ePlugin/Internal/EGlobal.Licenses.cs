@@ -105,7 +105,7 @@ internal sealed partial class EGlobal
             var recipe = RecipeOf(current);
             foreach (var dependency in recipe?.PluginDependencies ?? [])
             {
-                if (!_host.IsPluginEnabled(dependency.Slug))
+                if (!IsDependencyAvailable(dependency.Slug))
                 {
                     Visit(dependency.Slug);
                 }
@@ -204,9 +204,15 @@ internal sealed partial class EGlobal
 
     /// <summary>The license the ePlugin Manager shows for a plugin, with what was accepted for it.</summary>
     internal LicenseInfo? DescribeLicense(string slug) =>
-        ReadInstalledLicense(slug, RecipeOf(slug)) is { } license
+        (ReadInstalledLicense(slug, RecipeOf(slug)) ?? ExtensionAddonLicense(slug)) is { } license
             ? license with { Accepted = _stateStore?.GetLicense(slug) }
             : null;
+
+    /// <summary>The LICENSE file of a GDExtension add-on, which has no plugin.cfg to name another or to require it.</summary>
+    private LicenseInfo? ExtensionAddonLicense(string slug) => IsExtensionAddon(slug)
+        ? new LicenseInfo(PluginLicense.FromConfig(slug, KnownPluginOf(slug)?.Name ?? slug, ExtensionAddonVersion(slug) ?? "", null,
+            ProjectSettings.GlobalizePath(_host.PluginDirectory(slug))), false, null)
+        : null;
 
     /// <summary>Accepts the licenses without asking when the project allows it; returns whether it did.</summary>
     private bool AcceptAutomatically(IReadOnlyCollection<LicenseEntry> entries)
