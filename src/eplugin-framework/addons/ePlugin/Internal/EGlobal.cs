@@ -1,6 +1,7 @@
 #if TOOLS
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -17,6 +18,8 @@ namespace Enaweg.Plugin.Internal;
 /// as well as provides some global values.
 /// </summary>
 [Tool]
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable",
+    Justification = "The singleton lives as long as the assembly; its indexing token sources have no timer or wait handle to release.")]
 internal sealed partial class EGlobal
 {
     private static EGlobal? _instance;
@@ -773,88 +776,12 @@ internal sealed partial class EGlobal
             return;
         }
 
-        // check dependencies
         var recipe = context.Builder.PluginRecipe;
         foreach (var dependency in recipe.PluginDependencies)
         {
-            if (_recipeUpdateJournal is not null && !IsDependencyAvailable(dependency.Slug))
+            if (CheckDependency(context, dependency) != DependencyReadiness.Ready)
             {
-                EnsureUpdateDependency(dependency);
-            }
-
-            if (!IsDependencyAvailable(dependency.Slug))
-            {
-                if (IsManagedPlugin(dependency.Slug))
-                {
-                    _toCheckEnable.Push(context);
-                    _host.SetPluginEnabled(dependency.Slug, true);
-                    return; // EnableEPlugin will be called by newly enabled plugin, stop here
-                }
-
-                // A plain plugin runs no framework code when it is enabled, so nothing would resume this plugin. It is
-                // enabled right away instead, and so are the optional recipes of other plugins that it satisfies.
-                if (!EnablePlainDependency(context, dependency.Slug))
-                {
-                    return;
-                }
-            }
-
-            if (dependency.Version is not null)
-            {
-                var dependencyContext = _contexts.FirstOrDefault(c => c.Slug == dependency.Slug);
-                // a plain plugin enabled in this session has no context
-                var dependencyVersion = dependencyContext?.Metadata?.Version ?? InstalledVersion(dependency.Slug);
-                if (dependencyVersion is null)
-                {
-                    var unknown = $"The version of the GDExtension {dependency.Slug} is unknown, so it cannot be checked against {dependency.Version}. Install a version of it in the ePlugin Manager.";
-                    var addon = IsExtensionAddon(dependency.Slug);
-                    context.Logger?.Warn(addon ? unknown : $"Plugin {dependency.Slug} not found!");
-                    _toCheckEnable.Push(context);
-                    FailAllUncheckedPluginsAndRefresh(addon ? unknown : $"Plugin dependency {dependency.Slug} not found!");
-                    return;
-                }
-
-                if (MatchesVersion(dependencyVersion, dependency.Version, context.Logger))
-                {
-                    if (dependencyContext?.State is EEditorPluginState.Deactivated or EEditorPluginState.Error)
-                    {
-                        context.Logger?.Warn(
-                            $"Plugin dependency {dependency.Slug} not ready but needed by {context.Slug}!");
-                        _toCheckEnable.Push(context);
-                        FailAllUncheckedPluginsAndRefresh(
-                            $"Plugin dependency {dependency.Slug} not ready but needed by {context.Slug}!");
-                        return;
-                    }
-                }
-                else
-                {
-                    context.Logger?.Warn(
-                        $"Dependency {dependency.Slug} {dependencyVersion} does not match needed {dependency.Version} of {context.Slug}!");
-
-                    _toCheckEnable.Push(context);
-                    FailAllUncheckedPluginsAndRefresh(
-                        $"Dependency {dependency.Slug} {dependencyVersion} does not match needed {dependency.Version} of {context.Slug}!");
-                    return;
-                }
-            }
-
-            var managedDependency = _contexts.FirstOrDefault(c => c.Slug == dependency.Slug && c.Plugin is not null);
-            if (managedDependency?.State == EEditorPluginState.Error)
-            {
-                _toCheckEnable.Push(context);
-                FailAllUncheckedPluginsAndRefresh($"Plugin dependency {dependency.Slug} failed.");
                 return;
-            }
-
-            if (managedDependency is not null && managedDependency.State != EEditorPluginState.Activated)
-            {
-                _toCheckEnable.Push(context);
-                return; // its activation callback will resume the waiting plugin
-            }
-
-            if (_ePluginContext?.EnableDebugLogging == true)
-            {
-                context.Logger?.Log($"Dependency {dependency.Slug} {dependency.Version} ready for {context.Slug}.");
             }
         }
 
@@ -888,12 +815,22 @@ internal sealed partial class EGlobal
 
         if (refreshAtEnd)
         {
-            // trigger install for waiting plugins
+            // Trigger install for waiting plugins, in rounds: each takes them off the stack first, because one whose
+            // dependency is still not activated pushes itself back, and popping until empty would never end. A round
+            // that resumes none of them leaves them waiting for their dependencies' activation callbacks.
             while (_toCheckEnable.Count > 0)
             {
-                var nextPlugin = _toCheckEnable.Pop();
+                var waiting = _toCheckEnable.ToArray();
+                _toCheckEnable.Clear();
+                foreach (var nextPlugin in waiting)
+                {
+                    EnableEPlugin(nextPlugin, false);
+                }
 
-                EnableEPlugin(nextPlugin, false);
+                if (_toCheckEnable.ToHashSet().SetEquals(waiting) && waiting.All(c => c.State == EEditorPluginState.Created))
+                {
+                    break;
+                }
             }
 
             if (FinishTransition())
@@ -901,6 +838,99 @@ internal sealed partial class EGlobal
                 RefreshEditor(rebuild: false);
             }
         }
+    }
+
+    private enum DependencyReadiness
+    {
+        Ready,
+        // the dependency's own activation resumes the dependant
+        Wait,
+        // the activation failed and was reported
+        Failed
+    }
+
+    /// <summary>
+    /// Makes a hard dependency of <paramref name="context"/> available and checks it before the plugin is installed. It is
+    /// ready once it is enabled in a matching version and, for an ePlugin, activated. Its state decides alike with or
+    /// without a version constraint: in error or deactivated it fails the dependant, because nothing would resume it.
+    /// </summary>
+    private DependencyReadiness CheckDependency(PluginContext context, EEditorPluginRecipe.Plugin dependency)
+    {
+        var slug = dependency.Slug;
+        if (_recipeUpdateJournal is not null && !IsDependencyAvailable(slug))
+        {
+            EnsureUpdateDependency(dependency);
+        }
+
+        if (!IsDependencyAvailable(slug))
+        {
+            if (IsManagedPlugin(slug))
+            {
+                _toCheckEnable.Push(context);
+                _host.SetPluginEnabled(slug, true);
+                return DependencyReadiness.Wait; // EnableEPlugin will be called by the newly enabled plugin
+            }
+
+            // A plain plugin runs no framework code when it is enabled, so nothing would resume this plugin. It is
+            // enabled right away instead, and so are the optional recipes of other plugins that it satisfies.
+            if (!EnablePlainDependency(context, slug))
+            {
+                return DependencyReadiness.Failed;
+            }
+        }
+
+        var managed = _contexts.FirstOrDefault(c => c.Slug == slug && c.Plugin is not null);
+        // a plain plugin has a context only while its editor instance is known, e.g. not when enabled in this session
+        var plain = managed is null ? _contexts.FirstOrDefault(c => c.Slug == slug) : null;
+        if (dependency.Version is not null)
+        {
+            var version = (managed ?? plain)?.Metadata?.Version ?? InstalledVersion(slug);
+            if (version is null)
+            {
+                var unknown = $"The version of the GDExtension {slug} is unknown, so it cannot be checked against {dependency.Version}. Install a version of it in the ePlugin Manager.";
+                return IsExtensionAddon(slug)
+                    ? FailDependency(context, unknown, unknown)
+                    : FailDependency(context, $"Plugin {slug} not found!", $"Plugin dependency {slug} not found!");
+            }
+
+            if (!MatchesVersion(version, dependency.Version, context.Logger))
+            {
+                var mismatch = $"Dependency {slug} {version} does not match needed {dependency.Version} of {context.Slug}!";
+                return FailDependency(context, mismatch, mismatch);
+            }
+        }
+
+        if ((managed ?? plain)?.State == EEditorPluginState.Error)
+        {
+            return FailDependency(context, $"Plugin dependency {slug} failed.", $"Plugin dependency {slug} failed.");
+        }
+
+        // A plain plugin is ready while the editor has it enabled; an ePlugin once its activation completed.
+        switch (managed?.State)
+        {
+            case EEditorPluginState.Deactivated:
+                var notReady = $"Plugin dependency {slug} not ready but needed by {context.Slug}!";
+                return FailDependency(context, notReady, notReady);
+            case EEditorPluginState.Created:
+                _toCheckEnable.Push(context);
+                return DependencyReadiness.Wait; // its activation callback will resume the waiting plugin
+        }
+
+        if (_ePluginContext?.EnableDebugLogging == true)
+        {
+            context.Logger?.Log($"Dependency {slug} {dependency.Version} ready for {context.Slug}.");
+        }
+
+        return DependencyReadiness.Ready;
+    }
+
+    /// <summary>Fails the activation of <paramref name="context"/> and of every plugin waiting with it.</summary>
+    private DependencyReadiness FailDependency(PluginContext context, string warning, string reason)
+    {
+        context.Logger?.Warn(warning);
+        _toCheckEnable.Push(context);
+        FailAllUncheckedPluginsAndRefresh(reason);
+        return DependencyReadiness.Failed;
     }
 
     /// <summary>

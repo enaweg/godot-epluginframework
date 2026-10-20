@@ -2,3 +2,8 @@ root = true
 
 [*]
 charset = utf-8
+
+# The sample plugins are kept as minimal as possible: global script classes, folders named like Godot add-ons.
+[src/eplugin-framework/addons/sample*/**.cs]
+dotnet_diagnostic.CA1050.severity = none
+dotnet_diagnostic.CA1707.severity = none

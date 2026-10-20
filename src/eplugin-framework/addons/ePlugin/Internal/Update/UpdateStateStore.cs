@@ -42,9 +42,14 @@ internal sealed class UpdateStateStore(string path) : IUpdateStateStore
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* disposable local cache */ }
     }
 }
-internal static class AtomicJson
+/// <summary>Replaces a file in one step, so nobody reads it half-written and a failure leaves the previous one.</summary>
+internal static class AtomicFile
 {
-    public static void Write<T>(string path, T value)
+    /// <param name="flushToDisk">
+    /// Whether the content reaches the disk before it replaces the file; otherwise a crash right after may leave it empty.
+    /// Only files that are rewritten anyway, such as the progress window's, skip it.
+    /// </param>
+    public static void Write(string path, Action<Stream> write, bool flushToDisk = true)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temp = path + ".tmp-" + Guid.NewGuid().ToString("N");
@@ -52,13 +57,20 @@ internal static class AtomicJson
         {
             using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
-                JsonSerializer.Serialize(stream, value, UpdateStateStore.JsonOptions);
-                stream.Flush(true);
+                write(stream);
+                stream.Flush(flushToDisk);
             }
             File.Move(temp, path, true);
         }
         finally { if (File.Exists(temp)) File.Delete(temp); }
     }
+
+    public static void Write(string path, byte[] bytes) => Write(path, stream => stream.Write(bytes));
+}
+internal static class AtomicJson
+{
+    public static void Write<T>(string path, T value) =>
+        AtomicFile.Write(path, stream => JsonSerializer.Serialize(stream, value, UpdateStateStore.JsonOptions));
 }
 internal static class UpdateScheduler
 {

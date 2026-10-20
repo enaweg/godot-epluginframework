@@ -56,7 +56,7 @@ internal static class ReleaseAssets
 
 internal sealed class GitHubReleaseSource(UpdateHttp http, string owner, string repository, bool pinned = false) : IUpdateSource, IVersionListSource
 {
-    private static string? Token => Environment.GetEnvironmentVariable("EPLUGIN_GITHUB_TOKEN") ?? Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+    private static string? Token => ForgeTokens.GitHub(new Uri("https://api.github.com"));
     public async Task<IReadOnlyList<UpdateCandidate>> ListAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct)
     {
         if (pinned) return [];
@@ -106,8 +106,8 @@ internal sealed class GitLabReleaseSource(UpdateHttp http, string host, string p
 {
     private async Task<JsonElement[]> Releases(int count, CancellationToken ct)
     {
-        var token = Environment.GetEnvironmentVariable("EPLUGIN_GITLAB_TOKEN") ?? Environment.GetEnvironmentVariable("GITLAB_TOKEN");
-        using var document = JsonDocument.Parse(await http.ReadTextAsync($"https://{host}/api/v4/projects/{Uri.EscapeDataString(project)}/releases?per_page={count}", ct, token, true).ConfigureAwait(false));
+        var url = $"https://{host}/api/v4/projects/{Uri.EscapeDataString(project)}/releases?per_page={count}";
+        using var document = JsonDocument.Parse(await http.ReadTextAsync(url, ct, ForgeTokens.GitLab(new Uri(url)), true).ConfigureAwait(false));
         return document.RootElement.EnumerateArray().Where(r => !ReleaseAssets.Flag(r, "upcoming_release") &&
             SemVer.TryParse(ReleaseAssets.String(r, "tag_name"), out _))
             .Select(r => r.Clone()).ToArray();
@@ -148,15 +148,13 @@ internal sealed class ForgejoReleaseSource(UpdateHttp http, string host, string 
 {
     // Forgejo and Gitea return at most 50 releases per page.
     private const int PageSize = 50;
-    public static string? Token => Environment.GetEnvironmentVariable("EPLUGIN_FORGEJO_TOKEN") ?? Environment.GetEnvironmentVariable("FORGEJO_TOKEN") ??
-        Environment.GetEnvironmentVariable("GITEA_TOKEN");
     private async Task<JsonElement[]> Releases(int pages, CancellationToken ct)
     {
         var releases = new List<JsonElement>();
         for (var page = 1; page <= pages; page++)
         {
-            using var document = JsonDocument.Parse(await http.ReadTextAsync(
-                $"https://{host}/api/v1/repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repository)}/releases?limit={PageSize}&page={page}", ct, Token).ConfigureAwait(false));
+            var url = $"https://{host}/api/v1/repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repository)}/releases?limit={PageSize}&page={page}";
+            using var document = JsonDocument.Parse(await http.ReadTextAsync(url, ct, ForgeTokens.Forgejo(new Uri(url))).ConfigureAwait(false));
             var list = document.RootElement.EnumerateArray().Select(r => r.Clone()).ToArray();
             releases.AddRange(list.Where(r => !ReleaseAssets.Flag(r, "draft") && SemVer.TryParse(ReleaseAssets.String(r, "tag_name"), out _)));
             if (list.Length < PageSize) break;

@@ -1,6 +1,7 @@
 #if TOOLS
 using System;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -14,12 +15,50 @@ internal sealed class UpdateHttpException(string message, bool rateLimited = fal
     public bool RateLimited { get; } = rateLimited;
 }
 
+/// <summary>
+/// The tokens for private release APIs, read from the editor's environment. Each goes only to the hosts it belongs to:
+/// an update_url comes from a plugin's plugin.cfg, so any installed add-on could otherwise name a host that receives it.
+/// GitHub's token goes to GitHub, GitLab's to gitlab.com and Forgejo's to codeberg.org, the last two also to the hosts
+/// listed in EPLUGIN_GITLAB_HOSTS or EPLUGIN_FORGEJO_HOSTS (host names separated by commas, e.g. a self-hosted instance).
+/// </summary>
+internal static class ForgeTokens
+{
+    internal enum Forge { GitHub, GitLab, Forgejo }
+
+    public static string? GitHub(Uri uri) => For(Forge.GitHub, uri.Host, Environment.GetEnvironmentVariable);
+    public static string? GitLab(Uri uri) => For(Forge.GitLab, uri.Host, Environment.GetEnvironmentVariable);
+    public static string? Forgejo(Uri uri) => For(Forge.Forgejo, uri.Host, Environment.GetEnvironmentVariable);
+
+    /// <summary>The token of <paramref name="forge"/> for <paramref name="host"/>, or null when the host is not trusted with it.</summary>
+    internal static string? For(Forge forge, string host, Func<string, string?> environment)
+    {
+        var rule = forge switch
+        {
+            Forge.GitHub => new Rule(["github.com", "api.github.com", "raw.githubusercontent.com"], null, ["EPLUGIN_GITHUB_TOKEN", "GITHUB_TOKEN"]),
+            Forge.GitLab => new Rule(["gitlab.com"], "EPLUGIN_GITLAB_HOSTS", ["EPLUGIN_GITLAB_TOKEN", "GITLAB_TOKEN"]),
+            _ => new Rule(["codeberg.org"], "EPLUGIN_FORGEJO_HOSTS", ["EPLUGIN_FORGEJO_TOKEN", "FORGEJO_TOKEN", "GITEA_TOKEN"])
+        };
+        var trusted = rule.Hosts.Concat((rule.HostsVariable is null ? null : environment(rule.HostsVariable))?
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? []);
+        if (!trusted.Contains(host, StringComparer.OrdinalIgnoreCase)) return null;
+        return rule.TokenVariables.Select(environment).FirstOrDefault(token => !string.IsNullOrEmpty(token));
+    }
+
+    private sealed record Rule(string[] Hosts, string? HostsVariable, string[] TokenVariables);
+}
+
 internal sealed class UpdateHttp
 {
     public const long MaximumDownload = 256L * 1024 * 1024;
     private static readonly HttpClient Shared = new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(15) };
     private readonly HttpClient _client;
     public UpdateHttp(HttpClient? client = null) { _client = client ?? Shared; }
+
+    /// <summary>
+    /// How long a download may receive nothing before it fails. Its total time is not limited: a large GDExtension package
+    /// takes long on a slow connection, but one that stopped sending would otherwise hang until it is canceled.
+    /// </summary>
+    internal TimeSpan StallTimeout { get; init; } = TimeSpan.FromSeconds(60);
 
     public async Task<HttpResponseMessage> SendAsync(Uri uri, HttpMethod method, CancellationToken ct,
         string? token = null, bool gitlab = false)
@@ -75,30 +114,40 @@ internal sealed class UpdateHttp
         if (Uri.TryCreate(sourceUrl, UriKind.Absolute, out var source) && new Uri(url).Host == source.Host)
         {
             gitlab = source.AbsolutePath.Contains("/-/", StringComparison.Ordinal);
-            if (source.Host == "github.com") token = Environment.GetEnvironmentVariable("EPLUGIN_GITHUB_TOKEN") ?? Environment.GetEnvironmentVariable("GITHUB_TOKEN");
-            else if (gitlab) token = Environment.GetEnvironmentVariable("EPLUGIN_GITLAB_TOKEN") ?? Environment.GetEnvironmentVariable("GITLAB_TOKEN");
-            else if (source.AbsolutePath.Contains("/releases", StringComparison.Ordinal)) token = ForgejoReleaseSource.Token;
+            if (source.Host == "github.com") token = ForgeTokens.GitHub(source);
+            else if (gitlab) token = ForgeTokens.GitLab(source);
+            else if (source.AbsolutePath.Contains("/releases", StringComparison.Ordinal)) token = ForgeTokens.Forgejo(source);
         }
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(TimeSpan.FromMinutes(5));
-        using var response = await SendAsync(new Uri(url), HttpMethod.Get, timeout.Token, token, gitlab).ConfigureAwait(false);
+        using var response = await SendAsync(new Uri(url), HttpMethod.Get, ct, token, gitlab).ConfigureAwait(false);
         await using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true);
-        await CopyBounded(response, output, MaximumDownload, progress, timeout.Token).ConfigureAwait(false);
+        await CopyBounded(response, output, MaximumDownload, progress, ct, StallTimeout).ConfigureAwait(false);
     }
-    private static async Task CopyBounded(HttpResponseMessage response, Stream output, long limit, IProgress<double>? progress, CancellationToken ct)
+    private static async Task CopyBounded(HttpResponseMessage response, Stream output, long limit, IProgress<double>? progress, CancellationToken ct,
+        TimeSpan? stallTimeout = null)
     {
         var length = response.Content.Headers.ContentLength;
         if (length > limit) throw new IOException("Update download exceeds its size limit.");
+        using var stall = CancellationTokenSource.CreateLinkedTokenSource(ct);
         await using var input = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
         var buffer = new byte[81920];
         long total = 0;
         int count;
-        while ((count = await input.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+        try
         {
-            total += count;
-            if (total > limit) throw new IOException("Update download exceeds its size limit.");
-            await output.WriteAsync(buffer.AsMemory(0, count), ct).ConfigureAwait(false);
-            if (length > 0) progress?.Report((double)total / length.Value);
+            while (true)
+            {
+                // restarted for every read, so only a connection that sends nothing for that long fails
+                if (stallTimeout is { } timeout) stall.CancelAfter(timeout);
+                if ((count = await input.ReadAsync(buffer, stall.Token).ConfigureAwait(false)) == 0) break;
+                total += count;
+                if (total > limit) throw new IOException("Update download exceeds its size limit.");
+                await output.WriteAsync(buffer.AsMemory(0, count), ct).ConfigureAwait(false);
+                if (length > 0) progress?.Report((double)total / length.Value);
+            }
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new IOException($"Update download stalled: nothing was received for {stallTimeout!.Value.TotalSeconds:0} seconds.");
         }
     }
 }

@@ -60,8 +60,9 @@ The progress helper's command handling has plain xUnit tests that need no Godot:
 dotnet test "src/activation-progress.Tests/ActivationProgress.Tests.csproj"
 ```
 Repository tooling is C# on .NET 10, not Python or shell scripts: single-file apps in `tools/` (`dotnet run tools/<name>.cs
--- <args>`: `coverage.cs`, `progress_smoke.cs`, `screenshots/capture.cs`, the known-plugins generators) and the CI
-reports project `tools/ci-reports` (coverage comment and `coverage` branch, static-analysis summary), tested with:
+-- <args>`: `coverage.cs`, `progress_smoke.cs`, `package_release.cs` (a test build of the release archive),
+`screenshots/capture.cs`, the known-plugins generators) and the CI reports project `tools/ci-reports` (coverage comment
+and `coverage` branch, static-analysis summary), tested with:
 ```
 dotnet test "tools/ci-reports.Tests/CiReports.Tests.csproj"
 ```
@@ -194,14 +195,16 @@ optional plugin removes the nested recipe but does not disable the plugin that d
 
 Both hooks sit in `EnableEPlugin`/`DisableEPlugin`, which return early for plugins that do not implement
 `IEEditorPlugin`. Plain plugins (GDScript, or C# without a recipe) run no framework code when they are toggled, so
-`EGlobal.PlainPlugins.cs` notices them: `EPluginPlugin._Process` calls `ObservePluginToggles` every frame (the manager
-also right after its own toggle), which diffs `editor_plugins/enabled` against `PluginToggles` (pure, tested). The
-known set lives in Engine metadata, so a toggle between a build and its reload is not lost; disabling the framework
-removes it. A newly enabled plain plugin passes the license gate first (otherwise it is disabled again inside a
-progress scope, which reopens Project Settings, and the review is queued), then `ReevaluateOptionalDependencies`. A
-disabled one disables the activated ePlugins that require it (their optional snapshot is filled first, since the
-editor no longer has the plugin) and runs `UninstallOptionalDependenciesOn`, all in one transition: `_transitionHold`
-keeps `FinishTransition` from building in between. Toggles the framework makes itself go through `NotePluginToggle`;
+`EGlobal.PlainPlugins.cs` notices them: `EPluginPlugin._Process` calls `ObservePluginToggles` after ProjectSettings'
+`settings_changed` (connected as a method callable), after (re)initializing and, while it returns false (a reload is
+pending), every frame; the manager also calls it right after its own toggle. It diffs `editor_plugins/enabled`
+against `PluginToggles` (pure, tested). The known set lives in Engine metadata, so a toggle between a build and its
+reload is not lost; disabling the framework removes it. A newly enabled plain plugin passes the license gate first
+(otherwise it is disabled again inside a progress scope, which reopens Project Settings, and the review is
+queued), then `ReevaluateOptionalDependencies`. A disabled one disables the activated ePlugins that require it (their
+optional snapshot is filled first, since the editor no longer has the plugin) and runs `UninstallOptionalDependenciesOn`,
+all in one transition: `_transitionHold` keeps `FinishTransition` from building in between. Toggles the framework makes
+itself go through `NotePluginToggle`;
 nothing reacts while a reload is pending or an update is active. A hard dependency on a plain plugin is enabled
 synchronously by `EnablePlainDependency`, because no `EnableEPlugin` callback would resume the dependant, and versions of
 plain plugins without a context are read from their `plugin.cfg`.

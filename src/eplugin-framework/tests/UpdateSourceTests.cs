@@ -112,6 +112,54 @@ public class UpdateSourceTests
     }
 
     [TestCase]
+    public static void ForgeTokensGoOnlyToTheHostsTheyBelongTo()
+    {
+        // an update_url comes from a plugin's plugin.cfg: a host it names must not receive a token meant for another
+        var environment = new Dictionary<string, string?>
+        {
+            ["GITHUB_TOKEN"] = "github", ["GITLAB_TOKEN"] = "gitlab", ["GITEA_TOKEN"] = "gitea",
+            ["EPLUGIN_GITLAB_HOSTS"] = " git.example.org ,, other.example", ["EPLUGIN_FORGEJO_HOSTS"] = ""
+        };
+        string? Read(string name) => environment.GetValueOrDefault(name);
+        Assertions.AssertString(ForgeTokens.For(ForgeTokens.Forge.GitHub, "api.github.com", Read)).IsEqual("github");
+        Assertions.AssertString(ForgeTokens.For(ForgeTokens.Forge.GitHub, "github.example", Read)).IsNull();
+        Assertions.AssertString(ForgeTokens.For(ForgeTokens.Forge.GitLab, "gitlab.com", Read)).IsEqual("gitlab");
+        Assertions.AssertString(ForgeTokens.For(ForgeTokens.Forge.GitLab, "GIT.example.org", Read)).IsEqual("gitlab");
+        Assertions.AssertString(ForgeTokens.For(ForgeTokens.Forge.GitLab, "evil.example", Read)).IsNull();
+        Assertions.AssertString(ForgeTokens.For(ForgeTokens.Forge.Forgejo, "codeberg.org", Read)).IsEqual("gitea");
+        Assertions.AssertString(ForgeTokens.For(ForgeTokens.Forge.Forgejo, "git.example.org", Read)).IsNull();
+        environment["EPLUGIN_FORGEJO_TOKEN"] = "forgejo";
+        Assertions.AssertString(ForgeTokens.For(ForgeTokens.Forge.Forgejo, "codeberg.org", Read)).IsEqual("forgejo");
+    }
+
+    [TestCase]
+    public static async Task DownloadFailsOnlyWhenNothingArrives()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "eplugin-stall-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            // four bytes 150 ms apart take longer than the stall timeout, but something arrives within it each time
+            using var steady = new HttpClient(new Handler(_ => new(HttpStatusCode.OK) { Content = new StreamContent(new SlowStream(4, false)) }));
+            var complete = Path.Combine(folder, "complete.zip");
+            await new UpdateHttp(steady) { StallTimeout = TimeSpan.FromMilliseconds(400) }
+                .DownloadAsync("https://example.org/plugin.zip", complete, null, CancellationToken.None);
+            Assertions.AssertThat(new FileInfo(complete).Length).IsEqual(4);
+
+            using var stalled = new HttpClient(new Handler(_ => new(HttpStatusCode.OK) { Content = new StreamContent(new SlowStream(1, true)) }));
+            string? error = null;
+            try
+            {
+                await new UpdateHttp(stalled) { StallTimeout = TimeSpan.FromMilliseconds(400) }
+                    .DownloadAsync("https://example.org/plugin.zip", Path.Combine(folder, "stalled.zip"), null, CancellationToken.None);
+            }
+            catch (IOException ex) { error = ex.Message; }
+            Assertions.AssertString(error).Contains("stalled");
+        }
+        finally { Directory.Delete(folder, true); }
+    }
+
+    [TestCase]
     public static async Task RateLimitFallsBackToLatestRedirect()
     {
         using var client = new HttpClient(new Handler(request =>
@@ -443,6 +491,34 @@ public class UpdateSourceTests
     private sealed class Handler(Func<HttpRequestMessage, HttpResponseMessage> handle) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) => Task.FromResult(handle(request));
+    }
+    /// <summary>A response body that sends one byte every 150 ms, then ends or, when it <paramref name="stalls"/>, sends nothing more.</summary>
+    private sealed class SlowStream(int bytes, bool stalls) : Stream
+    {
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken ct = default)
+        {
+            if (bytes == 0)
+            {
+                if (stalls) await Task.Delay(Timeout.Infinite, ct);
+                return 0;
+            }
+            await Task.Delay(150, ct);
+            bytes--;
+            buffer.Span[0] = 1;
+            return 1;
+        }
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken ct) =>
+            ReadAsync(buffer.AsMemory(offset, count), ct).AsTask();
+        public override int Read(byte[] buffer, int offset, int count) => ReadAsync(buffer, offset, count, CancellationToken.None).GetAwaiter().GetResult();
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
     /// <summary>A repository with one plugin in <paramref name="folder"/> ("" at its root) next to a project.godot.</summary>
     private sealed record OtherPackageRef : UpdatePackageRef;

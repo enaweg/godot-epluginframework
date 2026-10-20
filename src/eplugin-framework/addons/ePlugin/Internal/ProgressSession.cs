@@ -8,6 +8,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
+using Enaweg.Plugin.Internal.Update;
 
 namespace Enaweg.Plugin.Internal;
 
@@ -243,12 +244,11 @@ internal sealed class ProgressSession : IProgressHelper
     }
 
     /// <summary>Replaces the file in one step, so nobody reads it half-written.</summary>
-    private static void Write(string path, string[] lines)
+    private static void Write(string path, string[] lines) => AtomicFile.Write(path, stream =>
     {
-        var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        File.WriteAllLines(temporary, lines);
-        File.Move(temporary, path, true);
-    }
+        using var writer = new StreamWriter(stream, leaveOpen: true);
+        foreach (var line in lines) writer.WriteLine(line);
+    }, flushToDisk: false);
 
     public void Send(string user, string command)
     {

@@ -147,13 +147,7 @@ internal static class UpdateRecovery
         }
         return Outcome.Continue;
     }
-    private static void Write(string path, JsonObject json)
-    {
-        var temporary = path + ".recovery.tmp";
-        using (var stream = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None))
-        { JsonSerializer.Serialize(stream, json, Options); stream.Flush(true); }
-        File.Move(temporary, path, true);
-    }
+    private static void Write(string path, JsonObject json) => AtomicFile.Write(path, stream => JsonSerializer.Serialize(stream, json, Options));
     private static void Slug(string slug) { if (slug.Contains('/') || slug.Contains('\\')) throw new InvalidDataException("Invalid addon slug."); Inside("/", slug); }
     private static string Inside(string root, string relative)
     {

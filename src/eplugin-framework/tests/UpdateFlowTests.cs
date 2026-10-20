@@ -17,7 +17,7 @@ namespace Enaweg.Plugin.Tests;
 /// installing a batch with a fake framework.
 /// </summary>
 [TestSuite]
-public class UpdateFlowTests
+public class UpdateFlowTests : IDisposable
 {
     private FakeHost _host = null!;
     private LicenseReview? _askedLicenses;
@@ -37,7 +37,13 @@ public class UpdateFlowTests
     }
 
     [AfterTest]
-    public void Cleanup() => _host.Dispose();
+    public void Cleanup() => Dispose();
+
+    public void Dispose()
+    {
+        _host.Dispose();
+        GC.SuppressFinalize(this);
+    }
 
     private UpdateFlow Flow() => new(_host, review =>
     {

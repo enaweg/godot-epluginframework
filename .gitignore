@@ -37,3 +37,6 @@ src/eplugin-framework/addons/ePlugin/progress/ActivationProgress.*
 
 # Output of tools/build_godot_addons.cs, written to the directory it runs in
 godot_addons_active_*_stars.json
+
+# Python bytecode left by older tooling
+__pycache__/

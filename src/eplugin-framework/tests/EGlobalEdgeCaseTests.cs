@@ -73,9 +73,46 @@ public partial class EGlobalEdgeCaseTests : IDisposable
 
         Assertions.AssertObject(_fixture.State("pinned")).IsEqual(EEditorPluginState.Error);
         Assertions.AssertObject(_fixture.State("loose")).IsEqual(EEditorPluginState.Error);
-        Assertions.AssertBool(Logged("warn", "Plugin dependency base not ready but needed by pinned!")).IsTrue();
+        Assertions.AssertString(_fixture.Context("pinned")!.ErrorDetail!.Message).Contains("Plugin dependency base failed.");
         Assertions.AssertString(_fixture.Context("loose")!.ErrorDetail!.Message).Contains("Plugin dependency base failed.");
         Assertions.AssertBool(_fixture.Operations.Skip(start).Any(o => o.StartsWith("add-", StringComparison.Ordinal))).IsFalse();
+    }
+
+    [TestCase]
+    public void ADeactivatedDependencyFailsItsDependantWithOrWithoutAVersion()
+    {
+        _fixture.AddEPlugin("base", b => b.AddNuget("Base.Package"));
+        _fixture.AddEPlugin("pinned", b => b.AddNuget("Pinned.Package").AddPluginDependency("base", ">=1.0"));
+        _fixture.AddEPlugin("loose", b => b.AddNuget("Loose.Package").AddPluginDependency("base"));
+        _fixture.Enable("base");
+        // Godot keeps it enabled, so no activation of it would resume a plugin that waits for it
+        _fixture.Context("base")!.State = EEditorPluginState.Deactivated;
+
+        _fixture.Enable("pinned");
+        _fixture.Enable("loose");
+
+        Assertions.AssertString(_fixture.Context("pinned")!.ErrorDetail!.Message).Contains("Plugin dependency base not ready but needed by pinned!");
+        Assertions.AssertString(_fixture.Context("loose")!.ErrorDetail!.Message).Contains("Plugin dependency base not ready but needed by loose!");
+        Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsFalse();
+    }
+
+    [TestCase]
+    public void APluginWaitingForADependencyThatNeverCallsBackDoesNotStopOthers()
+    {
+        _fixture.AddEPlugin("base", b => b.AddNuget("Base.Package"));
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package").AddPluginDependency("base"));
+        _fixture.AddEPlugin("other", b => b.AddNuget("Other.Package"));
+        _fixture.Enable("base");
+        // like an ePlugin whose _EnablePlugin does not call EnableEPlugin: enabled, but never activated
+        _fixture.Context("base")!.State = EEditorPluginState.Created;
+        _fixture.Enable("app");
+
+        // resumes the waiting app, which waits again; this used to pop and push it back forever
+        _fixture.Enable("other");
+
+        Assertions.AssertObject(_fixture.State("other")).IsEqual(EEditorPluginState.Activated);
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Created);
+        Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsTrue();
     }
 
     [TestCase]

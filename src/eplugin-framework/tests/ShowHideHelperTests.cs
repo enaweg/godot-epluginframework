@@ -10,7 +10,7 @@ namespace Enaweg.Plugin.Tests;
 
 [TestSuite]
 [RequireGodotRuntime]
-public class ShowHideHelperTests
+public class ShowHideHelperTests : IDisposable
 {
     private string _root = null!;
     private EditorPlugin _pluginBase = null!;
@@ -26,10 +26,13 @@ public class ShowHideHelperTests
     }
 
     [AfterTest]
-    public void Cleanup()
+    public void Cleanup() => Dispose();
+
+    public void Dispose()
     {
-        _pluginBase.Free();
-        Directory.Delete(_root, true);
+        if (GodotObject.IsInstanceValid(_pluginBase)) _pluginBase.Free();
+        if (Directory.Exists(_root)) Directory.Delete(_root, true);
+        GC.SuppressFinalize(this);
     }
 
     [TestCase]

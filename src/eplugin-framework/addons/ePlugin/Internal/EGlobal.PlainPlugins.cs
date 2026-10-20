@@ -43,29 +43,30 @@ internal sealed partial class EGlobal
     /// <summary>
     /// Handles plain plugins (GDScript or C# plugins without a recipe) that were enabled or disabled since the last call,
     /// in Project Settings, the ePlugin Manager or by a declined license. They run no framework code when they are
-    /// toggled, so this is called every frame and right after the ePlugin Manager toggles a plugin.
+    /// toggled, so this is called after a project setting changed and right after the ePlugin Manager toggles a plugin.
     /// </summary>
-    internal void ObservePluginToggles()
+    /// <returns>False when the toggles must be looked at again later, e.g. once the framework is initialized.</returns>
+    internal bool ObservePluginToggles()
     {
         if (!IsValid() || _pluginToggles is null)
         {
-            return;
+            return false;
         }
 
         var current = GetEnabledPluginSlugs();
         var (enabled, disabled) = _pluginToggles.Changes(current);
         if (enabled.Length == 0 && disabled.Length == 0)
         {
-            return;
+            return true;
         }
 
         // Handled once the new assembly is loaded: work started now would run on the old code.
         if (AssemblyReload.IsPending)
         {
-            return;
+            return false;
         }
 
-        // Taken as handled first, so a failure below is not repeated every frame.
+        // Taken as handled first, so a failure below is not repeated.
         _pluginToggles.Rebase(current);
         SavePluginToggles();
 
@@ -73,7 +74,7 @@ internal sealed partial class EGlobal
         if (_recipeUpdateJournal is not null || _updateRefreshSuppression > 0 ||
             _updateJournals?.Read().Any(j => j.IsActive) == true)
         {
-            return;
+            return true;
         }
 
         foreach (var slug in disabled.Where(IsPlainPlugin))
@@ -85,6 +86,8 @@ internal sealed partial class EGlobal
         {
             Guard(slug, () => OnPlainPluginEnabled(slug));
         }
+
+        return true;
 
         void Guard(string slug, Action handle)
         {

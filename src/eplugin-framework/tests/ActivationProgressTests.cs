@@ -1,6 +1,7 @@
 #if TOOLS
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -11,6 +12,8 @@ using GdUnit4;
 namespace Enaweg.Plugin.Tests;
 
 [TestSuite]
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable",
+    Justification = "_timer is a fake heartbeat; the tests assert when the code under test disposes it.")]
 public class ActivationProgressTests
 {
     private readonly List<FakeHelper> _launched = [];

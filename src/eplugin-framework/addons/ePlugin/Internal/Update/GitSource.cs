@@ -65,14 +65,39 @@ internal interface IGitRunner
 }
 internal sealed class GitRunner(bool allowFileProtocol = false) : IGitRunner
 {
+    // Whether the user set how git runs ssh (GIT_SSH_COMMAND, GIT_SSH or core.sshCommand); asked once per assembly load.
+    private static bool? _customSsh;
+
     public async Task<GitOutcome> RunAsync(string directory, IReadOnlyList<string> arguments, CancellationToken ct, bool trace = false)
     {
+        var batchSsh = !await HasCustomSsh(directory, ct).ConfigureAwait(false);
+        // A fetch transfers the commit's trees and a checkout its blobs, which take long on a slow connection.
+        return await StartAsync(directory, arguments, arguments.Contains("checkout") || arguments.Contains("fetch") ? 300 : 60, batchSsh, trace, ct)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Whether the user configured an ssh command, e.g. plink or an agent's: it is used as it is. Otherwise ssh runs in
+    /// batch mode, so a passphrase or host key question fails instead of waiting for an answer nobody can give.
+    /// </summary>
+    private async Task<bool> HasCustomSsh(string directory, CancellationToken ct)
+    {
+        if (_customSsh is { } known) return known;
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("GIT_SSH_COMMAND")) ||
+            !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("GIT_SSH"))) return (_customSsh = true).Value;
+        var configured = await StartAsync(directory, ["config", "--get", "core.sshCommand"], 60, false, false, ct).ConfigureAwait(false);
+        return (_customSsh = configured.ExitCode == 0 && configured.Output.Trim().Length > 0).Value;
+    }
+
+    private async Task<GitOutcome> StartAsync(string directory, IReadOnlyList<string> arguments, int timeoutSeconds, bool batchSsh, bool trace,
+        CancellationToken ct)
+    {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(TimeSpan.FromSeconds(arguments.Contains("checkout") ? 300 : 60));
+        timeout.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
         var start = new ProcessStartInfo("git") { WorkingDirectory = directory, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
         foreach (var value in new[] { "-c", "protocol.file.allow=" + (allowFileProtocol ? "always" : "never"), "-c", "protocol.ext.allow=never", "-c", "protocol.version=2" }.Concat(arguments)) start.ArgumentList.Add(value);
         start.Environment["GIT_TERMINAL_PROMPT"] = "0";
-        start.Environment["GIT_SSH_COMMAND"] = "ssh -o BatchMode=yes";
+        if (batchSsh) start.Environment["GIT_SSH_COMMAND"] = "ssh -o BatchMode=yes";
         if (trace) start.Environment["GIT_TRACE_PACKET"] = "1";
         using var process = Process.Start(start) ?? throw new IOException("Cannot start git; git >= 2.25 is required.");
         var output = process.StandardOutput.ReadToEndAsync(timeout.Token);
@@ -241,14 +266,14 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
             var path = repo.AbsolutePath.Trim('/');
             if (path.EndsWith(".git", StringComparison.Ordinal)) path = path[..^4];
             metadata = await http.ReadTextAsync($"https://raw.githubusercontent.com/{path}/{commit}/{url.Path}/plugin.cfg", ct,
-                Environment.GetEnvironmentVariable("EPLUGIN_GITHUB_TOKEN") ?? Environment.GetEnvironmentVariable("GITHUB_TOKEN")).ConfigureAwait(false);
+                ForgeTokens.GitHub(repo)).ConfigureAwait(false);
         }
         else if (repo?.Host == "gitlab.com")
         {
             var path = repo.AbsolutePath.Trim('/');
             if (path.EndsWith(".git", StringComparison.Ordinal)) path = path[..^4];
             metadata = await http.ReadTextAsync($"https://{repo.Authority}/{path}/-/raw/{commit}/{url.Path}/plugin.cfg", ct,
-                Environment.GetEnvironmentVariable("EPLUGIN_GITLAB_TOKEN") ?? Environment.GetEnvironmentVariable("GITLAB_TOKEN"), true).ConfigureAwait(false);
+                ForgeTokens.GitLab(repo), true).ConfigureAwait(false);
         }
         else
         {
