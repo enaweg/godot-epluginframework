@@ -36,6 +36,8 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
     private static readonly TimeSpan InitializeRetryDelay = TimeSpan.FromSeconds(10);
     private DateTime _nextInitializeAttempt;
     private bool _unloadingObserved;
+    // Set when a project setting changed, e.g. the enabled plugins: reading them every frame would cost for nothing.
+    private bool _pluginTogglesDue = true;
     internal CancellationToken UpdateLifetime => _updateLifetime.Token;
     /// <summary>The <c>eplugin/logging/debug</c> project setting.</summary>
     public bool EnableDebugLogging => LoggingSettings.Debug;
@@ -74,7 +76,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         EGlobal.RunPosted();
         // Plain plugins enabled or disabled in Project Settings run no framework code; their licenses, dependants and
         // optional recipes are handled here, before the dialogs below look at them.
-        if (EGlobal.Instance.IsValid()) EGlobal.Instance.ObservePluginToggles();
+        if (_pluginTogglesDue) _pluginTogglesDue = !EGlobal.Instance.ObservePluginToggles();
 
         ShowManagerStatus();
         ReopenManager();
@@ -212,12 +214,18 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         if (_managerButton.Icon is null) _managerButton.Text = "ePlugin";
         _managerSignals.Connect(_managerButton, Control.SignalName.ThemeChanged, Callable.From(() => CallDeferred(nameof(RefreshManagerIcon))));
         _managerSignals.Connect(_managerButton, BaseButton.SignalName.Pressed, Callable.From(OpenManager));
+        var settingsChanged = new Callable(this, MethodName.OnSettingsChanged);
+        if (!ProjectSettings.Singleton.IsConnected(ProjectSettings.SignalName.SettingsChanged, settingsChanged))
+            _managerSignals.Connect(ProjectSettings.Singleton, ProjectSettings.SignalName.SettingsChanged, settingsChanged);
         AddControlToContainer(CustomControlContainer.Toolbar, _managerButton);
         Engine.Singleton.SetMeta(ManagerButtonMeta, _managerButton.GetInstanceId());
         _managerUiAdded = true;
         // Toggling a plugin in the manager may rebuild and reload the assembly while the dialog is open.
         if (RemoveStaleManagerDialog()) CallDeferred(MethodName.OpenManager);
     }
+
+    /// <summary>Godot emits settings_changed once in the frame after settings changed, also when a plugin was toggled.</summary>
+    private void OnSettingsChanged() => _pluginTogglesDue = true;
 
     private void RefreshManagerIcon()
     {
@@ -348,6 +356,8 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
     {
         if (!EnsureEarlyUpdateRecovery() || DateTime.UtcNow < _nextInitializeAttempt) return;
         _managerUiAdded = false;
+        // a plugin toggled between a build and its reload is found against the toggles kept in Engine metadata
+        _pluginTogglesDue = true;
         _updateOwner = EGlobal.Instance;
         _updateOwner.UpdateDecisionNeeded -= ShowUpdateFailure;
         _updateOwner.UpdateDecisionNeeded += ShowUpdateFailure;
