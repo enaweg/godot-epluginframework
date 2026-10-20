@@ -34,7 +34,7 @@ Release sources select the highest semantic version and a ZIP asset. A releases 
 
 Git sources require **git 2.25 or newer** on PATH. Fetches use shallow, partial, sparse checkout of the requested subtree. Servers that do not advertise partial-clone filtering are refused. Git release checks can read remote metadata directly; other Git checks fetch only the metadata blob. Release ZIP sources do not require git.
 
-For private release APIs, set `EPLUGIN_GITHUB_TOKEN` (fallback `GITHUB_TOKEN`) `EPLUGIN_GITLAB_TOKEN` (fallback `GITLAB_TOKEN`) or `EPLUGIN_FORGEJO_TOKEN` (fallback `FORGEJO_TOKEN`) in the editor environment. Tokens are not written to project files or caches. HTTP credentials are scoped to the source host and stripped on redirects to another host. Git authentication uses normal Git or SSH credentials and runs without interactive prompts.
+For private release APIs, set `EPLUGIN_GITHUB_TOKEN` (fallback `GITHUB_TOKEN`), `EPLUGIN_GITLAB_TOKEN` (fallback `GITLAB_TOKEN`) or `EPLUGIN_FORGEJO_TOKEN` (fallback `FORGEJO_TOKEN`) in the editor environment. Tokens are not written to project files or caches. HTTP credentials are scoped to the source host and stripped on redirects to another host. The GitLab and Forgejo tokens are sent to every GitLab or Forgejo host that is an update site, so set them only when those are hosts you trust with them. Git authentication uses normal Git or SSH credentials and runs without interactive prompts.
 
 ## Project update sites
 

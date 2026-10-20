@@ -46,17 +46,25 @@ slug. `PluginUpdateTarget.KnownUrl` is the last entry of `UpdateUrls`, and `Plug
 source and website links. `eplugin/updates/builtin_update_sites` (default on, `EGlobal.UseKnownPlugins`) turns it off.
 
 Regenerate the data with `tools/generate_known_plugins.cs` from the output of `tools/build_godot_addons.cs` (run both in
-`tools/`); never edit it by hand. Each slug is, in this order:
+`tools/`); never edit it by hand. `build_godot_addons.cs` needs a `GITHUB_TOKEN` without scopes and reads three hosts at
+the same time: GitHub repositories from the godot-stars ranking (at least 20 stars, read in GraphQL batches one after
+another), and the searches of gitlab.com and codeberg.org for Godot projects (at least 5 stars; no token needed). Every
+add-on needs a commit or activity within two years and a release or version tag. The 500-entry maximum applies to the
+GitHub ranking only. Searches also find games: a repository with a game topic and no add-on topic is skipped, and
+entries found by a search are marked `searched`. Each slug is, in this order:
 
 1. the one `tools/extra_addons.txt` gives;
 2. the plugin folder in the latest release's ZIP, chosen like the updater's `ReleaseAssets.Select` (file list only);
 3. the slug already in the list;
 4. the plugin folder in the repository at the latest release or version tag.
 
-A slug claimed by several repositories goes to the one with the most stars. Release ZIPs the updater refuses (no or
-several plugin roots) leave the add-on out. Entries are not installed or validated in advance. Add-ons the
-ranking misses go in `tools/extra_addons.txt` (`slug;url` or `url` per line, any git host), which
-`build_godot_addons.cs` always lists regardless of stars and activity.
+A searched entry is listed only when its slug is named like its repository (one contains the other, ignoring `-`, `_`,
+`.` and "godot"), because games and projects often hold someone else's add-on in `addons/`. A slug claimed by several
+repositories goes to the one with the most stars. Release ZIPs the updater refuses (no or several plugin roots) leave the
+add-on out. Entries are not installed or validated in advance. Add-ons the ranking and searches miss or leave out go in
+`tools/extra_addons.txt` (`slug;url` or `url` per line, any git host), which `build_godot_addons.cs` always lists
+regardless of stars and activity. GitLab and Forgejo repositories there are read through their APIs; other hosts only
+through their version tags.
 
 ## Checks
 
