@@ -21,7 +21,7 @@ namespace Enaweg.Plugin.Internal;
 /// </para>
 /// </summary>
 [Tool]
-public static class ShowHideHelper
+internal static class ShowHideHelper
 {
     /// <param name="host">The editor, which loads the GDExtensions of the directory; null skips that.</param>
     internal static void ShowDirectory(PluginContext plugin, string directory, IEditorHost? host = null)

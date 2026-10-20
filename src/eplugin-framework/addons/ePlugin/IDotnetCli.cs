@@ -27,7 +27,8 @@ public interface IDotnetCli
     /// Removes a project from the solution file.
     /// </summary>
     /// <param name="projectPath">
-    /// Path to the <c>.csproj</c> file to remove, relative to the Godot project root or as a <c>res://</c> path.
+    /// Path to the <c>.csproj</c> file to remove,
+    /// relative to the Godot project root, as a <c>res://</c> path, or absolute.
     /// </param>
     void RemoveProjectFromSolution(string projectPath);
 
@@ -35,7 +36,8 @@ public interface IDotnetCli
     /// Adds a project to the solution file.
     /// </summary>
     /// <param name="projectPath">
-    /// Path to the <c>.csproj</c> file to add, relative to the Godot project root or as a <c>res://</c> path.
+    /// Path to the <c>.csproj</c> file to add,
+    /// relative to the Godot project root, as a <c>res://</c> path, or absolute.
     /// </param>
     /// <param name="virtualFolderName">
     /// Optional solution folder to place the project under.
@@ -73,7 +75,8 @@ public interface IDotnetCli
     /// Adds a project-to-project reference to the Godot project.
     /// </summary>
     /// <param name="projectReference">
-    /// Path to the referenced <c>.csproj</c> file, relative to the Godot project root or as a <c>res://</c> path.
+    /// Path to the referenced <c>.csproj</c> file,
+    /// relative to the Godot project root, as a <c>res://</c> path, or absolute.
     /// </param>
     void AddProjectReference(string projectReference);
 
@@ -81,7 +84,8 @@ public interface IDotnetCli
     /// Removes a project-to-project reference from the Godot project.
     /// </summary>
     /// <param name="projectReference">
-    /// Path to the referenced <c>.csproj</c> file to remove, relative to the Godot project root or as a <c>res://</c> path.
+    /// Path to the referenced <c>.csproj</c> file to remove,
+    /// relative to the Godot project root, as a <c>res://</c> path, or absolute.
     /// </param>
     void RemoveProjectReference(string projectReference);
 
@@ -93,8 +97,10 @@ public interface IDotnetCli
     /// </param>
     /// <param name="args">Additional arguments appended after the command, one per element and unquoted.</param>
     /// <returns>
-    /// A tuple of <c>(exitCode, outputLines)</c> where <c>exitCode</c> is the process exit code
-    /// and <c>outputLines</c> contains the captured standard output lines.
+    /// A tuple of <c>(exitCode, output)</c> where <c>exitCode</c> is the process exit code and <c>output</c> holds what
+    /// the command wrote to standard output and standard error, as Godot's <c>OS.Execute</c> returns it: one element
+    /// with the whole text, not one per line. When <c>dotnet</c> cannot be started, the exit code is <c>-1</c> and the
+    /// output is empty. A non-zero exit code is logged with the output.
     /// </returns>
     public (int, string[]) Execute(string command, string[] args);
 }

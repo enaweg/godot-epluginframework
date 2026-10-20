@@ -30,10 +30,12 @@ public interface IEEditorPlugin
     /// projects, managed directories, and plugin dependencies for this plugin.
     /// </param>
     /// <remarks>
-    /// Called by the framework when the recipe is needed — typically the first time the plugin is
-    /// enabled or disabled in the current editor session. The framework also re-invokes this when
-    /// deactivating an already-active plugin so the cleanup steps can be derived. Implementations
-    /// should be deterministic and side-effect free: just add items to <paramref name="builder"/>.
+    /// Called by the framework whenever it needs the recipe: once per editor instance of the plugin when it is
+    /// first enabled or disabled (after an assembly reload too, so the cleanup steps can be derived), and again with
+    /// a fresh builder to read the plugin's dependencies, license or welcome page, e.g. for the ePlugin Manager or a
+    /// retry. A disabled plugin's recipe is read from a throw-away instance of its type that is never enabled.
+    /// Implementations must therefore be deterministic and side-effect free: just add items to
+    /// <paramref name="builder"/>.
     /// </remarks>
     public void CreateRecipe(IEEditorPluginBuilder builder);
 }
