@@ -4,18 +4,19 @@ Line coverage of `src/eplugin-framework/addons/ePlugin` on `main`, recorded by t
 
 ![Line coverage](badge.svg)
 
-**79.78%** (7761 of 9728 lines) at [67755d2](https://github.com/enaweg/godot-epluginframework/commit/67755d2720b48fb97fc589b1fff88d94ad56925c), 2026-10-17.
+**79.78%** (7761 of 9728 lines) at [dda54cb](https://github.com/enaweg/godot-epluginframework/commit/dda54cbc1e267058c4b9cdd58984c55d2bf5c38e), 2026-10-20.
 
 ```mermaid
 xychart-beta
-    title "Line coverage on main (last 19 pushes)"
-    x-axis ["659bbaa", "fc57fee", "ce064dc", "7cfc8b2", "b7e2f25", "caa9da2", "bd7e681", "ff903cf", "10401ac", "e44d91f", "73f8104", "736827c", "6ff9d4b", "dd42316", "7b94ccd", "d6fa7e2", "4c0596e", "93563f4", "67755d2"]
+    title "Line coverage on main (last 20 pushes)"
+    x-axis ["659bbaa", "fc57fee", "ce064dc", "7cfc8b2", "b7e2f25", "caa9da2", "bd7e681", "ff903cf", "10401ac", "e44d91f", "73f8104", "736827c", "6ff9d4b", "dd42316", "7b94ccd", "d6fa7e2", "4c0596e", "93563f4", "67755d2", "dda54cb"]
     y-axis "Line coverage (%)" 67 --> 82
-    line [69.50, 69.48, 69.48, 69.48, 76.80, 76.80, 76.80, 76.80, 76.64, 76.67, 76.67, 76.46, 79.03, 79.03, 79.03, 79.54, 79.54, 79.71, 79.78]
+    line [69.50, 69.48, 69.48, 69.48, 76.80, 76.80, 76.80, 76.80, 76.64, 76.67, 76.67, 76.46, 79.03, 79.03, 79.03, 79.54, 79.54, 79.71, 79.78, 79.78]
 ```
 
 | Date | Commit | Line coverage | Change |
 |:--|:--|--:|--:|
+| 2026-10-20 | [dda54cb](https://github.com/enaweg/godot-epluginframework/commit/dda54cbc1e267058c4b9cdd58984c55d2bf5c38e) | 79.78% | +0.00 pp |
 | 2026-10-17 | [67755d2](https://github.com/enaweg/godot-epluginframework/commit/67755d2720b48fb97fc589b1fff88d94ad56925c) | 79.78% | +0.07 pp |
 | 2026-10-17 | [93563f4](https://github.com/enaweg/godot-epluginframework/commit/93563f44708413d616cde9989497630a71c069b0) | 79.71% | +0.17 pp |
 | 2026-10-17 | [4c0596e](https://github.com/enaweg/godot-epluginframework/commit/4c0596e4b1ad1201ecc0253c9e74554ab7409529) | 79.54% | +0.00 pp |
@@ -38,7 +39,7 @@ xychart-beta
 
 All measurements: [history.csv](history.csv).
 
-<details><summary>Files at 67755d2 (107)</summary>
+<details><summary>Files at dda54cb (107)</summary>
 
 | File | Line coverage | Covered lines |
 |:--|--:|--:|
