@@ -551,6 +551,13 @@ internal sealed partial class EGlobal
             return false;
         }
 
+        // A new editor instance of a plugin that joined already, e.g. one a manual retry enabled again after its failed
+        // activation disabled it: it takes the place of the old one, which Godot freed. The attempt has one entry per slug.
+        foreach (var stale in _transition.Participants.Keys.Where(c => c.Slug == context.Slug && c != context).ToArray())
+        {
+            _transition.Participants.Remove(stale);
+        }
+
         _transition.Participants.Add(context, target);
         return true;
     }
@@ -739,6 +746,13 @@ internal sealed partial class EGlobal
         if (!_host.IsPluginEnabled(context.Slug))
         {
             _host.SetPluginEnabled(context.Slug, true);
+            // A plugin disabled by its failed activation has no editor instance left: Godot created a new one, whose
+            // EnableEPlugin did this activation in its place. This context's instance is freed; it must not go on.
+            if (_contexts.LastOrDefault(c => c.Slug == context.Slug && c.Plugin is not null) is { } current && current != context)
+            {
+                _contexts.Remove(context);
+                return;
+            }
         }
 
         if (!TryEnsureRecipe(context))
