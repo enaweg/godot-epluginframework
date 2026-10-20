@@ -2,9 +2,12 @@
 #:property PublishAot=false
 // Run with: dotnet run build_godot_addons.cs
 // Then write ePlugin's built-in list from its output with: dotnet run generate_known_plugins.cs
+// Add-ons are found on GitHub (the godot-stars ranking), GitLab and Codeberg (their searches for Godot projects), read from
+// all three hosts at the same time. GitLab and Codeberg need no token.
 // Requires .NET 10 SDK and GITHUB_TOKEN. Only public repositories are read, but GitHub's GraphQL API answers no
 // unauthenticated requests and its REST API allows 60 per hour, too few for several hundred repositories. A token
 // without any scopes (classic) or with read-only access to public repositories (fine-grained) is enough.
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.Net;
@@ -16,6 +19,8 @@ using System.Text.RegularExpressions;
 
 const string source = "https://raw.githubusercontent.com/sci-comp/godot-stars/main/README.md";
 const int minStars = 20;
+// GitLab and Codeberg have far fewer users than GitHub, so their add-ons have fewer stars.
+const int minStarsElsewhere = 5;
 const int maxItems = 500;
 const int maxRetries = 3;
 // Only add-ons with a commit on their default branch within the last two years count as active.
@@ -28,6 +33,12 @@ var versionTag = new Regex(@"^[vV]?(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\.(0|[1-9]\d*)(?
 // godot-stars categories that hold games, project templates or assets rather than add-ons.
 var skippedCategories = new HashSet<string>(["Demos", "Shader", "Shaders", "Templates", "Projects", "Materials"],
     StringComparer.OrdinalIgnoreCase);
+// GitLab and Codeberg have no such categories, and their searches mostly find games. A game is a repository with a game
+// topic but no add-on topic.
+var gameTopics = new HashSet<string>(["game", "games", "videogame", "video-game", "godot-game", "game-jam", "gamejam", "jam"],
+    StringComparer.OrdinalIgnoreCase);
+var addonTopics = new HashSet<string>(["plugin", "addon", "add-on", "godot-plugin", "godot-addon", "editor-plugin", "library",
+    "gdextension", "tool", "tools"], StringComparer.OrdinalIgnoreCase);
 
 // cmd keeps the quotes of `set GITHUB_TOKEN="..."` in the value, and a pasted token can carry spaces.
 var token = Environment.GetEnvironmentVariable("GITHUB_TOKEN")?.Trim().Trim('"', '\'').Trim();
@@ -225,9 +236,13 @@ static ReleaseAsset[] Zips(IEnumerable<ReleaseAsset> assets) => assets.Where(a =
      Uri.TryCreate(a.Url, UriKind.Absolute, out var uri) && uri.AbsolutePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))).ToArray();
 static string? Utc(DateTimeOffset? time) => time?.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
 
-// An extra add-on outside GitHub. GitLab's API (gitlab.com or self-hosted) gives its stars, activity and releases; any
-// other host only its version tags, read with git. Null when it has no release or version tag.
-async Task<Addon?> OtherAddon(string repository, string? pluginSlug)
+// Repositories that have neither a release nor a version tag, on any host.
+var unversioned = new ConcurrentBag<string>();
+
+// An add-on outside GitHub: an extra one, or one that GitLab's or Codeberg's search found. GitLab's API (gitlab.com or
+// self-hosted) and Forgejo's (Codeberg or self-hosted, also Gitea) give its stars, activity and releases; any other host
+// only its version tags, read with git. Null when it has no release or version tag.
+async Task<Addon?> OtherAddon(string repository, string? pluginSlug, bool extra)
 {
     var https = Uri.TryCreate(repository, UriKind.Absolute, out var uri) && uri.Scheme == "https";
     var web = https ? Regex.Replace(repository, @"\.git$", "") : repository;
@@ -238,6 +253,7 @@ async Task<Addon?> OtherAddon(string repository, string? pluginSlug)
     string? release = null;
     ReleaseAsset[]? assets = null;
     var gitlab = false;
+    var forgejo = false;
     if (https)
     {
         var api = $"https://{uri!.Authority}/api/v4/projects/{Uri.EscapeDataString(new Uri(web).AbsolutePath.Trim('/'))}";
@@ -264,18 +280,131 @@ async Task<Addon?> OtherAddon(string repository, string? pluginSlug)
                         (l.TryGetProperty("url", out var link) ? link.GetString() : null) ?? "")));
             }
         }
+        else if (new Uri(web).AbsolutePath.Trim('/').Split('/') is [{ Length: > 0 } owner, { Length: > 0 } path])
+        {
+            var forgejoApi = $"https://{uri!.Authority}/api/v1/repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(path)}";
+            using var forgejoInfo = await TryJson(forgejoApi);
+            if (forgejoInfo?.RootElement is { ValueKind: JsonValueKind.Object } repo && repo.TryGetProperty("stars_count", out var count))
+            {
+                forgejo = true;
+                if (count.TryGetInt32(out var starCount)) stars = starCount;
+                if (repo.TryGetProperty("updated_at", out var updated) && updated.TryGetDateTimeOffset(out var updatedAt)) activity = updatedAt;
+                if (repo.TryGetProperty("name", out var title) && title.GetString() is { Length: > 0 } text) name = text;
+                // Drafts are not published; the updater skips them too. Forgejo returns at most 50 releases per page.
+                using var releases = await TryJson(forgejoApi + "/releases?limit=50");
+                if (releases?.RootElement is { ValueKind: JsonValueKind.Array } list)
+                {
+                    var published = list.EnumerateArray()
+                        .Where(r => !(r.TryGetProperty("draft", out var draft) && draft.ValueKind == JsonValueKind.True)).ToArray();
+                    release = Newest(published.Select(r => r.TryGetProperty("tag_name", out var tagName) ? tagName.GetString() : null));
+                    assets = Zips(published.Where(r => r.TryGetProperty("tag_name", out var tagName) && tagName.GetString() == release)
+                        .SelectMany(r => r.TryGetProperty("assets", out var all) && all.ValueKind == JsonValueKind.Array
+                            ? all.EnumerateArray() : Enumerable.Empty<JsonElement>())
+                        .Select(a => new ReleaseAsset(a.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "",
+                            a.TryGetProperty("browser_download_url", out var download) ? download.GetString() ?? "" : "")));
+                }
+            }
+        }
     }
     var tag = release is null ? Newest(await RemoteTags(git)) : null;
     if (release is null && tag is null) return null;
-    // The updater reads GitLab's release and tag pages; another host by its .git URL, whose tags are the versions.
-    if (!gitlab && !git.EndsWith(".git", StringComparison.Ordinal))
+    // The updater reads the release and tag pages of GitLab and Forgejo; another host by its .git URL, whose tags are the
+    // versions.
+    if (!gitlab && !forgejo && !git.EndsWith(".git", StringComparison.Ordinal))
     {
         Console.Error.WriteLine($"Extra add-on {repository}: the updater reads git repositories by a URL ending in .git; give that URL.");
         return null;
     }
-    var updateUrl = release is not null ? web + "/-/releases" : gitlab ? web + "/-/tags" : git;
+    var updateUrl = gitlab ? web + (release is not null ? "/-/releases" : "/-/tags")
+        : forgejo ? web + (release is not null ? "/releases" : "/tags") : git;
     return new Addon(name, stars, Utc(activity), updateUrl, release is not null ? "releases" : "tags", (release ?? tag)!,
-        web, web, web, git, true, pluginSlug, release is null ? null : assets ?? []);
+        web, web, web, git, extra, pluginSlug, release is null ? null : assets ?? [], !extra);
+}
+
+// Godot projects on gitlab.com with enough stars and recent activity, found by its topics and by its search of names and
+// descriptions. GitLab returns them by stars, so reading stops below the minimum. Without a token GitLab does not say
+// which projects are forks, but it leaves out archived ones.
+async Task<string[]> GitLabSearch()
+{
+    var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var query in new[] { "topic=godot", "topic=Godot%20Engine", "topic=godotengine", "topic=godot-engine", "search=godot" })
+    {
+        for (var page = 1; ; page++)
+        {
+            using var json = JsonDocument.Parse(await RequestAsync(
+                $"https://gitlab.com/api/v4/projects?{query}&archived=false&order_by=star_count&sort=desc&per_page=100&page={page}"));
+            var projects = json.RootElement.EnumerateArray().ToArray();
+            foreach (var project in projects)
+            {
+                if (project.TryGetProperty("forked_from_project", out var fork) && fork.ValueKind == JsonValueKind.Object) continue;
+                if (Searched(project, "star_count", "last_activity_at", "topics", "path") && project.GetProperty("web_url").GetString() is { } url)
+                    found.Add(url.TrimEnd('/'));
+            }
+            if (projects.Length < 100 || projects[^1].GetProperty("star_count").GetInt32() < minStarsElsewhere) break;
+        }
+    }
+    return found.ToArray();
+}
+
+// Godot repositories on Codeberg, found like GitLabSearch's: by their topics and by the search of names and descriptions.
+async Task<string[]> CodebergSearch()
+{
+    var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var queries = new[] { "godot", "godot-engine", "godotengine", "godot4", "godot-plugin", "godot-addon", "gdscript", "gdextension" }
+        .Select(topic => $"q={topic}&topic=true").Append("q=godot&includeDesc=true");
+    foreach (var query in queries)
+    {
+        for (var page = 1; ; page++)
+        {
+            using var json = JsonDocument.Parse(await RequestAsync(
+                $"https://codeberg.org/api/v1/repos/search?{query}&sort=stars&order=desc&limit=50&page={page}"));
+            var repositories = json.RootElement.GetProperty("data").EnumerateArray().ToArray();
+            foreach (var repository in repositories)
+            {
+                if (new[] { "archived", "fork", "mirror", "template" }.Any(flag =>
+                        repository.TryGetProperty(flag, out var value) && value.ValueKind == JsonValueKind.True)) continue;
+                if (Searched(repository, "stars_count", "updated_at", "topics", "name") && repository.GetProperty("html_url").GetString() is { } url)
+                    found.Add(url.TrimEnd('/'));
+            }
+            if (repositories.Length < 50 || repositories[^1].GetProperty("stars_count").GetInt32() < minStarsElsewhere) break;
+        }
+    }
+    return found.ToArray();
+}
+
+// Whether a repository a search found can be an active add-on: enough stars, recent activity, not a game and not the
+// engine. Repositories named "godot" are the engine and its forks.
+bool Searched(JsonElement repository, string starsProperty, string activityProperty, string topicsProperty, string nameProperty)
+{
+    var topics = repository.TryGetProperty(topicsProperty, out var list) && list.ValueKind == JsonValueKind.Array
+        ? list.EnumerateArray().Select(t => t.GetString() ?? "").ToArray() : [];
+    return repository.TryGetProperty(starsProperty, out var stars) && stars.GetInt32() >= minStarsElsewhere &&
+        repository.TryGetProperty(activityProperty, out var activity) && activity.TryGetDateTimeOffset(out var last) && last >= cutoff &&
+        !(topics.Any(gameTopics.Contains) && !topics.Any(addonTopics.Contains)) &&
+        !string.Equals(repository.TryGetProperty(nameProperty, out var name) ? name.GetString() : null, "godot", StringComparison.OrdinalIgnoreCase);
+}
+
+// The add-ons among repositories outside GitHub, read a few at a time.
+async Task<Addon[]> OtherAddons(IEnumerable<(string Repository, string? PluginSlug)> repositories, bool extra)
+{
+    var addons = new ConcurrentBag<Addon>();
+    await Parallel.ForEachAsync(repositories, new ParallelOptions { MaxDegreeOfParallelism = 6 }, async (repository, _) =>
+    {
+        if (await OtherAddon(repository.Repository, repository.PluginSlug, extra) is { } addon) addons.Add(addon);
+        else unversioned.Add(repository.Repository);
+    });
+    return addons.ToArray();
+}
+
+// The add-ons a search found on a host. Extra add-ons are left out here and read with the other extra add-ons, which
+// keeps the slug extra_addons.txt gives them.
+async Task<Addon[]> SearchedAddons(string host, Task<string[]> search)
+{
+    var extras = others.Select(o => Regex.Replace(o.Repository, @"\.git$", "")).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    var repositories = (await search).Where(r => !extras.Contains(r)).ToArray();
+    var addons = await OtherAddons(repositories.Select(r => (r, (string?)null)), false);
+    Console.Error.WriteLine($"Checked {repositories.Length} candidates on {host}, {addons.Length} with a release or version tag");
+    return addons;
 }
 
 async Task<JsonDocument?> TryJson(string url)
@@ -310,86 +439,90 @@ static async Task<IEnumerable<string>> RemoteTags(string repository)
         .Select(r => r["refs/tags/".Length..]).ToArray();
 }
 
-var results = new List<Addon>();
-var unversioned = new List<string>();
-var values = candidates.Values.ToArray();
-for (var offset = 0; offset < values.Length; offset += 20)
+// The hosts are read at the same time. GitHub's batches run one after another, as GitHub asks of API clients, next to
+// GitLab's and Codeberg's searches and the extra add-ons on other hosts.
+var found = await Task.WhenAll(GitHubAddons(), SearchedAddons("GitLab", GitLabSearch()), SearchedAddons("Codeberg", CodebergSearch()),
+    OtherAddons(others, true));
+var addons = found.SelectMany(hostAddons => hostAddons).ToArray();
+
+// The candidates from GitHub's ranking and the extra add-ons on GitHub.
+async Task<Addon[]> GitHubAddons()
 {
-    var batch = values.Skip(offset).Take(20).ToArray();
-    var fields = new StringBuilder("{ ");
-    for (var i = 0; i < batch.Length; i++)
+    var results = new List<Addon>();
+    var values = candidates.Values.ToArray();
+    for (var offset = 0; offset < values.Length; offset += 20)
     {
-        var slugParts = batch[i].Slug.Split('/', 2);
-        fields.Append($"r{i}: repository(owner:{JsonSerializer.Serialize(slugParts[0])}, name:{JsonSerializer.Serialize(slugParts[1])}) {{ ");
-        fields.Append("nameWithOwner isArchived isDisabled isFork stargazerCount url homepageUrl description ");
-        fields.Append("defaultBranchRef { target { ... on Commit { committedDate } } } ");
-        // As many releases as the updater's check reads, and the newest tags for repositories without a release.
-        // Each release's assets, so generate_known_plugins.cs can read the ZIP the updater downloads.
-        fields.Append("releases(first: 30, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { tagName isDraft ");
-        fields.Append("releaseAssets(first: 20) { nodes { name downloadUrl } } } } ");
-        fields.Append("refs(refPrefix: \"refs/tags/\", first: 100, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) { nodes { name } } } ");
-    }
-    fields.Append('}');
-
-    using var json = JsonDocument.Parse(await RequestAsync("https://api.github.com/graphql", new { query = fields.ToString() }));
-    var root = json.RootElement;
-    if (root.TryGetProperty("errors", out var errors))
-        Console.Error.WriteLine($"GitHub API warnings: {errors}");
-    if (!root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
-        throw new InvalidOperationException("GitHub GraphQL returned no repository data.");
-
-    for (var i = 0; i < batch.Length; i++)
-    {
-        var extra = batch[i].Extra;
-        if (!data.TryGetProperty($"r{i}", out var repo) || repo.ValueKind != JsonValueKind.Object)
+        var batch = values.Skip(offset).Take(20).ToArray();
+        var fields = new StringBuilder("{ ");
+        for (var i = 0; i < batch.Length; i++)
         {
-            if (extra) Console.Error.WriteLine($"Extra add-on https://github.com/{batch[i].Slug} was not found on GitHub.");
-            continue;
+            var slugParts = batch[i].Slug.Split('/', 2);
+            fields.Append($"r{i}: repository(owner:{JsonSerializer.Serialize(slugParts[0])}, name:{JsonSerializer.Serialize(slugParts[1])}) {{ ");
+            fields.Append("nameWithOwner isArchived isDisabled isFork stargazerCount url homepageUrl description ");
+            fields.Append("defaultBranchRef { target { ... on Commit { committedDate } } } ");
+            // As many releases as the updater's check reads, and the newest tags for repositories without a release.
+            // Each release's assets, so generate_known_plugins.cs can read the ZIP the updater downloads.
+            fields.Append("releases(first: 30, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { tagName isDraft ");
+            fields.Append("releaseAssets(first: 20) { nodes { name downloadUrl } } } } ");
+            fields.Append("refs(refPrefix: \"refs/tags/\", first: 100, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) { nodes { name } } } ");
         }
-        if (!extra && (repo.GetProperty("isArchived").GetBoolean() || repo.GetProperty("isDisabled").GetBoolean()
-            || repo.GetProperty("isFork").GetBoolean())) continue;
-        var stars = repo.GetProperty("stargazerCount").GetInt32();
-        if (!extra && stars < minStars) continue;
-        // committedDate keeps the committer's time zone, so compare and store it in UTC.
-        DateTimeOffset? committed = repo.TryGetProperty("defaultBranchRef", out var branch) && branch.ValueKind == JsonValueKind.Object
-            && branch.TryGetProperty("target", out var target) && target.TryGetProperty("committedDate", out var dateValue)
-            && DateTimeOffset.TryParse(dateValue.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date : null;
-        if (!extra && (committed is null || committed < cutoff)) continue;
-        var url = repo.GetProperty("url").GetString()!.TrimEnd('/');
-        // A published release (whose ZIP the updater downloads), prereleases included, wins; otherwise the repository's version tags,
-        // which the updater installs from git through the tag page URL. Without either there is nothing to update to.
-        var release = Newest(Nodes(repo, "releases")
-            .Where(r => !r.GetProperty("isDraft").GetBoolean())
-            .Select(r => r.GetProperty("tagName").GetString()));
-        var tag = release is null ? Newest(Nodes(repo, "refs").Select(r => r.GetProperty("name").GetString())) : null;
-        if (release is null && tag is null)
+        fields.Append('}');
+
+        using var json = JsonDocument.Parse(await RequestAsync("https://api.github.com/graphql", new { query = fields.ToString() }));
+        var root = json.RootElement;
+        if (root.TryGetProperty("errors", out var errors))
+            Console.Error.WriteLine($"GitHub API warnings: {errors}");
+        if (!root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException("GitHub GraphQL returned no repository data.");
+
+        for (var i = 0; i < batch.Length; i++)
         {
-            unversioned.Add(url);
-            continue;
+            var extra = batch[i].Extra;
+            if (!data.TryGetProperty($"r{i}", out var repo) || repo.ValueKind != JsonValueKind.Object)
+            {
+                if (extra) Console.Error.WriteLine($"Extra add-on https://github.com/{batch[i].Slug} was not found on GitHub.");
+                continue;
+            }
+            if (!extra && (repo.GetProperty("isArchived").GetBoolean() || repo.GetProperty("isDisabled").GetBoolean()
+                || repo.GetProperty("isFork").GetBoolean())) continue;
+            var stars = repo.GetProperty("stargazerCount").GetInt32();
+            if (!extra && stars < minStars) continue;
+            // committedDate keeps the committer's time zone, so compare and store it in UTC.
+            DateTimeOffset? committed = repo.TryGetProperty("defaultBranchRef", out var branch) && branch.ValueKind == JsonValueKind.Object
+                && branch.TryGetProperty("target", out var target) && target.TryGetProperty("committedDate", out var dateValue)
+                && DateTimeOffset.TryParse(dateValue.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date : null;
+            if (!extra && (committed is null || committed < cutoff)) continue;
+            var url = repo.GetProperty("url").GetString()!.TrimEnd('/');
+            // A published release (whose ZIP the updater downloads), prereleases included, wins; otherwise the repository's version tags,
+            // which the updater installs from git through the tag page URL. Without either there is nothing to update to.
+            var release = Newest(Nodes(repo, "releases")
+                .Where(r => !r.GetProperty("isDraft").GetBoolean())
+                .Select(r => r.GetProperty("tagName").GetString()));
+            var tag = release is null ? Newest(Nodes(repo, "refs").Select(r => r.GetProperty("name").GetString())) : null;
+            if (release is null && tag is null)
+            {
+                unversioned.Add(url);
+                continue;
+            }
+            var homepage = repo.TryGetProperty("homepageUrl", out var hp) && hp.ValueKind == JsonValueKind.String
+                ? hp.GetString() : null;
+            var assets = release is null ? null : Zips(Nodes(repo, "releases").Where(r => r.GetProperty("tagName").GetString() == release)
+                .SelectMany(r => Nodes(r, "releaseAssets"))
+                .Select(a => new ReleaseAsset(a.GetProperty("name").GetString() ?? "", a.GetProperty("downloadUrl").GetString() ?? "")));
+            results.Add(new Addon(batch[i].Name, stars, Utc(committed),
+                release is not null ? url + "/releases" : url + "/tags", release is not null ? "releases" : "tags", (release ?? tag)!,
+                string.IsNullOrWhiteSpace(homepage) ? url : homepage, url + "#readme", url, url + ".git", extra, batch[i].PluginSlug, assets));
         }
-        var homepage = repo.TryGetProperty("homepageUrl", out var hp) && hp.ValueKind == JsonValueKind.String
-            ? hp.GetString() : null;
-        var assets = release is null ? null : Zips(Nodes(repo, "releases").Where(r => r.GetProperty("tagName").GetString() == release)
-            .SelectMany(r => Nodes(r, "releaseAssets"))
-            .Select(a => new ReleaseAsset(a.GetProperty("name").GetString() ?? "", a.GetProperty("downloadUrl").GetString() ?? "")));
-        results.Add(new Addon(batch[i].Name, stars, Utc(committed),
-            release is not null ? url + "/releases" : url + "/tags", release is not null ? "releases" : "tags", (release ?? tag)!,
-            string.IsNullOrWhiteSpace(homepage) ? url : homepage, url + "#readme", url, url + ".git", extra, batch[i].PluginSlug, assets));
+        Console.Error.WriteLine($"Checked {Math.Min(offset + 20, values.Length)}/{values.Length} candidates on GitHub");
     }
-    Console.Error.WriteLine($"Checked {Math.Min(offset + 20, values.Length)}/{values.Length} candidates");
+    return results.ToArray();
 }
 
-// Extra add-ons on other hosts.
-foreach (var (repository, pluginSlug) in others)
-{
-    if (await OtherAddon(repository, pluginSlug) is { } addon) results.Add(addon);
-    else unversioned.Add(repository);
-}
-
-// Several candidates can name one repository, e.g. an old name that GitHub redirects to the renamed one. The extra
-// add-ons are always listed, also beyond the maximum.
-var unique = results.DistinctBy(x => x.RepositoryUrl, StringComparer.OrdinalIgnoreCase).ToArray();
-var output = unique.Where(x => !x.Extra).OrderByDescending(x => x.Stars).Take(maxItems).Concat(unique.Where(x => x.Extra))
+// Several candidates can name one repository, e.g. an old name that GitHub redirects to the renamed one. The maximum
+// applies to GitHub's ranking; the extra add-ons and the few found on GitLab and Codeberg are always listed.
+var unique = addons.DistinctBy(x => x.RepositoryUrl, StringComparer.OrdinalIgnoreCase).ToArray();
+static bool Ranked(Addon addon) => !addon.Extra && addon.RepositoryUrl.StartsWith("https://github.com/", StringComparison.OrdinalIgnoreCase);
+var output = unique.Where(Ranked).OrderByDescending(x => x.Stars).Take(maxItems).Concat(unique.Where(x => !Ranked(x)))
     .DistinctBy(x => x.RepositoryUrl, StringComparer.OrdinalIgnoreCase)
     .OrderByDescending(x => x.Stars).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToArray();
 var dest = Path.Combine(Environment.CurrentDirectory, $"godot_addons_active_{minStars}_stars.json");
@@ -402,20 +535,24 @@ await File.WriteAllTextAsync(dest, JsonSerializer.Serialize(output, new JsonSeri
 Console.WriteLine($"Saved {output.Length} qualifying add-ons to {dest} " +
     $"({output.Count(a => a.UpdateSource == "releases")} with releases, {output.Count(a => a.UpdateSource == "tags")} with version tags only)");
 if (unversioned.Count > 0)
-    Console.WriteLine($"Left out {unversioned.Count} add-ons without a release or version tag: {string.Join(", ", unversioned)}");
-Console.WriteLine("Candidate discovery uses an older ranking; the result may omit recently published add-ons. " +
+    Console.WriteLine($"Left out {unversioned.Count} add-ons without a release or version tag: {string.Join(", ", unversioned.Order())}");
+Console.WriteLine("GitHub's candidates come from an older ranking; the result may omit recently published add-ons. " +
     "List those in extra_addons.txt.");
 
-/// <param name="LastCommitAt">The last commit on the default branch, or GitLab's last activity; null when unknown.</param>
-/// <param name="UpdateUrl">The releases page, or the tag page (a .git URL off GitHub and GitLab) without a release.</param>
+/// <param name="LastCommitAt">The last commit on the default branch, or GitLab's last activity or Forgejo's last update;
+/// null when unknown.</param>
+/// <param name="UpdateUrl">The releases page, or the tag page (a .git URL off GitHub, GitLab and Forgejo) without a
+/// release.</param>
 /// <param name="UpdateSource">"releases" or "tags": where <paramref name="LatestVersion"/> was found.</param>
 /// <param name="LatestVersion">The tag name of the newest release or version tag, prereleases included.</param>
 /// <param name="RepositoryUrl">The repository's web page, or its git URL when it has none.</param>
 /// <param name="GitUrl">The URL to clone the repository from.</param>
-/// <param name="Extra">Listed in extra_addons.txt, so it skips the star and activity filters.</param>
+/// <param name="Extra">Listed in extra_addons.txt, so it skips the star and activity filters and the maximum.</param>
 /// <param name="Slug">The add-on's folder in res://addons as extra_addons.txt gives it; null to let the generator find it.</param>
 /// <param name="ReleaseAssets">The ZIP assets of the latest release; null without a release.</param>
+/// <param name="Searched">Found by GitLab's or Codeberg's search rather than in a curated ranking, so it may be a game or
+/// project that bundles other add-ons; the generator then requires a plugin folder named like the repository.</param>
 record Addon(string Name, int Stars, string? LastCommitAt, string UpdateUrl, string UpdateSource, string LatestVersion,
     string WebsiteUrl, string DocumentationUrl, string RepositoryUrl, string GitUrl, bool Extra, string? Slug = null,
-    ReleaseAsset[]? ReleaseAssets = null);
+    ReleaseAsset[]? ReleaseAssets = null, bool Searched = false);
 record ReleaseAsset(string Name, string Url);

@@ -143,4 +143,48 @@ internal sealed class GitLabReleaseSource(UpdateHttp http, string host, string p
             link ?? $"https://{host}/{project}/-/releases/{Uri.EscapeDataString(tag)}", tag, new ZipPackageRef(download, target.Slug));
     }
 }
+/// <summary>Releases of Forgejo and Gitea, which share their API, such as Codeberg's: https://host/owner/repository/releases.</summary>
+internal sealed class ForgejoReleaseSource(UpdateHttp http, string host, string owner, string repository, bool pinned = false) : IUpdateSource, IVersionListSource
+{
+    // Forgejo and Gitea return at most 50 releases per page.
+    private const int PageSize = 50;
+    public static string? Token => Environment.GetEnvironmentVariable("EPLUGIN_FORGEJO_TOKEN") ?? Environment.GetEnvironmentVariable("FORGEJO_TOKEN") ??
+        Environment.GetEnvironmentVariable("GITEA_TOKEN");
+    private async Task<JsonElement[]> Releases(int pages, CancellationToken ct)
+    {
+        var releases = new List<JsonElement>();
+        for (var page = 1; page <= pages; page++)
+        {
+            using var document = JsonDocument.Parse(await http.ReadTextAsync(
+                $"https://{host}/api/v1/repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repository)}/releases?limit={PageSize}&page={page}", ct, Token).ConfigureAwait(false));
+            var list = document.RootElement.EnumerateArray().Select(r => r.Clone()).ToArray();
+            releases.AddRange(list.Where(r => !ReleaseAssets.Flag(r, "draft") && SemVer.TryParse(ReleaseAssets.String(r, "tag_name"), out _)));
+            if (list.Length < PageSize) break;
+        }
+        return releases.ToArray();
+    }
+    public async Task<UpdateCandidate?> CheckAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct)
+    {
+        if (pinned) return null;
+        var release = (await Releases(1, ct).ConfigureAwait(false))
+            .Where(r => SemVer.TryParse(ReleaseAssets.String(r, "tag_name"), out var v) && UpdateService.Offers(target, v))
+            .OrderByDescending(ReleaseAssets.Version).Select(r => (JsonElement?)r).FirstOrDefault();
+        return release is null ? null : Candidate(target, release.Value);
+    }
+    public async Task<IReadOnlyList<UpdateCandidate>> ListAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct)
+    {
+        if (pinned) return [];
+        return (await Releases(2, ct).ConfigureAwait(false)).Select(r => Candidate(target, r)).ToArray();
+    }
+    private UpdateCandidate Candidate(PluginUpdateTarget target, JsonElement release)
+    {
+        var root = $"https://{host}/{owner}/{repository}";
+        var tag = ReleaseAssets.String(release, "tag_name")!;
+        var version = ReleaseAssets.Version(release);
+        var assets = ReleaseAssets.Array(release, "assets").Select(a => (ReleaseAssets.String(a, "name") ?? "", ReleaseAssets.String(a, "browser_download_url") ?? "")).Where(a => a.Item2.Length > 0);
+        var download = ReleaseAssets.Select(assets, target.Slug) ?? ReleaseAssets.String(release, "zipball_url") ?? $"{root}/archive/{Uri.EscapeDataString(tag)}.zip";
+        return new(target.Slug, target.Name, target.InstalledVersion, version.ToString(), target.UpdateUrl,
+            ReleaseAssets.String(release, "html_url") ?? $"{root}/releases/tag/{Uri.EscapeDataString(tag)}", tag, new ZipPackageRef(download, target.Slug));
+    }
+}
 #endif
