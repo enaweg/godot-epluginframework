@@ -81,6 +81,10 @@ public class UpdateCoreTests
         Assertions.AssertBool(UpdateScheduler.ShouldCheck(now, now.AddHours(-20), true)).IsTrue();
         Assertions.AssertBool(UpdateScheduler.ShouldCheck(now, now.AddHours(-19), true)).IsFalse();
         Assertions.AssertBool(UpdateScheduler.ShouldCheck(now, null, false)).IsFalse();
+        Assertions.AssertObject(UpdateScheduler.NextCheck(now, true, 5)).IsEqual(now.AddHours(5));
+        Assertions.AssertObject(UpdateScheduler.NextCheck(now, true, 0)).IsEqual(now.AddHours(1));
+        Assertions.AssertObject(UpdateScheduler.NextCheck(null, true)).IsEqual(DateTimeOffset.MinValue);
+        Assertions.AssertObject(UpdateScheduler.NextCheck(now, false)).IsNull();
         var cache = new UpdateCache { Results = [Candidate("plugin", "2.0.0")] };
         Assertions.AssertInt(UpdateScheduler.CurrentCached(cache, [Target("plugin", "3.0.0")]).Count).IsEqual(0);
         Assertions.AssertInt(UpdateScheduler.CurrentCached(cache, [Target("plugin", "1.0.0")]).Count).IsEqual(1);

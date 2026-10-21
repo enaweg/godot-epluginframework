@@ -69,3 +69,7 @@ text = "Source code"
 unique_name_in_owner = true
 layout_mode = 2
 text = "Documentation"
+
+[node name="ButtonSpace" type="Control" parent="AboutBox"]
+custom_minimum_size = Vector2(0, 16)
+layout_mode = 2
