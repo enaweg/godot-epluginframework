@@ -189,7 +189,7 @@ internal static class AnalysisReport
 
     internal static string Summary(AnalysisMetrics metrics, Func<string, string?> environment)
     {
-        var lines = new List<string> { "<!-- eplugin-static-analysis -->", "### Static analysis", "" };
+        var lines = new List<string> { "### Static analysis", "" };
         if (environment("ANALYSIS_RUN_URL") is { Length: > 0 } runUrl)
             lines.AddRange([$"[Workflow run and downloadable reports]({runUrl})", ""]);
         lines.AddRange(["| Check | Status |", "| --- | --- |"]);

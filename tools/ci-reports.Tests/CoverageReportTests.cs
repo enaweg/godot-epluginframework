@@ -73,7 +73,7 @@ public class CoverageReportTests : TemporaryDirectory
     public void SummaryWithoutBaselineSaysSo()
     {
         var text = Summarize();
-        Assert.StartsWith(Marker, text);
+        Assert.StartsWith("### Code coverage", text);
         Assert.Contains("**50.00%** | 2 of 4", text);
         Assert.Contains("nothing to compare with", text);
         var coverage = JsonNode.Parse(File.ReadAllText(Path.Combine(Output, "coverage.json")))!;

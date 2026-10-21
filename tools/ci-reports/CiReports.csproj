@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
-    The CI workflows' reports: line coverage summaries and the coverage branch (coverage summary|history), and the
-    static-analysis summary (analysis). Run with dotnet run, passing the command after the project and a double dash.
+    The CI workflows' reports: line coverage summaries and the coverage branch (coverage summary|history), the
+    static-analysis summary (analysis), and the pull request comment that combines them (comment). Run with dotnet run,
+    passing the command after the project and a double dash.
   -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
