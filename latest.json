@@ -1,8 +1,8 @@
 {
- "commit": "63cb38b8e6aab9adad1128087cd0b17b50964dc2",
- "date": "2026-10-21T09:07:03Z",
- "covered": 8097,
- "coverable": 10085,
+ "commit": "88d7bc0ed0732086375837fd11e03983ca497b8c",
+ "date": "2026-10-21T09:34:42Z",
+ "covered": 8212,
+ "coverable": 10199,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -325,8 +325,8 @@
    44
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/KnownPlugins.Data.cs": [
-   878,
-   878
+   992,
+   992
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/KnownPlugins.cs": [
    6,
@@ -397,7 +397,7 @@
    61
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateModels.cs": [
-   37,
+   38,
    38
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateRecovery.cs": [
