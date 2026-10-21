@@ -36,6 +36,9 @@ internal sealed partial class LocalSourcesDialog : AcceptDialog, ISerializationL
         _signals.Connect(_folderDialog, FileDialog.SignalName.DirSelected, Callable.From<string>(Add));
     }
 
+    /// <summary>Renders the button icons for the current editor theme; the manager calls it when its theme changes.</summary>
+    public void RefreshTheme() => _rescan.Icon = EditorIcons.Rescan;
+
     private void QueueWindowIcons() => CallDeferred(nameof(RefreshWindowIcons));
     private void RefreshWindowIcons()
     {

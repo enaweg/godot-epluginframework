@@ -69,6 +69,28 @@ public class EditorIconsTests
         Assertions.AssertBool(ReferenceEquals(green, EditorIcons.Get(EditorIcons.EPluginPath, theme, 4f, piece: Color.FromHtml("#00ff00")))).IsTrue();
     }
 
+    [TestCase]
+    public static void ActionIconsFollowTheIconPaletteAndTheThemeStatusColors()
+    {
+        using var theme = new Theme();
+        theme.SetColor("font_color", "Editor", Colors.Black);
+        foreach (var path in new[] { EditorIcons.RescanPath, EditorIcons.SettingsPath, EditorIcons.RetryPath,
+                     EditorIcons.UpgradePath, EditorIcons.ReinstallPath, EditorIcons.DowngradePath, EditorIcons.AboutPath, EditorIcons.DirectoriesPath })
+            AssertHasColor(EditorIcons.Get(path, theme, 4f)!, "#5a5a5a");
+
+        theme.SetColor("success_color", "Editor", Color.FromHtml("#00ff00"));
+        theme.SetColor("warning_color", "Editor", Color.FromHtml("#ffff00"));
+        theme.SetColor("error_color", "Editor", Color.FromHtml("#ff0000"));
+        var green = EditorIcons.Get(EditorIcons.UpgradePath, theme, 4f)!;
+        AssertHasColor(green, "#00ff00");
+        AssertHasColor(EditorIcons.Get(EditorIcons.DowngradePath, theme, 4f)!, "#ffff00");
+        AssertHasColor(EditorIcons.Get(EditorIcons.RetryPath, theme, 4f)!, "#ff0000");
+        theme.SetColor("success_color", "Editor", Color.FromHtml("#0000ff"));
+        var blue = EditorIcons.Get(EditorIcons.UpgradePath, theme, 4f)!;
+        AssertHasColor(blue, "#0000ff");
+        Assertions.AssertBool(ReferenceEquals(green, blue)).IsFalse();
+    }
+
     private static void AssertHasColor(Texture2D texture, string html) => Assertions.AssertBool(HasColor(texture, html)).IsTrue();
 
     private static bool HasColor(Texture2D texture, string html)

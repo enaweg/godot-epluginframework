@@ -16,6 +16,8 @@ Select a plugin to see its status, author, documentation and source links, licen
 
 ## Actions
 
+The buttons at the top right of the manager are icons: **Retry failed**, **Local directories...**, **Update sites...**, **Check for updates** and **About**, from left to right. Hover over one to see its name and what it does.
+
 - **On** enables or disables the selected plugin. Enabling an ePlugin installs its recipe and required dependencies. Plugins that ask for their [license](plugin-licenses.md) to be accepted show it first. Once installed, a plugin shows its [welcome page](plugin-welcome.md) if it has one and it was not shown for the project yet. Disabling a plugin also disables plugins that require it. The manager refreshes the list after toggles. Disabling ePlugin Framework itself requires confirmation because it closes the manager.
 - **Check for updates** checks immediately regardless of the scheduled interval and indexes local plugin directories again.
 - **Local directories...** adds, removes, or rescans folders containing plugin ZIP packages. The folders are user-wide settings; see [Updating plugins](updating-plugins.md#local-plugin-directories).

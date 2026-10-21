@@ -1,7 +1,7 @@
 [gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" uid="uid://bvv1rdcwentgp" path="res://addons/ePlugin/Internal/Manager/EPluginManagerDialog.cs" id="1_script"]
-[ext_resource type="Texture2D" uid="uid://c0e8d5lpm8fxh" path="res://addons/ePlugin/icons/update.svg" id="2_update"]
+[ext_resource type="Texture2D" uid="uid://sbphlpbrf2br" path="res://addons/ePlugin/icons/rescan.svg" id="2_rescan"]
 [ext_resource type="PackedScene" path="res://addons/ePlugin/Internal/Manager/LocalSourcesDialog.tscn" id="3_local"]
 [ext_resource type="PackedScene" path="res://addons/ePlugin/Internal/Manager/UpdateSitesDialog.tscn" id="4_sites"]
 [ext_resource type="PackedScene" path="res://addons/ePlugin/Internal/Manager/AboutDialog.tscn" id="5_about"]
@@ -39,33 +39,38 @@ text_overrun_behavior = 3
 [node name="RetryButton" type="Button" parent="Content/Header"]
 unique_name_in_owner = true
 layout_mode = 2
-tooltip_text = "Retry plugin activations, deactivations and updates that failed or were interrupted."
-text = "Retry failed"
+tooltip_text = "Retry failed
+Retry plugin activations, deactivations and updates that failed or were interrupted."
+flat = true
 
 [node name="LocalSourcesButton" type="Button" parent="Content/Header"]
 unique_name_in_owner = true
 layout_mode = 2
-tooltip_text = "Manage your local plugin directories. Plugin ZIP files in them are offered as updates and versions."
-text = "Local directories..."
+tooltip_text = "Local directories
+Manage your local plugin directories. Plugin ZIP files in them are offered as updates and versions."
+flat = true
 
 [node name="UpdateSitesButton" type="Button" parent="Content/Header"]
 unique_name_in_owner = true
 layout_mode = 2
-tooltip_text = "Set update sites for plugins in this project, and review ePlugin's built-in list of add-on update sites. A project's site replaces a plugin's plugin.cfg update_url, which stays the fallback."
-text = "Update sites..."
+tooltip_text = "Update sites
+Set update sites for plugins in this project, and review ePlugin's built-in list of add-on update sites. A project's site replaces a plugin's plugin.cfg update_url, which stays the fallback."
+flat = true
 
 [node name="CheckButton" type="Button" parent="Content/Header"]
 unique_name_in_owner = true
 layout_mode = 2
-tooltip_text = "Check every plugin with an update_url for a new version now, and index the local plugin directories again."
-text = "Check for updates"
-icon = ExtResource("2_update")
+tooltip_text = "Check for updates
+Check every plugin with an update_url for a new version now, and index the local plugin directories again."
+icon = ExtResource("2_rescan")
+flat = true
 
 [node name="AboutButton" type="Button" parent="Content/Header"]
 unique_name_in_owner = true
 layout_mode = 2
-tooltip_text = "Show the ePlugin Framework's version, with links to its store page, source code and documentation."
-text = "About"
+tooltip_text = "About
+Show the ePlugin Framework's version, with links to its store page, source code and documentation."
+flat = true
 
 [node name="Split" type="HSplitContainer" parent="Content"]
 layout_mode = 2
