@@ -77,6 +77,13 @@ internal static class UpdateScheduler
     public static bool ShouldCheck(DateTimeOffset now, DateTimeOffset? last, bool enabled, double intervalHours = 20) =>
         enabled && (last is null || now - last.Value >= TimeSpan.FromHours(Math.Clamp(intervalHours, 1, 8760)));
 
+    /// <summary>
+    /// From when the scheduled check runs again, at the first editor start from then on: null while scheduled checks are
+    /// off, <see cref="DateTimeOffset.MinValue"/> when no check ran yet.
+    /// </summary>
+    public static DateTimeOffset? NextCheck(DateTimeOffset? last, bool enabled, double intervalHours = 20) =>
+        !enabled ? null : last is null ? DateTimeOffset.MinValue : last.Value + TimeSpan.FromHours(Math.Clamp(intervalHours, 1, 8760));
+
     public static IReadOnlyList<UpdateCandidate> CurrentCached(UpdateCache cache, IReadOnlyList<PluginUpdateTarget> targets) =>
         cache.Results.Where(candidate => targets.Any(t => t.Slug == candidate.Slug &&
             candidate.SourceUrl is { } source && t.UpdateUrls.Contains(source) && SemVer.TryParse(t.InstalledVersion, out var installed) &&

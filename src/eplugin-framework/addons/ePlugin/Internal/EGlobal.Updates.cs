@@ -24,6 +24,10 @@ internal sealed partial class EGlobal
     /// </summary>
     public IReadOnlyList<UpdateCandidate> PendingUpdates => UpdateService.Merge(UpdateService.WithoutInstalled(_remoteUpdates, _updateCache?.State.Revisions), _localUpdates);
     internal DateTimeOffset? LastUpdateCheck => _updateCache?.State.LastCheckUtc;
+    /// <summary>See <see cref="UpdateScheduler.NextCheck"/>.</summary>
+    internal DateTimeOffset? NextUpdateCheck => UpdateScheduler.NextCheck(LastUpdateCheck, ScheduledChecksEnabled, CheckIntervalHours);
+    private static bool ScheduledChecksEnabled => ProjectSettings.GetSetting("eplugin/updates/check_enabled", true).AsBool();
+    private static double CheckIntervalHours => ProjectSettings.GetSetting("eplugin/updates/check_interval_hours", 20).AsDouble();
     internal UpdateCache? UpdateCache => _updateCache?.State;
 
     private void InitializeUpdates(EPluginPlugin plugin)
@@ -96,8 +100,8 @@ internal sealed partial class EGlobal
             // A manual check also finds ZIP files added to the local plugin directories since they were indexed.
             if (force) await RebuildLocalIndexAsync();
             var targets = CollectUpdateTargets();
-            var enabled = ProjectSettings.GetSetting("eplugin/updates/check_enabled", true).AsBool();
-            var interval = ProjectSettings.GetSetting("eplugin/updates/check_interval_hours", 20).AsDouble();
+            var enabled = ScheduledChecksEnabled;
+            var interval = CheckIntervalHours;
             _localUpdates = UpdateService.CheckLocal(targets, LocalIndex);
             // Scheduled checks are off: nothing is fetched or logged, but the known updates stay what callers see.
             if (!force && !enabled) return new(PendingUpdates, [], LastUpdateCheck ?? DateTimeOffset.UtcNow);
