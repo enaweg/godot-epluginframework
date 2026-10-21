@@ -77,7 +77,8 @@ Console.Error.WriteLine();
 // Plugins that one repository has on its own; another repository holding them too (gut, gdUnit4) only bundles them.
 var unambiguous = trees.Values.Where(t => t.Plugins.Length == 1).Select(t => Name(t.Plugins[0])).ToHashSet(StringComparer.Ordinal);
 var chosen = new List<(string Slug, Addon Addon, string Note)>();
-var leftOut = new List<string>();
+// The add-ons left out: the kind of reason, which the statistics count, and the reason itself.
+var leftOut = new List<(Addon Addon, string Kind, string Reason)>();
 foreach (var addon in addons)
 {
     var tree = trees[addon];
@@ -88,7 +89,7 @@ foreach (var addon in addons)
     if (zip is { Error: { } refused, Refuses: true })
     {
         // The updater downloads this ZIP for every update and refuses it, whatever the slug.
-        leftOut.Add($"{addon.Repository}: the release ZIP {zip.Asset} {refused}");
+        leftOut.Add((addon, "release ZIP refused by the updater", $"the release ZIP {zip.Asset} {refused}"));
         continue;
     }
     var zipSlug = zip?.Root is { } root ? ZipSlug(root, repositoryName) : null;
@@ -104,8 +105,12 @@ foreach (var addon in addons)
     }
     else
     {
-        if (tree.Error is not null) { leftOut.Add($"{addon.Repository}: {tree.Error}"); continue; }
-        if (tree.Plugins.Length == 0) { leftOut.Add($"{addon.Repository}: no plugin.cfg and no GDExtension in addons/"); continue; }
+        if (tree.Error is not null) { leftOut.Add((addon, "repository not readable with git", tree.Error)); continue; }
+        if (tree.Plugins.Length == 0)
+        {
+            leftOut.Add((addon, "no plugin.cfg and no GDExtension in addons/", "no plugin.cfg and no GDExtension in addons/"));
+            continue;
+        }
         var (folder, chosenNote) = Choose(addon, tree, repositoryName);
         slug = folder is null || folder.Length == 0 ? null : Name(folder);
         note = chosenNote;
@@ -116,14 +121,18 @@ foreach (var addon in addons)
             slug = kept;
         }
         if (zip?.Error is { } failed) note = (note.Length == 0 ? "" : note + "; ") + $"release ZIP {zip.Asset} not used: {failed}";
-        if (slug is null) { leftOut.Add($"{addon.Repository}: {note}"); continue; }
+        if (slug is null)
+        {
+            leftOut.Add((addon, folder is null ? "several plugins, none named like the repository" : "plugin at the repository root", note));
+            continue;
+        }
     }
     // A search also finds games and projects that hold someone else's add-on; only a plugin named like its repository is
     // the repository's own.
     if (addon.Searched && addon.Slug is null && !NamedLike(slug, repositoryName))
     {
-        leftOut.Add($"{addon.Repository}: found by a search, and its plugin {slug} is not named like the repository; " +
-            "list it in extra_addons.txt if it is the repository's own");
+        leftOut.Add((addon, "found by a search, plugin not named like the repository", $"found by a search, and its plugin {slug} is " +
+            "not named like the repository; list it in extra_addons.txt if it is the repository's own"));
         continue;
     }
     chosen.Add((slug, addon, note));
@@ -131,12 +140,12 @@ foreach (var addon in addons)
 
 // One entry per slug: the repository with the most stars keeps it, or the one extra_addons.txt names it for.
 var entries = new List<(string Slug, Addon Addon, string Note)>();
-var duplicates = new List<string>();
+var duplicates = new List<(string Slug, Addon Addon, Addon Winner)>();
 foreach (var group in chosen.GroupBy(c => c.Slug, StringComparer.Ordinal))
 {
     var ranked = group.OrderByDescending(c => c.Addon.Slug is not null).ThenByDescending(c => c.Addon.Stars).ToArray();
     entries.Add(ranked[0]);
-    duplicates.AddRange(ranked.Skip(1).Select(c => $"{c.Slug}: {c.Addon.Repository} ({c.Addon.Stars}) loses to {ranked[0].Addon.Repository} ({ranked[0].Addon.Stars})"));
+    duplicates.AddRange(ranked.Skip(1).Select(c => (c.Slug, c.Addon, ranked[0].Addon)));
 }
 
 var stars = Regex.Match(Path.GetFileName(input), @"_(\d+)_stars") is { Success: true } count ? count.Groups[1].Value : "?";
@@ -168,8 +177,15 @@ await File.WriteAllTextAsync(output, text.ToString().ReplaceLineEndings("\n"), n
 
 Console.WriteLine($"Wrote {entries.Count} add-ons ({entries.Count(e => e.Addon.UpdateSource == "tags")} from tags) to {output}");
 Report("Chosen or kept slugs", entries.Where(e => e.Note.Length > 0).Select(e => $"{e.Addon.Repository}: {e.Slug}, {e.Note}"));
-Report("Same slug as a more popular repository", duplicates);
-Report("Left out", leftOut);
+Report("Same slug as a more popular repository",
+    duplicates.Select(d => $"{d.Slug}: {d.Addon.Repository} ({d.Addon.Stars}) loses to {d.Winner.Repository} ({d.Winner.Stars})"));
+Report("Left out", leftOut.Select(l => $"{l.Addon.Repository}: {l.Reason}"));
+Compare(entries, repository => leftOut.FirstOrDefault(l => SameRepository(l.Addon, repository)) is { Addon: not null } left ? left.Reason
+    : duplicates.FirstOrDefault(d => SameRepository(d.Addon, repository)) is { Addon: not null } lost ? $"{lost.Slug} goes to {lost.Winner.Repository}"
+    : $"not in {Path.GetFileName(input)}; see the output of build_godot_addons.cs");
+Statistics(entries.Count, leftOut.Select(l => (l.Addon.Repository, l.Addon.Stars, l.Kind, l.Reason))
+    .Concat(duplicates.Select(d => (d.Addon.Repository, d.Addon.Stars, "same slug as a more popular repository", $"{d.Slug} goes to {d.Winner.Repository}")))
+    .ToArray());
 
 // The plugin folder of the add-on ("" at the repository root), or null when several plugins leave it open.
 (string? Folder, string Note) Choose(Addon addon, Tree tree, string repositoryName)
@@ -355,6 +371,44 @@ static string Plain(string name, bool keepGodot = false) => keepGodot ? Regex.Re
 // Whether a plugin folder is named like the repository, as one is part of the other ("sculptor" of godot-sculptor).
 static bool NamedLike(string slug, string repositoryName) => Plain(slug) is { Length: > 0 } plugin &&
     Plain(repositoryName) is { Length: > 0 } repository && (repository.Contains(plugin) || plugin.Contains(repository));
+// The add-ons that are new and those whose slug changed since the current list, and the most-starred of those no longer
+// listed with why they are left out now. Warns when clearly fewer are listed than before.
+void Compare(List<(string Slug, Addon Addon, string Note)> now, Func<string, string> why)
+{
+    var repositories = now.Select(e => e.Addon.Repository).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    var added = now.Where(e => !existing.ContainsKey(e.Addon.Repository)).OrderBy(e => e.Slug, StringComparer.OrdinalIgnoreCase).ToArray();
+    // The current list has no stars; an add-on still in the input has its stars there.
+    var removed = existing.Where(e => !repositories.Contains(e.Key))
+        .Select(e => (Repository: e.Key, Slug: e.Value, Stars: addons.FirstOrDefault(a => SameRepository(a, e.Key))?.Stars))
+        .OrderByDescending(e => e.Stars ?? -1).ThenBy(e => e.Slug, StringComparer.OrdinalIgnoreCase).ToArray();
+    var renamed = now.Where(e => existing.TryGetValue(e.Addon.Repository, out var slug) && slug != e.Slug)
+        .OrderBy(e => e.Slug, StringComparer.OrdinalIgnoreCase).ToArray();
+    Console.WriteLine($"Compared with the current list: {existing.Count} before, {now.Count} now ({now.Count - existing.Count:+0;-0;0}), " +
+        $"{added.Length} new, {removed.Length} no longer listed, {renamed.Length} with another slug");
+    foreach (var (slug, addon, _) in added) Console.WriteLine($"  + {slug}: {addon.Repository} ({addon.Stars} stars)");
+    foreach (var (repository, slug, stars) in removed.Take(10))
+        Console.WriteLine($"  - {slug}: {repository}{(stars is null ? "" : $" ({stars} stars)")}: {why(repository)}");
+    if (removed.Length > 10) Console.WriteLine($"  ... and {removed.Length - 10} more no longer listed");
+    foreach (var (slug, addon, _) in renamed) Console.WriteLine($"  ~ {existing[addon.Repository]} is now {slug}: {addon.Repository}");
+    if (now.Count < existing.Count * 0.9)
+        Console.Error.WriteLine($"Warning: {existing.Count - now.Count} add-ons fewer than before. Check the reasons above, and the " +
+            $"statistics of build_godot_addons.cs for {Path.GetFileName(input)}, before committing the list.");
+}
+static bool SameRepository(Addon addon, string repository) => string.Equals(addon.Repository, repository, StringComparison.OrdinalIgnoreCase);
+
+// How many add-ons were added and filtered out, how many each kind of reason left out, and the most-starred ones left out,
+// which are the likeliest to be add-ons the slug rules should not have left out.
+static void Statistics(int added, (string Repository, int Stars, string Kind, string Reason)[] filtered)
+{
+    Console.WriteLine($"Statistics: {added} added, {filtered.Length} filtered out of {added + filtered.Length} add-ons");
+    foreach (var kind in filtered.GroupBy(f => f.Kind).OrderByDescending(g => g.Count()).ThenBy(g => g.Key, StringComparer.Ordinal))
+        Console.WriteLine($"  {kind.Count(),5}  {kind.Key}");
+    if (filtered.Length == 0) return;
+    Console.WriteLine("Most-starred filtered out:");
+    foreach (var (repository, stars, _, reason) in filtered.OrderByDescending(f => f.Stars)
+                 .ThenBy(f => f.Repository, StringComparer.OrdinalIgnoreCase).Take(10))
+        Console.WriteLine($"  {stars,6} stars  {repository}: {reason}");
+}
 static string Cs(string value) => "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
 static void Report(string title, IEnumerable<string> lines)
 {
