@@ -97,11 +97,11 @@ Updates replace whole addon folders. They do not install missing plugins or reso
 
 CI tests pull requests and pushes to `main` with Godot 4.7.2 and both the .NET 8 and the .NET 10 SDK, which use different dotnet command forms, and builds the framework against the Godot 4.6.2, 4.5.1 and 4.4.1 SDKs. Running it on those older Godot versions is tested by hand.
 
-Static analysis also runs SDK analyzers, dependency vulnerability auditing, workflow lint and CodeQL security checks on pull requests and `main`. Counts appear in PR comments and workflow summaries, and findings appear in code-scanning views. See [Static analysis in CI](docs/static-analysis.md) for the policy, reports and local commands.
+Static analysis also runs SDK analyzers, dependency vulnerability auditing, workflow lint and CodeQL security checks on pull requests and `main`. Counts appear in the PR's CI comment and workflow summaries, and findings appear in code-scanning views. See [Static analysis in CI](docs/static-analysis.md) for the policy, reports and local commands.
 
-The tests also measure the framework's line coverage. Each pull request gets a comment with its coverage, the change against `main` and which of its changed lines no test runs; the history of `main` is kept on the [`coverage` branch](https://github.com/enaweg/godot-epluginframework/tree/coverage). See [Code coverage](docs/code-coverage.md).
+The tests also measure the framework's line coverage. The PR's CI comment shows its coverage, the change against `main` and which of its changed lines no test runs; the history of `main` is kept on the [`coverage` branch](https://github.com/enaweg/godot-epluginframework/tree/coverage). See [Code coverage](docs/code-coverage.md).
 
-Every pull request is also packaged like a release by the **CI-PR-Build** workflow. Its ZIP carries the PR number as a semver prerelease (`0.9.1` becomes `0.9.1-pr.42`), so the release of that version still counts as an update. The download link is in a comment on the pull request (for pull requests from forks, in the workflow run's summary), and downloading needs a GitHub login. Copy the archive's `addons/ePlugin` directory into a project to try the change.
+Every pull request is also packaged like a release by the **CI-PR-Build** workflow, which CI-PR runs first. Its ZIP carries the PR number as a semver prerelease (`0.9.1` becomes `0.9.1-pr.42`), so the release of that version still counts as an update. Its download link is posted as the pull request's CI comment as soon as the package is built; when all jobs have finished, CI-PR updates that one comment with the result of each job, the static analysis and the coverage. Pull requests from forks find all of it in the workflow run's summary. Downloading needs a GitHub login. Copy the archive's `addons/ePlugin` directory into a project to try the change.
 
 ```bash
 cd src/eplugin-framework

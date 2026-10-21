@@ -1,0 +1,56 @@
+name: Update the pull request CI comment
+description: >-
+  Creates or updates the pull request's single CI comment (tools/ci-reports comment), found by the marker on the first
+  line of its body. Removes duplicates and the per-report comments that earlier workflow versions posted.
+inputs:
+  body-file:
+    description: The comment body; its first line is the marker.
+    required: true
+  pr-number:
+    description: The pull request to comment on.
+    required: true
+  token:
+    description: A token that can write pull request comments.
+    default: ${{ github.token }}
+runs:
+  using: composite
+  steps:
+    - name: Update the comment
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        BODY_FILE: ${{ inputs.body-file }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        REPOSITORY: ${{ github.repository }}
+      run: |
+        set -euo pipefail
+        marker="$(head -n 1 "$BODY_FILE")"
+        if [[ "$marker" != "<!--"*"-->" ]]; then
+          echo "::error file=$BODY_FILE::The comment body must start with its marker comment"
+          exit 1
+        fi
+        # Comments that CI-PR-Build, CI-Analysis and CI-PR posted separately before they were combined.
+        legacy=("<!-- eplugin-pr-build -->" "<!-- eplugin-static-analysis -->" "<!-- eplugin-coverage -->")
+        # Listed first, so that a failed request stops here instead of posting a second comment.
+        comments="$(gh api --paginate "repos/$REPOSITORY/issues/$PR_NUMBER/comments" \
+          --jq '.[] | select(.user.login == "github-actions[bot]") | [.id, (.body | split("\n")[0] // "" | rtrimstr("\r"))] | @tsv')"
+        current=""
+        obsolete=()
+        while IFS=$'\t' read -r id first; do
+          [[ -n "$id" ]] || continue
+          if [[ "$first" == "$marker" ]]; then
+            if [[ -z "$current" ]]; then current="$id"; else obsolete+=("$id"); fi
+            continue
+          fi
+          for old in "${legacy[@]}"; do
+            if [[ "$first" == "$old" ]]; then obsolete+=("$id"); fi
+          done
+        done <<< "$comments"
+        if [[ -n "$current" ]]; then
+          gh api --method PATCH "repos/$REPOSITORY/issues/comments/$current" -F "body=@$BODY_FILE" > /dev/null
+        else
+          gh api --method POST "repos/$REPOSITORY/issues/$PR_NUMBER/comments" -F "body=@$BODY_FILE" > /dev/null
+        fi
+        for id in "${obsolete[@]}"; do
+          gh api --method DELETE "repos/$REPOSITORY/issues/comments/$id" > /dev/null
+        done

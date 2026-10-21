@@ -10,8 +10,9 @@ Pull requests and pushes to `main` run the following checks:
 | [CI-PR](../.github/workflows/ci-pr.yml) | Existing .NET/Godot compatibility and native progress-helper tests | Build, runtime test and smoke-test failures fail the relevant matrix job. |
 
 CodeQL also runs weekly on Monday at 05:23 UTC and supports manual dispatch.
-CI-Analysis supports manual dispatch. The PR packaging/title workflows remain
-PR-only, and the release workflow remains tag-triggered.
+CI-Analysis runs on its own for `main` and supports manual dispatch; for pull requests the CI-PR workflow calls it
+(as its `analysis` job), so its summary becomes part of the PR's single CI comment. The PR packaging/title workflows
+remain PR-only, and the release workflow remains tag-triggered.
 
 ## Analyzer policy and reports
 
@@ -39,7 +40,7 @@ separate from CodeQL. Raw reports remain available for full inspection.
 
 | View | What appears |
 | --- | --- |
-| PR conversation | A single bot comment, updated on each run, with audit/build status, per-project error/warning/note counts, frequent rules, and a link to the run. |
+| PR conversation | The *Static analysis* section of the PR's single CI comment, updated on each run, with audit/build status, per-project error/warning/note counts and frequent rules. |
 | PR checks and source annotations | Native job status checks, up to ten immediate owned-source diagnostic annotations, and code-scanning annotations for changed lines. |
 | Actions run summary | The same numeric analysis table and a workflow-lint status summary, including when a build or audit fails. |
 | Repository Security / code scanning | Owned-source `.NET SDK analyzers` findings and separate CodeQL alerts, tracked across commits once scans run on `main`. |
@@ -55,6 +56,8 @@ using GitHub's own tracking, with upload-sarif generating fingerprints.
 Fork PRs retain checks, annotations and run summaries; their read-only tokens
 cannot write the conversation comment. The comment is limited to same-repository
 PRs and uses the workflow's GitHub token, without additional service secrets.
+CI-PR's `pr-comment` job writes it with `tools/ci-reports comment` from the reports
+the jobs upload as `pr-comment-*` artifacts.
 Custom numeric trends are not automatically added to GitHub's general Insights
 charts; the JSON artifact provides those values for a future dashboard. Badges
 and scheduled scans start showing `main` results after these workflows land.
