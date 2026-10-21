@@ -327,6 +327,53 @@ public class PluginManagerViewModelTests
         Assertions.AssertString(fallback.SourceUrl).IsEqual(AboutInfo.DefaultSource);
         Assertions.AssertString(fallback.DocumentationUrl).IsEqual(AboutInfo.DefaultDocumentation);
     }
+    [TestCase]
+    public static void TheListShowsTheAuthorAfterThePluginName()
+    {
+        var plugin = Plugin("a", PluginKind.EPlugin) with { Name = "Alpha", Author = " Enaweg " };
+        Assertions.AssertString(PluginManagerViewModel.ListName(plugin)).IsEqual("Alpha (Enaweg)");
+        Assertions.AssertString(PluginManagerViewModel.ListName(plugin with { Author = " " })).IsEqual("Alpha");
+    }
+    [TestCase]
+    public static void TheStatusLineShowsTheLastAndTheNextScheduledCheck()
+    {
+        var culture = System.Globalization.CultureInfo.InvariantCulture;
+        var now = new DateTimeOffset(2026, 10, 21, 12, 0, 0, TimeSpan.Zero);
+        string Local(DateTimeOffset time) => time.ToLocalTime().ToString("g", culture);
+        Assertions.AssertString(PluginManagerViewModel.CheckSchedule(now.AddHours(-2), now.AddHours(18), now, culture))
+            .IsEqual($"Last checked: {Local(now.AddHours(-2))} · Next check: after {Local(now.AddHours(18))}");
+        // A due check waits for the editor to start again.
+        Assertions.AssertString(PluginManagerViewModel.CheckSchedule(null, DateTimeOffset.MinValue, now, culture))
+            .IsEqual("Last checked: never · Next check: at the next editor start");
+        Assertions.AssertString(PluginManagerViewModel.CheckSchedule(now.AddHours(-30), now.AddHours(-10), now, culture))
+            .EndsWith("Next check: at the next editor start");
+        Assertions.AssertString(PluginManagerViewModel.CheckSchedule(null, null, now, culture)).EndsWith("Next check: off");
+        Assertions.AssertString(PluginManagerViewModel.CheckScheduleHint(null)).Contains("check_enabled");
+        Assertions.AssertString(PluginManagerViewModel.CheckScheduleHint(now)).Contains("check_interval_hours");
+    }
+    [TestCase]
+    [RequireGodotRuntime]
+    public static void TheManagerScrollsItsDetailsAndShowsTheStatusAtTheBottom()
+    {
+        var manager = Godot.GD.Load<Godot.PackedScene>(EPluginManagerDialog.ScenePath).Instantiate<EPluginManagerDialog>();
+        try
+        {
+            // The details scroll instead of growing the dialog, which wraps its controls' minimum size.
+            Assertions.AssertObject(manager.GetNode("%DetailsText").GetParent().GetParent()).IsInstanceOf<Godot.ScrollContainer>();
+            foreach (var label in new[] { "%DetailsName", "%VersionHint" })
+                Assertions.AssertFloat(manager.GetNode<Godot.Label>(label).CustomMinimumSize.X).IsGreater(0);
+            Assertions.AssertString(manager.GetNode("%Status").GetParent().Name).IsEqual("Footer");
+            Assertions.AssertInt((int)manager.GetNode<Godot.Label>("%Status").HorizontalAlignment).IsEqual((int)Godot.HorizontalAlignment.Right);
+            Assertions.AssertObject(manager.GetNodeOrNull("Content/Header/Note")).IsNotNull();
+            // Both sides of the split expand with the same ratio, so the list and the details start at half the width each.
+            foreach (var side in manager.GetNode("Content/Split").GetChildren().OfType<Godot.Control>())
+            {
+                Assertions.AssertBool(side.SizeFlagsHorizontal.HasFlag(Godot.Control.SizeFlags.Expand)).IsTrue();
+                Assertions.AssertFloat(side.SizeFlagsStretchRatio).IsEqual(1f);
+            }
+        }
+        finally { manager.Free(); }
+    }
     private static ValidatedPackage Package(string slug)
     {
         Assertions.AssertBool(SemVer.TryParse("2.0.0", out var version)).IsTrue();

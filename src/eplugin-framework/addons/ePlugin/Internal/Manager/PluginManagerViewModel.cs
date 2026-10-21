@@ -156,6 +156,10 @@ internal sealed class PluginManagerViewModel
     public static string VersionText(PluginInfo plugin) =>
         plugin.Version.Length == 0 && plugin.Kind == PluginKind.GDExtensionAddon ? "unknown" : plugin.Version;
 
+    /// <summary>The plugin as the list shows it: its name, followed by its author in parentheses when it names one.</summary>
+    public static string ListName(PluginInfo plugin) =>
+        string.IsNullOrWhiteSpace(plugin.Author) ? plugin.Name : $"{plugin.Name} ({plugin.Author.Trim()})";
+
     public static string StatusText(PluginInfo plugin)
     {
         if (plugin.Missing) return "Missing (no plugin.cfg)";
@@ -164,6 +168,21 @@ internal sealed class PluginManagerViewModel
         if (plugin.FailedAttempt is { } attempt) text += $", needs retry: {attempt.Reason}";
         return text;
     }
+
+    /// <summary>
+    /// When updates were checked and will be checked next, as the status line ends. <paramref name="next"/> comes from
+    /// <see cref="UpdateScheduler.NextCheck"/>: a scheduled check runs only when the editor starts, so one that is due
+    /// waits for the next start.
+    /// </summary>
+    public static string CheckSchedule(DateTimeOffset? last, DateTimeOffset? next, DateTimeOffset now, IFormatProvider culture) =>
+        "Last checked: " + (last?.ToLocalTime().ToString("g", culture) ?? "never") + " · Next check: " +
+        (next is not { } due ? "off" : due <= now ? "at the next editor start" : "after " + due.ToLocalTime().ToString("g", culture));
+
+    /// <summary>The tooltip of <see cref="CheckSchedule"/>.</summary>
+    public static string CheckScheduleHint(DateTimeOffset? next) => next is null
+        ? "Scheduled update checks are off (Project Settings > eplugin/updates/check_enabled). Check for updates still checks now."
+        : "The editor checks for updates when it starts and the last successful check is older than " +
+          "eplugin/updates/check_interval_hours. Check for updates checks now.";
 
     /// <summary>The meta of the license link in <see cref="Describe"/>, which opens the license dialog.</summary>
     public const string LicenseMeta = "eplugin-license";

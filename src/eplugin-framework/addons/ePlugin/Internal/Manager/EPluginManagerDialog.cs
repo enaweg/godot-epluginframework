@@ -21,8 +21,8 @@ namespace Enaweg.Plugin.Internal.Manager;
 internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerializationListener
 {
     internal const string ScenePath = "res://addons/ePlugin/Internal/Manager/EPluginManagerDialog.tscn";
-    private const int EnabledColumn = 0, NameColumn = 1, AuthorColumn = 2, TypeColumn = 3, VersionColumn = 4;
-    private const int AuthorMinimumWidth = 100;
+    private const int EnabledColumn = 0, NameColumn = 1, VersionColumn = 2;
+    private const int VersionMinimumWidth = 150;
 
     private readonly EditorSignalConnections _signals = new();
     private EGlobal _global = null!;
@@ -71,6 +71,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private PluginManagerViewModel _model = null!;
     private string? _selectedSlug;
     private bool _working;
+    // Only an installation can be cancelled; the dialog has no Close button otherwise.
+    private bool _installing;
     private bool _swapping;
     private readonly PluginOperationGate _pluginOperation = new();
     // A build of this assembly waits for Godot's hot reload; see AssemblyReload. Plugin operations wait for it.
@@ -120,14 +122,12 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _signals.Connect(this, Control.SignalName.ThemeChanged, Callable.From(() => CallDeferred(nameof(RefreshTheme))));
 
         // Column titles and sizing are not scene properties of Tree.
-        _tree.SetColumnTitle(EnabledColumn, "On"); _tree.SetColumnTitle(NameColumn, "Plugin"); _tree.SetColumnTitle(AuthorColumn, "Author");
-        _tree.SetColumnTitle(TypeColumn, "Type"); _tree.SetColumnTitle(VersionColumn, "Version");
-        _tree.SetColumnExpand(EnabledColumn, false); _tree.SetColumnExpand(NameColumn, false); _tree.SetColumnExpand(AuthorColumn, true);
-        _tree.SetColumnExpand(TypeColumn, false); _tree.SetColumnExpand(VersionColumn, false);
+        _tree.SetColumnTitle(EnabledColumn, "On"); _tree.SetColumnTitle(NameColumn, "Plugin"); _tree.SetColumnTitle(VersionColumn, "Version");
+        _tree.SetColumnExpand(EnabledColumn, false); _tree.SetColumnExpand(NameColumn, false); _tree.SetColumnExpand(VersionColumn, true);
         foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm, _rollbackKeptConfirm }) EditorWindows.Prepare(window, _signals, this, nameof(QueueWindowIcons));
         var scale = EditorInterface.Singleton.GetEditorScale();
-        _tree.SetColumnCustomMinimumWidth(EnabledColumn, (int)(40 * scale)); _tree.SetColumnCustomMinimumWidth(AuthorColumn, (int)(AuthorMinimumWidth * scale));
-        _tree.SetColumnCustomMinimumWidth(VersionColumn, (int)(150 * scale));
+        _tree.SetColumnCustomMinimumWidth(EnabledColumn, (int)(40 * scale));
+        _tree.SetColumnCustomMinimumWidth(VersionColumn, (int)(VersionMinimumWidth * scale));
 
         _signals.Connect(_check, BaseButton.SignalName.Pressed, Callable.From(CheckNow));
         _signals.Connect(GetNode<Button>("%LocalSourcesButton"), BaseButton.SignalName.Pressed, Callable.From(_localSources.Open));
@@ -168,8 +168,12 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private void RefreshTheme()
     {
         if (!GodotObject.IsInstanceValid(this) || _global is null) return;
-        if (EditorInterface.Singleton.GetEditorTheme() is { } editorTheme && editorTheme.HasIcon("Folder", "EditorIcons"))
+        var editorTheme = EditorInterface.Singleton.GetEditorTheme();
+        if (editorTheme is not null && editorTheme.HasIcon("Folder", "EditorIcons"))
         { _openFolder.Icon = editorTheme.GetIcon("Folder", "EditorIcons"); _openFolder.Text = ""; }
+        // The editor's labels indent their text; the details text starts where theirs does.
+        var inset = editorTheme is not null && editorTheme.HasStylebox("normal", "Label") ? editorTheme.GetStylebox("normal", "Label").GetMargin(Side.Left) : 0;
+        _detailsText.AddThemeStyleboxOverride("normal", new StyleBoxEmpty { ContentMarginLeft = inset });
         _ePluginIcon = EditorIcons.EPlugin; _logo = EditorIcons.Logo; _updateIcon = EditorIcons.UpdateIndicator;
         _check.Icon = EditorIcons.Rescan; _retry.Icon = EditorIcons.Retry;
         GetNode<Button>("%UpdateSitesButton").Icon = EditorIcons.Settings; GetNode<Button>("%AboutButton").Icon = EditorIcons.About;
@@ -184,7 +188,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _operationNotice = null;
         Refresh();
         PopupCenteredClamped(Size, 0.9f);
-        GetCancelButton().GrabFocus();
+        _tree.GrabFocus();
     }
 
     public void Refresh()
@@ -217,9 +221,10 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             item.SetTooltipText(EnabledColumn, plugin.Kind == PluginKind.GDExtensionAddon ? "Godot always loads a GDExtension without plugin.cfg; there is nothing to enable or disable."
                 : !row.CanToggle ? "The plugin folder or its plugin.cfg is missing."
                 : plugin.Enabled ? "Enabled. Uncheck to disable the plugin." : "Disabled. Check to enable the plugin.");
-            item.SetText(NameColumn, plugin.Name);
+            item.SetText(NameColumn, PluginManagerViewModel.ListName(plugin));
             var updateState = PluginManagerViewModel.UpdateState(row);
-            item.SetTooltipText(NameColumn, $"{plugin.Name} ({PluginDirectory(plugin.Slug)})" + (updateState is null ? "" : "\n" + updateState));
+            item.SetTooltipText(NameColumn, $"{PluginManagerViewModel.ListName(plugin)} ({PluginDirectory(plugin.Slug)})\n{PluginCatalog.KindName(plugin.Kind)}" +
+                (updateState is null ? "" : "\n" + updateState));
             if (row.IsEPlugin && _ePluginIcon is not null) item.SetIcon(NameColumn, _ePluginIcon);
             if (updateState is not null && _updateIcon is not null)
             {
@@ -228,9 +233,6 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             }
             if (!plugin.Enabled) item.SetCustomColor(NameColumn, DisabledColor());
             if (row.NeedsAttention) item.SetCustomColor(NameColumn, ErrorColor());
-            item.SetText(AuthorColumn, plugin.Author);
-            if (!string.IsNullOrWhiteSpace(plugin.Author)) item.SetTooltipText(AuthorColumn, plugin.Author);
-            item.SetText(TypeColumn, PluginCatalog.KindName(plugin.Kind));
             if (row.Update is { } update)
             {
                 // An available update is selected for the batch right where its version change is shown.
@@ -252,12 +254,13 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         if (selected is not null) { selected.Select(NameColumn); _tree.ScrollToItem(selected); }
         else ShowDetails(null);
         var count = _model.Updates.Count;
+        var next = _global.NextUpdateCheck;
         _status.Text = (_operationNotice ?? (count == 0 ? "" : $"{count} update{(count == 1 ? "" : "s")} available · ") +
-                       "Last checked: " + (_global.LastUpdateCheck?.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) ?? "never") +
+                       PluginManagerViewModel.CheckSchedule(_global.LastUpdateCheck, next, DateTimeOffset.UtcNow, CultureInfo.CurrentCulture) +
                        (_global.IsIndexingLocalSources ? " · Indexing local directories..." : "")) +
                        ((_reloadPending = AssemblyReload.IsPending) ? " · " + ReloadNotice
                            : _pluginOperation.IsAwaitingReload ? " · " + ReloadFailedNotice : "");
-        _status.TooltipText = _status.Text;
+        _status.TooltipText = _status.Text + "\n" + PluginManagerViewModel.CheckScheduleHint(next);
         Buttons();
     }
 
@@ -265,7 +268,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
 
     /// <summary>
     /// Tree draws cell buttons at the right edge of the cell. Sizing the Plugin column to its longest title keeps the
-    /// update icons right after the titles; the Type column fits its texts and the Author column takes the remaining width.
+    /// update icons right after the titles; the Version column takes the remaining width.
     /// </summary>
     private void FitColumns()
     {
@@ -274,26 +277,24 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         var separation = _tree.GetThemeConstant("h_separation");
         var margins = _tree.GetThemeConstant("inner_item_margin_left") + _tree.GetThemeConstant("inner_item_margin_right") + 2 * separation;
         float TextWidth(string text) => font.GetStringSize(text, HorizontalAlignment.Left, -1, fontSize).X;
-        float name = 0f, type = TextWidth(_tree.GetColumnTitle(TypeColumn));
+        var name = 0f;
         for (var item = _tree.GetRoot()?.GetFirstChild(); item is not null; item = item.GetNext())
         {
             var text = TextWidth(item.GetText(NameColumn));
             if (item.GetIcon(NameColumn) is { } icon) text += icon.GetWidth() + separation;
             name = Math.Max(name, text);
-            type = Math.Max(type, TextWidth(item.GetText(TypeColumn)));
         }
-        var typeWidth = type + margins;
         var button = _updateIcon is null ? 0 : _updateIcon.GetWidth() + 4 * separation;
         var desired = name + button + margins;
         // Never wider than the list leaves next to the other columns, or the tree scrolls horizontally.
         if (_tree.Size.X > 0)
         {
-            var others = _tree.GetColumnWidth(EnabledColumn) + _tree.GetColumnWidth(VersionColumn) + typeWidth + AuthorMinimumWidth * scale +
+            // The Version column's minimum rather than its width, which expands into the rest of the list.
+            var others = _tree.GetColumnWidth(EnabledColumn) + VersionMinimumWidth * scale +
                          _tree.GetThemeStylebox("panel").GetMinimumSize().X + 16 * scale;
             desired = Math.Max(Math.Min(desired, _tree.Size.X - others), 120 * scale);
         }
         _tree.SetColumnCustomMinimumWidth(NameColumn, (int)Math.Ceiling(desired));
-        _tree.SetColumnCustomMinimumWidth(TypeColumn, (int)Math.Ceiling(typeWidth));
     }
 
     private void ShowDetails(string? slug)
@@ -301,6 +302,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _selectedSlug = slug;
         var row = slug is null ? null : _model.Find(slug);
         _detailsIcon.Texture = row?.IsEPlugin == true ? _logo : null;
+        // Without an icon its separation would indent the name further than the lines below.
+        _detailsIcon.Visible = _detailsIcon.Texture is not null;
         _detailsName.Text = row?.Plugin.Name ?? "No plugin selected";
         var reviewed = _updates.Request?.VersionInstall == true ? _updates.Staged?.FirstOrDefault(p => p.Candidate.Slug == slug)?.Findings : null;
         _keptUpdate = row is null ? null : _global.KeptUpdate(row.Plugin.Slug);
@@ -511,7 +514,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         GetOkButton().Disabled = busy || !CanProceed;
         GetOkButton().Visible = _model.Updates.Count > 0 || staged;
         GetCancelButton().Disabled = _swapping || _pluginOperation.IsBusy || _global.IsChangingPlugins || _reloadPending;
-        GetCancelButton().Text = _working && !_swapping ? "Cancel" : "Close";
+        GetCancelButton().Visible = _installing && !_swapping;
         _trust.Visible = NeedsTrust;
         _check.Disabled = busy || staged;
         _retry.Disabled = busy || staged || !_model.CanRetry;
@@ -726,7 +729,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     {
         if (Busy || request.Batch.Count == 0) return;
         _operationNotice = null;
-        _working = true; _cancel?.Dispose(); _cancel = CancellationTokenSource.CreateLinkedTokenSource(_lifetime);
+        _working = _installing = true; _cancel?.Dispose(); _cancel = CancellationTokenSource.CreateLinkedTokenSource(_lifetime);
         Render();
         InstallOutcome outcome;
         try
@@ -747,7 +750,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
                 Swapping = () => { _swapping = true; Buttons(); }
             }, _cancel.Token);
         }
-        finally { _working = false; _swapping = false; }
+        finally { _working = _installing = _swapping = false; }
         if (!IsShown || outcome.Step == InstallStep.Abandoned) return;
         // The build-failure dialog takes over the decision. Otherwise the manager stays open: an update that needs no
         // restart is finished here, and a restart reopens it.
