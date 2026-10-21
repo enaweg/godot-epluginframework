@@ -12,6 +12,8 @@
 eContainer;https://github.com/enaweg/godot-econtainer
 eLogger;https://github.com/enaweg/godot-elogger
 eMessagePipe;https://github.com/enaweg/godot-emessagepipe
+# A C# plugin with too few stars for the GitHub ranking. Its releases have no ZIP, so the updater takes the source archive.
+anvil;https://github.com/AhmedGD1/Anvil
 global_asset_manager;https://github.com/sn1ks0h/Global-Asset-Manager
 # A GDExtension whose libraries are built by CI (only in the release ZIP). Neither the ZIP nor the repository has a
 # plugin.cfg, so ePlugin updates it as a GDExtension add-on, found by its folder name.
