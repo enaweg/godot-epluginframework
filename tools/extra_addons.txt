@@ -12,12 +12,23 @@
 eContainer;https://github.com/enaweg/godot-econtainer
 eLogger;https://github.com/enaweg/godot-elogger
 eMessagePipe;https://github.com/enaweg/godot-emessagepipe
+# Add-ons with too few stars for the GitHub ranking.
+anvil;https://github.com/AhmedGD1/Anvil
+audio_service;https://github.com/AhmedGD1/Godot-Audio-Service
+# A GDExtension plugin whose libraries are built by CI (only in the release ZIP).
+crabbyconsole;https://github.com/Bauxitedev/crabbyconsole
 global_asset_manager;https://github.com/sn1ks0h/Global-Asset-Manager
+godot_advanced_logger;https://github.com/DYNMC-Motorsports/GodotAdvancedLogger
 # A GDExtension whose libraries are built by CI (only in the release ZIP). Neither the ZIP nor the repository has a
 # plugin.cfg, so ePlugin updates it as a GDExtension add-on, found by its folder name.
 godot_servo;https://github.com/shiena/godot-servo
+godotite;https://github.com/Arkaein/godotite
+portalsCS;https://github.com/Phlegmlee/godot-portals-plugin-csharp
 # A GDExtension plugin whose libraries are built by CI: they are in the release ZIP but not in the repository, so its
 # update site must be the releases page (which build_godot_addons.cs takes for any GitHub repository with releases).
 rider-plugin;https://github.com/JetBrains/godot-support
+# On a Gitea host. Its plugin.cfg is at the repository root, so only its res:// paths name the folder.
+rokojori_action_library;https://community.rokojori.com/Rokojori/rokojori_action_library
+takobi_ai;https://github.com/AhmedGD1/takobi_ai
 # Its release ZIP ships a GDExtension without a plugin.cfg, which ePlugin updates as a GDExtension add-on.
 tweens_gd;https://github.com/outfox/tweens.gd
