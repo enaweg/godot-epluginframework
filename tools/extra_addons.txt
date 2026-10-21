@@ -15,6 +15,8 @@ eMessagePipe;https://github.com/enaweg/godot-emessagepipe
 # Add-ons with too few stars for the GitHub ranking.
 anvil;https://github.com/AhmedGD1/Anvil
 audio_service;https://github.com/AhmedGD1/Godot-Audio-Service
+# On Codeberg; its search finds it too, but only above the star and activity minimums.
+cogito;https://codeberg.org/Phazorknight/Cogito
 # A GDExtension plugin whose libraries are built by CI (only in the release ZIP).
 crabbyconsole;https://github.com/Bauxitedev/crabbyconsole
 global_asset_manager;https://github.com/sn1ks0h/Global-Asset-Manager
@@ -23,6 +25,9 @@ godot_advanced_logger;https://github.com/DYNMC-Motorsports/GodotAdvancedLogger
 # plugin.cfg, so ePlugin updates it as a GDExtension add-on, found by its folder name.
 godot_servo;https://github.com/shiena/godot-servo
 godotite;https://github.com/Arkaein/godotite
+# A GDExtension without a plugin.cfg, which ePlugin updates as a GDExtension add-on. Only its release ZIP has all
+# libraries (the repository lacks the macOS one).
+line3d;https://github.com/ApocalypticPhosphorus/Line3D
 portalsCS;https://github.com/Phlegmlee/godot-portals-plugin-csharp
 # A GDExtension plugin whose libraries are built by CI: they are in the release ZIP but not in the repository, so its
 # update site must be the releases page (which build_godot_addons.cs takes for any GitHub repository with releases).
