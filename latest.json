@@ -1,8 +1,8 @@
 {
- "commit": "2a11e25a6952521a00dd480fa036cc71894075ee",
- "date": "2026-10-21T14:09:24Z",
- "covered": 8212,
- "coverable": 10199,
+ "commit": "0a5933c360c6362386702df4974013e4548bf0d3",
+ "date": "2026-10-21T15:31:31Z",
+ "covered": 8221,
+ "coverable": 10223,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -214,11 +214,11 @@
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.cs": [
    53,
-   607
+   618
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EditorIcons.cs": [
-   30,
-   44
+   39,
+   56
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EditorSignalConnections.cs": [
    12,
@@ -234,7 +234,7 @@
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/LocalSourcesDialog.cs": [
    16,
-   89
+   90
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/ManagerReopenMarker.cs": [
    16,
