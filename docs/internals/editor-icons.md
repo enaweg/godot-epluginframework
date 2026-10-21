@@ -31,7 +31,7 @@ Rules:
 
 - The ring or outline is always `#e0e0e0`. An accent goes only on the glyph inside it.
 - At most one accent per icon.
-- Actions that change no installed plugin stay monochrome (rescan, settings).
+- Actions that change no installed plugin stay monochrome (rescan, settings, about).
 - `update.svg` is drawn in `#fff` because it doubles as the white mask that `UpdateIndicator` tints. Don't copy that into
   new icons.
 
@@ -56,6 +56,7 @@ Glyphs sit inside the ring, roughly between 4.4 and 11.6, with a stroke of 1.6 t
 | Down arrow | `M8 4.4v6.7M5.2 8.4 8 11.2l2.8-2.8` | 1.7 |
 | Plus | `M8 5v6M5 8h6` | 1.7 |
 | Exclamation mark | `M8 4.6v3.8` plus `<circle cx="8" cy="11.1" r="1.05"/>` filled | 1.8 |
+| Information | `<circle cx="8" cy="4.9" r="1.05"/>` filled plus `M8 7.6v3.8` | 1.8 |
 
 An action with a well-known shape of its own (the gear for settings) may skip the ring. It uses the same weight: shapes
 at least 1.5 wide, filled in `#e0e0e0`.
@@ -72,6 +73,7 @@ at least 1.5 wide, filled in `#e0e0e0`.
 | `upgrade.svg` | Upgrade | Closed | Up arrow in success |
 | `reinstall.svg` | Reinstall | Clockwise | Plus in success |
 | `downgrade.svg` | Downgrade | Closed | Down arrow in warning |
+| `about.svg` | About | Closed | `i` |
 
 Rescan and upgrade differ by the ring and the color only, so don't put them next to each other without a label.
 
