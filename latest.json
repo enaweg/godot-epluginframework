@@ -1,8 +1,8 @@
 {
- "commit": "0a5933c360c6362386702df4974013e4548bf0d3",
- "date": "2026-10-21T15:31:31Z",
- "covered": 8221,
- "coverable": 10223,
+ "commit": "8a13efd56794128395dab9ad90d5be74515b8486",
+ "date": "2026-10-21T16:08:17Z",
+ "covered": 8231,
+ "coverable": 10232,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -129,8 +129,8 @@
    7
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Updates.cs": [
-   87,
-   115
+   89,
+   118
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Welcomes.cs": [
    70,
@@ -214,7 +214,7 @@
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.cs": [
    53,
-   618
+   616
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EditorIcons.cs": [
    39,
@@ -249,8 +249,8 @@
    11
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/PluginManagerViewModel.cs": [
-   262,
-   272
+   269,
+   279
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateFailureDialog.cs": [
    0,
@@ -417,8 +417,8 @@
    50
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateStateStore.cs": [
-   39,
-   40
+   40,
+   41
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/VersionConstraint.cs": [
    25,
