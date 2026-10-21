@@ -46,9 +46,11 @@ slug. `PluginUpdateTarget.KnownUrl` is the last entry of `UpdateUrls`, and `Plug
 source and website links. `eplugin/updates/builtin_update_sites` (default on, `EGlobal.UseKnownPlugins`) turns it off.
 
 Regenerate the data with `tools/generate_known_plugins.cs` from the output of `tools/build_godot_addons.cs` (run both in
-`tools/`); never edit it by hand. `build_godot_addons.cs` needs a `GITHUB_TOKEN` without scopes and reads three hosts at
+`tools/`); never edit it by hand. `build_godot_addons.cs` needs a GitHub token without scopes and reads three hosts at
 the same time: GitHub repositories from the godot-stars ranking (at least 20 stars, read in GraphQL batches one after
-another), and the searches of gitlab.com and codeberg.org for Godot projects (at least 5 stars; no token needed). Every
+another), and the searches of gitlab.com and codeberg.org for Godot projects (at least 5 stars; a token is optional, with
+one GitLab also leaves out forks). Each token comes from its environment variable (`GITHUB_TOKEN`, `GITLAB_TOKEN`,
+`CODEBERG_TOKEN`) or else from the host's CLI when it is logged in (`gh`, `glab`, a codeberg.org login of `tea`). Every
 add-on needs a commit or activity within two years and a release or version tag. The 500-entry maximum applies to the
 GitHub ranking only. Searches also find games: a repository with a game topic and no add-on topic is skipped, and
 entries found by a search are marked `searched`. Each slug is, in this order:
