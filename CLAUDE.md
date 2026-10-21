@@ -313,7 +313,8 @@ otherwise the editor translates the English UI into its own language. An autowra
 `custom_minimum_size` width, or the dialog measures it at zero width and pops up taller than the screen. Scenes are
 authored for 100% editor scale: `EditorWindows.Prepare` scales the window's size and its controls' minimum sizes, and
 plugin BBCode pages go through `PluginManagerViewModel.ScaleFontSizes`. Icons come
-from `EditorIcons`, which renders the SVGs at the editor scale (a headless editor re-imports them at 100%). `EGlobal.CollectPlugins` scans every `res://addons/<slug>/plugin.cfg`; `PluginCatalog.Classify`
+from `EditorIcons`, which renders the SVGs at the editor scale (a headless editor re-imports them at 100%) and maps
+their accent colors to the theme's status colors; draw new icons after `docs/internals/editor-icons.md`. `EGlobal.CollectPlugins` scans every `res://addons/<slug>/plugin.cfg`; `PluginCatalog.Classify`
 recognizes disabled ePlugins by the `ScriptPathAttribute` of their compiled type. `PluginManagerViewModel` is pure
 (rows, update selection, BBCode details) and unit-tested. The update workflows (checking, loading versions, staging,
 reviewing and installing) are in `UpdateFlow`, which the dialog only displays; it is tested without the editor in
