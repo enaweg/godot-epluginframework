@@ -32,7 +32,7 @@ Rules:
 - The ring or outline is always `#e0e0e0`. An accent goes only on the glyph inside it.
 - At most one accent per icon.
 - Actions that change no installed plugin stay monochrome (rescan, settings, about).
-- `update.svg` is drawn in `#fff` because it doubles as the white mask that `UpdateIndicator` tints. Don't copy that into
+- `update.svg` is drawn in `#fff` because it is the white mask that `UpdateIndicator` tints. Don't copy that into
   new icons.
 
 ## The ring style
@@ -66,16 +66,24 @@ at least 1.5 wide, filled in `#e0e0e0`.
 | File | Action | Ring | Glyph |
 |---|---|---|---|
 | `eplugin_editor.svg` | ePlugin Manager, ePlugin rows | – | Robot head and puzzle piece (`id="piece"` is tinted by status) |
-| `update.svg` | Update available, Check for updates | Closed | Up arrow (white mask) |
-| `rescan.svg` | Rescan for updates | Clockwise | Up arrow |
-| `settings.svg` | Settings | – | Gear |
-| `retry.svg` | Retry failed updates | Counter-clockwise | `!` in error |
-| `upgrade.svg` | Upgrade | Closed | Up arrow in success |
-| `reinstall.svg` | Reinstall | Clockwise | Plus in success |
-| `downgrade.svg` | Downgrade | Closed | Down arrow in warning |
+| `update.svg` | Update available in the plugin list | Closed | Up arrow (white mask) |
+| `rescan.svg` | Check for updates, Rescan (local directories) | Clockwise | Up arrow |
+| `settings.svg` | Update sites... | – | Gear |
+| `retry.svg` | Retry failed | Counter-clockwise | `!` in error |
+| `upgrade.svg` | Update (version button, manager OK button) | Closed | Up arrow in success |
+| `reinstall.svg` | Reinstall (version button and confirmation) | Clockwise | Plus in success |
+| `downgrade.svg` | Downgrade (version button and confirmation) | Closed | Down arrow in warning |
 | `about.svg` | About | Closed | `i` |
+| `directories.svg` | Local directories... | – | Folder outline (Godot's filled `Folder` is the details' Open button) |
 
 Rescan and upgrade differ by the ring and the color only, so don't put them next to each other without a label.
+
+## Toolbar buttons
+
+The buttons in the ePlugin Manager's header are a toolbar: `flat = true` and no text, so they show only their icon and
+get a background on hover, like the editor's own toolbars. Their tooltip starts with the button's name on its own line,
+followed by what it does, because the documentation and status messages refer to them by name. Buttons that finish a
+dialog (OK, the version button, confirmations) keep their text next to the icon.
 
 ## Adding an icon
 

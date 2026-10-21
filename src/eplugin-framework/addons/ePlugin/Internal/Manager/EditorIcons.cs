@@ -15,7 +15,7 @@ internal static class EditorIcons
     public const string LogoPath = "res://addons/ePlugin/icons/eplugin.svg";
     /// <summary>The ePlugin icon in the style of the editor's own icons, for the toolbar and lists.</summary>
     public const string EPluginPath = "res://addons/ePlugin/icons/eplugin_editor.svg";
-    /// <summary>The update icon, for buttons using the editor's normal icon palette.</summary>
+    /// <summary>The update icon, the mask of the update indicator in the plugin list.</summary>
     public const string UpdatePath = "res://addons/ePlugin/icons/update.svg";
     // Action icons, drawn after docs/internals/editor-icons.md.
     public const string RescanPath = "res://addons/ePlugin/icons/rescan.svg";
@@ -25,6 +25,7 @@ internal static class EditorIcons
     public const string ReinstallPath = "res://addons/ePlugin/icons/reinstall.svg";
     public const string DowngradePath = "res://addons/ePlugin/icons/downgrade.svg";
     public const string AboutPath = "res://addons/ePlugin/icons/about.svg";
+    public const string DirectoriesPath = "res://addons/ePlugin/icons/directories.svg";
 
     // The common icon color of the editor's icons and what a light editor theme turns it into.
     private const string IconColor = "#e0e0e0", LightThemeIconColor = "#5a5a5a";
@@ -44,7 +45,6 @@ internal static class EditorIcons
     /// <summary>The colored ePlugin logo at eight times its icon size, for the About dialog.</summary>
     public static Texture2D? LargeLogo => Get(LogoPath, EditorInterface.Singleton.GetEditorTheme(), EditorInterface.Singleton.GetEditorScale() * 8);
     public static Texture2D? EPlugin => Get(EPluginPath);
-    public static Texture2D? Update => Get(UpdatePath);
     /// <summary>A white update mask, so status colors can tint it without multiplying by the icon palette.</summary>
     public static Texture2D? UpdateIndicator => Get(UpdatePath, tintable: true);
     public static Texture2D? Rescan => Get(RescanPath);
@@ -54,6 +54,7 @@ internal static class EditorIcons
     public static Texture2D? Reinstall => Get(ReinstallPath);
     public static Texture2D? Downgrade => Get(DowngradePath);
     public static Texture2D? About => Get(AboutPath);
+    public static Texture2D? Directories => Get(DirectoriesPath);
 
     /// <summary>The editor's color for something that went well, e.g. an available update.</summary>
     public static Color SuccessColor => ThemeColor(EditorInterface.Singleton.GetEditorTheme(), Accents[0].Name, Accents[0].Fallback);

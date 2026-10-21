@@ -171,7 +171,10 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         if (EditorInterface.Singleton.GetEditorTheme() is { } editorTheme && editorTheme.HasIcon("Folder", "EditorIcons"))
         { _openFolder.Icon = editorTheme.GetIcon("Folder", "EditorIcons"); _openFolder.Text = ""; }
         _ePluginIcon = EditorIcons.EPlugin; _logo = EditorIcons.Logo; _updateIcon = EditorIcons.UpdateIndicator;
-        _check.Icon = EditorIcons.Update;
+        _check.Icon = EditorIcons.Rescan; _retry.Icon = EditorIcons.Retry;
+        GetNode<Button>("%UpdateSitesButton").Icon = EditorIcons.Settings; GetNode<Button>("%AboutButton").Icon = EditorIcons.About;
+        GetNode<Button>("%LocalSourcesButton").Icon = EditorIcons.Directories;
+        _localSources.RefreshTheme();
         // Render the existing model rather than refreshing it: a theme change must preserve a staged update.
         if (_model is not null) Render();
     }
@@ -442,9 +445,14 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     {
         var row = _selectedSlug is null ? null : _model.Find(_selectedSlug);
         var option = _versionOptions.Count == 0 ? null : SelectedVersion();
-        if (row is null || option is null) { _installVersion.Disabled = true; _installVersion.Text = "Update"; ShowVersionHint(_versionNote); return; }
+        if (row is null || option is null)
+        {
+            _installVersion.Disabled = true; _installVersion.Text = "Update"; _installVersion.Icon = EditorIcons.Upgrade;
+            ShowVersionHint(_versionNote);
+            return;
+        }
         var blocked = PluginManagerViewModel.VersionChangeBlocked(row, option);
-        _installVersion.Text = option.Action;
+        _installVersion.Text = option.Action; _installVersion.Icon = VersionIcon(option.IsDowngrade, option.IsReinstall);
         _installVersion.Disabled = blocked is not null || Busy || _updates.Staged is not null;
         _installVersion.TooltipText = blocked ?? (option.IsReinstall
             ? $"Install version {option.Version} of {row.Plugin.Name} again, replacing its files."
@@ -462,7 +470,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         // The listed candidate was built when the list was loaded; the installed version may have changed since.
         _pendingVersion = option.Candidate with { InstalledVersion = row.Plugin.Version };
         _pendingDowngrade = option.IsDowngrade; _pendingReinstall = option.IsReinstall;
-        _versionConfirm.OkButtonText = option.Action;
+        _versionConfirm.OkButtonText = option.Action; _versionConfirm.GetOkButton().Icon = VersionIcon(option.IsDowngrade, option.IsReinstall);
         _versionConfirm.DialogText = (option.IsReinstall
                 ? $"Reinstall {row.Plugin.Name} {row.Plugin.Version}?\n\n{PluginManagerViewModel.VersionSource(option)}. Its files replace the installed ones: " +
                   "this brings in new commits of a git branch and undoes changes made to the plugin's folder in the project.\n\n"
@@ -497,6 +505,9 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _trust.Disabled = busy;
         _versionSelect.Disabled = busy || _versionOptions.Count < 2;
         GetOkButton().Text = !staged ? _model.OkText : _updates.Request?.VersionInstall == true ? "Install reviewed version" : "Install reviewed updates";
+        GetOkButton().Icon = staged && _updates.Request is { } request
+            ? VersionIcon(request.AllowDowngrade, request.AllowReinstall)
+            : EditorIcons.Upgrade;
         GetOkButton().Disabled = busy || !CanProceed;
         GetOkButton().Visible = _model.Updates.Count > 0 || staged;
         GetCancelButton().Disabled = _swapping || _pluginOperation.IsBusy || _global.IsChangingPlugins || _reloadPending;
@@ -763,6 +774,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         return theme is not null && theme.HasColor(name, type) ? theme.GetColor(name, type) : fallback;
     }
     private static Color UpdateColor() => EditorIcons.SuccessColor;
+    private static Texture2D? VersionIcon(bool downgrade, bool reinstall) =>
+        reinstall ? EditorIcons.Reinstall : downgrade ? EditorIcons.Downgrade : EditorIcons.Upgrade;
     private static Color ErrorColor() => EditorIcons.ErrorColor;
     private static Color DisabledColor() => ThemeColor("font_disabled_color", "Button", new Color(0.5f, 0.5f, 0.5f));
 
