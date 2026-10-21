@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- Tests of the CI reports (coverage summary and history, static-analysis summary); they need no Godot. -->
+  <!-- Tests of the CI reports (coverage summary and history, static-analysis summary, pull request comment); they need no Godot. -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>

@@ -61,13 +61,16 @@ dotnet test "src/activation-progress.Tests/ActivationProgress.Tests.csproj"
 ```
 Repository tooling is C# on .NET 10, not Python or shell scripts: single-file apps in `tools/` (`dotnet run tools/<name>.cs
 -- <args>`: `coverage.cs`, `progress_smoke.cs`, `package_release.cs` (a test build of the release archive),
-`screenshots/capture.cs`, the known-plugins generators) and the CI reports project `tools/ci-reports` (coverage comment
-and `coverage` branch, static-analysis summary), tested with:
+`screenshots/capture.cs`, the known-plugins generators) and the CI reports project `tools/ci-reports` (coverage summary
+and `coverage` branch, static-analysis summary, and the single PR comment combining them), tested with:
 ```
 dotnet test "tools/ci-reports.Tests/CiReports.Tests.csproj"
 ```
 CI installs that SDK separately (`$RUNNER_TEMP/dotnet-tools`) where the job's own SDK must stay in charge of building and
-testing, so tools that start `dotnet` themselves (coverage.cs) use the `dotnet` on `PATH`.
+testing, so tools that start `dotnet` themselves (coverage.cs) use the `dotnet` on `PATH`. A pull request gets one CI
+comment: CI-PR calls CI-PR-Build (`package`, which posts it early with the download link) and CI-Analysis, and its
+`pr-comment` job replaces it with every job's result and the `pr-comment-*` report artifacts once all jobs finish
+(`.github/actions/pr-comment` finds it by its marker). Don't post further comments; add a section instead.
 Alternative: gdUnit4's own CLI runner (`src/eplugin-framework/addons/gdUnit4/runtest.cmd` /
 `runtest.sh`), which takes `--godot_binary <path>` or the same `GODOT_BIN` env var.
 

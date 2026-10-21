@@ -22,14 +22,13 @@ internal sealed record Links(string Label = "This run", string? Html = null, str
 /// <summary>
 /// Summarizes framework line coverage for pull requests and keeps its history on the coverage branch.
 /// summary: merges the Cobertura reports of the test runs, compares them with the latest main measurement and the pull
-///          request's changed lines, and writes summary.md (PR comment and run summary) and coverage.json.
+///          request's changed lines, and writes summary.md (a section of the PR comment, and the run summary) and coverage.json.
 /// history: records a main measurement (coverage.json) in a checkout of the coverage branch: latest.json, history.csv,
 ///          badge.svg and a README.md with a trend chart that GitHub renders.
 /// </summary>
 internal static partial class CoverageReport
 {
     internal const string Owned = "src/eplugin-framework/addons/ePlugin/";
-    internal const string Marker = "<!-- eplugin-coverage -->";
     private const string HistoryHeader = "date,commit,covered_lines,coverable_lines,line_coverage";
     private const int ChartPoints = 30;
     private const int TableRows = 30;
@@ -155,7 +154,7 @@ internal static partial class CoverageReport
         Links links)
     {
         var total = Percent(current.Covered, current.Coverable);
-        var lines = new List<string> { Marker, "### Code coverage", "" };
+        var lines = new List<string> { "### Code coverage", "" };
         lines.AddRange(["| | Line coverage | Covered lines |", "|:--|--:|--:|"]);
         lines.Add($"| {links.Label} | **{Fixed(total, 2)}%** | {Number(current.Covered)} of {Number(current.Coverable)} |");
         if (baseline is not null)

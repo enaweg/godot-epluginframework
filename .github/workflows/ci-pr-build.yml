@@ -3,15 +3,13 @@ name: CI-PR-Build
 # Packages the plugin of every pull request like a release, so it can be downloaded and tried in a project. The
 # version gets the PR number as a prerelease: 0.9.1 -> 0.9.1-pr.42, 1.0.0-rc.1+build.5 -> 1.0.0-rc.1.pr.42+build.5.
 # A PR build therefore sorts before the release of the same version, and the updater still offers that release.
+# CI-PR calls it for pull requests. It posts the download link as the pull request's CI comment right away, and CI-PR's
+# pr-comment job replaces that comment with all results once the other jobs finish.
 on:
-  pull_request:
+  workflow_call:
 
 permissions:
   contents: read
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
 
 jobs:
   package:
@@ -27,6 +25,14 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+
+      - name: Setup .NET for the tools
+        # tools/ci-reports needs .NET 10. A separate installation, so the SDK below still builds the package.
+        uses: actions/setup-dotnet@v6
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet-tools
+        with:
+          dotnet-version: 10.0.x
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
@@ -96,30 +102,40 @@ jobs:
           ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
+          mkdir -p "$RUNNER_TEMP/pr-comment"
           {
-            echo "<!-- eplugin-pr-build -->"
             echo "### ePlugin test build"
             echo
             echo "[ePlugin-v${VERSION}.zip](${ARTIFACT_URL}) (version \`${VERSION}\`, commit ${HEAD_SHA:0:7})"
             echo
             echo "Extract its \`addons/ePlugin\` directory into your project's \`addons\` directory, build the project and enable"
             echo "**ePlugin** under **Project > Project Settings > Plugins**. Downloading requires a GitHub login."
-          } > "$RUNNER_TEMP/build-comment.md"
-          cat "$RUNNER_TEMP/build-comment.md" >> "$GITHUB_STEP_SUMMARY"
+          } > "$RUNNER_TEMP/pr-comment/build.md"
+          cat "$RUNNER_TEMP/pr-comment/build.md" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Comment download link on the pull request
+      - name: Upload the comment section
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-comment-build
+          path: ${{ runner.temp }}/pr-comment/build.md
+          retention-days: 1
+
+      - name: Compose the early pull request comment
         # Fork pull requests get a read-only token; their download link is in the run summary.
         if: github.event.pull_request.head.repo.full_name == github.repository
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          # One comment per pull request, updated by every run.
-          comment="$(gh api --paginate "repos/$REPOSITORY/issues/$PR_NUMBER/comments" \
-            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- eplugin-pr-build -->"))) | .id' | head -n 1)"
-          if [[ -n "$comment" ]]; then
-            gh api --method PATCH "repos/$REPOSITORY/issues/comments/$comment" -F "body=@$RUNNER_TEMP/build-comment.md" > /dev/null
-          else
-            gh api --method POST "repos/$REPOSITORY/issues/$PR_NUMBER/comments" -F "body=@$RUNNER_TEMP/build-comment.md" > /dev/null
-          fi
+          "$RUNNER_TEMP/dotnet-tools/dotnet" run --project tools/ci-reports -- comment \
+            --output "$RUNNER_TEMP/pr-comment.md" --commit "$HEAD_SHA" --run-url "$RUN_URL" \
+            --job "Test build=success" --section "$RUNNER_TEMP/pr-comment/build.md" \
+            --note "Tests, static analysis and code coverage are still running. This comment is updated when they finish."
+
+      - name: Post the download link on the pull request
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        uses: ./.github/actions/pr-comment
+        with:
+          body-file: ${{ runner.temp }}/pr-comment.md
+          pr-number: ${{ github.event.pull_request.number }}

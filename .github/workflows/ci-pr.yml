@@ -8,7 +8,29 @@ on:
 permissions:
   contents: read
 
+# A new push to a pull request cancels the run of the previous one, so an older run never overwrites the CI comment of a
+# newer one. Pushes to main each get their own group and always run to the end.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
+  package:
+    # The pull request's test build; it posts the CI comment early with the download link.
+    if: ${{ github.event_name == 'pull_request' }}
+    uses: ./.github/workflows/ci-pr-build.yml
+    permissions:
+      contents: read
+      pull-requests: write
+
+  analysis:
+    # Runs on its own for main.
+    if: ${{ github.event_name == 'pull_request' }}
+    uses: ./.github/workflows/ci-analysis.yml
+    permissions:
+      contents: read
+      security-events: write
+
   progress-helper:
     strategy:
       fail-fast: false
@@ -150,15 +172,14 @@ jobs:
           retention-days: 14
 
   coverage:
-    # Merges the SDK runs (each covers its own dotnet CLI generation) and reports them in the run summary and as a
-    # pull request comment, compared with the latest main measurement on the coverage branch.
+    # Merges the SDK runs (each covers its own dotnet CLI generation) and reports them in the run summary and in the
+    # pull request's CI comment, compared with the latest main measurement on the coverage branch.
     needs: build-and-test
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: write
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: true
       DOTNET_NOLOGO: true
@@ -244,23 +265,72 @@ jobs:
             artifacts/coverage/summary.md
           retention-days: 14
 
-      - name: Update the pull request coverage comment
-        # Forks have a read-only token; their coverage remains in the run summary.
-        if: ${{ steps.summary.outcome == 'success' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+      - name: Upload the pull request comment section
+        if: ${{ steps.summary.outcome == 'success' && github.event_name == 'pull_request' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-comment-coverage
+          path: artifacts/coverage/summary.md
+          retention-days: 1
+
+  pr-comment:
+    # Replaces the early CI comment of the package job with the result of every job and the reports of the test build,
+    # static analysis and code coverage. Fork pull requests get a read-only token; their reports are in the run summary.
+    needs: [package, analysis, progress-helper, build-and-test, coverage, godot-compatibility]
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      DOTNET_NOLOGO: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Download the comment sections
+        # A job that failed early uploaded no section; the comment then shows only its result.
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: pr-comment-*
+          path: ${{ runner.temp }}/pr-comment
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Compose the pull request comment
         env:
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SECTIONS: ${{ runner.temp }}/pr-comment
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PACKAGE: ${{ needs.package.result }}
+          ANALYSIS: ${{ needs.analysis.result }}
+          PROGRESS_HELPER: ${{ needs.progress-helper.result }}
+          TESTS: ${{ needs.build-and-test.result }}
+          COVERAGE: ${{ needs.coverage.result }}
+          COMPATIBILITY: ${{ needs.godot-compatibility.result }}
         run: |
-          comment="$(gh api --paginate "repos/$REPOSITORY/issues/$PR_NUMBER/comments" \
-            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- eplugin-coverage -->"))) | .id' | head -n 1)"
-          if [[ -n "$comment" ]]; then
-            gh api --method PATCH "repos/$REPOSITORY/issues/comments/$comment" \
-              -F "body=@artifacts/coverage/summary.md" > /dev/null
-          else
-            gh api --method POST "repos/$REPOSITORY/issues/$PR_NUMBER/comments" \
-              -F "body=@artifacts/coverage/summary.md" > /dev/null
-          fi
+          dotnet run --project tools/ci-reports -- comment --output "$RUNNER_TEMP/pr-comment.md" \
+            --commit "$HEAD_SHA" --run-url "$RUN_URL" \
+            --job "Test build=$PACKAGE" --job "Tests (.NET 8, .NET 10)=$TESTS" \
+            --job "Progress helper (Windows, macOS)=$PROGRESS_HELPER" --job "Godot 4.4 to 4.6 build=$COMPATIBILITY" \
+            --job "Static analysis and workflow lint=$ANALYSIS" --job "Code coverage=$COVERAGE" \
+            --section "$SECTIONS/pr-comment-build/build.md" \
+            --section "$SECTIONS/pr-comment-analysis/summary.md" \
+            --section "$SECTIONS/pr-comment-coverage/summary.md"
+
+      - name: Update the pull request comment
+        uses: ./.github/actions/pr-comment
+        with:
+          body-file: ${{ runner.temp }}/pr-comment.md
+          pr-number: ${{ github.event.pull_request.number }}
 
   coverage-history:
     # Records each main measurement on the generated coverage branch (README with trend chart, history.csv, badge),
