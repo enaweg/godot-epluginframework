@@ -234,8 +234,15 @@ catch (UnauthorizedAccessException ex)
     return;
 }
 
-// One candidate per GitHub slug, with the title shown in the Godot Asset Library ranking. Extra add-ons skip the filters.
-var candidates = new Dictionary<string, (string Slug, string Name, bool Extra, string? PluginSlug)>(StringComparer.OrdinalIgnoreCase);
+// The repositories left out, by URL: their stars, the kind of filter and why. The statistics at the end count them by
+// kind and show the most-starred ones, to check the filters by. A later reason replaces an earlier one, and add-ons that
+// are listed after all are removed at the end.
+var filtered = new ConcurrentDictionary<string, (int Stars, string Kind, string Reason)>(StringComparer.OrdinalIgnoreCase);
+void Filter(string repository, int stars, string kind, string? reason = null) => filtered[repository.TrimEnd('/')] = (stars, kind, reason ?? kind);
+
+// One candidate per GitHub slug, with the title shown in the Godot Asset Library ranking and its stars there. Extra
+// add-ons skip the filters.
+var candidates = new Dictionary<string, (string Slug, string Name, bool Extra, string? PluginSlug, int Stars)>(StringComparer.OrdinalIgnoreCase);
 var markdown = await RequestAsync(source);
 string? category = null;
 var listingPattern = new Regex(@"^\|\s*\[([^]]+)\]\((https://github\.com/[^)/]+/[^)/]+)\)\s*\|\s*([\d,]+)\s*\|", RegexOptions.Compiled);
@@ -243,14 +250,24 @@ foreach (var line in markdown.Split('\n'))
 {
     if (line.StartsWith("### ", StringComparison.Ordinal))
         category = line[4..].Trim();
-    if (category is null || skippedCategories.Contains(category)) continue;
+    if (category is null) continue;
 
     var match = listingPattern.Match(line);
-    // The ranking's star counts are older, so add-ons that have grown since are kept for the current count to decide.
-    if (!match.Success || !int.TryParse(match.Groups[3].Value.Replace(",", ""), out var oldStars) || oldStars < minStars / 2)
+    if (!match.Success || !int.TryParse(match.Groups[3].Value.Replace(",", ""), out var oldStars))
         continue;
     var slug = match.Groups[2].Value["https://github.com/".Length..].TrimEnd('/');
-    candidates[slug] = (slug, match.Groups[1].Value, false, null);
+    if (skippedCategories.Contains(category))
+    {
+        Filter("https://github.com/" + slug, oldStars, "in a godot-stars category of games, templates or assets", $"in godot-stars category {category}");
+        continue;
+    }
+    // The ranking's star counts are older, so add-ons that have grown since are kept for the current count to decide.
+    if (oldStars < minStars / 2)
+    {
+        Filter("https://github.com/" + slug, oldStars, $"fewer than {minStars / 2} stars in the godot-stars ranking");
+        continue;
+    }
+    candidates[slug] = (slug, match.Groups[1].Value, false, null, oldStars);
 }
 
 // A file-based app runs from a temporary build folder, so the script's own folder comes from AppContext.
@@ -280,7 +297,8 @@ if (File.Exists(extrasPath))
         if (github.Success)
         {
             var slug = github.Groups[1].Value + "/" + github.Groups[2].Value;
-            candidates[slug] = (slug, candidates.TryGetValue(slug, out var known) ? known.Name : github.Groups[2].Value, true, pluginSlug);
+            candidates[slug] = candidates.TryGetValue(slug, out var known) ? known with { Extra = true, PluginSlug = pluginSlug }
+                : (slug, github.Groups[2].Value, true, pluginSlug, 0);
         }
         else others.Add((repository, pluginSlug));
     }
@@ -303,7 +321,7 @@ if (seedPath is not null)
         var slug = match.Groups[1].Value;
         if (!candidates.ContainsKey(slug))
             candidates[slug] = (slug, item.TryGetProperty("name", out var name) && name.ValueKind == JsonValueKind.String
-                ? name.GetString()! : slug, false, null);
+                ? name.GetString()! : slug, false, null, 0);
     }
 }
 
@@ -418,12 +436,17 @@ async Task<Addon?> OtherAddon(string repository, string? pluginSlug, bool extra)
         }
     }
     var tag = release is null ? Newest(await RemoteTags(git)) : null;
-    if (release is null && tag is null) return null;
+    if (release is null && tag is null)
+    {
+        Filter(web, stars, "no release or version tag");
+        return null;
+    }
     // The updater reads the release and tag pages of GitLab and Forgejo; another host by its .git URL, whose tags are the
     // versions.
     if (!gitlab && !forgejo && !git.EndsWith(".git", StringComparison.Ordinal))
     {
         Console.Error.WriteLine($"Extra add-on {repository}: the updater reads git repositories by a URL ending in .git; give that URL.");
+        Filter(web, stars, "extra add-on without a .git URL");
         return null;
     }
     var updateUrl = gitlab ? web + (release is not null ? "/-/releases" : "/-/tags")
@@ -448,9 +471,13 @@ async Task<string[]> GitLabSearch()
             var projects = json.RootElement.EnumerateArray().ToArray();
             foreach (var project in projects)
             {
-                if (project.TryGetProperty("forked_from_project", out var fork) && fork.ValueKind == JsonValueKind.Object) continue;
-                if (Searched(project, "star_count", "last_activity_at", "topics", "path") && project.GetProperty("web_url").GetString() is { } url)
-                    found.Add(url.TrimEnd('/'));
+                if (project.GetProperty("web_url").GetString()?.TrimEnd('/') is not { } url) continue;
+                var stars = project.TryGetProperty("star_count", out var count) && count.TryGetInt32(out var starCount) ? starCount : 0;
+                if (project.TryGetProperty("forked_from_project", out var fork) && fork.ValueKind == JsonValueKind.Object)
+                    Filter(url, stars, "a fork");
+                else if (Rejected(project, "star_count", "last_activity_at", "topics", "path") is { } reason)
+                    Filter(url, stars, reason);
+                else found.Add(url);
             }
             if (projects.Length < 100 || projects[^1].GetProperty("star_count").GetInt32() < minStarsElsewhere) break;
         }
@@ -474,10 +501,18 @@ async Task<string[]> CodebergSearch()
             var repositories = json.RootElement.GetProperty("data").EnumerateArray().ToArray();
             foreach (var repository in repositories)
             {
-                if (new[] { "archived", "fork", "mirror", "template", "private", "internal" }.Any(flag =>
-                        repository.TryGetProperty(flag, out var value) && value.ValueKind == JsonValueKind.True)) continue;
-                if (Searched(repository, "stars_count", "updated_at", "topics", "name") && repository.GetProperty("html_url").GetString() is { } url)
-                    found.Add(url.TrimEnd('/'));
+                if (repository.GetProperty("html_url").GetString()?.TrimEnd('/') is not { } url) continue;
+                var stars = repository.TryGetProperty("stars_count", out var count) && count.TryGetInt32(out var starCount) ? starCount : 0;
+                // The user's own private repositories are not candidates at all, so the statistics leave them out.
+                if (new[] { "private", "internal" }.Any(flag => repository.TryGetProperty(flag, out var value) && value.ValueKind == JsonValueKind.True))
+                    continue;
+                if (new[] { ("archived", "archived"), ("fork", "a fork"), ("mirror", "a mirror"), ("template", "a template") }
+                        .FirstOrDefault(flag => repository.TryGetProperty(flag.Item1, out var value) && value.ValueKind == JsonValueKind.True)
+                        .Item2 is { } skipped)
+                    Filter(url, stars, skipped);
+                else if (Rejected(repository, "stars_count", "updated_at", "topics", "name") is { } reason)
+                    Filter(url, stars, reason);
+                else found.Add(url);
             }
             if (repositories.Length < 50 || repositories[^1].GetProperty("stars_count").GetInt32() < minStarsElsewhere) break;
         }
@@ -485,16 +520,20 @@ async Task<string[]> CodebergSearch()
     return found.ToArray();
 }
 
-// Whether a repository a search found can be an active add-on: enough stars, recent activity, not a game and not the
-// engine. Repositories named "godot" are the engine and its forks.
-bool Searched(JsonElement repository, string starsProperty, string activityProperty, string topicsProperty, string nameProperty)
+// Why a repository a search found cannot be an active add-on, or null when it can: too few stars, no recent activity, a
+// game or the engine. Repositories named "godot" are the engine and its forks.
+string? Rejected(JsonElement repository, string starsProperty, string activityProperty, string topicsProperty, string nameProperty)
 {
     var topics = repository.TryGetProperty(topicsProperty, out var list) && list.ValueKind == JsonValueKind.Array
         ? list.EnumerateArray().Select(t => t.GetString() ?? "").ToArray() : [];
-    return repository.TryGetProperty(starsProperty, out var stars) && stars.GetInt32() >= minStarsElsewhere &&
-        repository.TryGetProperty(activityProperty, out var activity) && activity.TryGetDateTimeOffset(out var last) && last >= cutoff &&
-        !(topics.Any(gameTopics.Contains) && !topics.Any(addonTopics.Contains)) &&
-        !string.Equals(repository.TryGetProperty(nameProperty, out var name) ? name.GetString() : null, "godot", StringComparison.OrdinalIgnoreCase);
+    if (!(repository.TryGetProperty(starsProperty, out var stars) && stars.GetInt32() >= minStarsElsewhere))
+        return $"fewer than {minStarsElsewhere} stars";
+    if (!(repository.TryGetProperty(activityProperty, out var activity) && activity.TryGetDateTimeOffset(out var last) && last >= cutoff))
+        return "no activity within two years";
+    if (topics.Any(gameTopics.Contains) && !topics.Any(addonTopics.Contains))
+        return "a game: a game topic and no add-on topic";
+    return string.Equals(repository.TryGetProperty(nameProperty, out var name) ? name.GetString() : null, "godot", StringComparison.OrdinalIgnoreCase)
+        ? "the engine or a fork of it" : null;
 }
 
 // The add-ons among repositories outside GitHub, read a few at a time.
@@ -591,21 +630,31 @@ async Task<Addon[]> GitHubAddons()
         for (var i = 0; i < batch.Length; i++)
         {
             var extra = batch[i].Extra;
+            // The repository's own URL replaces the ranking's, which may be an old name.
+            filtered.TryRemove("https://github.com/" + batch[i].Slug, out _);
             if (!data.TryGetProperty($"r{i}", out var repo) || repo.ValueKind != JsonValueKind.Object)
             {
                 if (extra) Console.Error.WriteLine($"Extra add-on https://github.com/{batch[i].Slug} was not found on GitHub.");
+                Filter("https://github.com/" + batch[i].Slug, batch[i].Stars, "not found on GitHub");
                 continue;
             }
-            if (!extra && (repo.GetProperty("isArchived").GetBoolean() || repo.GetProperty("isDisabled").GetBoolean()
-                || repo.GetProperty("isFork").GetBoolean())) continue;
+            var url = repo.GetProperty("url").GetString()!.TrimEnd('/');
             var stars = repo.GetProperty("stargazerCount").GetInt32();
-            if (!extra && stars < minStars) continue;
             // committedDate keeps the committer's time zone, so compare and store it in UTC.
             DateTimeOffset? committed = repo.TryGetProperty("defaultBranchRef", out var branch) && branch.ValueKind == JsonValueKind.Object
                 && branch.TryGetProperty("target", out var target) && target.TryGetProperty("committedDate", out var dateValue)
                 && DateTimeOffset.TryParse(dateValue.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date : null;
-            if (!extra && (committed is null || committed < cutoff)) continue;
-            var url = repo.GetProperty("url").GetString()!.TrimEnd('/');
+            var rejected = extra ? null
+                : repo.GetProperty("isArchived").GetBoolean() ? "archived"
+                : repo.GetProperty("isDisabled").GetBoolean() ? "disabled"
+                : repo.GetProperty("isFork").GetBoolean() ? "a fork"
+                : stars < minStars ? $"fewer than {minStars} stars"
+                : committed is null || committed < cutoff ? "no commit within two years" : null;
+            if (rejected is not null)
+            {
+                Filter(url, stars, rejected);
+                continue;
+            }
             // A published release (whose ZIP the updater downloads), prereleases included, wins; otherwise the repository's version tags,
             // which the updater installs from git through the tag page URL. Without either there is nothing to update to.
             var release = Newest(Nodes(repo, "releases")
@@ -615,6 +664,7 @@ async Task<Addon[]> GitHubAddons()
             if (release is null && tag is null)
             {
                 unversioned.Add(url);
+                Filter(url, stars, "no release or version tag");
                 continue;
             }
             var homepage = repo.TryGetProperty("homepageUrl", out var hp) && hp.ValueKind == JsonValueKind.String
@@ -635,10 +685,32 @@ async Task<Addon[]> GitHubAddons()
 // applies to GitHub's ranking; the extra add-ons and the few found on GitLab and Codeberg are always listed.
 var unique = addons.DistinctBy(x => x.RepositoryUrl, StringComparer.OrdinalIgnoreCase).ToArray();
 static bool Ranked(Addon addon) => !addon.Extra && addon.RepositoryUrl.StartsWith("https://github.com/", StringComparison.OrdinalIgnoreCase);
-var output = unique.Where(Ranked).OrderByDescending(x => x.Stars).Take(maxItems).Concat(unique.Where(x => !Ranked(x)))
+var ranked = unique.Where(Ranked).OrderByDescending(x => x.Stars).ToArray();
+foreach (var addon in ranked.Skip(maxItems)) Filter(addon.RepositoryUrl, addon.Stars, $"beyond the {maxItems} most-starred of GitHub's ranking");
+var output = ranked.Take(maxItems).Concat(unique.Where(x => !Ranked(x)))
     .DistinctBy(x => x.RepositoryUrl, StringComparer.OrdinalIgnoreCase)
     .OrderByDescending(x => x.Stars).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToArray();
 var dest = Path.Combine(Environment.CurrentDirectory, $"godot_addons_active_{minStars}_stars.json");
+// The add-ons of the previous output with their stars then, to compare with: a sudden drop points to a source, host or
+// token that failed rather than to add-ons that went away. JSON written before other hosts were read names GitHub only.
+Dictionary<string, int>? previous = null;
+if (File.Exists(dest))
+{
+    try
+    {
+        using var old = JsonDocument.Parse(await File.ReadAllTextAsync(dest));
+        previous = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in old.RootElement.EnumerateArray())
+            if ((item.TryGetProperty("repository_url", out var url) || item.TryGetProperty("github_url", out url)) &&
+                url.GetString() is { Length: > 0 } repository)
+                previous.TryAdd(repository.TrimEnd('/'), item.TryGetProperty("stars", out var count) && count.TryGetInt32(out var oldStars) ? oldStars : 0);
+    }
+    catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+    {
+        Console.Error.WriteLine($"The previous {Path.GetFileName(dest)} is not readable ({ex.Message}); nothing to compare with.");
+        previous = null;
+    }
+}
 await File.WriteAllTextAsync(dest, JsonSerializer.Serialize(output, new JsonSerializerOptions
 {
     WriteIndented = true,
@@ -651,6 +723,42 @@ if (unversioned.Count > 0)
     Console.WriteLine($"Left out {unversioned.Count} add-ons without a release or version tag: {string.Join(", ", unversioned.Order())}");
 Console.WriteLine("GitHub's candidates come from an older ranking; the result may omit recently published add-ons. " +
     "List those in extra_addons.txt.");
+foreach (var addon in output) filtered.TryRemove(addon.RepositoryUrl, out _);
+Statistics(output.Length, filtered.Select(f => (f.Key, f.Value.Stars, f.Value.Kind, f.Value.Reason)).ToArray());
+if (previous is not null)
+    Compare(previous, output, repository => filtered.TryGetValue(repository, out var left) ? left.Reason : "found by neither the ranking nor a search");
+
+// The add-ons that are new since the previous output, and the most-starred of those no longer listed with why they are left
+// out now. Warns when clearly fewer are listed than before.
+static void Compare(Dictionary<string, int> previous, Addon[] output, Func<string, string> why)
+{
+    var now = output.Select(a => a.RepositoryUrl).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    var added = output.Where(a => !previous.ContainsKey(a.RepositoryUrl)).OrderBy(a => a.RepositoryUrl, StringComparer.OrdinalIgnoreCase).ToArray();
+    var removed = previous.Where(p => !now.Contains(p.Key)).OrderByDescending(p => p.Value)
+        .ThenBy(p => p.Key, StringComparer.OrdinalIgnoreCase).ToArray();
+    Console.WriteLine($"Compared with the previous output: {previous.Count} before, {output.Length} now " +
+        $"({output.Length - previous.Count:+0;-0;0}), {added.Length} new, {removed.Length} no longer listed");
+    foreach (var addon in added) Console.WriteLine($"  + {addon.RepositoryUrl} ({addon.Stars} stars)");
+    foreach (var (repository, stars) in removed.Take(10)) Console.WriteLine($"  - {repository} ({stars} stars before): {why(repository)}");
+    if (removed.Length > 10) Console.WriteLine($"  ... and {removed.Length - 10} more no longer listed, with fewer stars");
+    if (output.Length < previous.Count * 0.9)
+        Console.Error.WriteLine($"Warning: {previous.Count - output.Length} add-ons fewer than before. A host, a search or the token " +
+            "may have failed; check the reasons above before generating the list from this output.");
+}
+
+// How many add-ons were added and filtered out, how many each kind of filter left out, and the most-starred ones left out,
+// which are the likeliest to be add-ons a filter should not have left out.
+static void Statistics(int added, (string Repository, int Stars, string Kind, string Reason)[] filtered)
+{
+    Console.WriteLine($"Statistics: {added} added, {filtered.Length} filtered out of {added + filtered.Length} repositories");
+    foreach (var kind in filtered.GroupBy(f => f.Kind).OrderByDescending(g => g.Count()).ThenBy(g => g.Key, StringComparer.Ordinal))
+        Console.WriteLine($"  {kind.Count(),5}  {kind.Key}");
+    if (filtered.Length == 0) return;
+    Console.WriteLine("Most-starred filtered out:");
+    foreach (var (repository, stars, _, reason) in filtered.OrderByDescending(f => f.Stars)
+                 .ThenBy(f => f.Repository, StringComparer.OrdinalIgnoreCase).Take(10))
+        Console.WriteLine($"  {stars,6} stars  {repository}: {reason}");
+}
 
 /// <param name="LastCommitAt">The last commit on the default branch, or GitLab's last activity or Forgejo's last update;
 /// null when unknown.</param>

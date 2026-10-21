@@ -63,8 +63,12 @@ entries found by a search are marked `searched`. Each slug is, in this order:
 A searched entry is listed only when its slug is named like its repository (one contains the other, ignoring `-`, `_`,
 `.` and "godot"), because games and projects often hold someone else's add-on in `addons/`. A slug claimed by several
 repositories goes to the one with the most stars. Release ZIPs the updater refuses (no or several plugin roots) leave the
-add-on out. Entries are not installed or validated in advance. Add-ons the ranking and searches miss or leave out go in
-`tools/extra_addons.txt` (`slug;url` or `url` per line, any git host), which `build_godot_addons.cs` always lists
+add-on out. Entries are not installed or validated in advance. Both tools end with statistics: how many repositories
+were added and filtered out, how many each kind of filter left out, and the ten most-starred ones left out with their
+reason, the likeliest to be add-ons a filter missed. Each also compares its result with the previous one (the existing
+JSON file, the committed list): counts before and now, every new add-on (and changed slugs), the ten most-starred no
+longer listed with why they are left out now, and a warning when more than a tenth fewer are listed, which usually means
+a host, search or token failed. Add-ons the ranking and searches miss or leave out go in `tools/extra_addons.txt` (`slug;url` or `url` per line, any git host), which `build_godot_addons.cs` always lists
 regardless of stars and activity. GitLab and Forgejo repositories there are read through their APIs; other hosts only
 through their version tags.
 
