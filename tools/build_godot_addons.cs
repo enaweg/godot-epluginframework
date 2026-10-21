@@ -3,11 +3,18 @@
 // Run with: dotnet run build_godot_addons.cs
 // Then write ePlugin's built-in list from its output with: dotnet run generate_known_plugins.cs
 // Add-ons are found on GitHub (the godot-stars ranking), GitLab and Codeberg (their searches for Godot projects), read from
-// all three hosts at the same time. GitLab and Codeberg need no token.
-// Requires .NET 10 SDK and GITHUB_TOKEN. Only public repositories are read, but GitHub's GraphQL API answers no
+// all three hosts at the same time.
+// Requires .NET 10 SDK and a GitHub token. Only public repositories are read, but GitHub's GraphQL API answers no
 // unauthenticated requests and its REST API allows 60 per hour, too few for several hundred repositories. A token
-// without any scopes (classic) or with read-only access to public repositories (fine-grained) is enough.
+// without any scopes (classic) or with read-only access to public repositories (fine-grained) is enough. GitLab and
+// Codeberg are read without a token too; with one, GitLab also tells which projects are forks.
+// Each token comes from an environment variable or, when that is not set, from the host's CLI if it is installed and
+// logged in, so none has to be set by hand:
+// - GitHub: GITHUB_TOKEN or GH_TOKEN, else `gh auth token`;
+// - GitLab: GITLAB_TOKEN or GITLAB_ACCESS_TOKEN, else glab's login (`glab auth login`);
+// - Codeberg: CODEBERG_TOKEN, else a codeberg.org login of tea, the Gitea and Forgejo CLI (`tea login add`).
 using System.Collections.Concurrent;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Net;
@@ -40,41 +47,145 @@ var gameTopics = new HashSet<string>(["game", "games", "videogame", "video-game"
 var addonTopics = new HashSet<string>(["plugin", "addon", "add-on", "godot-plugin", "godot-addon", "editor-plugin", "library",
     "gdextension", "tool", "tools"], StringComparer.OrdinalIgnoreCase);
 
-// cmd keeps the quotes of `set GITHUB_TOKEN="..."` in the value, and a pasted token can carry spaces.
-var token = Environment.GetEnvironmentVariable("GITHUB_TOKEN")?.Trim().Trim('"', '\'').Trim();
-if (string.IsNullOrWhiteSpace(token))
+// The token for each API host, and where it came from. A token is only sent to its own host.
+var tokens = new ConcurrentDictionary<string, (string Token, string Source)>(StringComparer.OrdinalIgnoreCase);
+if ((FromEnvironment("GITHUB_TOKEN", "GH_TOKEN") ?? GhToken("github.com")) is { } githubLogin) tokens["api.github.com"] = githubLogin;
+if ((FromEnvironment("GITLAB_TOKEN", "GITLAB_ACCESS_TOKEN") ?? GlabToken("gitlab.com")) is { } gitlabLogin) tokens["gitlab.com"] = gitlabLogin;
+if ((FromEnvironment("CODEBERG_TOKEN") ?? TeaToken("codeberg.org")) is { } codebergLogin) tokens["codeberg.org"] = codebergLogin;
+if (!tokens.ContainsKey("api.github.com"))
 {
-    Console.Error.WriteLine("Set GITHUB_TOKEN to a GitHub personal access token. It needs no scopes: GitHub's API " +
-        "requires a token for GraphQL and rate-limits anonymous requests, even for public repositories.");
+    Console.Error.WriteLine("No GitHub token: log in with `gh auth login`, or set GITHUB_TOKEN to a GitHub personal access " +
+        "token. It needs no scopes: GitHub's API requires a token for GraphQL and rate-limits anonymous requests, even for " +
+        "public repositories.");
     Environment.ExitCode = 1;
     return;
+}
+Console.Error.WriteLine("Tokens: " + string.Join(", ", new[] { ("GitHub", "api.github.com"), ("GitLab", "gitlab.com"), ("Codeberg", "codeberg.org") }
+    .Select(h => $"{h.Item1} {(tokens.TryGetValue(h.Item2, out var login) ? "from " + login.Source : "none")}")));
+
+// cmd keeps the quotes of `set GITHUB_TOKEN="..."` in the value, and a pasted token can carry spaces.
+static string? Clean(string? value) => value?.Trim().Trim('"', '\'').Trim() is { Length: > 0 } token ? token : null;
+
+static (string Token, string Source)? FromEnvironment(params string[] variables)
+{
+    foreach (var variable in variables)
+        if (Clean(Environment.GetEnvironmentVariable(variable)) is { } token) return (token, variable);
+    return null;
+}
+
+static (string Token, string Source)? GhToken(string host) =>
+    Cli("gh", "auth", "token", "--hostname", host) is { } gh && Clean(gh.Output) is { } token ? (token, "gh auth token") : null;
+
+// glab has no command that prints only the token, but its status shows it, also one kept in the system keyring. It
+// writes the status to stderr.
+static (string Token, string Source)? GlabToken(string host)
+{
+    if (Cli("glab", "auth", "status", "--show-token", "--hostname", host) is not { } status) return null;
+    var token = Regex.Matches(status.Output + "\n" + status.Error, @"\bToken\b[^:\r\n]*:\s*(\S+)")
+        .Select(m => m.Groups[1].Value).LastOrDefault(t => t.Trim('*').Length > 0);
+    return token is null ? null : (token, "glab auth status");
+}
+
+// tea keeps its logins with their tokens in tea/config.yml, in the configuration folder of its OS.
+static (string Token, string Source)? TeaToken(string host)
+{
+    var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    var paths = new[] { Environment.GetEnvironmentVariable("XDG_CONFIG_HOME"), Path.Combine(home, ".config"),
+            Path.Combine(home, "Library", "Application Support"), Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) }
+        .Where(d => !string.IsNullOrEmpty(d)).Select(d => Path.Combine(d!, "tea", "config.yml")).Distinct();
+    foreach (var path in paths.Where(File.Exists))
+    {
+        // The logins are a list of flat maps (name, url, token, ...); a top-level key ends the list.
+        var logins = new List<Dictionary<string, string>>();
+        Dictionary<string, string>? login = null;
+        try
+        {
+            foreach (var line in File.ReadLines(path))
+            {
+                if (line.Length > 0 && !char.IsWhiteSpace(line[0]) && line[0] != '-') login = null;
+                var entry = Regex.Match(line, @"^\s*(-\s+)?(\w+):\s*(.*?)\s*$");
+                if (!entry.Success) continue;
+                if (entry.Groups[1].Success) logins.Add(login = []);
+                if (login is not null) login[entry.Groups[2].Value] = entry.Groups[3].Value.Trim('"', '\'');
+            }
+        }
+        catch (IOException) { continue; }
+        catch (UnauthorizedAccessException) { continue; }
+        var match = logins.FirstOrDefault(l => l.TryGetValue("url", out var url) && Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
+            string.Equals(uri.Host, host, StringComparison.OrdinalIgnoreCase) && l.TryGetValue("token", out var token) && Clean(token) is not null);
+        if (match is not null)
+            return (Clean(match["token"])!, $"tea login {(match.TryGetValue("name", out var name) ? name : host)}");
+    }
+    return null;
+}
+
+// What a CLI wrote to stdout and stderr; null when it is not installed, fails (e.g. is not logged in) or hangs.
+static (string Output, string Error)? Cli(string program, params string[] arguments)
+{
+    var start = new ProcessStartInfo(program)
+    {
+        RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false
+    };
+    foreach (var argument in arguments) start.ArgumentList.Add(argument);
+    try
+    {
+        using var process = Process.Start(start)!;
+        process.StandardInput.Close();
+        var output = process.StandardOutput.ReadToEndAsync();
+        var error = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(TimeSpan.FromSeconds(20)))
+        {
+            process.Kill(true);
+            return null;
+        }
+        return process.ExitCode == 0 ? (output.Result, error.Result) : null;
+    }
+    catch (Win32Exception) { return null; }
 }
 
 using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(45) };
 http.DefaultRequestHeaders.UserAgent.ParseAdd("godot-active-addon-exporter/1.0");
+
+// Sends a request with its host's token: GitHub's to its API, GitLab's and Codeberg's to their /api/ paths, none to other
+// hosts (the README is public). A GitLab or Codeberg token the host rejects is dropped with a warning and the request
+// sent again without it, since both hosts are read without a token too.
+async Task<HttpResponseMessage> SendAsync(Uri uri, object? body)
+{
+    while (true)
+    {
+        var github = uri.Host == "api.github.com";
+        (string Token, string Source)? login = (github || uri.AbsolutePath.StartsWith("/api/", StringComparison.Ordinal)) &&
+            tokens.TryGetValue(uri.Host, out var found) ? found : null;
+        using var request = new HttpRequestMessage(body is null ? HttpMethod.Get : HttpMethod.Post, uri);
+        if (github)
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+        if (login is not null)
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", login.Value.Token);
+        if (body is not null)
+            request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+
+        var response = await http.SendAsync(request);
+        if (response.StatusCode != HttpStatusCode.Unauthorized || login is null || github)
+            return response;
+        response.Dispose();
+        if (tokens.TryRemove(uri.Host, out _))
+            Console.Error.WriteLine($"{uri.Host} rejected the token from {login.Value.Source} (401); reading it without a token.");
+    }
+}
 
 async Task<string> RequestAsync(string url, object? body = null)
 {
     var uri = new Uri(url);
     for (var attempt = 0; ; attempt++)
     {
-        using var request = new HttpRequestMessage(body is null ? HttpMethod.Get : HttpMethod.Post, uri);
-        // The token is only needed by the GitHub API; the README is public.
-        if (uri.Host == "api.github.com")
-        {
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        }
-        if (body is not null)
-            request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
-
-        using var response = await http.SendAsync(request);
+        using var response = await SendAsync(uri, body);
         var content = await response.Content.ReadAsStringAsync();
         if (response.IsSuccessStatusCode)
             return content;
         if (response.StatusCode == HttpStatusCode.Unauthorized && uri.Host == "api.github.com")
-            throw new UnauthorizedAccessException("GitHub rejected GITHUB_TOKEN (401 Bad credentials): it is mistyped, " +
-                "expired, revoked, or a fine-grained token still awaiting approval. Check it with " +
+            throw new UnauthorizedAccessException($"GitHub rejected the token from {tokens["api.github.com"].Source} (401 Bad " +
+                "credentials): it is mistyped, expired, revoked, or a fine-grained token still awaiting approval. Check it with " +
                 "`curl -H \"Authorization: Bearer <token>\" https://api.github.com/user`.");
         if (attempt < maxRetries && RetryDelay(response, attempt) is { } delay)
         {
@@ -323,7 +434,8 @@ async Task<Addon?> OtherAddon(string repository, string? pluginSlug, bool extra)
 
 // Godot projects on gitlab.com with enough stars and recent activity, found by its topics and by its search of names and
 // descriptions. GitLab returns them by stars, so reading stops below the minimum. Without a token GitLab does not say
-// which projects are forks, but it leaves out archived ones.
+// which projects are forks, but it leaves out archived ones. With one it would also return the user's private and internal
+// projects, so only public ones are asked for.
 async Task<string[]> GitLabSearch()
 {
     var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -332,7 +444,7 @@ async Task<string[]> GitLabSearch()
         for (var page = 1; ; page++)
         {
             using var json = JsonDocument.Parse(await RequestAsync(
-                $"https://gitlab.com/api/v4/projects?{query}&archived=false&order_by=star_count&sort=desc&per_page=100&page={page}"));
+                $"https://gitlab.com/api/v4/projects?{query}&archived=false&visibility=public&order_by=star_count&sort=desc&per_page=100&page={page}"));
             var projects = json.RootElement.EnumerateArray().ToArray();
             foreach (var project in projects)
             {
@@ -347,6 +459,7 @@ async Task<string[]> GitLabSearch()
 }
 
 // Godot repositories on Codeberg, found like GitLabSearch's: by their topics and by the search of names and descriptions.
+// With a token the search also finds the user's private repositories, which are left out like forks.
 async Task<string[]> CodebergSearch()
 {
     var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -361,7 +474,7 @@ async Task<string[]> CodebergSearch()
             var repositories = json.RootElement.GetProperty("data").EnumerateArray().ToArray();
             foreach (var repository in repositories)
             {
-                if (new[] { "archived", "fork", "mirror", "template" }.Any(flag =>
+                if (new[] { "archived", "fork", "mirror", "template", "private", "internal" }.Any(flag =>
                         repository.TryGetProperty(flag, out var value) && value.ValueKind == JsonValueKind.True)) continue;
                 if (Searched(repository, "stars_count", "updated_at", "topics", "name") && repository.GetProperty("html_url").GetString() is { } url)
                     found.Add(url.TrimEnd('/'));
@@ -411,7 +524,7 @@ async Task<JsonDocument?> TryJson(string url)
 {
     try
     {
-        using var response = await http.GetAsync(url);
+        using var response = await SendAsync(new Uri(url), null);
         return response.IsSuccessStatusCode ? JsonDocument.Parse(await response.Content.ReadAsStringAsync()) : null;
     }
     catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException) { return null; }
