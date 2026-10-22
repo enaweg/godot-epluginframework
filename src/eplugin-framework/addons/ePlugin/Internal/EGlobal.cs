@@ -938,7 +938,15 @@ internal sealed partial class EGlobal
             {
                 _toCheckEnable.Push(context);
                 _host.SetPluginEnabled(slug, true);
-                return DependencyReadiness.Wait; // EnableEPlugin will be called by the newly enabled plugin
+                if (_host.IsPluginEnabled(slug))
+                {
+                    return DependencyReadiness.Wait; // EnableEPlugin will be called by the newly enabled plugin
+                }
+
+                // Godot refused it (e.g. its script does not load), so no activation callback would resume this plugin.
+                context.Logger?.Warn($"Plugin {slug} cannot be enabled!");
+                FailAllUncheckedPluginsAndRefresh($"Plugin dependency {slug} cannot be enabled!");
+                return DependencyReadiness.Failed;
             }
 
             // A plain plugin runs no framework code when it is enabled, so nothing would resume this plugin. It is

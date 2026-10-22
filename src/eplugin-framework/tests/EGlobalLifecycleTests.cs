@@ -152,6 +152,22 @@ public class EGlobalLifecycleTests : IDisposable
     }
 
     [TestCase]
+    public void AnEPluginDependencyThatGodotRefusesFailsTheActivationInsteadOfWaiting()
+    {
+        _fixture.AddEPlugin("base", b => b.AddNuget("Base.Package"));
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package").AddPluginDependency("base"));
+        _fixture.Host.Broken.Add("base");
+
+        _fixture.Enable("app");
+
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Error);
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsFalse();
+        Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsFalse();
+        Assertions.AssertBool(_fixture.Operations.Any(o => o.StartsWith("add-", StringComparison.Ordinal))).IsFalse();
+        Assertions.AssertBool(_fixture.Log.Any(l => l.Contains("base cannot be enabled"))).IsTrue();
+    }
+
+    [TestCase]
     public void DisablingADependencyDisablesItsDependantsFirst()
     {
         _fixture.AddEPlugin("base", b => b.AddNuget("Base.Package"));
