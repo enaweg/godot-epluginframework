@@ -24,8 +24,6 @@ internal static class EditorIcons
     public const string UpgradePath = "res://addons/ePlugin/icons/upgrade.svg";
     public const string ReinstallPath = "res://addons/ePlugin/icons/reinstall.svg";
     public const string DowngradePath = "res://addons/ePlugin/icons/downgrade.svg";
-    public const string AboutPath = "res://addons/ePlugin/icons/about.svg";
-    public const string DirectoriesPath = "res://addons/ePlugin/icons/directories.svg";
 
     // The common icon color of the editor's icons and what a light editor theme turns it into.
     private const string IconColor = "#e0e0e0", LightThemeIconColor = "#5a5a5a";
@@ -42,7 +40,7 @@ internal static class EditorIcons
     private static readonly Dictionary<(string Path, bool LightIcons, float Scale, bool Tintable, string? Piece, string Accents), Texture2D?> Cache = [];
 
     public static Texture2D? Logo => Get(LogoPath);
-    /// <summary>The colored ePlugin logo at eight times its icon size, for the About dialog.</summary>
+    /// <summary>The colored ePlugin logo at eight times its icon size, for the About tab of the settings.</summary>
     public static Texture2D? LargeLogo => Get(LogoPath, EditorInterface.Singleton.GetEditorTheme(), EditorInterface.Singleton.GetEditorScale() * 8);
     public static Texture2D? EPlugin => Get(EPluginPath);
     /// <summary>A white update mask, so status colors can tint it without multiplying by the icon palette.</summary>
@@ -53,8 +51,6 @@ internal static class EditorIcons
     public static Texture2D? Upgrade => Get(UpgradePath);
     public static Texture2D? Reinstall => Get(ReinstallPath);
     public static Texture2D? Downgrade => Get(DowngradePath);
-    public static Texture2D? About => Get(AboutPath);
-    public static Texture2D? Directories => Get(DirectoriesPath);
 
     /// <summary>The editor's color for something that went well, e.g. an available update.</summary>
     public static Color SuccessColor => ThemeColor(EditorInterface.Singleton.GetEditorTheme(), Accents[0].Name, Accents[0].Fallback);

@@ -4,7 +4,7 @@
 // Regenerates the documentation screenshots in docs/images.
 //
 // Starts the Godot editor on the sample project with a throw-away editor configuration (English, default theme, no
-// local plugin directories of your own), opens every ePlugin dialog with sample data, and captures each window with
+// local directories of your own), opens every ePlugin dialog with sample data, and captures each window with
 // its frame. Needs a desktop session with X11 or Xwayland, GODOT_BIN pointing at a Godot .NET editor, and the .NET 10
 // SDK (git for the progress helper build). Windows appear on screen while it runs; don't touch the mouse or keyboard until the editor closes.
 //
@@ -69,7 +69,7 @@ static class Screenshots
 
                 """);
 
-            // Example releases of the sample plugins for the local plugin directory: 1.1.0 of three plugins and an older 1.0.5.
+            // Example releases of the sample plugins for the local directory: 1.1.0 of three plugins and an older 1.0.5.
             if (Directory.Exists(Samples))
                 Directory.Delete(Samples, true);
             var releases = Path.Combine(Samples, "releases");

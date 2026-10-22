@@ -4,13 +4,12 @@ using Godot;
 namespace Enaweg.Plugin.Internal.Manager;
 
 /// <summary>
-/// Shows the ePlugin Framework's logo, version and description with links to its store page, source code and
-/// documentation, and asks for a star on GitHub. The layout lives in AboutDialog.tscn.
+/// The About tab of the settings: the ePlugin Framework's logo, version and description with links to its store page,
+/// source code and documentation, and a request for a star on GitHub. The layout lives in SettingsDialog.tscn.
 /// </summary>
 [Tool]
-internal sealed partial class AboutDialog : AcceptDialog, ISerializationListener
+internal sealed partial class AboutTab : VBoxContainer
 {
-    private readonly EditorSignalConnections _signals = new();
     private TextureRect _logo = null!;
     private Label _version = null!;
     private Label _description = null!;
@@ -25,7 +24,6 @@ internal sealed partial class AboutDialog : AcceptDialog, ISerializationListener
         _logo = GetNode<TextureRect>("%AboutLogo"); _version = GetNode<Label>("%AboutVersion"); _description = GetNode<Label>("%AboutDescription");
         _store = GetNode<LinkButton>("%StoreLink"); _source = GetNode<LinkButton>("%SourceLink"); _documentation = GetNode<LinkButton>("%DocumentationLink");
         _starNote = GetNode<PanelContainer>("%StarNote"); _star = GetNode<LinkButton>("%StarLink");
-        EditorWindows.Prepare(this, _signals, this, nameof(QueueWindowIcon));
     }
 
     /// <summary>Shows <paramref name="framework"/>, the manager's entry for the framework, or the defaults without one.</summary>
@@ -40,8 +38,6 @@ internal sealed partial class AboutDialog : AcceptDialog, ISerializationListener
         Show(_star, about.StarUrl);
         _starNote.Visible = about.StarUrl is not null;
         _starNote.AddThemeStyleboxOverride("panel", StarNoteStyle());
-        PopupCentered();
-        GetOkButton().GrabFocus();
     }
 
     // A LinkButton opens its Uri in the system browser when it is clicked.
@@ -65,27 +61,9 @@ internal sealed partial class AboutDialog : AcceptDialog, ISerializationListener
         return style;
     }
 
-    private void QueueWindowIcon() => CallDeferred(nameof(RefreshWindowIcon));
-    private void RefreshWindowIcon() => EditorWindows.ApplyIcon(this);
-
-    // Reload serializes every script before disposing any of them, so callback targets are still valid here.
-    public void OnBeforeSerialize() => _signals.Dispose();
-    public void OnAfterDeserialize() { }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing) _signals.Dispose();
-        base.Dispose(disposing);
-    }
-
-    public override void _ExitTree()
-    {
-        _signals.Dispose();
-        base._ExitTree();
-    }
 }
 
-/// <summary>What the About dialog shows, from the framework's plugin.cfg; links that are not web URLs are left out.</summary>
+/// <summary>What the About tab shows, from the framework's plugin.cfg; links that are not web URLs are left out.</summary>
 internal sealed record AboutInfo(string VersionLine, string Description, string? StoreUrl, string? SourceUrl, string? DocumentationUrl,
     string? StarUrl)
 {

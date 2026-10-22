@@ -24,7 +24,7 @@ internal sealed record PluginInfo(string Slug, string Name, PluginKind Kind, boo
     public string? DocumentationUrl { get; init; }
     /// <summary>The <c>source_url</c> of plugin.cfg, linked in the details.</summary>
     public string? SourceUrl { get; init; }
-    /// <summary>How many packages of this plugin the local plugin directories hold, of any version.</summary>
+    /// <summary>How many packages of this plugin the local directories hold, of any version.</summary>
     public int LocalPackages { get; init; }
     public string? Script { get; init; }
     /// <summary>Lifecycle state of an ePlugin that has an editor instance; null for every other plugin.</summary>

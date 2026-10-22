@@ -248,26 +248,6 @@ public class UpdateSiteTests
         Assertions.AssertObject(KnownPlugins.Find("no-such-plugin")).IsNull();
     }
 
-    [TestCase]
-    [RequireGodotRuntime]
-    public static void DialogSceneHasTheNodesItsScriptBinds()
-    {
-        var dialog = Godot.GD.Load<Godot.PackedScene>("res://addons/ePlugin/Internal/Manager/UpdateSitesDialog.tscn").Instantiate<UpdateSitesDialog>();
-        try
-        {
-            foreach (var name in new[] { "%SiteTree", "%SiteStatus", "%AddSiteButton", "%EditSiteButton", "%RemoveSiteButton", "%SiteEditor", "%SiteSlug", "%SiteUrl", "%SiteHint" })
-                Assertions.AssertObject(dialog.GetNodeOrNull(name)).IsNotNull();
-            var manager = Godot.GD.Load<Godot.PackedScene>(EPluginManagerDialog.ScenePath).Instantiate<EPluginManagerDialog>();
-            try
-            {
-                Assertions.AssertObject(manager.GetNodeOrNull("%UpdateSitesButton")).IsNotNull();
-                Assertions.AssertObject(manager.GetNodeOrNull("%UpdateSitesDialog")).IsInstanceOf<UpdateSitesDialog>();
-            }
-            finally { manager.Free(); }
-        }
-        finally { dialog.Free(); }
-    }
-
     private static UpdateCandidate Candidate(string sourceUrl) =>
         new("plugin", "Plugin", "1.0.0", "2.0.0", sourceUrl, null, null, new ZipPackageRef("https://example.org/plugin.zip", "plugin"));
 

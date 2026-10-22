@@ -75,7 +75,7 @@ public class EditorIconsTests
         using var theme = new Theme();
         theme.SetColor("font_color", "Editor", Colors.Black);
         foreach (var path in new[] { EditorIcons.RescanPath, EditorIcons.SettingsPath, EditorIcons.RetryPath,
-                     EditorIcons.UpgradePath, EditorIcons.ReinstallPath, EditorIcons.DowngradePath, EditorIcons.AboutPath, EditorIcons.DirectoriesPath })
+                     EditorIcons.UpgradePath, EditorIcons.ReinstallPath, EditorIcons.DowngradePath })
             AssertHasColor(EditorIcons.Get(path, theme, 4f)!, "#5a5a5a");
 
         theme.SetColor("success_color", "Editor", Color.FromHtml("#00ff00"));

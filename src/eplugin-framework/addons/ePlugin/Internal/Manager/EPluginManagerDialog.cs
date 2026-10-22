@@ -50,9 +50,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private ConfirmationDialog _rollbackKeptConfirm = null!;
     // The selected plugin's update kept with build errors, read when its details are shown.
     private UpdateJournal? _keptUpdate;
-    private LocalSourcesDialog _localSources = null!;
-    private UpdateSitesDialog _updateSites = null!;
-    private AboutDialog _about = null!;
+    private SettingsDialog _settings = null!;
     // Checking, loading versions, staging and installing; this dialog shows what they report.
     private UpdateFlow _updates = null!;
     private IReadOnlyList<PluginUpdateTarget> _targets = [];
@@ -114,9 +112,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _versionSelect = GetNode<OptionButton>("%VersionSelect"); _installVersion = GetNode<Button>("%InstallVersionButton");
         _versionHint = GetNode<Label>("%VersionHint"); _versionConfirm = GetNode<ConfirmationDialog>("%VersionConfirm");
         _rollbackKeptConfirm = GetNode<ConfirmationDialog>("%RollbackKeptConfirm");
-        _localSources = GetNode<LocalSourcesDialog>("%LocalSourcesDialog"); _localSources.Initialize(global);
-        _updateSites = GetNode<UpdateSitesDialog>("%UpdateSitesDialog"); _updateSites.Initialize(global);
-        _about = GetNode<AboutDialog>("%AboutDialog"); _about.Initialize();
+        _settings = GetNode<SettingsDialog>("%SettingsDialog"); _settings.Initialize(global);
         _locationRow = GetNode<Control>("%LocationRow"); _locationLink = GetNode<LinkButton>("%LocationLink"); _openFolder = GetNode<Button>("%OpenFolderButton");
         RefreshTheme();
         _signals.Connect(this, Control.SignalName.ThemeChanged, Callable.From(() => CallDeferred(nameof(RefreshTheme))));
@@ -130,10 +126,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _tree.SetColumnCustomMinimumWidth(VersionColumn, (int)(VersionMinimumWidth * scale));
 
         _signals.Connect(_check, BaseButton.SignalName.Pressed, Callable.From(CheckNow));
-        _signals.Connect(GetNode<Button>("%LocalSourcesButton"), BaseButton.SignalName.Pressed, Callable.From(_localSources.Open));
-        _signals.Connect(GetNode<Button>("%UpdateSitesButton"), BaseButton.SignalName.Pressed, Callable.From(_updateSites.Open));
-        _signals.Connect(GetNode<Button>("%AboutButton"), BaseButton.SignalName.Pressed,
-            Callable.From(() => _about.Open(_model.Plugins.FirstOrDefault(r => r.Plugin.Kind == PluginKind.Framework)?.Plugin)));
+        _signals.Connect(GetNode<Button>("%SettingsButton"), BaseButton.SignalName.Pressed,
+            Callable.From(() => _settings.Open(_model.Plugins.FirstOrDefault(r => r.Plugin.Kind == PluginKind.Framework)?.Plugin)));
         _signals.Connect(_retry, BaseButton.SignalName.Pressed, Callable.From(RetryFailed));
         _signals.Connect(_release, BaseButton.SignalName.Pressed, Callable.From(OpenRelease));
         _signals.Connect(_locationLink, BaseButton.SignalName.Pressed, Callable.From(() => { if (_selectedSlug is not null) EditorInterface.Singleton.SelectFile(PluginDirectory(_selectedSlug)); }));
@@ -176,9 +170,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _detailsText.AddThemeStyleboxOverride("normal", new StyleBoxEmpty { ContentMarginLeft = inset });
         _ePluginIcon = EditorIcons.EPlugin; _logo = EditorIcons.Logo; _updateIcon = EditorIcons.UpdateIndicator;
         _check.Icon = EditorIcons.Rescan; _retry.Icon = EditorIcons.Retry;
-        GetNode<Button>("%UpdateSitesButton").Icon = EditorIcons.Settings; GetNode<Button>("%AboutButton").Icon = EditorIcons.About;
-        GetNode<Button>("%LocalSourcesButton").Icon = EditorIcons.Directories;
-        _localSources.RefreshTheme();
+        GetNode<Button>("%SettingsButton").Icon = EditorIcons.Settings;
+        _settings.RefreshTheme();
         // Render the existing model rather than refreshing it: a theme change must preserve a staged update.
         if (_model is not null) Render();
     }
@@ -367,7 +360,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     }
 
     /// <summary>
-    /// The version choice of an updatable plugin: the versions in the local plugin directories, plus those of its
+    /// The version choice of an updatable plugin: the versions in the local directories, plus those of its
     /// update_url once they are loaded. Without the update site's versions the local ones are still offered.
     /// </summary>
     private void RenderVersions(PluginRow? row)
@@ -509,8 +502,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             item.SetEditable(EnabledColumn, editable && row is { CanToggle: true });
             if (row?.Update is { } update) item.SetEditable(VersionColumn, editable && !update.HasError);
         }
-        GetNode<Button>("%LocalSourcesButton").Disabled = busy;
-        GetNode<Button>("%UpdateSitesButton").Disabled = busy;
+        GetNode<Button>("%SettingsButton").Disabled = busy;
         _trust.Disabled = busy;
         _versionSelect.Disabled = busy || _versionOptions.Count < 2;
         GetOkButton().Text = !staged ? _model.OkText : _updates.Request?.VersionInstall == true ? "Install reviewed version" : "Install reviewed updates";
@@ -681,10 +673,10 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     }
 
     /// <summary>
-    /// A plugin's update site changed: versions loaded from its old site are dropped, and the list is read again so
-    /// updates found there are no longer offered.
+    /// A plugin's update site or a setting changed: versions loaded from an old site are dropped, and the list is read
+    /// again so updates found there are no longer offered and the status line shows the next scheduled check.
     /// </summary>
-    private void UpdateSitesChanged()
+    private void SettingsChanged()
     {
         _updates.ClearVersions();
         if (!IsShown || _working || _updates.Staged is not null) return;
@@ -807,7 +799,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     {
         base._EnterTree();
         if (_global is not null) _global.LocalIndexChanged += LocalIndexChanged;
-        if (_updateSites is not null) _updateSites.Changed += UpdateSitesChanged;
+        if (_settings is not null) _settings.Changed += SettingsChanged;
     }
 
     private void ReleaseCallbacks()
@@ -815,7 +807,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _signals.Dispose();
         _cancel?.Cancel(); _cancel?.Dispose(); _cancel = null;
         if (_global is not null) _global.LocalIndexChanged -= LocalIndexChanged;
-        if (_updateSites is not null) _updateSites.Changed -= UpdateSitesChanged;
+        if (_settings is not null) _settings.Changed -= SettingsChanged;
     }
 
     // Reload serializes every script before disposing any of them, so callback targets are still valid here.

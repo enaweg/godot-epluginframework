@@ -21,7 +21,7 @@ internal sealed class LocalIndexCacheFile
 /// <summary>
 /// Remembers what indexing read from each ZIP file, keyed by its path, size and modification time, so indexing again
 /// (every editor start and every assembly reload) only opens new or changed archives. It is a per-user file next to the
-/// list of local plugin directories, shared by all editors, and only a cache: anything wrong with it just means the
+/// list of local directories, shared by all editors, and only a cache: anything wrong with it just means the
 /// archives are read again. A file written by a newer schema or indexer is used by nobody here and never overwritten.
 /// </summary>
 internal sealed class LocalIndexCache(string path)

@@ -19,7 +19,7 @@ internal sealed partial class EGlobal
     private bool _checkingUpdates;
     private IReadOnlyList<UpdateCandidate> _remoteUpdates = [];
     /// <summary>
-    /// The highest known version per plugin, from its update_url or from the local plugin directories, without a release
+    /// The highest known version per plugin, from its update_url or from the local directories, without a release
     /// that is installed already.
     /// </summary>
     public IReadOnlyList<UpdateCandidate> PendingUpdates => UpdateService.Merge(UpdateService.WithoutInstalled(_remoteUpdates, _updateCache?.State.Revisions), _localUpdates);
@@ -62,7 +62,7 @@ internal sealed partial class EGlobal
 
     /// <summary>
     /// Every enabled plugin with a readable plugin.cfg and every GDExtension add-on, with the update site the project sets
-    /// for it. Plugins without an update site can still be updated from the local plugin directories; remote checks skip
+    /// for it. Plugins without an update site can still be updated from the local directories; remote checks skip
     /// them.
     /// </summary>
     internal IReadOnlyList<PluginUpdateTarget> CollectUpdateTargets()
@@ -90,7 +90,7 @@ internal sealed partial class EGlobal
         var ct = _ePluginContext.UpdateLifetime;
         try
         {
-            // A manual check also finds ZIP files added to the local plugin directories since they were indexed.
+            // A manual check also finds ZIP files added to the local directories since they were indexed.
             if (force) await RebuildLocalIndexAsync();
             var targets = CollectUpdateTargets();
             var enabled = ScheduledChecksEnabled;
@@ -119,7 +119,7 @@ internal sealed partial class EGlobal
         finally { _checkingUpdates = false; }
     }
 
-    /// <summary>The versions of an enabled plugin in the local plugin directories, newest first. Never touches the disk.</summary>
+    /// <summary>The versions of an enabled plugin in the local directories, newest first. Never touches the disk.</summary>
     internal IReadOnlyList<UpdateCandidate> ListLocalVersions(PluginUpdateTarget target) =>
         LocalDirectorySource.Versions(LocalIndex, target);
 
