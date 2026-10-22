@@ -239,11 +239,14 @@ public partial class EGlobalEdgeCaseTests : IDisposable
             global.AddContext(new PluginContext(null, later, null));
             Assertions.AssertInt(later.Calls).IsEqual(0);
             global.Attach(_fixture.Framework, new Logging.GenericLoggerFactory(c => new RecordingLogger(_fixture.Log, c)), _fixture.Cli);
-            global.AddInitializer(later);
+            // what the end of the framework's start does
             global.ExecuteInitializers();
+            Assertions.AssertInt(later.Calls).IsEqual(1);
+            // registered once the framework is ready, e.g. by a plugin enabled later: nothing would run the queue again
+            global.AddInitializer(later);
 
             Assertions.AssertInt(later.Calls).IsEqual(2);
-            Assertions.AssertBool(Logged("log", $"Initializer {typeof(InitializingPlugin).FullName} enqueued.")).IsTrue();
+            Assertions.AssertBool(Logged("log", $"Initializer {typeof(InitializingPlugin).FullName} runs now, the framework is ready.")).IsTrue();
         }
         finally
         {

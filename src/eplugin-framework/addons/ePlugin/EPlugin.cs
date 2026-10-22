@@ -48,8 +48,8 @@ public static class EPlugin
     }
 
     /// <summary>
-    /// Queues an initializer whose <see cref="IInitialize.Initialize"/> is called once the framework has finished
-    /// starting up.
+    /// Registers an initializer whose <see cref="IInitialize.Initialize"/> is called once the framework has finished
+    /// starting up, or right away when it already has.
     /// </summary>
     /// <param name="initializer">The initializer to call.</param>
     public static void RegisterInitializer(IInitialize initializer)

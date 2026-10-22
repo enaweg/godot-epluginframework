@@ -746,14 +746,7 @@ internal sealed partial class EGlobal
         if (context.PluginBase is IInitialize initialize)
         {
             // before the framework is set up there is nothing to pass yet; it initializes the plugin then
-            if (_ePluginContext is null)
-            {
-                AddInitializer(initialize);
-            }
-            else
-            {
-                RunInitializer(initialize);
-            }
+            AddInitializer(initialize);
         }
     }
 
@@ -1677,12 +1670,19 @@ internal sealed partial class EGlobal
 
     public void AddInitializer(IInitialize initializer)
     {
-        _toInitialize.Enqueue(initializer);
-
-        if (_ePluginContext?.EnableDebugLogging ?? false)
+        // The queue is only run while the framework starts: one registered later, e.g. by a plugin enabled since, runs now.
+        if (!IsValid())
         {
-            _ePluginContext.Logger?.Log($"Initializer {initializer.GetType().FullName} enqueued.");
+            _toInitialize.Enqueue(initializer);
+            return;
         }
+
+        if (_ePluginContext!.EnableDebugLogging)
+        {
+            _ePluginContext.Logger?.Log($"Initializer {initializer.GetType().FullName} runs now, the framework is ready.");
+        }
+
+        RunInitializer(initializer);
     }
 }
 #endif

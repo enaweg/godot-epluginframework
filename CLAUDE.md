@@ -159,7 +159,7 @@ dependencies carrying a nested recipe via `AddOptionalPluginDependency`, and the
 `addons/sample_addedcode_plugin` (`AddDirectory` example), and `addons/sample_optional_plugin`
 (`AddOptionalPluginDependency` example) for minimal reference implementations, and `docs/creating-plugins.md` for the
 full builder surface. `EditorPluginExtensions` gives authors public helpers on `EditorPlugin` (`GetPluginSlug`,
-`GetPluginDirectory`, `ReadMetadata`, `Cli()`), and `EPlugin.RegisterInitializer` runs an `IInitialize` at startup.
+`GetPluginDirectory`, `ReadMetadata`, `Cli()`), and `EPlugin.RegisterInitializer` runs an `IInitialize` at startup (or right away once the framework is ready).
 
 `IEEditorPlugin` is an interface rather than an abstract base class specifically to work around C# bugs in
 Godot 4.5+ EditorPlugin handling — don't "simplify" this back to a base class.
