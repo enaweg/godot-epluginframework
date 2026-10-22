@@ -68,13 +68,11 @@ at least 1.5 wide, filled in `#e0e0e0`.
 | `eplugin_editor.svg` | ePlugin Manager, ePlugin rows | – | Robot head and puzzle piece (`id="piece"` is tinted by status) |
 | `update.svg` | Update available in the plugin list | Closed | Up arrow (white mask) |
 | `rescan.svg` | Check for updates, Rescan (local directories) | Clockwise | Up arrow |
-| `settings.svg` | Update sites... | – | Gear |
+| `settings.svg` | Settings | – | Gear |
 | `retry.svg` | Retry failed | Counter-clockwise | `!` in error |
 | `upgrade.svg` | Update (version button, manager OK button) | Closed | Up arrow in success |
 | `reinstall.svg` | Reinstall (version button and confirmation) | Clockwise | Plus in success |
 | `downgrade.svg` | Downgrade (version button and confirmation) | Closed | Down arrow in warning |
-| `about.svg` | About | Closed | `i` |
-| `directories.svg` | Local directories... | – | Folder outline (Godot's filled `Folder` is the details' Open button) |
 
 Rescan and upgrade differ by the ring and the color only, so don't put them next to each other without a label.
 

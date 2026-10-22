@@ -305,8 +305,15 @@ the view model when pending updates, enabled plugins or their states changed; th
 `EGlobal.RestartRequested` writes `ManagerReopenMarker` (`.godot/eplugin/manager-open`, renewed by an interim restart,
 expires after an hour); the start that requests no further restart wraps `Initialize` in one `ActivationProgress` scope,
 reopens the manager and closes that progress window a few frames later. Every dialog is its own scene (`EPluginManagerDialog.tscn`,
-`LocalSourcesDialog.tscn`, `UpdateFailureDialog.tscn`, `AboutDialog.tscn`); scripts only bind `%`-unique nodes and set what a scene cannot
-store (e.g. Tree column titles/widths). Keep layout changes in the scenes. Close dialogs with `EditorWindows.Release`, never `QueueFree` in the frame that hides them: freeing a window from its
+`SettingsDialog.tscn`, `UpdateFailureDialog.tscn`, `LicenseDialog.tscn`, `WelcomeDialog.tscn`); scripts only bind
+`%`-unique nodes and set what a scene cannot store (e.g. Tree column titles/widths). Keep layout changes in the scenes.
+The manager's Settings button opens `SettingsDialog`, a `TabContainer` whose tabs (General, Update sources, About) each
+have their own script (`GeneralSettingsTab`, `UpdateSourcesTab`, `AboutTab`); the dialog owns the windows the tabs open.
+Update sources lists the project's update sites, the user's local directories (each with the packages the index found in
+it; a local directory is one update source for any number of plugins) and the built-in list in one tree. Tab titles are the tab nodes' names, because Godot 4.4 ignores
+`metadata/_tab_name`. The General tab shows every `eplugin/*` project setting: a control names its setting in its
+`setting` metadata (an OptionButton its item values in `values`) and is saved to `project.godot` on change, so a new
+setting needs only a control in the scene; `SettingsDialogTests` checks that every registered setting is bound. Close dialogs with `EditorWindows.Release`, never `QueueFree` in the frame that hides them: freeing a window from its
 own button, or right after a reload while it has focus and the mouse, crashed Godot 4.7.2 on the next window message
 (use-after-free in its message handling). Release hides it now and frees it 0.25 s later through a native callable.
 Scene roots set `auto_translate_mode = 2`,
@@ -382,7 +389,7 @@ still inside its `_EnablePlugin`), the review is queued, and `EPluginPlugin._Pro
 later; accepting re-enables it. `ReviewEnabledLicenses` (end of `Initialize`) asks about enabled plugins whose license
 source is not accepted, e.g. a recipe license an update changed; declining disables them. The ePlugin Manager asks
 before `SetPluginEnabled` and before installing staged updates (skipping recipe-licensed plugins), and its details link
-the license to `LicenseDialog.CreateViewer`. The `eplugin/licenses/auto_accept` project setting (no manager UI, logged)
+the license to `LicenseDialog.CreateViewer`. The `eplugin/licenses/auto_accept` project setting (on the settings' General tab, which confirms turning it on; logged)
 skips the dialog.
 
 ### Plugin welcome pages
