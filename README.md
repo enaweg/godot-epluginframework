@@ -4,18 +4,19 @@ Line coverage of `src/eplugin-framework/addons/ePlugin` on `main`, recorded by t
 
 ![Line coverage](badge.svg)
 
-**79.77%** (8263 of 10359 lines) at [7ec5675](https://github.com/enaweg/godot-epluginframework/commit/7ec56757503242eb87f1f2c03009b0c3907814c9), 2026-10-22.
+**79.79%** (8273 of 10369 lines) at [7903b4c](https://github.com/enaweg/godot-epluginframework/commit/7903b4c2b162e66b7d2acfb0a5935deec21e51c9), 2026-10-22.
 
 ```mermaid
 xychart-beta
     title "Line coverage on main (last 30 pushes)"
-    x-axis ["e44d91f", "73f8104", "736827c", "6ff9d4b", "dd42316", "7b94ccd", "d6fa7e2", "4c0596e", "93563f4", "67755d2", "dda54cb", "3a28294", "c71e7ca", "684bdb3", "d64116f", "a313d02", "e4ab969", "56e3bab", "d92667f", "63cb38b", "88d7bc0", "f5b30b9", "a5c396b", "2a11e25", "0a5933c", "8a13efd", "7836444", "88a5d44", "5443f13", "7ec5675"]
+    x-axis ["73f8104", "736827c", "6ff9d4b", "dd42316", "7b94ccd", "d6fa7e2", "4c0596e", "93563f4", "67755d2", "dda54cb", "3a28294", "c71e7ca", "684bdb3", "d64116f", "a313d02", "e4ab969", "56e3bab", "d92667f", "63cb38b", "88d7bc0", "f5b30b9", "a5c396b", "2a11e25", "0a5933c", "8a13efd", "7836444", "88a5d44", "5443f13", "7ec5675", "7903b4c"]
     y-axis "Line coverage (%)" 74 --> 83
-    line [76.67, 76.67, 76.46, 79.03, 79.03, 79.03, 79.54, 79.54, 79.71, 79.78, 79.78, 80.12, 80.16, 80.22, 80.22, 80.29, 80.29, 80.29, 80.29, 80.29, 80.52, 80.52, 80.52, 80.52, 80.42, 80.44, 80.44, 80.42, 80.32, 79.77]
+    line [76.67, 76.46, 79.03, 79.03, 79.03, 79.54, 79.54, 79.71, 79.78, 79.78, 80.12, 80.16, 80.22, 80.22, 80.29, 80.29, 80.29, 80.29, 80.29, 80.52, 80.52, 80.52, 80.52, 80.42, 80.44, 80.44, 80.42, 80.32, 79.77, 79.79]
 ```
 
 | Date | Commit | Line coverage | Change |
 |:--|:--|--:|--:|
+| 2026-10-22 | [7903b4c](https://github.com/enaweg/godot-epluginframework/commit/7903b4c2b162e66b7d2acfb0a5935deec21e51c9) | 79.79% | +0.02 pp |
 | 2026-10-22 | [7ec5675](https://github.com/enaweg/godot-epluginframework/commit/7ec56757503242eb87f1f2c03009b0c3907814c9) | 79.77% | -0.55 pp |
 | 2026-10-22 | [5443f13](https://github.com/enaweg/godot-epluginframework/commit/5443f1344f6aeaaadcd21a194c48138a9178c491) | 80.32% | -0.10 pp |
 | 2026-10-22 | [88a5d44](https://github.com/enaweg/godot-epluginframework/commit/88a5d445577c347ec6852e5d56d073bca25576b2) | 80.42% | -0.02 pp |
@@ -45,11 +46,10 @@ xychart-beta
 | 2026-10-17 | [6ff9d4b](https://github.com/enaweg/godot-epluginframework/commit/6ff9d4b729e3bfaacd8544a36ffb26408e059a0c) | 79.03% | +2.57 pp |
 | 2026-10-17 | [736827c](https://github.com/enaweg/godot-epluginframework/commit/736827c1a81fe9a1d0974f7b4b69d82be89cd3d6) | 76.46% | -0.21 pp |
 | 2026-10-17 | [73f8104](https://github.com/enaweg/godot-epluginframework/commit/73f8104ae916ade392b7d2fffa7cddf1fd75b81c) | 76.67% | +0.00 pp |
-| 2026-10-16 | [e44d91f](https://github.com/enaweg/godot-epluginframework/commit/e44d91f69afe69c46752ee3db6c85e90fa6c8822) | 76.67% | +0.03 pp |
 
 All measurements: [history.csv](history.csv).
 
-<details><summary>Files at 7ec5675 (110)</summary>
+<details><summary>Files at 7903b4c (111)</summary>
 
 | File | Line coverage | Covered lines |
 |:--|--:|--:|
@@ -71,7 +71,7 @@ All measurements: [history.csv](history.csv).
 | `Internal/EGlobal.UpdateSites.cs` | 47.4% | 9 of 19 |
 | `Internal/Kinds/GDScriptPluginWorkflow.cs` | 50.0% | 2 of 4 |
 | `Internal/EGlobal.LocalSources.cs` | 54.4% | 31 of 57 |
-| `EPluginPlugin.cs` | 63.6% | 173 of 272 |
+| `EPluginPlugin.cs` | 63.7% | 174 of 273 |
 | `Internal/EditorHost.cs` | 69.4% | 34 of 49 |
 | `Internal/Manager/EditorIcons.cs` | 72.2% | 39 of 54 |
 | `Internal/Kinds/UnknownPluginWorkflow.cs` | 75.0% | 3 of 4 |
@@ -161,6 +161,7 @@ All measurements: [history.csv](history.csv).
 | `Internal/Update/UpdateSettings.cs` | 100.0% | 18 of 18 |
 | `Internal/Update/UpdateSiteSettings.cs` | 100.0% | 50 of 50 |
 | `Internal/VersionConstraint.cs` | 100.0% | 25 of 25 |
+| `Internal/Welcomes/WelcomeSettings.cs` | 100.0% | 9 of 9 |
 | `Logging/GenericLoggerFactory.cs` | 100.0% | 7 of 7 |
 | `Logging/NullLogger.cs` | 100.0% | 6 of 6 |
 

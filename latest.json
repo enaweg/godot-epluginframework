@@ -1,8 +1,8 @@
 {
- "commit": "7ec56757503242eb87f1f2c03009b0c3907814c9",
- "date": "2026-10-22T10:07:30Z",
- "covered": 8263,
- "coverable": 10359,
+ "commit": "7903b4c2b162e66b7d2acfb0a5935deec21e51c9",
+ "date": "2026-10-22T10:17:57Z",
+ "covered": 8273,
+ "coverable": 10369,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -13,8 +13,8 @@
    9
   ],
   "src/eplugin-framework/addons/ePlugin/EPluginPlugin.cs": [
-   173,
-   272
+   174,
+   273
   ],
   "src/eplugin-framework/addons/ePlugin/EditorPluginExtensions.cs": [
    52,
@@ -431,6 +431,10 @@
   "src/eplugin-framework/addons/ePlugin/Internal/Welcomes/PluginWelcome.cs": [
    29,
    33
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Welcomes/WelcomeSettings.cs": [
+   9,
+   9
   ],
   "src/eplugin-framework/addons/ePlugin/Logging/GenericLoggerFactory.cs": [
    7,
