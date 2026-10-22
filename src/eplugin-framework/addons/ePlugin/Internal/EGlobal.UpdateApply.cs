@@ -199,54 +199,68 @@ internal sealed partial class EGlobal
         using var restarts = DeferRestarts();
         foreach (var listed in _updateJournals.Read())
         {
-            // An earlier group's commit or rollback may have refreshed this journal's backups since it was listed.
-            UpdateJournal journal;
-            try { journal = UpdateJournal.Load(listed.Directory); }
-            catch (Exception ex) when (ex is IOException or InvalidDataException or System.Text.Json.JsonException)
+            // Runs inside Initialize: one journal that cannot be resumed must not keep the framework from starting.
+            try { ResumeUpdate(listed); }
+            catch (Exception ex)
             {
-                _ePluginContext?.Logger.Error($"Cannot read update journal {listed.Directory}: {ex.Message}");
-                continue;
+                _ePluginContext?.Logger.Error($"Cannot resume update {listed.Directory}; it is tried again at the next start: {ex.Message}");
             }
-            if (_stateStore.LastCompletedAttemptId == journal.AttemptId)
-            {
-                Directory.Delete(journal.Directory, true);
-                continue;
-            }
-            var attempts = _stateStore.LocalAttempts.Where(a => a.AttemptId == journal.AttemptId).ToArray();
-            if (attempts.Any(a => a.Reason.StartsWith("update_", StringComparison.Ordinal)))
-            {
-                _ePluginContext?.Logger.Warn($"Update needs manual recovery: {journal.Directory}. Use Retry under Needs attention in the ePlugin Manager.");
-                continue;
-            }
-            UpdateOutcome result;
-            switch (journal.State)
-            {
-                case UpdatePhase.Staged:
-                    if (attempts.Length > 0 && !_stateStore.TryAbandonAttempt(journal.AttemptId)) continue;
-                    Directory.Delete(journal.Directory, true);
-                    continue;
-                case UpdatePhase.Verified:
-                    if (attempts.Length == 0) { _ePluginContext?.Logger.Error($"Update marker is missing: {journal.Directory}; repair manually."); continue; }
-                    result = Applier().Commit(journal);
-                    break;
-                case UpdatePhase.InterimBuilt:
-                case UpdatePhase.Reconciling:
-                case UpdatePhase.Reconciled:
-                    result = attempts.Length == 0 ? Applier().Rollback(journal, "Update marker was lost.") : Applier().Resume(journal);
-                    break;
-                case UpdatePhase.AwaitingDecision:
-                    result = UpdateHost.UiAvailable ? UpdateOutcome.AwaitingDecision : Applier().Rollback(journal, "Cannot show the build-failure dialog.");
-                    break;
-                case UpdatePhase.Swapped:
-                case UpdatePhase.RollingBack:
-                    result = Applier().Rollback(journal, "Interrupted update.");
-                    break;
-                default:
-                    // Retain diagnostic journals and kept-version backups for at least seven days.
-                    if (DateTimeOffset.UtcNow - journal.CreatedUtc > TimeSpan.FromDays(7) && attempts.Length == 0) Directory.Delete(journal.Directory, true);
-                    continue;
-            }
-            HandleUpdateOutcome(journal.Directory, result);
+        }
+    }
+
+    private void ResumeUpdate(UpdateJournal listed)
+    {
+        // An earlier group's commit or rollback may have refreshed this journal's backups since it was listed.
+        var journal = UpdateJournal.Load(listed.Directory);
+        if (_stateStore!.LastCompletedAttemptId == journal.AttemptId)
+        {
+            DeleteJournal(journal);
+            return;
+        }
+        var attempts = _stateStore.LocalAttempts.Where(a => a.AttemptId == journal.AttemptId).ToArray();
+        if (attempts.Any(a => a.Reason.StartsWith("update_", StringComparison.Ordinal)))
+        {
+            _ePluginContext?.Logger.Warn($"Update needs manual recovery: {journal.Directory}. Use Retry under Needs attention in the ePlugin Manager.");
+            return;
+        }
+        UpdateOutcome result;
+        switch (journal.State)
+        {
+            case UpdatePhase.Staged:
+                if (attempts.Length > 0 && !_stateStore.TryAbandonAttempt(journal.AttemptId)) return;
+                DeleteJournal(journal);
+                return;
+            case UpdatePhase.Verified:
+                if (attempts.Length == 0) { _ePluginContext?.Logger.Error($"Update marker is missing: {journal.Directory}; repair manually."); return; }
+                result = Applier().Commit(journal);
+                break;
+            case UpdatePhase.InterimBuilt:
+            case UpdatePhase.Reconciling:
+            case UpdatePhase.Reconciled:
+                result = attempts.Length == 0 ? Applier().Rollback(journal, "Update marker was lost.") : Applier().Resume(journal);
+                break;
+            case UpdatePhase.AwaitingDecision:
+                result = UpdateHost.UiAvailable ? UpdateOutcome.AwaitingDecision : Applier().Rollback(journal, "Cannot show the build-failure dialog.");
+                break;
+            case UpdatePhase.Swapped:
+            case UpdatePhase.RollingBack:
+                result = Applier().Rollback(journal, "Interrupted update.");
+                break;
+            default:
+                // Retain diagnostic journals and kept-version backups for at least seven days.
+                if (DateTimeOffset.UtcNow - journal.CreatedUtc > TimeSpan.FromDays(7) && attempts.Length == 0) DeleteJournal(journal);
+                return;
+        }
+        HandleUpdateOutcome(journal.Directory, result);
+    }
+
+    /// <summary>Deletes a finished journal's folder; one that cannot be deleted yet is tried again at the next start.</summary>
+    private void DeleteJournal(UpdateJournal journal)
+    {
+        try { AddonFiles.DeleteTree(journal.Directory); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _ePluginContext?.Logger.Warn($"Cannot delete update journal {journal.Directory} yet; it is tried again at the next start: {ex.Message}");
         }
     }
     /// <summary>The update of <paramref name="slug"/> kept with build errors, if there is one; see <see cref="RollbackKeptUpdate"/>.</summary>

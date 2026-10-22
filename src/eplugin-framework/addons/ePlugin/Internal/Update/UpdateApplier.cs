@@ -320,7 +320,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             }
             cache.Save();
             journal.Save(UpdatePhase.Committed);
-            System.IO.Directory.Delete(journal.Directory, true);
+            AddonFiles.DeleteTree(journal.Directory);
         }
         catch (Exception ex) { host.Log("Update was committed; cleanup will be retried at startup: " + ex.Message); }
         if (journal.Plugins.Any(p => p.IsEPlugin && p.ContainsCSharp) && !RunsInterimBuild(journal))

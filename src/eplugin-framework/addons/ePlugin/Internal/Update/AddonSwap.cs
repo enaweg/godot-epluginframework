@@ -93,7 +93,7 @@ internal sealed class AddonFileSwap : IAddonSwap
         Directory.CreateDirectory(Path.GetDirectoryName(restored)!);
         for (var n = 1; Directory.Exists(restored); n++) restored = Restored(backup) + "." + n;
         AddonFiles.MoveDirectory(backup, restored);
-        try { Directory.Delete(restored, true); }
+        try { AddonFiles.DeleteTree(restored); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         return discarded;
     }
@@ -112,6 +112,18 @@ internal static class AddonFiles
             try { Directory.Move(from, to); return; }
             catch (IOException) when (attempt < 2) { Thread.Sleep(200); }
         }
+    }
+
+    /// <summary>
+    /// Deletes a folder with everything in it, read-only files included, which Windows refuses to delete otherwise
+    /// (version control systems such as Perforce sync files read-only). Links are deleted, not followed.
+    /// </summary>
+    public static void DeleteTree(string directory)
+    {
+        if (!Directory.Exists(directory)) return;
+        var options = new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint };
+        foreach (var file in Directory.EnumerateFiles(directory, "*", options)) File.SetAttributes(file, FileAttributes.Normal);
+        Directory.Delete(directory, true);
     }
 
     public static void RefuseLink(string directory)

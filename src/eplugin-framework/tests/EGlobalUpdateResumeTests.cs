@@ -137,6 +137,35 @@ public class EGlobalUpdateResumeTests : IDisposable
     }
 
     [TestCase]
+    public void AJournalWithReadOnlyFilesIsRemoved()
+    {
+        var attempt = Attempt();
+        Assertions.AssertBool(_fixture.Store.TryAcknowledgeVersions(attempt, new Dictionary<string, string> { ["tool"] = "2.0.0" })).IsTrue();
+        var journal = Journal(UpdatePhase.Swapped, attempt);
+        // version control systems such as Perforce sync files read-only, which Windows refuses to delete
+        File.SetAttributes(Path.Combine(journal.Backup("tool"), "plugin.cfg"), FileAttributes.ReadOnly);
+
+        _fixture.Global.ResumeUpdates();
+
+        Assertions.AssertBool(Directory.Exists(journal.Directory)).IsFalse();
+    }
+
+    [TestCase]
+    public void AJournalWithNullEntriesIsSkippedAndTheOthersResume()
+    {
+        var broken = Journal(UpdatePhase.Swapped, Guid.NewGuid());
+        var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(broken.Directory, "journal.json")))!;
+        json["plugins"]![0]!["preserved"] = null;
+        File.WriteAllText(Path.Combine(broken.Directory, "journal.json"), json.ToJsonString());
+        var journal = Journal(UpdatePhase.Swapped, Attempt());
+
+        Assertions.AssertThrown(() => UpdateJournal.Load(broken.Directory)).IsInstanceOf<InvalidDataException>();
+        _fixture.Global.ResumeUpdates();
+
+        AssertRolledBack(journal, "Interrupted update.");
+    }
+
+    [TestCase]
     public void AnInterimBuildWithoutItsMarkerIsRolledBackAndOneWithItResumes()
     {
         var lost = Journal(UpdatePhase.InterimBuilt, Guid.NewGuid());
