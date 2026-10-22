@@ -1,0 +1,441 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" uid="uid://btbbeg8tiqrrb" path="res://addons/ePlugin/Internal/Manager/SettingsDialog.cs" id="1_script"]
+[ext_resource type="Script" uid="uid://chsb1rf38my4n" path="res://addons/ePlugin/Internal/Manager/GeneralSettingsTab.cs" id="2_general"]
+[ext_resource type="Script" uid="uid://d036s5wngeej2" path="res://addons/ePlugin/Internal/Manager/UpdateSourcesTab.cs" id="3_sources"]
+[ext_resource type="Script" uid="uid://dkwm775uwm5gt" path="res://addons/ePlugin/Internal/Manager/AboutTab.cs" id="5_about"]
+
+[node name="SettingsDialog" type="AcceptDialog"]
+auto_translate_mode = 2
+title = "ePlugin Settings"
+initial_position = 2
+size = Vector2i(900, 640)
+min_size = Vector2i(640, 480)
+ok_button_text = "Close"
+script = ExtResource("1_script")
+
+[node name="SettingsTabs" type="TabContainer" parent="."]
+unique_name_in_owner = true
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 892.0
+offset_bottom = 591.0
+current_tab = 0
+
+[node name="General" type="VBoxContainer" parent="SettingsTabs"]
+layout_mode = 2
+theme_override_constants/separation = 8
+script = ExtResource("2_general")
+
+[node name="GeneralHelp" type="Label" parent="SettingsTabs/General"]
+custom_minimum_size = Vector2(540, 0)
+layout_mode = 2
+text = "ePlugin's project settings, which Project Settings also lists under ePlugin with Advanced Settings shown. Changes are saved in project.godot right away, so they apply to everyone working on the project once it is committed."
+autowrap_mode = 3
+
+[node name="GeneralScroll" type="ScrollContainer" parent="SettingsTabs/General"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="GeneralBox" type="VBoxContainer" parent="SettingsTabs/General/GeneralScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="UpdatesHeader" type="Label" parent="SettingsTabs/General/GeneralScroll/GeneralBox"]
+layout_mode = 2
+theme_type_variation = &"HeaderSmall"
+text = "Updates"
+
+[node name="UpdatesGrid" type="GridContainer" parent="SettingsTabs/General/GeneralScroll/GeneralBox"]
+layout_mode = 2
+theme_override_constants/h_separation = 16
+theme_override_constants/v_separation = 6
+columns = 2
+
+[node name="CheckEnabledLabel" type="Label" parent="SettingsTabs/General/GeneralScroll/GeneralBox/UpdatesGrid"]
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+text = "Scheduled checks"
+
+[node name="CheckEnabledCheck" type="CheckBox" parent="SettingsTabs/General/GeneralScroll/GeneralBox/UpdatesGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Checks for updates once per editor session, when the last successful check is old enough. Check for updates in the ePlugin Manager always works.
+eplugin/updates/check_enabled"
+text = "Check for updates when the editor starts"
+metadata/setting = "eplugin/updates/check_enabled"
+
+[node name="CheckIntervalLabel" type="Label" parent="SettingsTabs/General/GeneralScroll/GeneralBox/UpdatesGrid"]
+layout_mode = 2
+text = "Hours between checks"
+
+[node name="CheckIntervalSpin" type="SpinBox" parent="SettingsTabs/General/GeneralScroll/GeneralBox/UpdatesGrid"]
+layout_mode = 2
+size_flags_horizontal = 0
+tooltip_text = "The minimum time between successful scheduled checks.
+eplugin/updates/check_interval_hours"
+min_value = 1.0
+max_value = 8760.0
+value = 20.0
+rounded = true
+suffix = "h"
+metadata/setting = "eplugin/updates/check_interval_hours"
+
+[node name="BuildFailureLabel" type="Label" parent="SettingsTabs/General/GeneralScroll/GeneralBox/UpdatesGrid"]
+layout_mode = 2
+text = "When an update does not build"
+
+[node name="BuildFailureOption" type="OptionButton" parent="SettingsTabs/General/GeneralScroll/GeneralBox/UpdatesGrid"]
+layout_mode = 2
+size_flags_horizontal = 0
+tooltip_text = "Ask: asks for an update started from a plugin's details and rolls back otherwise. Self-updates, headless runs and batches of several groups always roll back.
+eplugin/updates/on_build_failure"
+selected = 0
+item_count = 3
+popup/item_0/text = "Ask"
+popup/item_0/id = 0
+popup/item_1/text = "Roll back"
+popup/item_1/id = 1
+popup/item_2/text = "Keep the new version"
+popup/item_2/id = 2
+metadata/setting = "eplugin/updates/on_build_failure"
+metadata/values = PackedStringArray("ask", "rollback", "keep")
+
+[node name="ProjectErrorsLabel" type="Label" parent="SettingsTabs/General/GeneralScroll/GeneralBox/UpdatesGrid"]
+layout_mode = 2
+text = "Errors only in the project's code"
+
+[node name="ProjectErrorsCheck" type="CheckBox" parent="SettingsTabs/General/GeneralScroll/GeneralBox/UpdatesGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Keeps an update whose build fails only in the project's own code while its plugins compile on their own, unless updates that do not build are rolled back.
+eplugin/updates/keep_on_project_errors"
+text = "Keep the update when its plugins compile on their own"
+metadata/setting = "eplugin/updates/keep_on_project_errors"
+
+[node name="RestartLabel" type="Label" parent="SettingsTabs/General/GeneralScroll/GeneralBox/UpdatesGrid"]
+layout_mode = 2
+text = "Restart the editor"
+
+[node name="RestartOption" type="OptionButton" parent="SettingsTabs/General/GeneralScroll/GeneralBox/UpdatesGrid"]
+layout_mode = 2
+size_flags_horizontal = 0
+tooltip_text = "When an update restarts the editor: only when its C# changes need it, or for every batch.
+eplugin/updates/restart_policy"
+selected = 0
+item_count = 2
+popup/item_0/text = "When needed"
+popup/item_0/id = 0
+popup/item_1/text = "After every update"
+popup/item_1/id = 1
+metadata/setting = "eplugin/updates/restart_policy"
+metadata/values = PackedStringArray("auto", "always")
+
+[node name="BuiltinSitesLabel" type="Label" parent="SettingsTabs/General/GeneralScroll/GeneralBox/UpdatesGrid"]
+layout_mode = 2
+text = "Built-in update sites"
+
+[node name="BuiltinSitesCheck" type="CheckBox" parent="SettingsTabs/General/GeneralScroll/GeneralBox/UpdatesGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Uses ePlugin's list of update sites of popular add-ons for plugins that name no working update site. The Update sites tab shows the list.
+eplugin/updates/builtin_update_sites"
+text = "Use ePlugin's list for add-ons without a working update site"
+metadata/setting = "eplugin/updates/builtin_update_sites"
+
+[node name="LicensesHeader" type="Label" parent="SettingsTabs/General/GeneralScroll/GeneralBox"]
+layout_mode = 2
+theme_type_variation = &"HeaderSmall"
+text = "Licenses"
+
+[node name="LicensesGrid" type="GridContainer" parent="SettingsTabs/General/GeneralScroll/GeneralBox"]
+layout_mode = 2
+theme_override_constants/h_separation = 16
+theme_override_constants/v_separation = 6
+columns = 2
+
+[node name="AutoAcceptLabel" type="Label" parent="SettingsTabs/General/GeneralScroll/GeneralBox/LicensesGrid"]
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+text = "Plugin licenses"
+
+[node name="AutoAcceptCheck" type="CheckBox" parent="SettingsTabs/General/GeneralScroll/GeneralBox/LicensesGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Accepts every plugin license without showing it. Each accepted license is logged.
+eplugin/licenses/auto_accept"
+text = "Accept every license without showing it"
+metadata/setting = "eplugin/licenses/auto_accept"
+
+[node name="AutoAcceptSpace" type="Control" parent="SettingsTabs/General/GeneralScroll/GeneralBox/LicensesGrid"]
+layout_mode = 2
+
+[node name="AutoAcceptWarning" type="Label" parent="SettingsTabs/General/GeneralScroll/GeneralBox/LicensesGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(360, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Risky: everyone working on the project agrees to license terms nobody read. Meant for headless editors, such as exports in CI."
+autowrap_mode = 3
+
+[node name="LoggingHeader" type="Label" parent="SettingsTabs/General/GeneralScroll/GeneralBox"]
+layout_mode = 2
+theme_type_variation = &"HeaderSmall"
+text = "Logging"
+
+[node name="LoggingGrid" type="GridContainer" parent="SettingsTabs/General/GeneralScroll/GeneralBox"]
+layout_mode = 2
+theme_override_constants/h_separation = 16
+theme_override_constants/v_separation = 6
+columns = 2
+
+[node name="DebugLabel" type="Label" parent="SettingsTabs/General/GeneralScroll/GeneralBox/LoggingGrid"]
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+text = "Debug logging"
+
+[node name="DebugCheck" type="CheckBox" parent="SettingsTabs/General/GeneralScroll/GeneralBox/LoggingGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Logs every dotnet command ePlugin runs and more detail about dependency resolution.
+eplugin/logging/debug"
+text = "Log dotnet commands and dependency resolution"
+metadata/setting = "eplugin/logging/debug"
+
+[node name="DebugSpace" type="Control" parent="SettingsTabs/General/GeneralScroll/GeneralBox/LoggingGrid"]
+layout_mode = 2
+
+[node name="DebugNote" type="Label" parent="SettingsTabs/General/GeneralScroll/GeneralBox/LoggingGrid"]
+custom_minimum_size = Vector2(360, 0)
+modulate = Color(1, 1, 1, 0.7)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Applies after the next C# build or editor restart."
+autowrap_mode = 3
+
+[node name="GeneralStatus" type="Label" parent="SettingsTabs/General"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+mouse_filter = 1
+text_overrun_behavior = 3
+
+[node name="Update sources" type="VBoxContainer" parent="SettingsTabs"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+script = ExtResource("3_sources")
+
+[node name="SourcesHelp" type="Label" parent="SettingsTabs/Update sources"]
+custom_minimum_size = Vector2(540, 0)
+layout_mode = 2
+text = "An update site set by this project replaces a plugin's plugin.cfg update_url; when it does not work, the update_url is used, and then ePlugin's built-in list. The sites are saved in addons/eplugin-update-sites.json, so commit it. ZIP files in local directories, which belong to your user account and all its projects, can update any plugin."
+autowrap_mode = 3
+
+[node name="SourceTree" type="Tree" parent="SettingsTabs/Update sources"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+columns = 2
+column_titles_visible = true
+hide_root = true
+select_mode = 1
+
+[node name="SourceButtons" type="HBoxContainer" parent="SettingsTabs/Update sources"]
+layout_mode = 2
+
+[node name="SourceStatus" type="Label" parent="SettingsTabs/Update sources/SourceButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 1
+text_overrun_behavior = 3
+
+[node name="RescanLocalSourcesButton" type="Button" parent="SettingsTabs/Update sources/SourceButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Index the local directories again to find ZIP files that were added or changed since. Update sites are not contacted."
+text = "Rescan"
+
+[node name="AddSiteButton" type="Button" parent="SettingsTabs/Update sources/SourceButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Set the update site of a plugin for this project."
+text = "Add site..."
+
+[node name="AddLocalSourceButton" type="Button" parent="SettingsTabs/Update sources/SourceButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Add a local directory with plugin ZIP files."
+text = "Add directory..."
+
+[node name="EditSiteButton" type="Button" parent="SettingsTabs/Update sources/SourceButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+tooltip_text = "Change the selected update site."
+text = "Edit..."
+
+[node name="RemoveSourceButton" type="Button" parent="SettingsTabs/Update sources/SourceButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+tooltip_text = "Remove the selected update site, so the plugin uses its plugin.cfg update_url again, or the selected local directory. Its files are not touched."
+text = "Remove"
+
+[node name="About" type="VBoxContainer" parent="SettingsTabs"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+script = ExtResource("5_about")
+
+[node name="AboutTopSpace" type="Control" parent="SettingsTabs/About"]
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+
+[node name="AboutLogo" type="TextureRect" parent="SettingsTabs/About"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+stretch_mode = 5
+
+[node name="AboutName" type="Label" parent="SettingsTabs/About"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HeaderLarge"
+text = "ePlugin Framework"
+horizontal_alignment = 1
+
+[node name="AboutVersion" type="Label" parent="SettingsTabs/About"]
+unique_name_in_owner = true
+modulate = Color(1, 1, 1, 0.7)
+layout_mode = 2
+text = "Version"
+horizontal_alignment = 1
+
+[node name="AboutDescription" type="Label" parent="SettingsTabs/About"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(420, 0)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 3
+text = "Description"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="AboutSeparator" type="HSeparator" parent="SettingsTabs/About"]
+layout_mode = 2
+
+[node name="AboutLinks" type="HBoxContainer" parent="SettingsTabs/About"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 24
+
+[node name="StoreLink" type="LinkButton" parent="SettingsTabs/About/AboutLinks"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Store page"
+
+[node name="SourceLink" type="LinkButton" parent="SettingsTabs/About/AboutLinks"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Source code"
+
+[node name="DocumentationLink" type="LinkButton" parent="SettingsTabs/About/AboutLinks"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Documentation"
+
+[node name="StarNote" type="PanelContainer" parent="SettingsTabs/About"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+
+[node name="StarBox" type="VBoxContainer" parent="SettingsTabs/About/StarNote"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="StarText" type="Label" parent="SettingsTabs/About/StarNote/StarBox"]
+custom_minimum_size = Vector2(380, 0)
+layout_mode = 2
+text = "Stars on GitHub help other Godot developers find ePlugin Framework. If it is useful to you, please star it."
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="StarLink" type="LinkButton" parent="SettingsTabs/About/StarNote/StarBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Star it on GitHub"
+
+[node name="AboutBottomSpace" type="Control" parent="SettingsTabs/About"]
+custom_minimum_size = Vector2(0, 8)
+layout_mode = 2
+
+[node name="AutoAcceptConfirm" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+auto_translate_mode = 2
+title = "Accept every license"
+initial_position = 2
+size = Vector2i(520, 200)
+ok_button_text = "Accept every license"
+dialog_text = "Plugins will be enabled and updated without showing their licenses, for everyone working on this project: they all agree to license terms nobody read.
+
+Turn this on only for headless editors, such as exports in CI."
+dialog_autowrap = true
+
+[node name="SiteEditor" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+auto_translate_mode = 2
+title = "Update site"
+initial_position = 2
+size = Vector2i(560, 220)
+min_size = Vector2i(460, 200)
+ok_button_text = "Save"
+dialog_hide_on_ok = false
+
+[node name="EditorBox" type="VBoxContainer" parent="SiteEditor"]
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 552.0
+offset_bottom = 171.0
+theme_override_constants/separation = 6
+
+[node name="SlugLabel" type="Label" parent="SiteEditor/EditorBox"]
+layout_mode = 2
+text = "Plugin"
+
+[node name="SiteSlug" type="OptionButton" parent="SiteEditor/EditorBox"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "The plugin in res://addons whose update site to set."
+fit_to_longest_item = false
+
+[node name="UrlLabel" type="Label" parent="SiteEditor/EditorBox"]
+layout_mode = 2
+text = "Update site URL"
+
+[node name="SiteUrl" type="LineEdit" parent="SiteEditor/EditorBox"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "https://github.com/owner/repository/releases"
+clear_button_enabled = true
+
+[node name="SiteHint" type="Label" parent="SiteEditor/EditorBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(440, 0)
+modulate = Color(1, 1, 1, 0.7)
+layout_mode = 2
+text = "GitHub or GitLab releases, a repository's tag page (.../tags), or a Git repository (.git, optionally with ?path=addons/<slug> and #branch)."
+autowrap_mode = 3
+
+[node name="LocalSourceFolderDialog" type="FileDialog" parent="."]
+unique_name_in_owner = true
+initial_position = 2
+size = Vector2i(720, 480)
+ok_button_text = "Select Current Folder"
+file_mode = 2
+access = 2

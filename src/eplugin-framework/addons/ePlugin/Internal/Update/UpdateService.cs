@@ -73,7 +73,7 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
     }
 
     /// <summary>
-    /// The newest version in the local plugin directories that is an update of the installed one (see
+    /// The newest version in the local directories that is an update of the installed one (see
     /// <see cref="IsUpdate"/>), per target. The index
     /// is in memory and rebuilt every editor start, so this is never cached.
     /// </summary>
@@ -103,7 +103,7 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
     /// Every version published at a plugin's update_url, newest first, so a specific one can be installed. Installing
     /// re-validates the chosen package. A listed version newer than the installed one and than the cached update is
     /// cached like a check found it, so the plugin shows the update without another check.
-    /// Combine it with the local plugin directories' versions using <see cref="MergeVersions"/>.
+    /// Combine it with the local directories' versions using <see cref="MergeVersions"/>.
     /// </summary>
     public async Task<IReadOnlyList<UpdateCandidate>> ListVersionsAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct)
     {

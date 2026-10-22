@@ -9,7 +9,7 @@ using System.Threading;
 
 namespace Enaweg.Plugin.Internal.Update;
 
-/// <summary>The plugin inside a ZIP file of a local plugin directory, read from its root plugin.cfg.</summary>
+/// <summary>The plugin inside a ZIP file of a local directory, read from its root plugin.cfg.</summary>
 /// <param name="Root">The plugin root inside the archive, e.g. <c>addons/my_plugin/</c>, see <see cref="SafeZipExtractor.PluginRoot"/>.</param>
 /// <param name="Slug">The name of the root folder, which is the slug of the plugin the package belongs to.</param>
 internal sealed record LocalPackage(string ZipPath, string Root, string Slug, string Version, DateTime ModifiedUtc);
@@ -18,7 +18,7 @@ internal sealed record LocalDirectoryState(string Path, bool Exists, int Package
 /// <param name="Cached">Known from an earlier indexing, as the archive did not change since.</param>
 internal sealed record LocalIndexFailure(string Path, string Message, bool Cached = false);
 
-/// <summary>An immutable snapshot of every plugin package found in the local plugin directories.</summary>
+/// <summary>An immutable snapshot of every plugin package found in the local directories.</summary>
 internal sealed record LocalPackageIndex(IReadOnlyList<LocalPackage> Packages, IReadOnlyList<LocalDirectoryState> Directories,
     int Archives, IReadOnlyList<LocalIndexFailure> Failures)
 {
@@ -118,7 +118,7 @@ internal static class LocalPackageIndexer
 }
 
 /// <summary>
-/// Offers the packages of the local plugin directories as versions of an installed plugin. It works on an index built
+/// Offers the packages of the local directories as versions of an installed plugin. It works on an index built
 /// in the background, so checks and version lists never touch the disk.
 /// </summary>
 internal static class LocalDirectorySource

@@ -1,10 +1,8 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" uid="uid://bvv1rdcwentgp" path="res://addons/ePlugin/Internal/Manager/EPluginManagerDialog.cs" id="1_script"]
 [ext_resource type="Texture2D" uid="uid://sbphlpbrf2br" path="res://addons/ePlugin/icons/rescan.svg" id="2_rescan"]
-[ext_resource type="PackedScene" path="res://addons/ePlugin/Internal/Manager/LocalSourcesDialog.tscn" id="3_local"]
-[ext_resource type="PackedScene" path="res://addons/ePlugin/Internal/Manager/UpdateSitesDialog.tscn" id="4_sites"]
-[ext_resource type="PackedScene" path="res://addons/ePlugin/Internal/Manager/AboutDialog.tscn" id="5_about"]
+[ext_resource type="PackedScene" path="res://addons/ePlugin/Internal/Manager/SettingsDialog.tscn" id="3_settings"]
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_details"]
 
@@ -43,37 +41,21 @@ tooltip_text = "Retry failed
 Retry plugin activations, deactivations and updates that failed or were interrupted."
 flat = true
 
-[node name="LocalSourcesButton" type="Button" parent="Content/Header"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_vertical = 4
-tooltip_text = "Local directories
-Manage your local plugin directories. Plugin ZIP files in them are offered as updates and versions."
-flat = true
-
-[node name="UpdateSitesButton" type="Button" parent="Content/Header"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_vertical = 4
-tooltip_text = "Update sites
-Set update sites for plugins in this project, and review ePlugin's built-in list of add-on update sites. A project's site replaces a plugin's plugin.cfg update_url, which stays the fallback."
-flat = true
-
 [node name="CheckButton" type="Button" parent="Content/Header"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 4
 tooltip_text = "Check for updates
-Check every plugin with an update_url for a new version now, and index the local plugin directories again."
+Check every plugin with an update_url for a new version now, and index the local directories again."
 icon = ExtResource("2_rescan")
 flat = true
 
-[node name="AboutButton" type="Button" parent="Content/Header"]
+[node name="SettingsButton" type="Button" parent="Content/Header"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 4
-tooltip_text = "About
-Show the ePlugin Framework's version, with links to its store page, source code and documentation."
+tooltip_text = "Settings
+Change ePlugin's project settings and update sources (update sites for plugins in this project and your local directories), and see the ePlugin Framework's version and links."
 flat = true
 
 [node name="Split" type="HSplitContainer" parent="Content"]
@@ -244,11 +226,5 @@ size = Vector2i(520, 200)
 ok_button_text = "Roll back"
 dialog_autowrap = true
 
-[node name="LocalSourcesDialog" parent="." instance=ExtResource("3_local")]
-unique_name_in_owner = true
-
-[node name="UpdateSitesDialog" parent="." instance=ExtResource("4_sites")]
-unique_name_in_owner = true
-
-[node name="AboutDialog" parent="." instance=ExtResource("5_about")]
+[node name="SettingsDialog" parent="." instance=ExtResource("3_settings")]
 unique_name_in_owner = true

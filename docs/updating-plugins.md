@@ -1,6 +1,6 @@
 # Updating plugins
 
-Plugins can publish updates from GitHub, GitLab, Forgejo or Gitea (such as Codeberg) releases, a Git source, or ZIP packages in a local plugin directory. Update checks report candidates; they do not install anything until you select packages in the [ePlugin Manager](eplugin-manager.md) and choose **Update**.
+Plugins can publish updates from GitHub, GitLab, Forgejo or Gitea (such as Codeberg) releases, a Git source, or ZIP packages in a local directory. Update checks report candidates; they do not install anything until you select packages in the [ePlugin Manager](eplugin-manager.md) and choose **Update**.
 
 ## Configure an update source
 
@@ -26,7 +26,7 @@ Supported source examples:
 | Git tags, for repositories that tag releases without ZIP assets | `https://github.com/owner/repository/tags`, `https://gitlab.example/group/repository/-/tags`, `https://codeberg.org/owner/repository/tags`, or `https://host/owner/repository.git` |
 | Git subtree tracking a branch | `https://host/owner/repository.git?path=addons/my_plugin#main` |
 | Git over SSH | `git@host:owner/repository.git?path=addons/my_plugin#main` |
-| Local plugin directories | ZIP files in folders you choose; no `update_url` required |
+| Local directories | ZIP files in folders you choose; no `update_url` required |
 | Project update sites | Any of the above, set by the project for a plugin; replaces its `update_url` |
 | Built-in update sites | ePlugin's list of popular add-ons, for plugins that name no working update site |
 
@@ -38,17 +38,17 @@ For private release APIs, set `EPLUGIN_GITHUB_TOKEN` (fallback `GITHUB_TOKEN`), 
 
 ## Project update sites
 
-A project can set the update site of a plugin itself, in **Update sites...** of the [ePlugin Manager](eplugin-manager.md). Use it for a plugin whose `plugin.cfg` has no `update_url`, or whose `update_url` changed and no longer finds updates. The project's update site replaces the plugin's `update_url` for checks, versions and downloads.
+A project can set the update site of a plugin itself, on the **Update sources** tab of the [ePlugin Manager](eplugin-manager.md)'s **Settings**. Use it for a plugin whose `plugin.cfg` has no `update_url`, or whose `update_url` changed and no longer finds updates. The project's update site replaces the plugin's `update_url` for checks, versions and downloads.
 
-- **Add...** chooses a plugin in `res://addons` from a list and asks for the update site URL.
+- **Add site...** chooses a plugin in `res://addons` from a list and asks for the update site URL.
 - **Edit...** (or double-clicking an entry) changes the URL of the selected plugin.
-- **Remove** deletes the entry; the plugin uses its `update_url` again.
+- **Remove** deletes the selected site; the plugin uses its `update_url` again.
 
-![Update sites dialog with a project update site for gdUnit4 and the expanded built-in list, installed add-ons first](images/eplugin-update-sites.png)
+![Update sources tab of the settings with a project update site for gdUnit4, a local directory with six packages, and the expanded built-in list, installed add-ons first](images/eplugin-update-sources.png)
 
 ![Edit update site dialog for gdUnit4 with its URL and the supported URL forms](images/eplugin-update-site-editor.png)
 
-The URL can be any [supported source](#configure-an-update-source): GitHub, GitLab or Forgejo releases, or a Git repository. Other URLs are refused when you save them. The dialog shows each plugin's `plugin.cfg` `update_url` next to the site that replaces it.
+The URL can be any [supported source](#configure-an-update-source): GitHub, GitLab or Forgejo releases, or a Git repository. Other URLs are refused when you save them. The editor shows the plugin's `plugin.cfg` `update_url`, which stays the fallback; so does the site's tooltip in the list.
 
 The project's update site is always tried first. When it does not work, the plugin's `update_url` is checked instead, and then its [built-in update site](#built-in-update-sites): for example when the site does not respond, returns an error, or is not a supported URL because the file was edited by hand. The output log and the manager's status line say when this happened. A plugin with no other site reports the failed check.
 
@@ -71,13 +71,11 @@ ePlugin ships a list of update sites for popular Godot add-ons. It is the last f
 
 The list matches add-ons by their folder name in `res://addons`. It holds active add-ons with at least 20 stars on GitHub or at least 5 on GitLab or Codeberg, plus add-ons listed explicitly in `tools/extra_addons.txt` (from any git host), that publish a release or tag their versions in git (prereleases included); for the latter it names the repository's tag page. Each add-on's folder name is the plugin folder in its latest release's ZIP or, without one, in its repository at that release or tag. A GDExtension without `plugin.cfg` counts as a plugin folder. GitLab and Codeberg add-ons come from those hosts' searches for Godot projects, which also find games, so they are listed only when their plugin folder is named like the repository. Add-ons without a plugin folder and add-ons whose release ZIP the updater would refuse are not in the list. The listed releases are not installed in advance, so an update found through the list is still validated and can be refused like any other.
 
-The list is read-only. **Update sites...** in the [ePlugin Manager](eplugin-manager.md) shows it below the project's update sites, with the installed add-ons first, so you can review which site each add-on uses. To use a different site for an add-on, set a [project update site](#project-update-sites); it is tried first. To ignore the list entirely, turn off `eplugin/updates/builtin_update_sites` in **Project Settings** (with **Advanced Settings** shown).
+The list is read-only. The **Update sources** tab of the [ePlugin Manager](eplugin-manager.md)'s **Settings** shows it below the project's update sites, with the installed add-ons first, so you can review which site each add-on uses. To use a different site for an add-on, set a [project update site](#project-update-sites); it is tried first. To ignore the list entirely, turn off **Built-in update sites** on the **General** tab of the settings (`eplugin/updates/builtin_update_sites`).
 
-## Local plugin directories
+## Local directories
 
-Local directories provide ZIP packages from a folder, network share, or downloaded release collection. Add them with **Local directories...** in the [ePlugin Manager](eplugin-manager.md). The list is stored in `eplugin/local-sources.json` in the Godot editor's user configuration folder, shared by projects, and never written to a project. A missing directory remains in the list for when a drive or share returns.
-
-![Local plugin directories dialog showing a release folder, six indexed packages, and the Rescan action](images/eplugin-local-directories.png)
+Local directories provide ZIP packages from a folder, network share, or downloaded release collection. A local directory is an update source for any plugin: one directory usually holds the packages of many plugins, so you typically need only one. Add it with **Add directory...** on the **Update sources** tab of the [ePlugin Manager](eplugin-manager.md)'s **Settings**, which lists each directory with the packages found in it. **Remove** removes the selected directory from the list without touching its files. The list is stored in `eplugin/local-sources.json` in the Godot editor's user configuration folder, shared by projects, and never written to a project. A missing directory remains in the list for when a drive or share returns.
 
 At editor startup and after C# assembly reloads, the framework indexes `*.zip` files in these directories and their subdirectories in the background. It reads each archive's file list and `plugin.cfg`, not the full archive. A cache in `eplugin/local-index.json` remembers each ZIP's metadata, so only new or changed ZIPs are opened again. Deleting the cache is safe. Adding or removing a directory, choosing **Rescan**, or selecting **Check for updates** indexes again. Hidden and system folders and folder links are skipped. ZIPs without a `plugin.cfg` are ignored; unreadable archives appear in the dialog with a status and are logged when first found.
 
@@ -110,7 +108,7 @@ The update list is part of ePlugin Manager. Select updates with the checkboxes i
 
 This screenshot uses example local ZIP releases of the repository's sample plugins; the displayed update versions are sample data.
 
-By default, the framework checks once per editor session when the last successful check was at least 20 hours ago. Results and the timestamp are cached under `.godot/eplugin/update-state.json`. The manager's **Check for updates** action bypasses the interval and also indexes local directories. Settings are under **Project Settings > eplugin/updates**.
+By default, the framework checks once per editor session when the last successful check was at least 20 hours ago. Results and the timestamp are cached under `.godot/eplugin/update-state.json`. The manager's **Check for updates** action bypasses the interval and also indexes local directories. The settings are on the **General** tab of the manager's **Settings** and under **Project Settings > eplugin/updates**; see [Update settings](#update-settings).
 
 The manager shows installed and candidate versions, sources, warnings, and earlier failures. Select a batch and choose **Update** to download and validate it. Package warnings require another confirmation before installation; a changed source host requires the explicit trust checkbox. Canceling the download leaves installed addons untouched. An update that comes with a license file not accepted yet shows it before installation; an update that keeps the accepted license file does not ask again (see [Plugin licenses](plugin-licenses.md#updates)). Updates never show a plugin's [welcome page](plugin-welcome.md#updates). Previously failed versions are shown but are not selected automatically. The **Version** selector also supports installing an earlier published version as a downgrade, and installing the installed version again with **Reinstall**, both with the same validation, backup, and rollback flow. Reinstalling picks up new commits of a Git branch whose `plugin.cfg` version did not change, and restores addon files that were changed by accident in the project.
 
@@ -176,6 +174,8 @@ The plugins-only build writes to the update's folder, never to the assembly the 
 When a build fails, the editor keeps running the code it loaded. ePlugin also puts the built assembly back after a failed non-incremental build (which removes it before compiling), so the editor still loads the C# plugins, including the ePlugin Manager and **Retry failed**, after a restart.
 
 ## Update settings
+
+The **General** tab of the [ePlugin Manager](eplugin-manager.md)'s **Settings** shows these settings, which are also listed under `eplugin/updates` in **Project Settings** (with **Advanced Settings** shown). They are stored in `project.godot`.
 
 | Setting | Default | Effect |
 |---|---|---|

@@ -123,4 +123,4 @@ An `EditorPlugin` that implements `IInitialize` itself is initialized when the f
 
 ## Troubleshooting
 
-Turn on `eplugin/logging/debug` in **Project Settings** (with **Advanced Settings** shown) to log every dotnet command ePlugin runs and more detail about dependency resolution. It is read when the framework starts, so it applies after the next C# build or editor restart. If ePlugin itself fails to start, the error is logged and it tries again every 10 seconds.
+Turn on **Debug logging** on the **General** tab of the [ePlugin Manager](eplugin-manager.md)'s **Settings**, or `eplugin/logging/debug` in **Project Settings** (with **Advanced Settings** shown), to log every dotnet command ePlugin runs and more detail about dependency resolution. It is read when the framework starts, so it applies after the next C# build or editor restart. If ePlugin itself fails to start, the error is logged and it tries again every 10 seconds.

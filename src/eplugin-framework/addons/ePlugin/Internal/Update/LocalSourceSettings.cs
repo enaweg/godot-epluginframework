@@ -15,7 +15,7 @@ internal sealed class LocalSourceConfig
 }
 
 /// <summary>
-/// The local plugin directories of the current user. They live in the editor's per-user configuration, never in a
+/// The local directories of the current user. They live in the editor's per-user configuration, never in a
 /// project, and are shared by all projects. A directory that does not exist is kept: it may be an unmounted drive or
 /// network share that reappears later.
 /// </summary>

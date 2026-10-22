@@ -85,7 +85,7 @@ public partial class DocScreenshots : Node
         Select(manager.GetNode<Tree>("%PluginTree"), "sample_plugin");
         await Shot("eplugin-manager", manager);
 
-        // Example 1.1.0 releases of the sample plugins in a local plugin directory.
+        // Example 1.1.0 releases of the sample plugins in a local directory.
         global.AddLocalDirectory(_releases);
         await Seconds(0.5);
         await WaitUntil(() => !global.IsIndexingLocalSources, 60);
@@ -93,39 +93,36 @@ public partial class DocScreenshots : Node
         Select(manager.GetNode<Tree>("%PluginTree"), OptionalSlug);
         await Shot("eplugin-updates", manager);
 
-        manager.GetNode<Button>("%LocalSourcesButton").EmitSignal(BaseButton.SignalName.Pressed);
-        var localSources = manager.GetNode<Window>("%LocalSourcesDialog");
-        await Shot("eplugin-local-directories", localSources);
-        localSources.Hide();
-
         global.SetUpdateSite("gdUnit4", "https://github.com/MikeSchulze/gdUnit4/releases");
         try
         {
-            manager.GetNode<Button>("%UpdateSitesButton").EmitSignal(BaseButton.SignalName.Pressed);
-            var sites = manager.GetNode<Window>("%UpdateSitesDialog");
-            Resize(sites, 1000, 520);
-            var siteTree = sites.GetNode<Tree>("%SiteTree");
-            // The built-in list starts collapsed; open it to show the add-ons it knows, installed ones first.
-            siteTree.GetRoot().GetChild(1).Collapsed = false;
-            Select(siteTree, "gdUnit4", scroll: false);
-            await Shot("eplugin-update-sites", sites);
+            manager.GetNode<Button>("%SettingsButton").EmitSignal(BaseButton.SignalName.Pressed);
+            var settings = manager.GetNode<Window>("%SettingsDialog");
+            var tabs = settings.GetNode<TabContainer>("%SettingsTabs");
+            Resize(settings, 1000, 640);
+            await Shot("eplugin-settings", settings);
 
-            sites.GetNode<Button>("%EditSiteButton").EmitSignal(BaseButton.SignalName.Pressed);
-            var editor = sites.GetNode<Window>("%SiteEditor");
+            tabs.CurrentTab = 1;
+            var sourceTree = settings.GetNode<Tree>("%SourceTree");
+            // The built-in list starts collapsed; open it to show the add-ons it knows, installed ones first.
+            sourceTree.GetRoot().GetChild(2).Collapsed = false;
+            Select(sourceTree, "gdUnit4", scroll: false);
+            await Shot("eplugin-update-sources", settings);
+
+            settings.GetNode<Button>("%EditSiteButton").EmitSignal(BaseButton.SignalName.Pressed);
+            var editor = settings.GetNode<Window>("%SiteEditor");
             await Shot("eplugin-update-site-editor", editor);
             editor.Hide();
-            sites.Hide();
+
+            tabs.CurrentTab = 2;
+            await Shot("eplugin-about", settings);
+            settings.Hide();
         }
         finally
         {
             global.RemoveUpdateSite("gdUnit4");
             global.RemoveLocalDirectory(_releases);
         }
-
-        manager.GetNode<Button>("%AboutButton").EmitSignal(BaseButton.SignalName.Pressed);
-        var about = manager.GetNode<Window>("%AboutDialog");
-        await Shot("eplugin-about", about);
-        about.Hide();
         manager.Hide();
         await Seconds(0.5);
     }

@@ -16,9 +16,9 @@ editor in `UpdateFlowTests`.
 
 ## Sources
 
-### Local plugin directories
+### Local directories
 
-Local plugin directories (`LocalSourceSettings`, per-user JSON in the editor config folder, never in the project) are a
+Local directories (`LocalSourceSettings`, per-user JSON in the editor config folder, never in the project) are a
 second source next to `update_url`. `LocalPackageIndexer` reads only the central directory and `plugin.cfg` of every ZIP
 below them, using `SafeZipExtractor.PluginRoot` (one root `plugin.cfg`, sub-plugins below it, anything else ambiguous),
 so it never lists what staging would refuse; the root folder's name is the slug it matches.
@@ -31,7 +31,7 @@ directories are skipped but kept in the list. `PendingUpdates` merges remote and
 ### Project update sites
 
 Project update sites (`UpdateSiteSettings`, the committed `res://addons/eplugin-update-sites.json`,
-`EGlobal.UpdateSites.cs`, `UpdateSitesDialog`) replace a plugin's `update_url`. `PluginUpdateTarget.UpdateUrl` stays the
+`EGlobal.UpdateSites.cs`, `UpdateSourcesTab`) replace a plugin's `update_url`. `PluginUpdateTarget.UpdateUrl` stays the
 `plugin.cfg` value (the validator's R9 compares new packages against it) and `OverrideUrl` holds the project's site;
 `UpdateUrls` lists the override first. `UpdateService.FirstWorkingSiteAsync` tries them in order, so an unsupported or
 failing site falls back to `plugin.cfg` (reported in `UpdateCheckResult.Fallbacks`), and a candidate from either URL

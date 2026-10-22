@@ -116,7 +116,7 @@ The folder can also sit at the ZIP's root (`my_tool/plugin.cfg`) or inside one w
 zip -r my_tool-1.2.0.zip addons/my_tool
 ```
 
-Attach the ZIP to a GitHub, GitLab, Forgejo or Gitea (Codeberg) release, or put it in a [local plugin directory](updating-plugins.md#local-plugin-directories). Without a ZIP asset, the release's source archive is used; repositories that only tag their versions use the tag source above.
+Attach the ZIP to a GitHub, GitLab, Forgejo or Gitea (Codeberg) release, or put it in a [local directory](updating-plugins.md#local-directories). Without a ZIP asset, the release's source archive is used; repositories that only tag their versions use the tag source above.
 
 - Raise `version` in `plugin.cfg` for every release. Versions have two to four numbers (`1.2`, `1.2.0`, `1.2.0.1`), optionally a leading `v` and a prerelease suffix such as `-beta.1`. Name the release or tag after the same version.
 - Keep the folder name stable. It is the plugin's slug, which update sites and dependencies refer to.
@@ -126,7 +126,7 @@ All rules are in [Publish an updatable release](updating-plugins.md#publish-an-u
 
 ### Plugins without an update_url
 
-A project can update a GDScript plugin that has no `update_url`, or whose `update_url` stopped working, without changing the plugin. **Update sites...** in the ePlugin Manager stores a site per plugin in the committed `res://addons/eplugin-update-sites.json`:
+A project can update a GDScript plugin that has no `update_url`, or whose `update_url` stopped working, without changing the plugin. The **Update sources** tab of the ePlugin Manager's **Settings** stores a site per plugin in the committed `res://addons/eplugin-update-sites.json`:
 
 ```json
 {
@@ -137,7 +137,7 @@ A project can update a GDScript plugin that has no `update_url`, or whose `updat
 }
 ```
 
-Popular add-ons are also covered by ePlugin's [built-in update sites](updating-plugins.md#built-in-update-sites), which many GDScript add-ons are part of. A ZIP in a local plugin directory works for any plugin as well. See [Project update sites](updating-plugins.md#project-update-sites).
+Popular add-ons are also covered by ePlugin's [built-in update sites](updating-plugins.md#built-in-update-sites), which many GDScript add-ons are part of. A ZIP in a local directory works for any plugin as well. See [Project update sites](updating-plugins.md#project-update-sites).
 
 ## License
 

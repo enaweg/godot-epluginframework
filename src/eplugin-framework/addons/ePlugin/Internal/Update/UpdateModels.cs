@@ -16,9 +16,9 @@ namespace Enaweg.Plugin.Internal.Update;
 internal abstract record UpdatePackageRef;
 internal sealed record ZipPackageRef(string Url, string ExpectedName) : UpdatePackageRef;
 internal sealed record GitPackageRef(string Repository, string Path, string Commit) : UpdatePackageRef;
-/// <summary>A ZIP file found by indexing one of the user's local plugin directories.</summary>
+/// <summary>A ZIP file found by indexing one of the user's local directories.</summary>
 internal sealed record LocalZipPackageRef(string Path) : UpdatePackageRef;
-/// <param name="UpdateUrl">The plugin.cfg update_url; null when only local plugin directories can update the plugin.</param>
+/// <param name="UpdateUrl">The plugin.cfg update_url; null when only local directories can update the plugin.</param>
 /// <param name="OverrideUrl">The update site the project sets for the plugin, which is tried before the plugin.cfg one.</param>
 /// <param name="KnownUrl">The update site of ePlugin's built-in list, the last one tried.</param>
 /// <param name="Kind">
@@ -31,7 +31,7 @@ internal sealed record PluginUpdateTarget(string Slug, string Name, string Insta
 {
     /// <summary>
     /// The update sites to try, in order: the project's, the plugin.cfg update_url, then the built-in one. A candidate
-    /// found at any of them belongs to the plugin. Empty when only local plugin directories can update the plugin.
+    /// found at any of them belongs to the plugin. Empty when only local directories can update the plugin.
     /// </summary>
     public IReadOnlyList<string> UpdateUrls => new[] { OverrideUrl, UpdateUrl, KnownUrl }
         .Where(url => !string.IsNullOrWhiteSpace(url)).Select(url => url!).Distinct(StringComparer.Ordinal).ToArray();
@@ -42,7 +42,7 @@ internal sealed record PluginUpdateTarget(string Slug, string Name, string Insta
     /// </summary>
     public bool VersionUnknown => Kind == PluginKind.GDExtensionAddon && InstalledVersion.Length == 0;
 }
-/// <param name="SourceUrl">The update_url the candidate was found at; null for a package of a local plugin directory.</param>
+/// <param name="SourceUrl">The update_url the candidate was found at; null for a package of a local directory.</param>
 internal sealed record UpdateCandidate(string Slug, string PluginName, string InstalledVersion, string NewVersion,
     string? SourceUrl, string? ReleaseUrl, string? ResolvedRevision, UpdatePackageRef Package)
 {

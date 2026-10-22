@@ -145,7 +145,7 @@ internal sealed class PluginManagerViewModel
     public static string? VersionChangeBlocked(PluginRow row, VersionOption option)
     {
         if (option.Installed && option.Candidate is null)
-            return "This version is installed. Neither its update site nor a local plugin directory offers it to reinstall.";
+            return "This version is installed. Neither its update site nor a local directory offers it to reinstall.";
         if (row.Plugin.Missing || option.Candidate is null) return "The plugin folder is missing.";
         if (!row.Plugin.Enabled) return "Enable the plugin to change its version.";
         if (row.Plugin.FailedAttempt is not null) return "Resolve the plugin's failed state with Retry failed first.";
@@ -182,9 +182,9 @@ internal sealed class PluginManagerViewModel
 
     /// <summary>The tooltip of <see cref="CheckSchedule"/>.</summary>
     public static string CheckScheduleHint(DateTimeOffset? next) => next is null
-        ? "Scheduled update checks are off (Project Settings > eplugin/updates/check_enabled). Check for updates still checks now."
-        : "The editor checks for updates when it starts and the last successful check is older than " +
-          "eplugin/updates/check_interval_hours. Check for updates checks now.";
+        ? "Scheduled update checks are off (Settings > General, eplugin/updates/check_enabled). Check for updates still checks now."
+        : "The editor checks for updates when it starts and the last successful check is older than the hours between checks " +
+          "(Settings > General, eplugin/updates/check_interval_hours). Check for updates checks now.";
 
     /// <summary>The meta of the license link in <see cref="Describe"/>, which opens the license dialog.</summary>
     public const string LicenseMeta = "eplugin-license";
@@ -349,7 +349,7 @@ internal sealed class PluginManagerViewModel
                         "built-in list does not know it. Add an update site for it under Update sites.\n");
         else if (plugin.LocalPackages == 0)
             text.Append("Not updatable: plugin.cfg has no update_url, the project sets no update site, ePlugin's built-in list does " +
-                        "not know it, and no local plugin directory holds a package of it.\n");
+                        "not know it, and no local directory holds a package of it.\n");
         if (plugin.Kind == PluginKind.GDExtensionAddon && plugin.Version.Length == 0 && row.IsUpdatable)
             text.Append("ePlugin does not know the installed version, because the add-on has no plugin.cfg and ePlugin did not " +
                         "install it, so no update is offered. Install the latest version, which is preselected below, or choose another; " +

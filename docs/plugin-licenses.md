@@ -77,7 +77,7 @@ The plugin details of the [ePlugin Manager](eplugin-manager.md) show each plugin
 
 ## Accepting licenses automatically
 
-The project setting `eplugin/licenses/auto_accept` (Project Settings > General, with Advanced Settings shown) accepts every license without showing it. It is stored in `project.godot`, so it applies to everyone working on the project.
+The project setting `eplugin/licenses/auto_accept` accepts every license without showing it. Turn it on with **Accept every license without showing it** on the **General** tab of the [ePlugin Manager](eplugin-manager.md)'s **Settings**, which asks for confirmation first, or in Project Settings > General (with Advanced Settings shown). It is stored in `project.godot`, so it applies to everyone working on the project.
 
 > [!WARNING]
 > This is risky. You agree to license terms nobody has read, which may for example restrict commercial use, require attribution or forbid redistribution. Each license accepted this way is logged with a warning and recorded as accepted automatically.
