@@ -19,15 +19,23 @@ audio_service;https://github.com/AhmedGD1/Godot-Audio-Service
 cogito;https://codeberg.org/Phazorknight/Cogito
 # A GDExtension plugin whose libraries are built by CI (only in the release ZIP).
 crabbyconsole;https://github.com/Bauxitedev/crabbyconsole
+# On Codeberg. Its repository also carries the dialogue_manager add-on it depends on.
+disco_tools;https://codeberg.org/Fireye/disco-tools
 global_asset_manager;https://github.com/sn1ks0h/Global-Asset-Manager
 godot_advanced_logger;https://github.com/DYNMC-Motorsports/GodotAdvancedLogger
 # A GDExtension whose libraries are built by CI (only in the release ZIP). Neither the ZIP nor the repository has a
 # plugin.cfg, so ePlugin updates it as a GDExtension add-on, found by its folder name.
 godot_servo;https://github.com/shiena/godot-servo
 godotite;https://github.com/Arkaein/godotite
+# A GDExtension without a plugin.cfg, which ePlugin updates as a GDExtension add-on. Its libraries are built by CI (only
+# in the release ZIP).
+hap_video;https://github.com/claytercek/godot-hap-video
+imsc_script;https://github.com/ImStocker/imsc-script-godot
 # A GDExtension without a plugin.cfg, which ePlugin updates as a GDExtension add-on. Only its release ZIP has all
 # libraries (the repository lacks the macOS one).
 line3d;https://github.com/ApocalypticPhosphorus/Line3D
+# Its repository also carries the px_file_sync add-on.
+pixquare_godot_importer;https://github.com/Wiggan/pixquare-godot-importer
 portalsCS;https://github.com/Phlegmlee/godot-portals-plugin-csharp
 # A GDExtension plugin whose libraries are built by CI: they are in the release ZIP but not in the repository, so its
 # update site must be the releases page (which build_godot_addons.cs takes for any GitHub repository with releases).
