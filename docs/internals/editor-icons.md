@@ -19,7 +19,7 @@ Only these colors appear in an icon. `EditorIcons.Render` replaces them, so they
 
 | Color | Meaning | Rendered as |
 |---|---|---|
-| `#e0e0e0` | Base color of every icon | `#e0e0e0` on dark icon palettes, `#5a5a5a` on light ones |
+| `#e0e0e0` | Base color of every icon | `#e0e0e0` on dark editor themes (light icons), `#5a5a5a` on light themes (dark icons) |
 | `#5fff97` | Success: installs a version (upgrade, reinstall) | the editor theme's `success_color` |
 | `#ffdd65` | Warning: goes back or needs care (downgrade) | the theme's `warning_color` |
 | `#ff5f5f` | Error: deals with something that failed (retry) | the theme's `error_color` |
@@ -31,7 +31,7 @@ Rules:
 
 - The ring or outline is always `#e0e0e0`. An accent goes only on the glyph inside it.
 - At most one accent per icon.
-- Actions that change no installed plugin stay monochrome (rescan, settings, about).
+- Actions that change no installed plugin stay monochrome (rescan, settings).
 - `update.svg` is drawn in `#fff` because it is the white mask that `UpdateIndicator` tints. Don't copy that into
   new icons.
 
@@ -53,13 +53,14 @@ Glyphs sit inside the ring, roughly between 4.4 and 11.6, with a stroke of 1.6 t
 | Glyph | Path | Stroke |
 |---|---|---|
 | Up arrow | `M8 11.6V4.9M5.2 7.6 8 4.8l2.8 2.8` | 1.7 |
+| Small up arrow (inside an arrow ring) | `M8 11.2V5.2M5.6 7.6 8 5.2l2.4 2.4` | 1.6 |
 | Down arrow | `M8 4.4v6.7M5.2 8.4 8 11.2l2.8-2.8` | 1.7 |
 | Plus | `M8 5v6M5 8h6` | 1.7 |
 | Exclamation mark | `M8 4.6v3.8` plus `<circle cx="8" cy="11.1" r="1.05"/>` filled | 1.8 |
-| Information | `<circle cx="8" cy="4.9" r="1.05"/>` filled plus `M8 7.6v3.8` | 1.8 |
+| Information (not used yet) | `<circle cx="8" cy="4.9" r="1.05"/>` filled plus `M8 7.6v3.8` | 1.8 |
 
 An action with a well-known shape of its own (the gear for settings) may skip the ring. It uses the same weight: shapes
-at least 1.5 wide, filled in `#e0e0e0`.
+at least 1.5 wide in `#e0e0e0`, filled or stroked (the gear's teeth are filled, its hub is a circle with a 2.8 stroke).
 
 ## Current icons
 
@@ -67,7 +68,7 @@ at least 1.5 wide, filled in `#e0e0e0`.
 |---|---|---|---|
 | `eplugin_editor.svg` | ePlugin Manager, ePlugin rows | – | Robot head and puzzle piece (`id="piece"` is tinted by status) |
 | `update.svg` | Update available in the plugin list | Closed | Up arrow (white mask) |
-| `rescan.svg` | Check for updates, Rescan (local directories) | Clockwise | Up arrow |
+| `rescan.svg` | Check for updates, Rescan (local directories) | Clockwise | Small up arrow |
 | `settings.svg` | Settings | – | Gear |
 | `retry.svg` | Needs attention (manager button), Retry and Retry all | Counter-clockwise | `!` in error |
 | `upgrade.svg` | Update (version button, manager OK button) | Closed | Up arrow in success |
@@ -80,8 +81,10 @@ Rescan and upgrade differ by the ring and the color only, so don't put them next
 
 The buttons in the ePlugin Manager's header are a toolbar: `flat = true` and no text, so they show only their icon and
 get a background on hover, like the editor's own toolbars. Their tooltip starts with the button's name on its own line,
-followed by what it does, because the documentation and status messages refer to them by name. Buttons that finish a
-dialog (OK, the version button, confirmations) keep their text next to the icon.
+followed by what it does, because the documentation and status messages refer to them by name. The exception is the
+attention button before them: it is not flat and shows its text ("N plugins need attention") next to the retry icon,
+so its tooltip only says what it does. Buttons that finish a dialog (OK, the version button, confirmations) keep their
+text next to the icon.
 
 ## Adding an icon
 

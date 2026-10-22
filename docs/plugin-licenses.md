@@ -10,7 +10,9 @@ The framework uses the first of these that the plugin provides:
 2. The `license_file` in the `[plugin]` section of `plugin.cfg`.
 3. The `LICENSE` file in the plugin's root directory.
 
-Every plugin should ship a `LICENSE` file. If a plugin has none, and sets no other license, the ePlugin Manager shows its license as missing.
+Every plugin should ship a `LICENSE` file. The name has no extension: `LICENSE.md` or `LICENSE.txt` is only used when `license_file` names it. Whether the case of the name matters depends on the file system, so use `LICENSE` in capitals. If a plugin has none, and sets no other license, the ePlugin Manager shows its license as missing.
+
+ePlugin Framework never asks for its own license to be accepted.
 
 The license is shown as [BBCode](https://docs.godotengine.org/en/stable/tutorials/ui/bbcode_in_richtextlabel.html), so it can use formatting such as `[b]`, `[i]`, `[color]` and `[url]`. Plain text works too. Links open in the browser only when they use `http` or `https`. A license file can be up to 1 MiB.
 
@@ -63,7 +65,7 @@ A license is accepted once per project. Disabling and enabling the plugin again 
 
 A license stays accepted while it comes from the same place: the same license file path, the same `res://` path set by the recipe, or, for a license text set by the recipe, the same text. The contents of a file are not compared. Plugin authors who want an updated license file to be accepted again should therefore ship it under a new name, such as `LICENSE-2.0.md`.
 
-At startup and after C# assembly reloads, the framework also checks the enabled plugins that require a license. A plugin whose license is not accepted as it is now asks for it again: accepting keeps the plugin enabled, declining disables it. This happens when an update changed the license its recipe sets, or when a plugin was enabled before its acceptance was recorded, for example while ePlugin Framework itself was disabled.
+At startup and after C# assembly reloads, the framework also checks the enabled plugins that require a license. If a plugin's current license has not been accepted, the framework asks for it again: accepting keeps the plugin enabled, declining disables it. This happens when an update changed the license its recipe sets, or when a plugin was enabled before its acceptance was recorded, for example while ePlugin Framework itself was disabled.
 
 ## Updates
 
@@ -88,4 +90,4 @@ It is mainly meant for headless editors, such as CI exports, where no dialog can
 
 Accepted licenses are recorded in the `licenses` list of `res://addons/eplugin-state.json`, the [plugin state file](plugin-state.md), next to the plugin states. Each entry holds the plugin slug, where the license came from, the plugin version, the time, and whether it was accepted automatically. Commit the file with the addon files.
 
-The `licenses` list is left out while no license has been accepted. Every released framework version reads it. If the file cannot be read or changed on disk in the meantime, licenses accepted in that state are remembered until the editor restarts and are asked for again afterwards.
+The `licenses` list is left out while no license has been accepted. Every released framework version reads it. If the file cannot be read or changed on disk in the meantime, licenses accepted in that state are remembered until the editor restarts or reloads its C# assemblies, for example after a build, and are asked for again afterwards.

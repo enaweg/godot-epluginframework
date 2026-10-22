@@ -131,7 +131,7 @@ internal sealed partial class EGlobal
         }
 
         _ePluginContext?.Logger.Warn(
-            "Shown welcome pages could not be saved to addons/eplugin-state.json; they are shown again after the editor restarts.");
+            "Shown welcome pages could not be saved to addons/eplugin-state.json; they are shown again after the editor restarts or reloads its C# assemblies.");
     }
 }
 #endif
