@@ -20,7 +20,10 @@ internal interface IAddonSwap
     /// <returns>How many old files were still in use and had to be moved to <paramref name="discard"/>.</returns>
     int Install(string installed, string staging, string backup, string discard);
 
-    /// <summary>Puts <paramref name="backup"/> back in place of <paramref name="installed"/> and removes the backup.</summary>
+    /// <summary>
+    /// Puts <paramref name="backup"/> back in place of <paramref name="installed"/>. Once it returns, the backup is gone
+    /// from its place, so a repeated rollback does not restore it again.
+    /// </summary>
     /// <returns>How many files of the replaced version were still in use and had to be moved to <paramref name="discard"/>.</returns>
     int Restore(string installed, string backup, string discard);
 }
@@ -84,9 +87,20 @@ internal sealed class AddonFileSwap : IAddonSwap
         AddonFiles.RefuseLink(installed);
         var discarded = AddonFiles.RemoveContents(installed, discard);
         AddonFiles.CopyTree(backup, installed);
-        Directory.Delete(backup, true);
+        // Moved aside in one step before it is deleted: a delete that stops halfway would leave a partial backup that a
+        // repeated restore copies back over the complete one. The journal's folder is removed with whatever remains.
+        var restored = Restored(backup);
+        Directory.CreateDirectory(Path.GetDirectoryName(restored)!);
+        for (var n = 1; Directory.Exists(restored); n++) restored = Restored(backup) + "." + n;
+        AddonFiles.MoveDirectory(backup, restored);
+        try { Directory.Delete(restored, true); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         return discarded;
     }
+
+    /// <summary>Where a backup goes once it was restored: next to the journal's <c>backup</c> folder, not inside it.</summary>
+    internal static string Restored(string backup) =>
+        Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(backup))!, "restored", Path.GetFileName(backup));
 }
 
 internal static class AddonFiles

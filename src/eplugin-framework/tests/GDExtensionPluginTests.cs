@@ -410,6 +410,30 @@ public class GDExtensionPluginTests
     }
 
     [TestCase]
+    public void FileSwapRestoreLeavesNoPartialBackupWhenItCannotDeleteIt()
+    {
+        var staging = Path.Combine(_root, "staging", Slug);
+        WritePlugin(staging, "2.0.0", "new library", reloadable: true);
+        var backup = Path.Combine(_root, "backup", Slug);
+        var discard = Path.Combine(_root, "discarded", Slug);
+        AddonFileSwap.Instance.Install(Installed, staging, backup, discard);
+        // Windows refuses to delete a read-only file (version control systems such as Perforce sync files that way)
+        File.SetAttributes(Path.Combine(backup, "plugin.gd"), FileAttributes.ReadOnly);
+        try
+        {
+            AddonFileSwap.Instance.Restore(Installed, backup, discard);
+
+            Assertions.AssertString(File.ReadAllText(Path.Combine(Installed, "bin/native.dll"))).IsEqual("old library");
+            // a repeated rollback must not find a backup that a failed delete left incomplete
+            Assertions.AssertBool(Directory.Exists(backup)).IsFalse();
+        }
+        finally
+        {
+            foreach (var file in Directory.EnumerateFiles(_root, "*", SearchOption.AllDirectories)) File.SetAttributes(file, FileAttributes.Normal);
+        }
+    }
+
+    [TestCase]
     public void AReloadableExtensionIsReloadedInPlaceWithoutRestart()
     {
         var (package, directory) = Stage("2.0.0", "new library", reloadable: true);
