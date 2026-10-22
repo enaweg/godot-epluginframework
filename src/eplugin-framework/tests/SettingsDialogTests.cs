@@ -4,6 +4,7 @@ using Enaweg.Plugin.Internal;
 using Enaweg.Plugin.Internal.Licenses;
 using Enaweg.Plugin.Internal.Manager;
 using Enaweg.Plugin.Internal.Update;
+using Enaweg.Plugin.Internal.Welcomes;
 using GdUnit4;
 using Godot;
 
@@ -56,7 +57,7 @@ public class SettingsDialogTests
     [TestCase]
     public static void TheGeneralTabBindsEveryProjectSettingOfThePluginWithItsTypeAndValues()
     {
-        UpdateSettings.Register(); LicenseSettings.Register(); LoggingSettings.Register();
+        UpdateSettings.Register(); LicenseSettings.Register(); WelcomeSettings.Register(); LoggingSettings.Register();
         var registered = ProjectSettings.Singleton.GetPropertyList()
             .Where(p => p["name"].AsString().StartsWith("eplugin/", System.StringComparison.Ordinal))
             .ToDictionary(p => p["name"].AsString());

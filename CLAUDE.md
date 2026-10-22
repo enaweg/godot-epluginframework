@@ -406,7 +406,8 @@ assembly reloads and restarts. A session set keeps plugins without a page from b
 (scene + script, like `LicenseDialog`) lists several pages; closing it in any way records all of them, but an assembly
 reload drops it unrecorded. It opens only while no license or update-failure dialog is open. `UpdateApplier.Commit` records
 the updated plugins as shown, so updates never show a page. The ePlugin Manager links the page in the details
-(`PluginManagerViewModel.WelcomeLine`).
+(`PluginManagerViewModel.WelcomeLine`). The `eplugin/welcomes/hide` project setting (`WelcomeSettings`, on the
+settings' General tab) makes `TakeWelcomes` hand out nothing; pages are not recorded, so turning it off shows them.
 
 ### Logging
 

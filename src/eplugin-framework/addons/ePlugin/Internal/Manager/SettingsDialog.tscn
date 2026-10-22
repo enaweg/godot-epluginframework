@@ -181,6 +181,30 @@ size_flags_horizontal = 3
 text = "Risky: everyone working on the project agrees to license terms nobody read. Meant for headless editors, such as exports in CI."
 autowrap_mode = 3
 
+[node name="WelcomesHeader" type="Label" parent="SettingsTabs/General/GeneralScroll/GeneralBox"]
+layout_mode = 2
+theme_type_variation = &"HeaderSmall"
+text = "Welcome pages"
+
+[node name="WelcomesGrid" type="GridContainer" parent="SettingsTabs/General/GeneralScroll/GeneralBox"]
+layout_mode = 2
+theme_override_constants/h_separation = 16
+theme_override_constants/v_separation = 6
+columns = 2
+
+[node name="HideWelcomesLabel" type="Label" parent="SettingsTabs/General/GeneralScroll/GeneralBox/WelcomesGrid"]
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+text = "Plugin welcome pages"
+
+[node name="HideWelcomesCheck" type="CheckBox" parent="SettingsTabs/General/GeneralScroll/GeneralBox/WelcomesGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Never opens the welcome dialog after a plugin is installed. The pages are not recorded as shown, and the plugin details still link them.
+eplugin/welcomes/hide"
+text = "Do not show welcome pages"
+metadata/setting = "eplugin/welcomes/hide"
+
 [node name="LoggingHeader" type="Label" parent="SettingsTabs/General/GeneralScroll/GeneralBox"]
 layout_mode = 2
 theme_type_variation = &"HeaderSmall"

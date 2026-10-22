@@ -8,6 +8,7 @@ using Enaweg.Plugin.Internal.Update;
 using System.Runtime.Loader;
 using Enaweg.Plugin.Internal;
 using Enaweg.Plugin.Internal.Licenses;
+using Enaweg.Plugin.Internal.Welcomes;
 using Enaweg.Plugin.Logging;
 using Godot;
 
@@ -371,6 +372,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         }
         UpdateSettings.Register();
         LicenseSettings.Register();
+        WelcomeSettings.Register();
         LoggingSettings.Register();
         // A reconnected window spans recovery and initialization. If the manager was open, let it draw before closing.
         var progress = _reopenProgress ?? (ManagerReopen.IsSet ? ActivationProgress.Begin("Finishing the plugin update...") : null);

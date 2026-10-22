@@ -58,6 +58,12 @@ At startup and after C# assembly reloads, the framework also checks the enabled 
 
 A plugin's welcome page is shown once per project, not once per developer: disabling and enabling the plugin again does not show it again. An editor restart or assembly reload while the dialog is open closes it without counting the pages as read, so they are shown again afterwards. In a headless editor no dialog can be shown and nothing is recorded.
 
+## Turning welcome pages off
+
+The project setting `eplugin/welcomes/hide` keeps the welcome dialog from opening at all. Turn it on with **Do not show welcome pages** on the **General** tab of the [ePlugin Manager](eplugin-manager.md)'s **Settings**, or in Project Settings > General (with Advanced Settings shown). It is stored in `project.godot`, so it applies to everyone working on the project.
+
+Pages are not recorded as shown while the setting is on, and the plugin details still link them. Turning it off again shows the pages of the enabled plugins that were not shown yet.
+
 ## Updates
 
 Updates never show a welcome page, also not when the new version changes it or has one for the first time. Installing an update records the updated plugins' welcome pages as shown.
