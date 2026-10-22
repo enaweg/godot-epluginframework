@@ -98,6 +98,17 @@ internal sealed class PluginManagerViewModel
     }
     public PluginRow? Find(string slug) => Plugins.FirstOrDefault(p => p.Plugin.Slug == slug);
 
+    /// <summary>
+    /// Leaves out the updates the user left out in <paramref name="previous"/>, the model this one replaces, so refreshing
+    /// the list does not check them again. A newer version of a left-out plugin is offered checked.
+    /// </summary>
+    public void KeepUnselected(PluginManagerViewModel? previous)
+    {
+        if (previous is null) return;
+        var unselected = previous.Updates.Where(u => !u.Selected).Select(u => (u.Candidate.Slug, u.Candidate.NewVersion)).ToHashSet();
+        foreach (var update in Updates.Where(u => unselected.Contains((u.Candidate.Slug, u.Candidate.NewVersion)))) update.Selected = false;
+    }
+
     /// <summary>The update state shown on the update icon of an updatable plugin; null for a plugin that is not.</summary>
     public static string? UpdateState(PluginRow row) =>
         row.Update is { } update ? $"Update available: {update.Candidate.InstalledVersion} → {update.Candidate.NewVersion}"

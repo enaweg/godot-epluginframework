@@ -52,6 +52,24 @@ public class PluginManagerViewModelTests
         Assertions.AssertObject(model.Updates.Single(r => r.Candidate.Slug == "failed").Failed!).IsNotNull();
     }
     [TestCase]
+    public static void UpdatesLeftOutStayLeftOutWhenTheListIsRefreshed()
+    {
+        var candidates = new[] { Candidate("kept"), Candidate("left-out") };
+        var targets = candidates.Select(c => new PluginUpdateTarget(c.Slug, c.PluginName, c.InstalledVersion, c.SourceUrl, "/unused")).ToArray();
+        var before = new PluginManagerViewModel([], candidates, targets, null, _ => []);
+        before.Updates.Single(r => r.Candidate.Slug == "left-out").Selected = false;
+
+        var after = new PluginManagerViewModel([], candidates, targets, null, _ => []);
+        after.KeepUnselected(before);
+        Assertions.AssertThat(after.Selected.Select(c => c.Slug).ToArray()).ContainsExactly("kept");
+
+        // a newer version than the one left out is offered again
+        var newer = new PluginManagerViewModel([], [Candidate("kept"), Candidate("left-out") with { NewVersion = "3.0" }], targets, null, _ => []);
+        newer.KeepUnselected(after);
+        Assertions.AssertThat(newer.Selected.Select(c => c.Slug).ToArray()).ContainsExactly("kept", "left-out");
+    }
+
+    [TestCase]
     public static void MissingTargetCannotBeAppliedAndFrameworkAnnouncesRestart()
     {
         var model = new PluginManagerViewModel([], [Candidate("missing"), Candidate("ePlugin")],

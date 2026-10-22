@@ -202,7 +202,9 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _licenses.Clear(); _welcomes.Clear();
         var plugins = _global.CollectPlugins();
         _targets = _global.CollectUpdateTargets();
+        var previous = _model;
         _model = new(plugins, _global.PendingUpdates, _targets, _global.UpdateCache, candidate => _global.UpdatePreflightFindings([candidate]));
+        _model.KeepUnselected(previous);
         _attentionItems = PluginAttention.Collect(_model, _global.FailedUpdateJournal, _global.KeptUpdate,
             slug => _global.RetryScope([slug], dependencies: true).Select(a => a.Slug).Where(s => s != slug).ToArray());
         // Update sites, local directories and retries change what the toolbar button shows, too.
