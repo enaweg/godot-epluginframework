@@ -1,8 +1,8 @@
 {
- "commit": "78364449dc352a9adc592128ba6ee7d03f276e01",
- "date": "2026-10-22T06:03:40Z",
- "covered": 8231,
- "coverable": 10232,
+ "commit": "88a5d445577c347ec6852e5d56d073bca25576b2",
+ "date": "2026-10-22T08:22:22Z",
+ "covered": 8240,
+ "coverable": 10246,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -130,7 +130,7 @@
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Updates.cs": [
    89,
-   118
+   117
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Welcomes.cs": [
    70,
@@ -214,7 +214,7 @@
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.cs": [
    53,
-   616
+   620
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EditorIcons.cs": [
    39,
@@ -249,8 +249,8 @@
    11
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/PluginManagerViewModel.cs": [
-   269,
-   279
+   270,
+   281
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateFailureDialog.cs": [
    0,
@@ -365,8 +365,8 @@
    26
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/ReleaseSources.cs": [
-   133,
-   135
+   134,
+   136
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/SafeZipExtractor.cs": [
    78,
@@ -381,7 +381,7 @@
    10
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateApplier.cs": [
-   394,
+   393,
    424
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateGroups.cs": [
@@ -397,16 +397,16 @@
    61
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateModels.cs": [
-   38,
-   38
+   39,
+   39
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateRecovery.cs": [
    138,
    142
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateService.cs": [
-   88,
-   94
+   93,
+   99
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateSettings.cs": [
    18,
@@ -417,8 +417,8 @@
    50
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateStateStore.cs": [
-   40,
-   41
+   42,
+   43
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/VersionConstraint.cs": [
    25,
