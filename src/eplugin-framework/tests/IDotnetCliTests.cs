@@ -313,7 +313,7 @@ public class IDotnetCliTests
     public static void APluginsOnlyBuildLeavesOutTheProjectsCode()
     {
         // The project's own code and its own library use an API the plugin no longer has, as after a breaking update.
-        var root = Path.Combine(Path.GetTempPath(), "eplugin plugins-only 'a$b' " + Path.GetRandomFileName());
+        var root = Path.Combine(Path.GetTempPath(), "eplugin plugins-only 'a$b,c' " + Path.GetRandomFileName());
         Directory.CreateDirectory(Path.Combine(root, "addons", "plug"));
         Directory.CreateDirectory(Path.Combine(root, "Lib"));
         try
