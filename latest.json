@@ -1,8 +1,8 @@
 {
- "commit": "7903b4c2b162e66b7d2acfb0a5935deec21e51c9",
- "date": "2026-10-22T10:17:57Z",
- "covered": 8273,
- "coverable": 10369,
+ "commit": "e48be7e3d631eb195bf46923b24b78e957488089",
+ "date": "2026-10-22T11:29:02Z",
+ "covered": 8469,
+ "coverable": 10791,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -105,8 +105,8 @@
    146
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.PluginManager.cs": [
-   73,
-   80
+   74,
+   81
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.RecipeOperations.cs": [
    62,
@@ -114,7 +114,7 @@
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateApply.cs": [
    101,
-   267
+   271
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateRecipes.cs": [
    184,
@@ -137,8 +137,8 @@
    75
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.cs": [
-   892,
-   1014
+   927,
+   1050
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EPluginProgress.cs": [
    1,
@@ -209,16 +209,20 @@
    9
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/AboutTab.cs": [
-   18,
-   49
+   24,
+   58
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Manager/AttentionDialog.cs": [
+   16,
+   117
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.cs": [
-   51,
-   612
+   52,
+   626
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EditorIcons.cs": [
    39,
-   54
+   55
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EditorSignalConnections.cs": [
    12,
@@ -244,13 +248,17 @@
    4,
    4
   ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Manager/PluginAttention.cs": [
+   60,
+   81
+  ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/PluginCatalog.cs": [
    11,
    11
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/PluginManagerViewModel.cs": [
-   270,
-   281
+   268,
+   276
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/SettingsDialog.cs": [
    15,
@@ -258,11 +266,19 @@
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateFailureDialog.cs": [
    0,
-   57
+   56
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateFlow.cs": [
-   144,
-   147
+   147,
+   153
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateReview.cs": [
+   66,
+   66
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateReviewDialog.cs": [
+   10,
+   93
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateSourcesTab.cs": [
    24,
