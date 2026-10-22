@@ -89,5 +89,12 @@ internal static class UpdateScheduler
             candidate.SourceUrl is { } source && t.UpdateUrls.Contains(source) && SemVer.TryParse(t.InstalledVersion, out var installed) &&
             SemVer.TryParse(candidate.NewVersion, out var remote) && UpdateService.IsUpdate(installed, remote)))
         .Select(c => c with { InstalledVersion = targets.First(t => t.Slug == c.Slug).InstalledVersion }).ToArray();
+
+    /// <summary>
+    /// The latest release cached for a target whose version is unknown (<see cref="PluginUpdateTarget.VersionUnknown"/>),
+    /// which <see cref="CurrentCached"/> never returns as an update; null for any other target or when none is cached.
+    /// </summary>
+    public static UpdateCandidate? CachedLatest(UpdateCache cache, PluginUpdateTarget target) => !target.VersionUnknown ? null
+        : cache.Results.FirstOrDefault(c => c.Slug == target.Slug && c.SourceUrl is { } source && target.UpdateUrls.Contains(source));
 }
 #endif

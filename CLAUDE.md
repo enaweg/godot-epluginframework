@@ -268,7 +268,8 @@ directories must be reloadable: `ShowHideHelper` loads them after showing and un
 A GDExtension add-on is a folder below `res://addons` without `plugin.cfg` that has a `.gdextension` outside hidden
 folders (`EGlobal.ExtensionAddons.cs`). Godot always loads it, so it is never toggled, counts as an available
 dependency (`IsDependencyAvailable`), and is listed as always loaded. Its version is the one the shared state recorded
-when an update installed it ("" until then, when checks skip it but the manager installs a chosen version). The manager
+when an update installed it ("" until then, when checks only cache its latest release and the manager installs a chosen
+version). The manager
 shows each extension's load state (`NativeExtensionStatus`); one Godot should load but did not marks the plugin as
 needing attention. See `docs/internals/update-system.md` and `docs/gdextension-plugins.md`.
 

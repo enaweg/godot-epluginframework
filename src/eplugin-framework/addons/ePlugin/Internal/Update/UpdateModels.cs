@@ -35,6 +35,12 @@ internal sealed record PluginUpdateTarget(string Slug, string Name, string Insta
     /// </summary>
     public IReadOnlyList<string> UpdateUrls => new[] { OverrideUrl, UpdateUrl, KnownUrl }
         .Where(url => !string.IsNullOrWhiteSpace(url)).Select(url => url!).Distinct(StringComparer.Ordinal).ToArray();
+
+    /// <summary>
+    /// A GDExtension add-on ePlugin did not install: nothing names its version, so no release counts as an update of it,
+    /// but its latest release is still looked up so the ePlugin Manager can offer to install it.
+    /// </summary>
+    public bool VersionUnknown => Kind == PluginKind.GDExtensionAddon && InstalledVersion.Length == 0;
 }
 /// <param name="SourceUrl">The update_url the candidate was found at; null for a package of a local plugin directory.</param>
 internal sealed record UpdateCandidate(string Slug, string PluginName, string InstalledVersion, string NewVersion,

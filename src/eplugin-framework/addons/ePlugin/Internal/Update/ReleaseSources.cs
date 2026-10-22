@@ -13,7 +13,8 @@ namespace Enaweg.Plugin.Internal.Update;
 internal static class ReleaseAssets
 {
     /// <summary>
-    /// The ZIP asset of a release to install as <paramref name="slug"/>: the only one, else the one named like the slug
+    /// The ZIP asset of a release to install as <paramref name="slug"/>: the only one, else the one named exactly like the
+    /// slug (as "lua-gdextension.zip" next to "lua-gdextension+luajit.zip"), else the one whose name contains the slug
     /// (also with '-', '_' and '.' mixed up, as in "godot-servo-1.2.zip" for godot_servo), else the one named like an
     /// add-on or plugin. Among several, a demo, example, sample or tutorial project released next to the add-on is left
     /// out. Null when that leaves none or several, and the source archive is installed instead.
@@ -25,6 +26,7 @@ internal static class ReleaseAssets
         if (zips.Length == 1) return zips[0].Url;
         foreach (var matches in new Func<string, bool>[]
                  {
+                     name => Plain(Path.GetFileNameWithoutExtension(name)) == Plain(slug),
                      name => name.Contains(slug, StringComparison.OrdinalIgnoreCase),
                      name => Plain(name).Contains(Plain(slug), StringComparison.Ordinal),
                      name => name.Contains("addon", StringComparison.OrdinalIgnoreCase) || name.Contains("plugin", StringComparison.OrdinalIgnoreCase)

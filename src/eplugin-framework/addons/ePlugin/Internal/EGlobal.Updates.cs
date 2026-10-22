@@ -81,13 +81,6 @@ internal sealed partial class EGlobal
         }).Where(t => t is not null).Cast<PluginUpdateTarget>().Concat(ExtensionAddonSlugs().Select(ExtensionAddonTarget)).ToArray();
     }
 
-    /// <summary>
-    /// The targets a check looks for updates of: not GDExtension add-ons whose version ePlugin does not know, since any
-    /// release would look like an update of them. Their versions are listed and installed from the ePlugin Manager.
-    /// </summary>
-    private static PluginUpdateTarget[] Checked(IReadOnlyList<PluginUpdateTarget> targets) =>
-        targets.Where(t => t.Kind != PluginKind.GDExtensionAddon || t.InstalledVersion.Length > 0).ToArray();
-
     public async Task<UpdateCheckResult> CheckForUpdatesAsync(bool force = false)
     {
         if (_updateService is null || _updateCache is null || _ePluginContext is null)
@@ -113,7 +106,7 @@ internal sealed partial class EGlobal
                 return cached;
             }
             var service = _updateService;
-            var result = await Task.Run(() => service.CheckAsync(Checked(targets), new(), ct), ct).ConfigureAwait(false);
+            var result = await Task.Run(() => service.CheckAsync(targets, new(), ct), ct).ConfigureAwait(false);
             await OnEditorThread(() => { _remoteUpdates = result.Updates; result = result with { Updates = PendingUpdates }; PrintUpdates(result, force); }, ct).ConfigureAwait(false);
             return result;
         }

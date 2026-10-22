@@ -590,6 +590,15 @@ public class UpdateTransactionTests
             journal.Save(UpdatePhase.InterimBuilt);
         }
         Assertions.AssertThat(new UpdateJournals(root).Read().Select(j => j.Id).ToArray()).ContainsExactly("b-first", "a-second", "c-third");
+
+        // a journal Load refuses is logged and skipped, not thrown at every caller
+        var invalid = new UpdateJournal { Id = "d-invalid", Directory = Path.Combine(root, "d-invalid"), AttemptId = Guid.NewGuid(), CreatedUtc = created };
+        invalid.Plugins.Add(new() { Slug = "d-invalid", OldVersion = "1.0.0", NewVersion = "not a version" });
+        Directory.CreateDirectory(invalid.Directory);
+        invalid.Save(UpdatePhase.InterimBuilt);
+        var log = new List<string>();
+        Assertions.AssertThat(new UpdateJournals(root, log.Add).Read().Select(j => j.Id).ToArray()).ContainsExactly("b-first", "a-second", "c-third");
+        Assertions.AssertString(log.Single()).Contains("Invalid plugin in update journal");
     }
     [TestCase]
     public void CleanupFailureAfterAcknowledgementNeverRollsBackWorkingFiles()

@@ -381,14 +381,17 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         else
         {
             var local = _global.ListLocalVersions(target);
-            var remote = _updates.RemoteVersions.GetValueOrDefault(target.Slug) ?? [];
+            // Until the update site's versions are listed, or when they cannot be (e.g. a rate limit), an add-on of unknown
+            // version offers the latest release a check found.
+            IReadOnlyList<UpdateCandidate> remote = _updates.RemoteVersions.GetValueOrDefault(target.Slug)
+                ?? (_global.UpdateCache is { } cache && UpdateScheduler.CachedLatest(cache, target) is { } cached ? [cached] : []);
             string? missing = null;
             if (target.UpdateUrls.Count > 0 && !_updates.RemoteVersions.ContainsKey(target.Slug))
             {
                 if (_updates.RemoteVersionErrors.TryGetValue(target.Slug, out var error)) missing = "Versions from the update site are unavailable: " + error;
                 else { missing = "Loading versions from the update site..."; Run(LoadVersionsAsync(target), "Loading versions"); }
             }
-            if (local.Count == 0 && missing is not null)
+            if (local.Count == 0 && remote.Count == 0 && missing is not null)
             {
                 var loading = _updates.IsLoadingVersions(target.Slug);
                 SetVersionPlaceholder(loading ? "Loading versions..." : PluginManagerViewModel.VersionText(row.Plugin) + " (installed)", loading ? null : missing);
@@ -477,6 +480,9 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _versionConfirm.DialogText = (option.IsReinstall
                 ? $"Reinstall {row.Plugin.Name} {row.Plugin.Version}?\n\n{PluginManagerViewModel.VersionSource(option)}. Its files replace the installed ones: " +
                   "this brings in new commits of a git branch and undoes changes made to the plugin's folder in the project.\n\n"
+                : option.ReplacesUnknown
+                ? $"Install {row.Plugin.Name} {option.Version}?\n\n{PluginManagerViewModel.VersionSource(option)}. Its files replace the installed ones, " +
+                  "whose version ePlugin does not know because it did not install them. From then on, updates are found.\n\n"
                 : $"Replace {row.Plugin.Name} {row.Plugin.Version} with version {option.Version}?\n\n") +
             (option.IsDowngrade
                 ? "Use this to undo an update that broke the project. Project code or saved data that already relies on the newer version may stop working. "
