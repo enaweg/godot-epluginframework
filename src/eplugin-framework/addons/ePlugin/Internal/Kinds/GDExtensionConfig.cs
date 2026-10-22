@@ -250,7 +250,8 @@ internal sealed partial record GDExtensionConfig(bool Reloadable, IReadOnlyList<
 
     /// <summary>
     /// Whether the editor running here would load the library of <paramref name="feature"/>: its operating system, an
-    /// architecture tag that is missing or this machine's, and no release-only tag.
+    /// architecture tag that is missing or the editor process's, and no release-only tag. Godot loads the library of
+    /// its own architecture, which differs from the machine's when it runs emulated (an x86_64 editor on Windows on ARM).
     /// </summary>
     public static bool MatchesThisEditor(string feature)
     {
@@ -258,7 +259,7 @@ internal sealed partial record GDExtensionConfig(bool Reloadable, IReadOnlyList<
         var os = OperatingSystem.IsWindows() ? "windows" : OperatingSystem.IsMacOS() ? "macos" : OperatingSystem.IsLinux() ? "linux" : null;
         if (os is null || !tags.Contains(os, StringComparer.Ordinal)) return false;
         if (tags.Any(t => t is "release" or "template_release")) return false;
-        var architecture = RuntimeInformation.OSArchitecture switch
+        var architecture = RuntimeInformation.ProcessArchitecture switch
         {
             Architecture.X64 => "x86_64", Architecture.X86 => "x86_32", Architecture.Arm64 => "arm64", Architecture.Arm => "arm32", _ => ""
         };
