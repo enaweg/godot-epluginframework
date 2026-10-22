@@ -1,8 +1,8 @@
 {
- "commit": "88a5d445577c347ec6852e5d56d073bca25576b2",
- "date": "2026-10-22T08:22:22Z",
- "covered": 8240,
- "coverable": 10246,
+ "commit": "5443f1344f6aeaaadcd21a194c48138a9178c491",
+ "date": "2026-10-22T09:17:14Z",
+ "covered": 8244,
+ "coverable": 10264,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -209,8 +209,8 @@
    9
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/AboutDialog.cs": [
-   19,
-   47
+   23,
+   65
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.cs": [
    53,
