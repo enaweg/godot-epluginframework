@@ -4,15 +4,17 @@ Pull requests and pushes to `main` run the following checks:
 
 | Workflow / job | What it checks | Failure policy |
 | --- | --- | --- |
-| [CI-Analysis / managed-analysis](../.github/workflows/ci-analysis.yml) | SDK analyzers, compiler diagnostics, and NuGet Audit for the framework, progress helper and helper tests | Build errors, high/critical dependency vulnerabilities, and failure to retrieve vulnerability data fail the job. Existing analyzer warnings remain informational. |
-| [CI-Analysis / workflow-lint](../.github/workflows/ci-analysis.yml) | All Actions workflow files, expressions, action inputs, and embedded Bash scripts through actionlint and ShellCheck | Lint findings fail the job. |
+| [CI-Analysis-Jobs / managed-analysis](../.github/workflows/ci-analysis-jobs.yml) | SDK analyzers, compiler diagnostics, and NuGet Audit for the framework, progress helper and helper tests | Build errors, high/critical dependency vulnerabilities, and failure to retrieve vulnerability data fail the job. Existing analyzer warnings remain informational. |
+| [CI-Analysis-Jobs / workflow-lint](../.github/workflows/ci-analysis-jobs.yml) | All Actions workflow files, expressions, action inputs, and embedded Bash scripts through actionlint and ShellCheck | Lint findings fail the job. |
 | [CI-CodeQL / codeql-csharp](../.github/workflows/ci-codeql.yml) | C# security dataflow with the `security-extended` query suite | Extraction, build or analysis failures fail the job; security findings are reported through GitHub's separate code-scanning results check. |
 | [CI-PR](../.github/workflows/ci-pr.yml) | Existing .NET/Godot compatibility and native progress-helper tests | Build, runtime test and smoke-test failures fail the relevant matrix job. |
 
 CodeQL also runs weekly on Monday at 05:23 UTC and supports manual dispatch.
-CI-Analysis runs on its own for `main` and supports manual dispatch; for pull requests the CI-PR workflow calls it
-(as its `analysis` job), so its summary becomes part of the PR's single CI comment. The PR packaging/title workflows
-remain PR-only, and the release workflow remains tag-triggered.
+The analysis jobs live in the reusable CI-Analysis-Jobs workflow. CI-Analysis calls it for `main` and manual dispatch;
+for pull requests the CI-PR workflow calls it (as its `analysis` job), so its summary becomes part of the PR's single CI
+comment. CI-Analysis itself must not get a `workflow_call` trigger: GitHub then finds none of its push runs, and the
+README badge shows "no status". The PR packaging/title workflows remain PR-only, and the release workflow remains
+tag-triggered.
 
 ## Analyzer policy and reports
 

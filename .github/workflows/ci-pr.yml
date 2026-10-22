@@ -24,9 +24,9 @@ jobs:
       pull-requests: write
 
   analysis:
-    # Runs on its own for main.
+    # CI-Analysis runs the same jobs for main.
     if: ${{ github.event_name == 'pull_request' }}
-    uses: ./.github/workflows/ci-analysis.yml
+    uses: ./.github/workflows/ci-analysis-jobs.yml
     permissions:
       contents: read
       security-events: write
