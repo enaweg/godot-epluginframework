@@ -17,8 +17,8 @@
 ![Godot 4.6](https://img.shields.io/badge/Godot-v4.6-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
 ![Godot 4.7](https://img.shields.io/badge/Godot-v4.7-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
 
-![Dotnet 8](https://img.shields.io/badge/8-02020?logo=dotnet&logoSize=auto&logoColor=purple&color=darkgreen&labelColor=E0E0E0)
-![Dotnet 10](https://img.shields.io/badge/10-02020?logo=dotnet&logoSize=auto&logoColor=purple&color=darkgreen&labelColor=E0E0E0)
+![Dotnet 8](https://img.shields.io/badge/8-202020?logo=dotnet&logoSize=auto&logoColor=purple&color=darkgreen&labelColor=E0E0E0)
+![Dotnet 10](https://img.shields.io/badge/10-202020?logo=dotnet&logoSize=auto&logoColor=purple&color=darkgreen&labelColor=E0E0E0)
 
 </div>
 
@@ -26,9 +26,9 @@ ePlugin Framework adds declarative dependency and resource management to Godot e
 
 ## Requirements and installation
 
-The project targets `net8.0`. The current CI-tested setup is [Godot 4.7.2 .NET](https://godotengine.org/download/archive/4.7.2-stable/) with the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0). Other tested combinations are listed under [Testing](#testing).
+The project targets `net8.0`. The current CI-tested setup is [Godot 4.7.2 .NET](https://godotengine.org/download/archive/4.7.2-stable/) with the [.NET 8](https://dotnet.microsoft.com/download/dotnet/8.0) and [.NET 10](https://dotnet.microsoft.com/download/dotnet/10.0) SDKs. Other tested combinations are listed under [Testing](#testing).
 
-Install [ePlugin Framework from the Godot Asset Store](https://store.godotengine.org/asset/enaweg/eplugin-framework/), or download a [release](https://github.com/enaweg/godot-epluginframework/releases) and copy its `addons/ePlugin` directory into your project's `addons` folder. Open the project in the Godot .NET editor, enable **ePlugin** under **Project > Project Settings > Plugins**, then enable the ePlugins you want to use.
+Install [ePlugin Framework from the Godot Asset Store](https://store.godotengine.org/asset/enaweg/eplugin-framework/), or download a [release](https://github.com/enaweg/godot-epluginframework/releases) and copy its `addons/ePlugin` directory into your project's `addons` folder. Open the project in the Godot .NET editor and build it (**Build** at the top right; a project without C# code needs **Project > Tools > C# > Create C# solution** first), so Godot can load the plugin's C# script. Then enable **ePlugin** under **Project > Project Settings > Plugins**, followed by the ePlugins you want to use.
 
 Release archives include a small shared progress helper (about 80 KB) that runs on the installed .NET runtime and draws its window with native UI. Source checkouts generate the helper during a normal build. Linux needs GTK 3 for that window. Plugin operations continue if the helper is missing or fails. Asset Library distributions should use the release archive to include the helper.
 
@@ -42,9 +42,9 @@ For plugin authors:
 - **Managed directories** keep plugin code that needs those packages or projects hidden (for example as `.src`) until the plugin is enabled, so the plugin's root code always compiles. A GDExtension in them must be reloadable; it is loaded when the directory is shown and unloaded before it is hidden.
 - **Plugin dependencies** enable required C#, GDScript or GDExtension plugins first (GDExtensions without `plugin.cfg` are always available), check version constraints, and disable dependants when a required plugin is disabled. Dependency cycles fail the activation instead of stalling it.
 - **Optional dependencies** apply a nested resource recipe only while another plugin is enabled and matches its version, in whichever order the two are enabled. They never enable the other plugin or fail the declaring plugin's activation.
-- **Licenses, welcome pages, and links** can be declared in the recipe or in `plugin.cfg`; by default the plugin's `LICENSE` and README are used. `documentation_url` and `source_url` appear in the ePlugin Manager.
+- **Licenses and welcome pages** can be declared in the recipe or in `plugin.cfg`; by default the plugin's `LICENSE` and README are used. **Links**: `documentation_url` and `source_url` in `plugin.cfg` appear in the ePlugin Manager.
 - **Startup initializers** let code in managed directories run `IInitialize` callbacks once the framework is ready.
-- **Progress and logging APIs**: `EPlugin.Progress` shows a C# plugin's own long-running editor work in the progress window, and a logging plugin can take over ePlugin's logging.
+- **Progress and logging**: `EPlugin.Progress` shows a C# plugin's own long-running editor work in the progress window. A logging plugin such as [godot-elogger](https://github.com/enaweg/godot-elogger) can take over ePlugin's logging; there is no public API for that, but plugin code is compiled into the project's assembly, so it can pass its `ILoggerFactory` to the internal `EGlobal.Instance.SwitchLogging` once ePlugin is initialized.
 - **Updatable releases** need only an `update_url` in `plugin.cfg` pointing at GitHub, GitLab, Forgejo or Gitea (Codeberg) releases or a Git repository.
 - **GDScript plugins** get updates, licenses, welcome pages, links, and can be dependencies of ePlugins, with only keys in `plugin.cfg` and no code. See [GDScript plugins](docs/gdscript-plugins.md).
 - **GDExtension plugins** (plugins with a `plugin.cfg` that ship native libraries) get the same, and ePlugins can ship a GDExtension too. Updates replace the libraries the editor has loaded and reload them in place or restart the editor, after checking the Godot versions and platforms the new libraries support. GDExtensions without a `plugin.cfg` are listed and updated too, with the version ePlugin installed. See [GDExtension plugins](docs/gdextension-plugins.md).
@@ -101,7 +101,7 @@ Static analysis also runs SDK analyzers, dependency vulnerability auditing, work
 
 The tests also measure the framework's line coverage. The PR's CI comment shows its coverage, the change against `main` and which of its changed lines no test runs; the history of `main` is kept on the [`coverage` branch](https://github.com/enaweg/godot-epluginframework/tree/coverage). See [Code coverage](docs/code-coverage.md).
 
-Every pull request is also packaged like a release by the **CI-PR-Build** workflow, which CI-PR runs first. Its ZIP carries the PR number as a semver prerelease (`0.9.1` becomes `0.9.1-pr.42`), so the release of that version still counts as an update. Its download link is posted as the pull request's CI comment as soon as the package is built; when all jobs have finished, CI-PR updates that one comment with the result of each job, the static analysis and the coverage. Pull requests from forks find all of it in the workflow run's summary. Downloading needs a GitHub login. Copy the archive's `addons/ePlugin` directory into a project to try the change.
+Every pull request is also packaged like a release by the **CI-PR-Build** workflow, which CI-PR runs first. Its ZIP carries the PR number as a semver prerelease (`0.12.0` becomes `0.12.0-pr.42`), so the release of that version still counts as an update. Its download link is posted as the pull request's CI comment as soon as the package is built; when all jobs have finished, CI-PR updates that one comment with the result of each job, the static analysis and the coverage. Pull requests from forks find all of it in the workflow run's summary. Downloading needs a GitHub login. Copy the archive's `addons/ePlugin` directory into a project to try the change.
 
 ```bash
 cd src/eplugin-framework

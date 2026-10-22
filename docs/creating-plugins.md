@@ -20,7 +20,7 @@ public partial class SamplePlugin : EditorPlugin, IEEditorPlugin
     {
         builder
             .AddNuget("Serilog", "4.0.0")
-            .AddProject("res://addons/my_plugin/Support.csproj", "My Plugin", true)
+            .AddProject("res://addons/my_plugin/.support/Support.csproj", "My Plugin", true)
             .AddAutoload("MyPluginService", "res://addons/my_plugin/service.tscn")
             .AddDirectory("res://addons/my_plugin/.src");
     }
@@ -49,24 +49,24 @@ public partial class SamplePlugin : EditorPlugin, IEEditorPlugin
 `IEEditorPluginBuilder` supports these declarations:
 
 - `AddNuget(name, version?, source?)` adds a NuGet package. Omit the version to use the latest stable version. `AddNugets(names...)` adds several packages. External and local feeds are recorded in the project's root `nuget.config`.
-- `AddProject(path, addReference?)` adds a project to the solution and, unless `addReference` is `false`, references it from the main Godot project. `AddProject(path, virtualFolderName, addReference?)` also places it under a solution folder (`null` for none). The path may be a `res://` path, relative to the project root, or absolute.
+- `AddProject(path, addReference?)` adds a project to the solution and, unless `addReference` is `false`, references it from the main Godot project. `AddProject(path, virtualFolderName, addReference?)` also places it under a solution folder (`null` for none). The path may be a `res://` path, relative to the project root, or absolute. Keep each project in its own folder whose name starts with `.`, such as `.support`: the main Godot project compiles every `.cs` file below it except in hidden folders, so it would otherwise compile the project's sources too, and a project in the plugin's own folder would also compile the plugin's script.
 - `AddAutoload(name, path)` registers an autoload singleton while the plugin is enabled.
 - `AddDirectory(path)` makes a plugin directory available while enabled and hides it while disabled, by renaming it with or without a leading `.` (and setting the hidden attribute on Windows). Ship managed source directories in hidden form, such as `.src`, so they are inert until activation. The path may name either form (`src` or `.src`). A directory already in the wanted state is left alone and a missing one is only reported as a warning; only both forms existing at once fails. A GDExtension (a `.gdextension` file and its libraries) in a managed directory must be reloadable: showing the directory loads it, and hiding it unloads it first, because Godot keeps its libraries open and the directory could otherwise not be renamed. A managed directory with a GDExtension that is not reloadable fails the activation (see [GDExtension plugins](gdextension-plugins.md#gdextensions-in-managed-directories)).
 - `AddPluginDependency(slug, version?)` requires another C#, GDScript or GDExtension plugin, or a [GDExtension without `plugin.cfg`](gdextension-plugins.md#gdextensions-without-plugincfg), which is always loaded and never enabled for it. The framework enables it first and disables dependants if it is turned off. A version such as `">=2.0.0"` means that version or higher (`">2.0.0"` means the same, for older recipes); an exact version such as `"1.2.3"` requires that version. Versions are written like `plugin.cfg` versions, with an optional `v`, two to four numbers, a prerelease suffix and build metadata, and only their numbers are compared: `1.2` equals `1.2.0`, and `1.2.3-beta.1` satisfies `1.2.3`. Every recipe already depends on `ePlugin`; naming it adds a version constraint. A plugin that depends on itself, also through other plugins, fails to activate and the cycle is logged.
 - `SetLicense(license)` sets the plugin's license, either as text (BBCode allowed) or as a `res://` path to a file. See [Plugin licenses](plugin-licenses.md#in-the-recipe).
 - `SetWelcome(welcome)` sets the welcome page shown once after the plugin is installed, either as text (BBCode allowed) or as a `res://` path to a file. See [Plugin welcome pages](plugin-welcome.md#in-the-recipe).
-- `AddOptionalPluginDependency(slug, version?, recipe)` declares resources needed only when another plugin is already enabled and matches the constraint. The other plugin is never enabled automatically and a missing or mismatched plugin does not fail activation.
+- `AddOptionalPluginDependency(slug, version, recipe)` declares resources needed only when another plugin is already enabled and matches the constraint (`null` for any version). The other plugin is never enabled automatically and a missing or mismatched plugin does not fail activation.
 
-Declarations are checked when the recipe is created: an empty name or path, an invalid NuGet package id or project path, a malformed plugin slug or version constraint, and declarations that contradict each other (one package with two versions, a plugin that is both a required and an optional dependency) throw an `ArgumentException`. The activation then fails with that message, shown in the ePlugin Manager. Declaring the same thing twice counts once.
+Declarations are checked when the recipe is created: an empty name or path, an invalid NuGet package id or project path, a malformed plugin slug or version constraint, and declarations that contradict each other (one package with two versions, a plugin that is both a required and an optional dependency) throw an `ArgumentException`. The activation then fails with that message, shown in the ePlugin Manager. Declaring the same thing twice counts once, except an optional dependency, whose resources must be declared in one call.
 
 Deactivation reverses the recipe. Removing a NuGet package, project reference, or solution entry that is already gone, for example because it was removed by hand, is reported as a warning and counts as done.
 
 Optional dependencies are re-evaluated when either plugin is enabled or disabled, also when the optional plugin is a GDScript plugin toggled in **Project Settings > Plugins**, so activation order does not matter. Disabling the optional plugin removes the nested recipe while leaving the declaring plugin active. Nested recipes receive `IEEditorPluginRecipeBuilder`, which supports resources but cannot declare dependencies of its own.
 
 ```csharp
-builder.AddOptionalPluginDependency("other-plugin", ">1.0.0", optional => optional
+builder.AddOptionalPluginDependency("other-plugin", ">=1.0.0", optional => optional
     .AddNuget("MyPlugin.Integration")
-    .AddProject("res://addons/my_plugin/Integration.csproj")
+    .AddProject("res://addons/my_plugin/.integration/Integration.csproj")
     .AddAutoload("IntegrationService", "res://addons/my_plugin/integration.tscn")
     .AddDirectory($"{this.GetPluginDirectory()}/.optional-src"));
 ```
@@ -97,12 +97,15 @@ The framework shows a plugin's welcome page once per project after the plugin is
 
 ## Plugin helpers and startup initializers
 
-The `EditorPlugin` extensions `GetPluginSlug()`, `GetPluginDirectory()`, `ReadMetadata()`, and `Cli()` help recipes locate plugin files, read metadata, and access the .NET CLI abstraction. See the [sample project](../src/eplugin-framework/addons/sample_plugin) for a complete example.
+The `EditorPlugin` extensions `GetPluginSlug()`, `GetPluginDirectory()`, `ReadMetadata()`, and `Cli()` help recipes locate plugin files, read metadata, and access the .NET CLI abstraction. The [added-code sample](../src/eplugin-framework/addons/sample_addedcode_plugin) and the [optional-dependency sample](../src/eplugin-framework/addons/sample_optional_plugin) use `GetPluginDirectory()` for their managed directories.
 
 Code in a managed directory can implement `IInitialize`. Register it with `EPlugin.RegisterInitializer` to receive its `Initialize(IEPlugin)` callback once the framework is ready, after every startup and C# assembly reload. A module initializer is a convenient place to register it, because it runs whenever the assembly is loaded:
 
 ```csharp
 #if TOOLS
+using System.Runtime.CompilerServices;
+using Enaweg.Plugin;
+
 public class MyInitializer : IInitialize
 {
     public void Initialize(IEPlugin ePlugin) => ePlugin.Logger.Log("My plugin code is ready.");
@@ -116,8 +119,7 @@ public static class MyInitializerSetup
 #endif
 ```
 
-Wrap code that uses ePlugin in `#if TOOLS`, like the plugin itself: the framework exists only in the editor, so an
-exported game does not compile it otherwise.
+Wrap code that uses ePlugin in `#if TOOLS`, like the plugin itself: the framework exists only in the editor, so an exported game does not compile it otherwise.
 
 An `EditorPlugin` that implements `IInitialize` itself is initialized when the framework first sees it, without registering. An initializer that throws is logged and does not keep the others from running. `IEPlugin.Logger` writes to ePlugin's log. The [added-code sample](../src/eplugin-framework/addons/sample_addedcode_plugin) demonstrates this pattern.
 
