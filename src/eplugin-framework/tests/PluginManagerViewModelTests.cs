@@ -332,6 +332,8 @@ public class PluginManagerViewModelTests
         Assertions.AssertString(about.StoreUrl).IsEqual(AboutInfo.StorePage);
         Assertions.AssertString(about.SourceUrl).IsEqual("https://example.org/source");
         Assertions.AssertString(about.DocumentationUrl).IsNull();
+        // A star always goes to the project itself, also when source_url names another repository.
+        Assertions.AssertString(about.StarUrl).IsEqual(AboutInfo.StarPage);
 
         // Without the framework's entry, e.g. a removed plugin.cfg, the repository's links remain.
         var fallback = AboutInfo.From(null);
