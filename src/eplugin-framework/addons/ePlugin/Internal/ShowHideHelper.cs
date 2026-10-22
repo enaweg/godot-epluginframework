@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Enaweg.Plugin.Internal.Kinds;
+using Enaweg.Plugin.Internal.Update;
 using Godot;
 
 namespace Enaweg.Plugin.Internal;
@@ -28,6 +29,7 @@ internal static class ShowHideHelper
     {
         var (shown, hidden) = Forms(directory);
         var baseDirectory = BaseDirectory(plugin);
+        RefuseEnclosingDirectory(directory, shown, baseDirectory);
         if (shown.Exists && hidden.Exists) throw Conflict(shown, hidden, baseDirectory);
         if (shown.Exists)
         {
@@ -59,6 +61,7 @@ internal static class ShowHideHelper
     {
         var (shown, hidden) = Forms(directory);
         var baseDirectory = BaseDirectory(plugin);
+        RefuseEnclosingDirectory(directory, shown, baseDirectory);
         if (shown.Exists && hidden.Exists) throw Conflict(shown, hidden, baseDirectory);
         if (hidden.Exists)
         {
@@ -94,6 +97,20 @@ internal static class ShowHideHelper
     /// </summary>
     internal static IReadOnlyList<(string File, GDExtensionConfig? Config)> Extensions(DirectoryInfo directory) =>
         GDExtensionConfig.ReadAll(directory.FullName).Select(e => (Path.Combine(directory.FullName, e.Key), e.Value)).ToArray();
+
+    /// <summary>
+    /// Refuses the plugin's own directory and the ones that hold it (the add-ons folder, the project): renaming one of
+    /// them would hide the plugin itself, or everything else with it.
+    /// </summary>
+    private static void RefuseEnclosingDirectory(string directory, DirectoryInfo shown, string? baseDirectory)
+    {
+        if (baseDirectory is null) return;
+        var plugin = Path.TrimEndingDirectorySeparator(baseDirectory) + Path.DirectorySeparatorChar;
+        var managed = Path.TrimEndingDirectorySeparator(shown.FullName) + Path.DirectorySeparatorChar;
+        if (plugin.StartsWith(managed, PackageFiles.PathComparison))
+            throw new InvalidOperationException($"The managed directory {directory} is the plugin's own directory or holds it. " +
+                "Only directories inside the plugin can be added with AddDirectory.");
+    }
 
     /// <summary>Refuses to show a directory with a GDExtension that could not be unloaded to hide it again.</summary>
     private static void RefuseFixedExtensions(DirectoryInfo hidden, string? baseDirectory)

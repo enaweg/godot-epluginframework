@@ -460,7 +460,8 @@ outside any `ILogger` (or `[StackTraceHidden]` method) as the location; without 
 without a leading `.` (POSIX-style hidden dirs) and toggling the Windows hidden attribute. Used for shipping
 plugin source that should stay inert until the plugin is activated. A recipe may name either form (`src` or `.src`).
 A directory already in the wanted state is left alone and one missing in both forms is only logged as a warning. It fails
-when both forms exist at once (neither can be renamed onto the other) or when a GDExtension inside is not reloadable or
+when both forms exist at once (neither can be renamed onto the other), when it names the plugin's own directory or one
+holding it (`res://addons`, the project) or when a GDExtension inside is not reloadable or
 cannot be unloaded.
 
 ## Commit and PR messages
