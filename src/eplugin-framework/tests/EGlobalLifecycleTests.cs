@@ -3,7 +3,9 @@ using System;
 using System.IO;
 using System.Linq;
 using Enaweg.Plugin.Internal;
+using Enaweg.Plugin.Internal.Welcomes;
 using GdUnit4;
+using Godot;
 
 namespace Enaweg.Plugin.Tests;
 
@@ -558,6 +560,21 @@ public class EGlobalLifecycleTests : IDisposable
         Assertions.AssertThat(welcomes.Select(w => w.Slug).ToArray()).ContainsExactly("app");
         _fixture.Global.CompleteWelcomes(welcomes);
         Assertions.AssertBool(_fixture.Store.IsWelcomeShown("app")).IsTrue();
+    }
+
+    [TestCase]
+    public void HiddenWelcomePagesAreNeitherHandedOutNorRecorded()
+    {
+        _fixture.AddEPlugin("app", b => b.SetWelcome("[b]Hello[/b]"));
+        _fixture.Host.Dialogs = true;
+        _fixture.Enable("app");
+        ProjectSettings.SetSetting(WelcomeSettings.HideKey, true);
+        try
+        {
+            Assertions.AssertObject(_fixture.Global.TakeWelcomes()).IsNull();
+            Assertions.AssertBool(_fixture.Store.IsWelcomeShown("app")).IsFalse();
+        }
+        finally { ProjectSettings.SetSetting(WelcomeSettings.HideKey, false); }
     }
 
     [TestCase]

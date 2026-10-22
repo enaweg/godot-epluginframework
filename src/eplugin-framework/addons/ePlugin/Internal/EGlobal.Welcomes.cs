@@ -36,7 +36,7 @@ internal sealed partial class EGlobal
         }
 
         _nextWelcomeCheck = frame + WelcomeCheckFrames;
-        if (_stateStore is null || _stateStore.IsReadOnly || !LicenseUiAvailable || !WelcomeQuiet)
+        if (WelcomeSettings.Hide || _stateStore is null || _stateStore.IsReadOnly || !LicenseUiAvailable || !WelcomeQuiet)
         {
             return null;
         }
