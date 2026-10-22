@@ -346,7 +346,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
                 if (recovery == UpdateRecovery.Outcome.Restart)
                 {
                     ActivationProgress.PrepareForRestart();
-                    EditorInterface.Singleton.CallDeferred(EditorInterface.MethodName.RestartEditor, true);
+                    host.RestartEditor();
                 }
                 ReleaseReopenProgress();
             }

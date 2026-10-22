@@ -187,6 +187,26 @@ internal sealed class FakeEditorHost(LifecycleFixture fixture) : IEditorHost
 
     public void ScanFilesystem() => Scans++;
 
+    public bool IsScanningFilesystem { get; set; }
+
+    /// <summary>How often "Import Resources When Unfocused" was turned off, and how often back on.</summary>
+    public (int Suspended, int Restored) UnfocusedImports { get; private set; }
+
+    public IDisposable SuspendUnfocusedImports()
+    {
+        UnfocusedImports = (UnfocusedImports.Suspended + 1, UnfocusedImports.Restored);
+        return new Restore(() => UnfocusedImports = (UnfocusedImports.Suspended, UnfocusedImports.Restored + 1));
+    }
+
+    public int Restarts { get; private set; }
+
+    public void RestartEditor() => Restarts++;
+
+    private sealed class Restore(Action restore) : IDisposable
+    {
+        public void Dispose() => restore();
+    }
+
     public string? GetAutoload(string name) => Autoloads.GetValueOrDefault(name);
 
     public void AddAutoload(EditorPlugin plugin, string name, string path) => Autoloads[name] = path;

@@ -33,7 +33,7 @@ internal sealed partial class UpdateReviewDialog : ConfirmationDialog, ISerializ
     }
 
     /// <summary>Opens above the ePlugin Manager.</summary>
-    public void Open() => EditorInterface.Singleton.PopupDialogCenteredClamped(this, Size, 0.9f);
+    public void Open() => EditorWindows.Popup(this);
 
     private void Initialize(UpdateReview review, Action<bool> finished)
     {

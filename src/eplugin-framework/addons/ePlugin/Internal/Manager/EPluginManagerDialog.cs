@@ -556,10 +556,15 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private static string? SlugOf(TreeItem? item) =>
         item?.GetMetadata(NameColumn).VariantType == Variant.Type.String ? item.GetMetadata(NameColumn).AsString() : null;
 
-    private void ItemEdited()
+    private void ItemEdited() => CellEdited(_tree.GetEdited(), _tree.GetEditedColumn());
+
+    /// <summary>
+    /// A check box of the list was clicked: selects an update for the batch, or enables or disables the plugin. Tests
+    /// call it directly, as only a click sets the tree's edited cell.
+    /// </summary>
+    internal void CellEdited(TreeItem? item, int column)
     {
         if (!IsInitialized) return;
-        var item = _tree.GetEdited();
         var row = SlugOf(item) is { } slug ? _model.Find(slug) : null;
         if (item is null || row is null) return;
         if (Busy)
@@ -569,12 +574,12 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             CallDeferred(MethodName.Render);
             return;
         }
-        if (_tree.GetEditedColumn() == VersionColumn && row.Update is { } update)
+        if (column == VersionColumn && row.Update is { } update)
         {
             update.Selected = item.IsChecked(VersionColumn);
             Buttons();
         }
-        else if (_tree.GetEditedColumn() == EnabledColumn)
+        else if (column == EnabledColumn)
         {
             var enable = item.IsChecked(EnabledColumn);
             if (!enable && row.Plugin.Kind == PluginKind.Framework)

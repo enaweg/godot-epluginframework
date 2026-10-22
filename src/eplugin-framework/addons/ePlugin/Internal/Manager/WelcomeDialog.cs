@@ -39,7 +39,7 @@ internal sealed partial class WelcomeDialog : AcceptDialog, ISerializationListen
     }
 
     /// <summary>Opens above whatever exclusive editor window is open, e.g. Project Settings or the ePlugin Manager.</summary>
-    public void Open() => EditorInterface.Singleton.PopupDialogCenteredClamped(this, Size, 0.9f);
+    public void Open() => EditorWindows.Popup(this);
 
     private void Initialize(WelcomeEntry[] welcomes, Action<IReadOnlyList<WelcomeEntry>>? closed)
     {

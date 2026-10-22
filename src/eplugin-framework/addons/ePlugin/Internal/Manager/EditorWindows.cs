@@ -18,6 +18,21 @@ internal static class EditorWindows
     // Asking for EditorInterface outside the editor logs an error, so it is not asked at all.
     public static Theme? Theme => Engine.IsEditorHint() ? EditorInterface.Singleton.GetEditorTheme() : null;
 
+    /// <summary>
+    /// Opens a dialog that has no parent above whatever exclusive editor window is open, e.g. Project Settings or the
+    /// ePlugin Manager. Without an editor, e.g. in tests, it opens in the scene tree's root.
+    /// </summary>
+    public static void Popup(Window dialog)
+    {
+        if (Engine.IsEditorHint())
+        {
+            EditorInterface.Singleton.PopupDialogCenteredClamped(dialog, dialog.Size, 0.9f);
+            return;
+        }
+        if (!dialog.IsInsideTree()) ((SceneTree)Engine.GetMainLoop()).Root.AddChild(dialog);
+        dialog.PopupCenteredClamped(dialog.Size, 0.9f);
+    }
+
     /// <summary>Scales the sizes a scene authored for 100% editor scale, and shows the ePlugin icon whenever it opens.</summary>
     public static void Prepare(Window window, EditorSignalConnections signals, GodotObject owner, StringName visibilityChanged)
     {

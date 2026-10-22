@@ -125,7 +125,8 @@ plugin's install recipe.
 
 Lifecycle code calls the editor only through `IEditorHost` (toggling plugins, the enabled list, the project root and
 assembly name, the addons folder and plugin directories, the user's editor config folder, the plugin nodes an assembly reload rebuilds contexts from, whether a slug is an
-ePlugin and the recipe of a disabled one, autoloads, filesystem scans, whether dialogs can show);
+ePlugin and the recipe of a disabled one, autoloads, filesystem scans and whether one runs, pausing imports while
+unfocused, restarting the editor, whether dialogs can show);
 keep new lifecycle code behind it so it stays testable. Recipes are created through `TryEnsureRecipe`, which puts the
 plugin in error and discards a half-built recipe when `CreateRecipe` throws. `FindDependencyCycle` fails an activation
 whose hard dependencies lead back to the plugin (otherwise it waits for itself forever). Godot frees a plugin's instance
@@ -326,8 +327,9 @@ otherwise the editor translates the English UI into its own language. An autowra
 `custom_minimum_size` width, or the dialog measures it at zero width and pops up taller than the screen. Scenes are
 authored for 100% editor scale: `EditorWindows.Prepare` scales the window's size and its controls' minimum sizes, and
 plugin BBCode pages go through `PluginManagerViewModel.ScaleFontSizes`. Read the editor's scale and theme through
-`EditorWindows.Scale`/`Theme` (1 and null without an editor), never `EditorInterface.Singleton` directly, so tests can
-create the dialogs (`ManagerDialogTests`). Icons come
+`EditorWindows.Scale`/`Theme` (1 and null without an editor) and open a parentless dialog with `EditorWindows.Popup`,
+never `EditorInterface.Singleton` directly, so tests can create the dialogs (`ManagerDialogTests`) and run the manager
+on `LifecycleFixture` (`PluginManagerDialogTests`, which clicks check boxes through `CellEdited`). Icons come
 from `EditorIcons`, which renders the SVGs at the editor scale (a headless editor re-imports them at 100%) and maps
 their accent colors to the theme's status colors; draw new icons after `docs/internals/editor-icons.md`. `EGlobal.CollectPlugins` scans every `res://addons/<slug>/plugin.cfg`; `PluginCatalog.Classify`
 recognizes disabled ePlugins by the `ScriptPathAttribute` of their compiled type. `PluginManagerViewModel` is pure
