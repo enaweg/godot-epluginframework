@@ -52,6 +52,31 @@ public class IDotnetCliTests
     }
 
     [TestCase]
+    public static void TheProjectIsNamedAfterTheAssemblyAndLocalSourcesAreRelativeToIt()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "eplugin-cli-" + Path.GetRandomFileName());
+        Directory.CreateDirectory(root);
+        try
+        {
+            // Godot names the project after the assembly; the solution may be named otherwise
+            File.WriteAllText(Path.Combine(root, "My Game.sln"), "");
+            File.WriteAllText(Path.Combine(root, "MyGame.csproj"), "<Project />");
+            var runner = new RecordingRunner();
+            var cli = new DotnetCli10(new NullLogger(), false, root, "MyGame", runner);
+            Assertions.AssertString(cli.SolutionPath).IsEqual(Path.Combine(root, "My Game.sln"));
+            Assertions.AssertString(cli.GodotProjectPath).IsEqual(Path.Combine(root, "MyGame.csproj"));
+            Assertions.AssertString(new DotnetCli9(new NullLogger(), false, root, null, runner).GodotProjectPath).IsEqual(Path.Combine(root, "MyGame.csproj"));
+
+            // the CLI's project, not the editor's or its working directory
+            foreach (var source in new[] { "res://feed", "feed", "./feed" })
+                Assertions.AssertString(cli.NugetSource(source)).IsEqual(Path.Combine(root, "feed"));
+            Assertions.AssertString(cli.NugetSource("https://example.org/v3/index.json")).IsEqual("https://example.org/v3/index.json");
+            Assertions.AssertString(cli.NugetSource(Path.Combine(root, "other"))).IsEqual(Path.Combine(root, "other"));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [TestCase]
     public static void TheDetectedGenerationChoosesTheCli()
     {
         foreach (var (version, expected) in new[] { ("10.0.401", typeof(DotnetCli10)), ("11.0.100-preview.1", typeof(DotnetCli10)), ("8.0.425", typeof(DotnetCli9)) })
@@ -113,7 +138,7 @@ public class IDotnetCliTests
 
         AssertCalls(cli9Runner,
             ["dotnet", "build", solution, "--no-incremental"],
-            ["dotnet", "add", project, "package", "Some.Package", "--version", "1.2.3", "--source", ProjectSettings.GlobalizePath("res://feed")],
+            ["dotnet", "add", project, "package", "Some.Package", "--version", "1.2.3", "--source", Path.Combine(ProjectRoot, "feed")],
             ["dotnet", "sln", solution, "add", absolute],
             ["dotnet", "sln", solution, "add", "-s", "Folder", absolute],
             ["dotnet", "add", project, "reference", absolute],

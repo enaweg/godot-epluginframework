@@ -10,7 +10,10 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
     /// <summary>The solution the CLI changes and builds.</summary>
     internal string SolutionPath { get; }
 
-    /// <summary>The main Godot project, next to the solution and named like it.</summary>
+    /// <summary>
+    /// The main Godot project: named after the assembly, else the only project in the project directory, else next to the
+    /// solution and named like it.
+    /// </summary>
     internal string GodotProjectPath { get; }
 
     /// <summary>The Godot project directory, <c>res://</c>.</summary>
@@ -47,7 +50,11 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
         SolutionPath = File.Exists(expectedSolutionPath) || solutions.Length != 1
             ? expectedSolutionPath
             : solutions[0];
-        GodotProjectPath = Path.ChangeExtension(SolutionPath, ".csproj");
+        // Godot names the project after the assembly, also when the solution has another name.
+        var expectedProjectPath = Path.Combine(ProjectRoot, $"{assemblyName}.csproj");
+        GodotProjectPath = assemblyName.Length > 0 && File.Exists(expectedProjectPath) ? expectedProjectPath
+            : Directory.GetFiles(ProjectRoot, "*.csproj") is [var only] ? only
+            : Path.ChangeExtension(SolutionPath, ".csproj");
         AssemblyName = string.IsNullOrEmpty(assemblyName) ? Path.GetFileNameWithoutExtension(GodotProjectPath) : assemblyName;
 
         if (enableDebugLogging)
@@ -122,8 +129,14 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
             return new BuildOutcome(exitCode, output);
         });
 
-    /// <summary>A NuGet source as the CLI takes it: <c>res://</c> and <c>user://</c> paths made absolute, URLs unchanged.</summary>
-    internal static string NugetSource(string source) => ProjectSettings.GlobalizePath(source);
+    /// <summary>
+    /// A NuGet source as the CLI takes it: URLs unchanged, <c>user://</c> made absolute, and local paths like
+    /// <see cref="ProjectFile"/>, relative to the project as <c>nuget.config</c> records them (<see cref="NugetConfigManager"/>).
+    /// </summary>
+    internal string NugetSource(string source) =>
+        source.StartsWith("user://", System.StringComparison.Ordinal) ? ProjectSettings.GlobalizePath(source)
+        : source.StartsWith("res://", System.StringComparison.Ordinal) || !source.Contains("://", System.StringComparison.Ordinal) ? ProjectFile(source)
+        : source;
 
     public abstract void RebuildSolution();
     public abstract void RunTests();
