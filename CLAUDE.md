@@ -68,7 +68,8 @@ dotnet test "tools/ci-reports.Tests/CiReports.Tests.csproj"
 ```
 CI installs that SDK separately (`$RUNNER_TEMP/dotnet-tools`) where the job's own SDK must stay in charge of building and
 testing, so tools that start `dotnet` themselves (coverage.cs) use the `dotnet` on `PATH`. A pull request gets one CI
-comment: CI-PR calls CI-PR-Build (`package`, which posts it early with the download link) and CI-Analysis, and its
+comment: CI-PR calls CI-PR-Build (`package`, which posts it early with the download link) and CI-Analysis-Jobs (which
+CI-Analysis calls for `main`; keep CI-Analysis free of `workflow_call`, or its README badge shows no status), and its
 `pr-comment` job replaces it with every job's result and the `pr-comment-*` report artifacts once all jobs finish
 (`.github/actions/pr-comment` finds it by its marker). Don't post further comments; add a section instead.
 Alternative: gdUnit4's own CLI runner (`src/eplugin-framework/addons/gdUnit4/runtest.cmd` /
