@@ -192,6 +192,19 @@ public class EGlobalEditorStateTests : IDisposable
     }
 
     [TestCase]
+    public void AFrameworkDisabledBeforeItInitializedIsRecordedInTheEditorsProject()
+    {
+        // an instance without a state store, like one dropped by an assembly reload before Initialize ran again
+        var global = new EGlobal(_fixture.Host);
+
+        global.RecordFrameworkDisabled(_fixture.Framework);
+
+        var store = new PluginStateStore(Path.Combine(_fixture.Root, "addons", "eplugin-state.json"), null);
+        store.Load();
+        Assertions.AssertObject(store.GetShared(_fixture.Framework.GetPluginSlug())!.State).IsEqual(PersistedPluginState.Deactivated);
+    }
+
+    [TestCase]
     public void APluginsOwnCallbacksInstallAndRemoveItsRecipeThroughThePublicApi()
     {
         // Godot enables the plugin, then calls its _EnablePlugin, which calls this.EnableEPlugin()

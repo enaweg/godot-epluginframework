@@ -71,6 +71,74 @@ public class SettingsDialogTests
     }
 
     [TestCase]
+    public static void TheGeneralTabShowsTheCurrentProjectSettingsWhenOpened()
+    {
+        UpdateSettings.Register(); LicenseSettings.Register(); WelcomeSettings.Register(); LoggingSettings.Register();
+        var dialog = GD.Load<PackedScene>(ScenePath).Instantiate<SettingsDialog>();
+        try
+        {
+            var general = dialog.GetNode<GeneralSettingsTab>("%SettingsTabs/General");
+            general.Initialize();
+            foreach (var control in GeneralSettingsTab.SettingControls(general))
+            {
+                switch (control)
+                {
+                    case CheckBox check: check.SetPressedNoSignal(!check.ButtonPressed); break;
+                    case SpinBox spin: spin.SetValueNoSignal(spin.MinValue == spin.Value ? spin.MaxValue : spin.MinValue); break;
+                    case OptionButton option: option.Select(-1); break;
+                }
+            }
+
+            general.Open();
+
+            foreach (var control in GeneralSettingsTab.SettingControls(general))
+            {
+                var value = ProjectSettings.GetSetting(GeneralSettingsTab.SettingOf(control));
+                switch (control)
+                {
+                    case CheckBox check: Assertions.AssertBool(check.ButtonPressed).IsEqual(value.AsBool()); break;
+                    case SpinBox spin: Assertions.AssertFloat(spin.Value).IsEqual(value.AsDouble()); break;
+                    case OptionButton option: Assertions.AssertString(GeneralSettingsTab.Values(option)[option.Selected]).IsEqual(value.AsString()); break;
+                }
+            }
+            Assertions.AssertBool(dialog.GetNode<Label>("%GeneralStatus").Visible).IsFalse();
+        }
+        finally { dialog.Free(); }
+    }
+
+    [TestCase]
+    public static void TheAboutTabLinksOnlyWebAddresses()
+    {
+        var dialog = GD.Load<PackedScene>(ScenePath).Instantiate<SettingsDialog>();
+        try
+        {
+            var about = dialog.GetNode<AboutTab>("%SettingsTabs/About");
+            about.Initialize();
+            about.Open(new PluginInfo("ePlugin", "ePlugin Framework", Enaweg.Plugin.Internal.Kinds.PluginKind.Framework, true)
+            {
+                Version = "1.2.3", Author = AboutInfo.Publisher, Description = " Plugins for plugins. ", SourceUrl = "https://example.org/fork",
+                DocumentationUrl = "file:///docs"
+            });
+
+            Assertions.AssertString(dialog.GetNode<Label>("%AboutVersion").Text).IsEqual("Version 1.2.3 · by");
+            Assertions.AssertString(dialog.GetNode<LinkButton>("%AuthorLink").Uri).IsEqual(AboutInfo.PublisherPage);
+            Assertions.AssertString(dialog.GetNode<Label>("%AboutDescription").Text).IsEqual("Plugins for plugins.");
+            Assertions.AssertString(dialog.GetNode<LinkButton>("%SourceLink").Uri).IsEqual("https://example.org/fork");
+            Assertions.AssertBool(dialog.GetNode<LinkButton>("%DocumentationLink").Visible).IsFalse();
+            Assertions.AssertBool(dialog.GetNode<PanelContainer>("%StarNote").Visible).IsTrue();
+            Assertions.AssertObject(dialog.GetNode<TextureRect>("%AboutLogo").Texture).IsNotNull();
+
+            // without the manager's entry, the defaults are shown
+            about.Open(null);
+            Assertions.AssertString(dialog.GetNode<Label>("%AboutVersion").Text).IsEqual("Version unknown");
+            Assertions.AssertBool(dialog.GetNode<LinkButton>("%AuthorLink").Visible).IsFalse();
+            Assertions.AssertBool(dialog.GetNode<Label>("%AboutDescription").Visible).IsFalse();
+            Assertions.AssertString(dialog.GetNode<LinkButton>("%DocumentationLink").Uri).IsEqual(AboutInfo.DefaultDocumentation);
+        }
+        finally { dialog.Free(); }
+    }
+
+    [TestCase]
     public static void TheGeneralTabBindsEveryProjectSettingOfThePluginWithItsTypeAndValues()
     {
         UpdateSettings.Register(); LicenseSettings.Register(); WelcomeSettings.Register(); LoggingSettings.Register();

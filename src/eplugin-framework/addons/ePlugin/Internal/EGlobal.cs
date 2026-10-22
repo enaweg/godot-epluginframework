@@ -63,6 +63,9 @@ internal sealed partial class EGlobal
 
     private readonly IEditorHost _host;
 
+    /// <summary>The shared plugin state, <c>addons/eplugin-state.json</c> of the host's project.</summary>
+    private string StateFilePath => Path.GetFullPath(Path.Combine(_host.ProjectRoot, "addons", "eplugin-state.json"));
+
     private EGlobal() : this(new EditorHost())
     {
     }
@@ -83,6 +86,9 @@ internal sealed partial class EGlobal
         _instance = global;
         return new Deferral(() => _instance = previous);
     }
+
+    /// <summary>The editor this instance works with, e.g. for the project's folder.</summary>
+    internal IEditorHost Host => _host;
 
     /// <summary>The plugin contexts, for tests.</summary>
     internal List<PluginContext> Contexts => _contexts;
@@ -152,8 +158,7 @@ internal sealed partial class EGlobal
             context.Cli = GetCli(context.Logger);
         }
 
-        _stateStore = new PluginStateStore(
-            Path.GetFullPath(ProjectSettings.GlobalizePath("res://addons/eplugin-state.json")), plugin.Logger);
+        _stateStore = new PluginStateStore(StateFilePath, plugin.Logger);
         _stateStore.Load();
         InitializeUpdateJournals();
         ReloadContexts(_loggerFactory, false);
@@ -255,8 +260,7 @@ internal sealed partial class EGlobal
 
     public void RecordFrameworkDisabled(EPluginPlugin plugin)
     {
-        _stateStore ??= new PluginStateStore(
-            Path.GetFullPath(ProjectSettings.GlobalizePath("res://addons/eplugin-state.json")), plugin.Logger);
+        _stateStore ??= new PluginStateStore(StateFilePath, plugin.Logger);
         if (!_stateStore.HasSharedFile && !_stateStore.IsReadOnly)
         {
             _stateStore.Load();
@@ -755,7 +759,7 @@ internal sealed partial class EGlobal
 
     public IDotnetCli? GetCli(ILogger? logger)
     {
-        return CliService?.Create(logger);
+        return CliService?.Create(logger, _host.ProjectRoot, _host.AssemblyName);
     }
 
     private void EnsureEEditorPluginEnabled(PluginContext context)

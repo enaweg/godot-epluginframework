@@ -48,6 +48,9 @@ internal abstract class ExecuteCliBase(ILogger? logger, bool enableDebugLogging,
 {
     private readonly IProcessRunner _runner = runner ?? GodotProcessRunner.Instance;
 
+    /// <summary>The project directory, which the debug log shortens to <c>&lt;project&gt;</c>; null for commands without one.</summary>
+    protected virtual string? LoggedProjectRoot => null;
+
     /// <param name="args">One argument per element and without quotes, also for paths containing spaces.</param>
     protected (int, string[]) ExecuteCall(string cmd, string[] args)
     {
@@ -55,9 +58,10 @@ internal abstract class ExecuteCliBase(ILogger? logger, bool enableDebugLogging,
         {
             if (enableDebugLogging)
             {
-                var pathToSolution = Path.GetFullPath(ProjectSettings.GlobalizePath("res://"));
-                logger?.Log(
-                    $"Executing: {cmd} {string.Join(" ", args).Replace(pathToSolution, $"<project>{Path.DirectorySeparatorChar}")}");
+                var line = string.Join(" ", args);
+                if (LoggedProjectRoot is { } root)
+                    line = line.Replace(Path.TrimEndingDirectorySeparator(root) + Path.DirectorySeparatorChar, $"<project>{Path.DirectorySeparatorChar}");
+                logger?.Log($"Executing: {cmd} {line}");
             }
 
             var (exitVal, output) = _runner.Run(cmd, args);

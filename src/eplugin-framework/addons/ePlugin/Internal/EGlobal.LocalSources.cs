@@ -29,10 +29,9 @@ internal sealed partial class EGlobal
     /// <summary>Raised on the editor thread when indexing starts or a new index is in place.</summary>
     internal event Action? LocalIndexChanged;
 
-    private void InitializeLocalSources()
+    internal void InitializeLocalSources()
     {
-        // The editor's configuration folder belongs to the user and is shared by all projects and Godot versions.
-        var config = EditorInterface.Singleton.GetEditorPaths().GetConfigDir();
+        var config = _host.ConfigDirectory;
         _localSources = new LocalSourceSettings(Path.Combine(config, "eplugin", "local-sources.json"));
         _localIndexCache = new LocalIndexCache(Path.Combine(config, "eplugin", "local-index.json"));
         _localSources.Load();

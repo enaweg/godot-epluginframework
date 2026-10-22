@@ -26,8 +26,20 @@ internal interface IEditorHost
     /// <summary>The project's folder (<c>res://</c>) as an absolute path, where update journals and backups are kept.</summary>
     string ProjectRoot { get; }
 
+    /// <summary>
+    /// The C# assembly the project builds (<c>dotnet/project/assembly_name</c>), which names its solution; empty to find
+    /// the solution by itself.
+    /// </summary>
+    string AssemblyName { get; }
+
     /// <summary>The folder holding every plugin's directory, as a path Godot's file APIs can read.</summary>
     string AddonsDirectory { get; }
+
+    /// <summary>
+    /// The editor's configuration folder as an absolute path. It belongs to the user and is shared by all projects and
+    /// Godot versions, e.g. for the list of local directories.
+    /// </summary>
+    string ConfigDirectory { get; }
 
     /// <summary>The directory of a plugin, which holds its <c>plugin.cfg</c>, as a path Godot's file APIs can read.</summary>
     string PluginDirectory(string slug);
@@ -52,6 +64,18 @@ internal interface IEditorHost
 
     /// <summary>Asks the editor to look at the project's files again, unless it is scanning already.</summary>
     void ScanFilesystem();
+
+    /// <summary>Whether the editor is scanning the project's files; an update waits until it is done.</summary>
+    bool IsScanningFilesystem { get; }
+
+    /// <summary>
+    /// Turns off "Import Resources When Unfocused" until the result is disposed. While the editor is unfocused, that
+    /// setting rescans every half second; a project whose rescan takes longer never becomes idle.
+    /// </summary>
+    IDisposable SuspendUnfocusedImports();
+
+    /// <summary>Restarts the editor after the current frame, saving the project first.</summary>
+    void RestartEditor();
 
     /// <summary>The path registered for an autoload, without the leading <c>*</c> of a singleton; null when there is none.</summary>
     string? GetAutoload(string name);
@@ -82,7 +106,11 @@ internal sealed class EditorHost : IEditorHost
 
     public string ProjectRoot => ProjectSettings.GlobalizePath("res://");
 
+    public string AssemblyName => ProjectSettings.GetSetting("dotnet/project/assembly_name").AsString();
+
     public string AddonsDirectory => "res://addons";
+
+    public string ConfigDirectory => EditorInterface.Singleton.GetEditorPaths().GetConfigDir();
 
     public string PluginDirectory(string slug) => $"{AddonsDirectory}/{slug}";
 
@@ -127,6 +155,34 @@ internal sealed class EditorHost : IEditorHost
         if (!filesystem.IsScanning())
         {
             filesystem.Scan();
+        }
+    }
+
+    public bool IsScanningFilesystem => EditorInterface.Singleton.GetResourceFilesystem().IsScanning();
+
+    public IDisposable SuspendUnfocusedImports() => UnfocusedImportSuspension.Begin();
+
+    public void RestartEditor() => EditorInterface.Singleton.CallDeferred(EditorInterface.MethodName.RestartEditor, true);
+
+    private sealed class UnfocusedImportSuspension : IDisposable
+    {
+        // Recent Godot versions keep the setting under behavior/; older ones do not.
+        private static readonly string[] Keys = ["interface/editor/behavior/import_resources_when_unfocused", "interface/editor/import_resources_when_unfocused"];
+        private readonly string[] _suspended;
+        private UnfocusedImportSuspension(string[] suspended) => _suspended = suspended;
+
+        public static UnfocusedImportSuspension Begin()
+        {
+            var settings = EditorInterface.Singleton.GetEditorSettings();
+            var suspended = Keys.Where(key => settings.HasSetting(key) && settings.GetSetting(key).AsBool()).ToArray();
+            foreach (var key in suspended) settings.SetSetting(key, false);
+            return new(suspended);
+        }
+
+        public void Dispose()
+        {
+            var settings = EditorInterface.Singleton.GetEditorSettings();
+            foreach (var key in _suspended) settings.SetSetting(key, true);
         }
     }
 

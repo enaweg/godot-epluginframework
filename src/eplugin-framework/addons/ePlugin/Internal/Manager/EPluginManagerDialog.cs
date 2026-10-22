@@ -121,7 +121,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _tree.SetColumnTitle(EnabledColumn, "On"); _tree.SetColumnTitle(NameColumn, "Plugin"); _tree.SetColumnTitle(VersionColumn, "Version");
         _tree.SetColumnExpand(EnabledColumn, false); _tree.SetColumnExpand(NameColumn, false); _tree.SetColumnExpand(VersionColumn, true);
         foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm }) EditorWindows.Prepare(window, _signals, this, nameof(QueueWindowIcons));
-        var scale = EditorInterface.Singleton.GetEditorScale();
+        var scale = EditorWindows.Scale;
         _tree.SetColumnCustomMinimumWidth(EnabledColumn, (int)(40 * scale));
         _tree.SetColumnCustomMinimumWidth(VersionColumn, (int)(VersionMinimumWidth * scale));
         // The scene's line spacing of the details, which keeps their links apart, is for 100% editor scale.
@@ -162,7 +162,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private void RefreshTheme()
     {
         if (!GodotObject.IsInstanceValid(this) || _global is null) return;
-        var editorTheme = EditorInterface.Singleton.GetEditorTheme();
+        var editorTheme = EditorWindows.Theme;
         if (editorTheme is not null && editorTheme.HasIcon("Folder", "EditorIcons"))
         { _openFolder.Icon = editorTheme.GetIcon("Folder", "EditorIcons"); _openFolder.Text = ""; }
         // The editor's labels indent their text; the details text starts where theirs does.
@@ -278,7 +278,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     /// </summary>
     private void FitColumns()
     {
-        var scale = EditorInterface.Singleton.GetEditorScale();
+        var scale = EditorWindows.Scale;
         var font = _tree.GetThemeFont("font"); var fontSize = _tree.GetThemeFontSize("font_size");
         var separation = _tree.GetThemeConstant("h_separation");
         var margins = _tree.GetThemeConstant("inner_item_margin_left") + _tree.GetThemeConstant("inner_item_margin_right") + 2 * separation;
@@ -556,10 +556,15 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private static string? SlugOf(TreeItem? item) =>
         item?.GetMetadata(NameColumn).VariantType == Variant.Type.String ? item.GetMetadata(NameColumn).AsString() : null;
 
-    private void ItemEdited()
+    private void ItemEdited() => CellEdited(_tree.GetEdited(), _tree.GetEditedColumn());
+
+    /// <summary>
+    /// A check box of the list was clicked: selects an update for the batch, or enables or disables the plugin. Tests
+    /// call it directly, as only a click sets the tree's edited cell.
+    /// </summary>
+    internal void CellEdited(TreeItem? item, int column)
     {
         if (!IsInitialized) return;
-        var item = _tree.GetEdited();
         var row = SlugOf(item) is { } slug ? _model.Find(slug) : null;
         if (item is null || row is null) return;
         if (Busy)
@@ -569,12 +574,12 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             CallDeferred(MethodName.Render);
             return;
         }
-        if (_tree.GetEditedColumn() == VersionColumn && row.Update is { } update)
+        if (column == VersionColumn && row.Update is { } update)
         {
             update.Selected = item.IsChecked(VersionColumn);
             Buttons();
         }
-        else if (_tree.GetEditedColumn() == EnabledColumn)
+        else if (column == EnabledColumn)
         {
             var enable = item.IsChecked(EnabledColumn);
             if (!enable && row.Plugin.Kind == PluginKind.Framework)
@@ -672,7 +677,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         using var progress = ActivationProgress.Begin((enable ? "Enabling " : "Disabling ") + name + "...");
         try
         {
-            EditorInterface.Singleton.SetPluginEnabled(slug, enable);
+            _global.SetPluginEnabled(slug, enable);
             // a plain plugin's dependants and optional recipes, before the list below shows them
             _global.ObservePluginToggles();
         }
@@ -690,7 +695,14 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         // The framework removes this dialog while it is disabled.
         Hide();
         var slug = _model.Plugins.First(p => p.Plugin.Kind == PluginKind.Framework).Plugin.Slug;
-        EditorInterface.Singleton.CallDeferred(EditorInterface.MethodName.SetPluginEnabled, slug, false);
+        // Not inside the confirmation's signal: disabling the framework releases this dialog.
+        CallDeferred(MethodName.DisableFrameworkNow, slug);
+    }
+
+    private void DisableFrameworkNow(string slug)
+    {
+        // An assembly reload replaced this dialog since the click; nothing is disabled without asking again.
+        if (IsInitialized) _global.SetPluginEnabled(slug, false);
     }
 
     private void OpenRelease()
@@ -801,7 +813,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
 
     private static Color ThemeColor(string name, string type, Color fallback)
     {
-        var theme = EditorInterface.Singleton.GetEditorTheme();
+        var theme = EditorWindows.Theme;
         return theme is not null && theme.HasColor(name, type) ? theme.GetColor(name, type) : fallback;
     }
     private static Color UpdateColor() => EditorIcons.SuccessColor;

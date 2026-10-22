@@ -39,7 +39,7 @@ internal sealed partial class WelcomeDialog : AcceptDialog, ISerializationListen
     }
 
     /// <summary>Opens above whatever exclusive editor window is open, e.g. Project Settings or the ePlugin Manager.</summary>
-    public void Open() => EditorInterface.Singleton.PopupDialogCenteredClamped(this, Size, 0.9f);
+    public void Open() => EditorWindows.Popup(this);
 
     private void Initialize(WelcomeEntry[] welcomes, Action<IReadOnlyList<WelcomeEntry>>? closed)
     {
@@ -68,7 +68,7 @@ internal sealed partial class WelcomeDialog : AcceptDialog, ISerializationListen
         _source.Text = PluginLicense.Display(entry.Slug, entry.Source);
         _source.TooltipText = _source.Text;
         // the welcome page is BBCode; a problem is plain text
-        var scale = EditorInterface.Singleton.GetEditorScale();
+        var scale = EditorWindows.Scale;
         _text.Text = entry.Problem is null ? PluginManagerViewModel.ScaleFontSizes(entry.Text, scale) : $"[color=#ff7070]{entry.Problem.Replace("[", "[lb]")}[/color]";
         _text.ScrollToLine(0);
     }

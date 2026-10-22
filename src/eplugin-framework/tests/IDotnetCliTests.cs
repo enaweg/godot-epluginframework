@@ -29,6 +29,8 @@ public class IDotnetCliTests
 
     private static string ProjectRoot => Path.GetFullPath(ProjectSettings.GlobalizePath("res://"));
 
+    private static string AssemblyName => ProjectSettings.GetSetting("dotnet/project/assembly_name").AsString();
+
     [TestCase]
     public static void VersionTest()
     {
@@ -43,7 +45,7 @@ public class IDotnetCliTests
     {
         var expectedPath = Path.Combine(ProjectRoot, "EPluginFramework.csproj");
 
-        foreach (var cli in new DotnetCliBase[] { new DotnetCli9(new NullLogger(), false), new DotnetCli10(new NullLogger(), false) })
+        foreach (var cli in new DotnetCliBase[] { new DotnetCli9(new NullLogger(), false, ProjectRoot, AssemblyName), new DotnetCli10(new NullLogger(), false, ProjectRoot, AssemblyName) })
         {
             Assertions.AssertThat(cli.GodotProjectPath).IsEqual(expectedPath);
         }
@@ -58,8 +60,8 @@ public class IDotnetCliTests
             var manager = new DotnetVersionManager(new NullLogger(), false, runner);
 
             Assertions.AssertString(manager.DotnetVersion).IsEqual(version);
-            Assertions.AssertObject(manager.Create(new NullLogger())).IsInstanceOf<IDotnetCli>();
-            Assertions.AssertString(manager.Create(new NullLogger()).GetType().Name).IsEqual(expected.Name);
+            Assertions.AssertObject(manager.Create(new NullLogger(), ProjectRoot, AssemblyName)).IsInstanceOf<IDotnetCli>();
+            Assertions.AssertString(manager.Create(new NullLogger(), ProjectRoot, AssemblyName).GetType().Name).IsEqual(expected.Name);
             Assertions.AssertThat(runner.Calls.Single()).ContainsExactly("dotnet", "--version");
         }
     }
@@ -74,7 +76,7 @@ public class IDotnetCliTests
 
             Assertions.AssertBool(manager.IsDotnetAvailable).IsFalse();
             Assertions.AssertObject(manager.DotnetVersion).IsNull();
-            Assertions.AssertString(manager.Create(new NullLogger()).GetType().Name).IsEqual(nameof(DotnetCli9));
+            Assertions.AssertString(manager.Create(new NullLogger(), ProjectRoot, AssemblyName).GetType().Name).IsEqual(nameof(DotnetCli9));
         }
     }
 
@@ -99,7 +101,7 @@ public class IDotnetCliTests
         var absolute = Path.Combine(ProjectRoot, "addons", "other", "Other.csproj");
 
         var cli9Runner = new RecordingRunner();
-        var cli9 = new DotnetCli9(new NullLogger(), false, cli9Runner);
+        var cli9 = new DotnetCli9(new NullLogger(), false, ProjectRoot, AssemblyName, cli9Runner);
         cli9.TryBuild();
         cli9.AddNugetToProject("Some.Package", "1.2.3", "res://feed");
         cli9.TryAddProjectToSolution("res://addons/other/Other.csproj", null);
@@ -120,7 +122,7 @@ public class IDotnetCliTests
             ["dotnet", "restore", "--force"]);
 
         var cli10Runner = new RecordingRunner();
-        var cli10 = new DotnetCli10(new NullLogger(), false, cli10Runner);
+        var cli10 = new DotnetCli10(new NullLogger(), false, ProjectRoot, AssemblyName, cli10Runner);
         cli10.TryBuild();
         cli10.AddNugetToProject("Some.Package", null, "https://example.org/v3/index.json", prerelease: true);
         cli10.TryAddProjectToSolution("res://addons/other/Other.csproj", "Folder");
@@ -146,8 +148,8 @@ public class IDotnetCliTests
         {
             var runner = new RecordingRunner();
             DotnetCliBase cli = generation == 9
-                ? new DotnetCli9(new NullLogger(), false, runner)
-                : new DotnetCli10(new NullLogger(), false, runner);
+                ? new DotnetCli9(new NullLogger(), false, ProjectRoot, AssemblyName, runner)
+                : new DotnetCli10(new NullLogger(), false, ProjectRoot, AssemblyName, runner);
             Assertions.AssertBool(cli.TryRemoveNugetFromProject("Not.Referenced.Package")).IsTrue();
             Assertions.AssertBool(cli.TryRemoveProjectReference("res://addons/missing/Missing.csproj")).IsTrue();
             Assertions.AssertBool(cli.TryRemoveProjectFromSolution("res://addons/missing/Missing.csproj")).IsTrue();
@@ -160,7 +162,7 @@ public class IDotnetCliTests
     public static void AFailingCommandIsReportedWithoutThrowing()
     {
         // a command that cannot start answers without output; the error message must not need any
-        foreach (DotnetCliBase cli in new DotnetCliBase[] { new DotnetCli9(new NullLogger(), false, new RecordingRunner(-1)), new DotnetCli10(new NullLogger(), false, new RecordingRunner(-1)) })
+        foreach (DotnetCliBase cli in new DotnetCliBase[] { new DotnetCli9(new NullLogger(), false, ProjectRoot, AssemblyName, new RecordingRunner(-1)), new DotnetCli10(new NullLogger(), false, ProjectRoot, AssemblyName, new RecordingRunner(-1)) })
         {
             Assertions.AssertBool(cli.AddNugetToProject("Some.Package", "1.0.0")).IsFalse();
             Assertions.AssertBool(cli.AddNugetToProject("Some.Package")).IsFalse();
@@ -179,8 +181,8 @@ public class IDotnetCliTests
             var log = new List<string>();
             var runner = new RecordingRunner();
             DotnetCliBase cli = generation == 9
-                ? new DotnetCli9(new RecordingLogger(log, "cli"), true, runner)
-                : new DotnetCli10(new RecordingLogger(log, "cli"), true, runner);
+                ? new DotnetCli9(new RecordingLogger(log, "cli"), true, ProjectRoot, AssemblyName, runner)
+                : new DotnetCli10(new RecordingLogger(log, "cli"), true, ProjectRoot, AssemblyName, runner);
 
             cli.RebuildSolution();
             cli.AddProjectToSolution("addons/other/Other.csproj");
@@ -212,8 +214,8 @@ public class IDotnetCliTests
             var log = new List<string>();
             var runner = new RecordingRunner();
             DotnetCliBase cli = generation == 9
-                ? new DotnetCli9(new RecordingLogger(log, "cli"), false, runner)
-                : new DotnetCli10(new RecordingLogger(log, "cli"), false, runner);
+                ? new DotnetCli9(new RecordingLogger(log, "cli"), false, ProjectRoot, AssemblyName, runner)
+                : new DotnetCli10(new RecordingLogger(log, "cli"), false, ProjectRoot, AssemblyName, runner);
 
             Assertions.AssertBool(cli.TryRemoveProjectReference("addons/other/readme.txt")).IsFalse();
             Assertions.AssertBool(cli.TryRemoveProjectFromSolution("addons/other/readme.txt")).IsFalse();
@@ -227,7 +229,7 @@ public class IDotnetCliTests
     public static void ARunnerThatThrowsIsReportedAsAFailedCommand()
     {
         var log = new List<string>();
-        var cli = new DotnetCli10(new RecordingLogger(log, "cli"), false, new ThrowingRunner());
+        var cli = new DotnetCli10(new RecordingLogger(log, "cli"), false, ProjectRoot, AssemblyName, new ThrowingRunner());
 
         Assertions.AssertInt(cli.Execute("restore", []).Item1).IsEqual(-1);
         Assertions.AssertBool(cli.TryRebuildSolution()).IsFalse();
@@ -258,8 +260,8 @@ public class IDotnetCliTests
                 File.WriteAllText(Path.Combine(root, "Game.sln"),
                     "Microsoft Visual Studio Solution File, Format Version 12.00\n# Visual Studio Version 17\nGlobal\nEndGlobal\n");
                 DotnetCliBase cli = generation == 9
-                    ? new DotnetCli9(new NullLogger(), false, projectRoot: root)
-                    : new DotnetCli10(new NullLogger(), false, projectRoot: root);
+                    ? new DotnetCli9(new NullLogger(), false, root)
+                    : new DotnetCli10(new NullLogger(), false, root);
                 const string lib = "res://addons/my lib/Lib.csproj"; // a path with a space, as a res:// path
                 bool References() => File.ReadAllText(Path.Combine(root, "Game.csproj")).Contains("Lib.csproj");
                 bool Contains() => File.ReadAllText(Path.Combine(root, "Game.sln")).Contains("Lib.csproj");
@@ -293,7 +295,7 @@ public class IDotnetCliTests
             foreach (var generation in new[] { 9, 10 })
             {
                 var runner = new RecordingRunner();
-                DotnetCliBase cli = generation == 9 ? new DotnetCli9(new NullLogger(), false, runner) : new DotnetCli10(new NullLogger(), false, runner);
+                DotnetCliBase cli = generation == 9 ? new DotnetCli9(new NullLogger(), false, ProjectRoot, AssemblyName, runner) : new DotnetCli10(new NullLogger(), false, ProjectRoot, AssemblyName, runner);
                 cli.TryBuildPluginsOnly(build);
                 AssertCalls(runner, ["dotnet", "build", project, "-c", "Debug", "--no-incremental",
                     "-p:CustomAfterMicrosoftCommonTargets=" + build.TargetsFile, "-p:OutDir=" + build.OutputDirectory,
@@ -329,8 +331,8 @@ public class IDotnetCliTests
             File.WriteAllText(Path.Combine(root, "Lib", "Lib.cs"), "public static class Lib { public static int Run() => Missing.Value; }");
             var sdk = new DotnetVersionManager(new NullLogger(), false);
             DotnetCliBase cli = DotnetVersionManager.ParseMajorVersion(sdk.DotnetVersion) >= 10
-                ? new DotnetCli10(new NullLogger(), false, projectRoot: root)
-                : new DotnetCli9(new NullLogger(), false, projectRoot: root);
+                ? new DotnetCli10(new NullLogger(), false, root)
+                : new DotnetCli9(new NullLogger(), false, root);
             var full = cli.Execute("build", [Path.Combine(root, "Game.csproj")]);
             Assertions.AssertInt(full.Item1).IsNotEqual(0);
             Assertions.AssertObject(BuildDiagnostics.Classify(full.Item2, root).Cause).IsEqual(BuildFailureCause.ProjectCode);
@@ -376,8 +378,8 @@ public class IDotnetCliTests
                 File.SetLastWriteTimeUtc(Path.Combine(output, "Game.dll"), built);
                 var failing = new BuildingRunner(() => { Directory.Delete(output, true); Directory.CreateDirectory(output); return 1; });
                 DotnetCliBase cli = generation == 9
-                    ? new DotnetCli9(new NullLogger(), false, failing, root)
-                    : new DotnetCli10(new NullLogger(), false, failing, root);
+                    ? new DotnetCli9(new NullLogger(), false, root, runner: failing)
+                    : new DotnetCli10(new NullLogger(), false, root, runner: failing);
 
                 Assertions.AssertInt(cli.TryBuild().ExitCode).IsEqual(1);
                 Assertions.AssertString(File.ReadAllText(Path.Combine(output, "Game.dll"))).IsEqual("old");
@@ -387,13 +389,13 @@ public class IDotnetCliTests
                 Assertions.AssertBool(Directory.Exists(Path.Combine(root, ".godot", "eplugin", "build-output"))).IsFalse();
 
                 var succeeding = new BuildingRunner(() => { File.WriteAllText(Path.Combine(output, "Game.dll"), "new"); return 0; });
-                cli = generation == 9 ? new DotnetCli9(new NullLogger(), false, succeeding, root) : new DotnetCli10(new NullLogger(), false, succeeding, root);
+                cli = generation == 9 ? new DotnetCli9(new NullLogger(), false, root, runner: succeeding) : new DotnetCli10(new NullLogger(), false, root, runner: succeeding);
                 Assertions.AssertInt(cli.TryBuild().ExitCode).IsEqual(0);
                 Assertions.AssertString(File.ReadAllText(Path.Combine(output, "Game.dll"))).IsEqual("new");
 
                 // A build that failed after the project compiled keeps the new assembly.
                 var lateFailure = new BuildingRunner(() => { File.WriteAllText(Path.Combine(output, "Game.dll"), "newer"); return 1; });
-                cli = generation == 9 ? new DotnetCli9(new NullLogger(), false, lateFailure, root) : new DotnetCli10(new NullLogger(), false, lateFailure, root);
+                cli = generation == 9 ? new DotnetCli9(new NullLogger(), false, root, runner: lateFailure) : new DotnetCli10(new NullLogger(), false, root, runner: lateFailure);
                 Assertions.AssertInt(cli.TryBuild().ExitCode).IsEqual(1);
                 Assertions.AssertString(File.ReadAllText(Path.Combine(output, "Game.dll"))).IsEqual("newer");
             }

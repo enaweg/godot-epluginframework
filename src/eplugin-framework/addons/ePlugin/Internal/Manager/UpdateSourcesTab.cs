@@ -53,7 +53,7 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
         _folderDialog = GetNode<FileDialog>("%LocalSourceFolderDialog");
         // Column titles and sizing are not scene properties of Tree.
         _tree.SetColumnTitle(PluginColumn, "Plugin"); _tree.SetColumnTitle(SourceColumn, "Update source");
-        _tree.SetColumnExpand(PluginColumn, false); _tree.SetColumnCustomMinimumWidth(PluginColumn, (int)(220 * EditorInterface.Singleton.GetEditorScale()));
+        _tree.SetColumnExpand(PluginColumn, false); _tree.SetColumnCustomMinimumWidth(PluginColumn, (int)(220 * EditorWindows.Scale));
         _signals.Connect(_rescan, BaseButton.SignalName.Pressed, Callable.From(() => { _error = null; _ = _global.RebuildLocalIndexAsync(); }));
         _signals.Connect(_addSite, BaseButton.SignalName.Pressed, Callable.From(() => OpenEditor(null)));
         _signals.Connect(_addDirectory, BaseButton.SignalName.Pressed, Callable.From(() => _folderDialog.PopupCentered()));
@@ -338,7 +338,7 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
 
     private static Color ThemeColor(string name, string type, Color fallback)
     {
-        var theme = EditorInterface.Singleton.GetEditorTheme();
+        var theme = EditorWindows.Theme;
         return theme is not null && theme.HasColor(name, type) ? theme.GetColor(name, type) : fallback;
     }
     private static Color ErrorColor() => ThemeColor("error_color", "Editor", new Color(1f, 0.47f, 0.42f));

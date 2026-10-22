@@ -227,6 +227,26 @@ public class EGlobalUpdateResumeTests : IDisposable
     }
 
     [TestCase]
+    public void TheJournalOfAFailedUpdateIsFoundByItsAttemptAndOnlyAKeptUpdateIsRolledBackOnRequest()
+    {
+        var attempt = Attempt();
+        Assertions.AssertBool(_fixture.Store.TryFail(attempt, PersistedPluginState.Failed, "update_commit_failed")).IsTrue();
+        Journal(UpdatePhase.RolledBack, Guid.NewGuid());
+        var journal = Journal(UpdatePhase.Swapped, attempt);
+
+        Assertions.AssertString(_fixture.Global.FailedUpdateJournal("tool")!.Id).IsEqual(journal.Id);
+        Assertions.AssertObject(_fixture.Global.FailedUpdateJournal("other")).IsNull();
+
+        // a journal that was not kept with build errors is left alone
+        _fixture.Global.RollbackKeptUpdate(journal);
+
+        Assertions.AssertBool(_fixture.Log.Any(l => l.StartsWith("error:", StringComparison.Ordinal) && l.Contains("Cannot roll back the kept update"))).IsTrue();
+        Assertions.AssertObject(UpdateJournal.Load(journal.Directory).State).IsEqual(UpdatePhase.Swapped);
+        Assertions.AssertString(Installed).Contains("2.0.0");
+        Assertions.AssertThat(_updates.Toggles).IsEmpty();
+    }
+
+    [TestCase]
     public void RetryReportsAnUpdateWhoseJournalIsGone()
     {
         var attempt = Attempt();

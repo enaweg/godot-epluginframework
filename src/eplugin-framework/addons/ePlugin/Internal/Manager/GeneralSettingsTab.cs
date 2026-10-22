@@ -84,7 +84,7 @@ internal sealed partial class GeneralSettingsTab : VBoxContainer, ISerialization
                 case OptionButton option: option.Select(Array.IndexOf(Values(option), value.AsString())); break;
             }
         }
-        var theme = EditorInterface.Singleton.GetEditorTheme();
+        var theme = EditorWindows.Theme;
         _autoAcceptWarning.AddThemeColorOverride("font_color",
             theme is not null && theme.HasColor("warning_color", "Editor") ? theme.GetColor("warning_color", "Editor") : new Color(1f, 0.87f, 0.4f));
     }

@@ -5,9 +5,9 @@ using Enaweg.Plugin.Logging;
 namespace Enaweg.Plugin.Internal.Dotnet;
 
 /// <summary>The dotnet CLI before .NET 10: <c>dotnet add|remove &lt;project&gt; package|reference</c>.</summary>
-internal sealed class DotnetCli9(ILogger? logger, bool enableDebugLogging, IProcessRunner? runner = null,
-    string? projectRoot = null)
-    : DotnetCliBase(logger, enableDebugLogging, runner, projectRoot)
+internal sealed class DotnetCli9(ILogger? logger, bool enableDebugLogging, string projectRoot, string? assemblyName = null,
+    IProcessRunner? runner = null)
+    : DotnetCliBase(logger, enableDebugLogging, projectRoot, assemblyName, runner)
 {
     private const string CmdDotNet = "dotnet";
 

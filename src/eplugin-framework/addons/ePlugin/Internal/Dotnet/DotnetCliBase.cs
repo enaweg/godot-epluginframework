@@ -22,25 +22,27 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
     /// <summary>Where the editor loads the project assembly from.</summary>
     internal string OutputDirectory => Path.Combine(ProjectRoot, ".godot", "mono", "temp", "bin", "Debug");
 
+    protected override string LoggedProjectRoot => ProjectRoot;
+
     protected readonly ILogger? Logger;
 
-    /// <param name="projectRoot">The Godot project directory; null for the open project. Tests use a scratch project.</param>
-    protected DotnetCliBase(ILogger? logger, bool enableDebugLogging, IProcessRunner? runner = null, string? projectRoot = null)
+    /// <param name="projectRoot">The Godot project directory, <see cref="IEditorHost.ProjectRoot"/>. Tests use a scratch project.</param>
+    /// <param name="assemblyName">The project's <see cref="IEditorHost.AssemblyName"/>; null or empty to use its only solution.</param>
+    protected DotnetCliBase(ILogger? logger, bool enableDebugLogging, string projectRoot, string? assemblyName = null, IProcessRunner? runner = null)
         : base(logger, enableDebugLogging, runner)
     {
         Logger = logger;
-        var pathToSolution = projectRoot ?? ProjectSettings.GlobalizePath("res://");
-        ProjectRoot = Path.GetFullPath(pathToSolution);
-        var assemblyName = projectRoot is null ? ProjectSettings.GetSetting("dotnet/project/assembly_name").AsString() : "";
+        ProjectRoot = Path.GetFullPath(projectRoot);
+        assemblyName ??= "";
         var solutionName = $"{assemblyName}.sln";
 
-        var expectedSolutionPath = Path.GetFullPath(Path.Combine(pathToSolution, solutionName));
+        var expectedSolutionPath = Path.GetFullPath(Path.Combine(ProjectRoot, solutionName));
         // Godot's assembly name need not match the solution name (the sample project uses
         // "MyGame" and "My Game.sln", for example).
-        var solutions = Directory.GetFiles(pathToSolution, "*.sln");
+        var solutions = Directory.GetFiles(ProjectRoot, "*.sln");
         if (solutions.Length == 0)
         {
-            solutions = Directory.GetFiles(pathToSolution, "*.slnx");
+            solutions = Directory.GetFiles(ProjectRoot, "*.slnx");
         }
         SolutionPath = File.Exists(expectedSolutionPath) || solutions.Length != 1
             ? expectedSolutionPath

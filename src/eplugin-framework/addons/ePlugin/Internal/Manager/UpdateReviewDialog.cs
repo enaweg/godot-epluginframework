@@ -33,14 +33,14 @@ internal sealed partial class UpdateReviewDialog : ConfirmationDialog, ISerializ
     }
 
     /// <summary>Opens above the ePlugin Manager.</summary>
-    public void Open() => EditorInterface.Singleton.PopupDialogCenteredClamped(this, Size, 0.9f);
+    public void Open() => EditorWindows.Popup(this);
 
     private void Initialize(UpdateReview review, Action<bool> finished)
     {
         _review = review; _finished = finished;
         _tree = GetNode<Tree>("%ReviewTree"); _name = GetNode<Label>("%ReviewName"); _text = GetNode<RichTextLabel>("%ReviewText");
         EditorWindows.Prepare(this, _signals, this, nameof(QueueWindowIcon));
-        var scale = EditorInterface.Singleton.GetEditorScale();
+        var scale = EditorWindows.Scale;
         _text.AddThemeConstantOverride("line_separation", (int)(_text.GetThemeConstant("line_separation") * scale));
         // Column titles and sizing are not scene properties of Tree.
         _tree.SetColumnTitle(InstallColumn, "Decision"); _tree.SetColumnTitle(NameColumn, "Plugin"); _tree.SetColumnTitle(VersionColumn, "Version");

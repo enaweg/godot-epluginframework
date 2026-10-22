@@ -7,7 +7,6 @@ using System.Text;
 using System.Xml;
 using System.Xml.Linq;
 using Enaweg.Plugin.Logging;
-using Godot;
 
 namespace Enaweg.Plugin.Internal.Dotnet;
 
@@ -30,11 +29,11 @@ internal static class NugetConfigManager
     private const string ManagedKeyPrefix = "ePlugin-";
     private const string UsedByCommentPrefix = "ePlugin-managed used-by=\"";
 
-    public static bool RegisterSource(string pluginSlug, string rawSource, ILogger? logger)
+    public static bool RegisterSource(string projectRoot, string pluginSlug, string rawSource, ILogger? logger)
     {
         try
         {
-            var normalized = Normalize(rawSource);
+            var normalized = Normalize(projectRoot, rawSource);
             if (normalized is null)
             {
                 logger?.Log(
@@ -43,7 +42,7 @@ internal static class NugetConfigManager
             }
 
             var key = ComputeKey(normalized);
-            var configPath = GetConfigPath();
+            var configPath = GetConfigPath(projectRoot);
             var doc = File.Exists(configPath) ? XDocument.Load(configPath) : new XDocument(new XElement("configuration"));
             var root = doc.Root;
             if (root is null)
@@ -93,17 +92,17 @@ internal static class NugetConfigManager
         }
     }
 
-    public static bool UnregisterSource(string pluginSlug, string rawSource, ILogger? logger)
+    public static bool UnregisterSource(string projectRoot, string pluginSlug, string rawSource, ILogger? logger)
     {
         try
         {
-            var normalized = Normalize(rawSource);
+            var normalized = Normalize(projectRoot, rawSource);
             if (normalized is null)
             {
                 return true;
             }
 
-            var configPath = GetConfigPath();
+            var configPath = GetConfigPath(projectRoot);
             if (!File.Exists(configPath))
             {
                 return true;
@@ -189,7 +188,7 @@ internal static class NugetConfigManager
     /// (portable across machines/checkouts) for local directories. Returns <see langword="null"/>
     /// when a local source cannot be expressed relative to the project.
     /// </summary>
-    private static string? Normalize(string rawSource)
+    private static string? Normalize(string projectRoot, string rawSource)
     {
         if (string.IsNullOrWhiteSpace(rawSource))
         {
@@ -202,10 +201,19 @@ internal static class NugetConfigManager
             return rawSource;
         }
 
-        var projectRoot = Path.GetFullPath(ProjectSettings.GlobalizePath("res://"));
-        var fullSourcePath = Path.GetFullPath(ProjectSettings.GlobalizePath(rawSource));
+        // res:// is the project folder; user:// and other schemes never point into it.
+        const string projectScheme = "res://";
+        var isResource = rawSource.StartsWith(projectScheme, StringComparison.Ordinal);
+        if (!isResource && rawSource.Contains("://", StringComparison.Ordinal))
+        {
+            return null;
+        }
 
-        var relative = Path.GetRelativePath(projectRoot, fullSourcePath);
+        var root = Path.GetFullPath(projectRoot);
+        // A relative path is relative to the project, not to the editor's working directory.
+        var fullSourcePath = Path.GetFullPath(Path.Combine(root, isResource ? rawSource[projectScheme.Length..] : rawSource));
+
+        var relative = Path.GetRelativePath(root, fullSourcePath);
         if (relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative))
         {
             // outside the project tree; cannot be represented portably.
@@ -234,9 +242,9 @@ internal static class NugetConfigManager
         return ManagedKeyPrefix + Convert.ToHexString(hash)[..12];
     }
 
-    private static string GetConfigPath()
+    private static string GetConfigPath(string projectRoot)
     {
-        return Path.GetFullPath(Path.Combine(ProjectSettings.GlobalizePath("res://"), "nuget.config"));
+        return Path.GetFullPath(Path.Combine(projectRoot, "nuget.config"));
     }
 
     private static void Save(XDocument doc, string configPath)

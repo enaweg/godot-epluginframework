@@ -163,7 +163,12 @@ internal sealed class FakeEditorHost(LifecycleFixture fixture) : IEditorHost
 
     public string ProjectRoot => fixture.Root;
 
+    public string AssemblyName => "";
+
     public string AddonsDirectory => Path.Combine(fixture.Root, "addons").Replace('\\', '/');
+
+    /// <summary>The user's configuration folder, inside the fixture's temporary folder.</summary>
+    public string ConfigDirectory => Path.Combine(fixture.Root, "config");
 
     public string PluginDirectory(string slug) => fixture.Addon(slug).Replace('\\', '/');
 
@@ -181,6 +186,26 @@ internal sealed class FakeEditorHost(LifecycleFixture fixture) : IEditorHost
     public bool CanShowDialogs(Node framework) => Dialogs;
 
     public void ScanFilesystem() => Scans++;
+
+    public bool IsScanningFilesystem { get; set; }
+
+    /// <summary>How often "Import Resources When Unfocused" was turned off, and how often back on.</summary>
+    public (int Suspended, int Restored) UnfocusedImports { get; private set; }
+
+    public IDisposable SuspendUnfocusedImports()
+    {
+        UnfocusedImports = (UnfocusedImports.Suspended + 1, UnfocusedImports.Restored);
+        return new Restore(() => UnfocusedImports = (UnfocusedImports.Suspended, UnfocusedImports.Restored + 1));
+    }
+
+    public int Restarts { get; private set; }
+
+    public void RestartEditor() => Restarts++;
+
+    private sealed class Restore(Action restore) : IDisposable
+    {
+        public void Dispose() => restore();
+    }
 
     public string? GetAutoload(string name) => Autoloads.GetValueOrDefault(name);
 

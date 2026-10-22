@@ -202,6 +202,18 @@ public class PluginManagerViewModelTests
         Assertions.AssertString(PluginCatalog.ResolveScript("res://addons/x", "res://other/Plugin.cs")).IsEqual("res://other/Plugin.cs");
     }
     [TestCase]
+    public static void EveryKindHasItsOwnWorkflow()
+    {
+        var kinds = Enum.GetValues<PluginKind>();
+        Assertions.AssertInt(kinds.Select(k => PluginKinds.Workflow(k).Kind).Distinct().Count()).IsEqual(kinds.Length);
+        Assertions.AssertInt(kinds.Select(PluginCatalog.KindName).Distinct().Count()).IsEqual(kinds.Length);
+        Assertions.AssertString(PluginCatalog.KindName(PluginKind.CSharp)).IsEqual("C# plugin");
+        // Godot runs a plain plugin's code from its folder, so it is disabled while the folder is swapped; the framework
+        // swaps ePlugins and add-ons that are never enabled without disabling them
+        Assertions.AssertThat(kinds.Where(k => PluginKinds.Workflow(k).DisabledDuringSwap).ToArray()).ContainsExactlyInAnyOrder(
+            PluginKind.CSharp, PluginKind.GDScript, PluginKind.GDExtension, PluginKind.Unknown);
+    }
+    [TestCase]
     public static void ClassifiesDerivedScriptTypes()
     {
         // a script class deriving from another one inherits its base's ScriptPath next to its own

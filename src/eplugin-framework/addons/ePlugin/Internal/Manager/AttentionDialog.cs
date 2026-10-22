@@ -44,7 +44,7 @@ internal sealed partial class AttentionDialog : AcceptDialog, ISerializationList
         _log = GetNode<Button>("%OpenLogButton"); _folder = GetNode<Button>("%OpenPluginFolderButton");
         _rollbackConfirm = GetNode<ConfirmationDialog>("%RollbackConfirm");
         foreach (var window in new Window[] { this, _rollbackConfirm }) EditorWindows.Prepare(window, _signals, this, nameof(QueueWindowIcons));
-        var scale = EditorInterface.Singleton.GetEditorScale();
+        var scale = EditorWindows.Scale;
         _text.AddThemeConstantOverride("line_separation", (int)(_text.GetThemeConstant("line_separation") * scale));
         _retryAll = AddButton("Retry all", false, RetryAllAction);
         _retryAll.TooltipText = "Retry every failed or interrupted plugin activation, deactivation and update.";
@@ -91,7 +91,7 @@ internal sealed partial class AttentionDialog : AcceptDialog, ISerializationList
             return;
         }
         if (Selected is null) _selected = items[0].Slug;
-        var theme = EditorInterface.Singleton.GetEditorTheme();
+        var theme = EditorWindows.Theme;
         Texture2D? Icon(string name) => theme is not null && theme.HasIcon(name, "EditorIcons") ? theme.GetIcon(name, "EditorIcons") : null;
         _list.Clear();
         foreach (var item in items)
