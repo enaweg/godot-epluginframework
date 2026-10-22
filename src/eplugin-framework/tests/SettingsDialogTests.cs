@@ -35,7 +35,7 @@ public class SettingsDialogTests
                          "%AutoAcceptCheck", "%AutoAcceptWarning", "%AutoAcceptConfirm", "%GeneralStatus",
                          "%SourceTree", "%SourceStatus", "%RescanLocalSourcesButton", "%AddSiteButton", "%AddLocalSourceButton", "%EditSiteButton", "%RemoveSourceButton",
                          "%SiteEditor", "%SiteSlug", "%SiteUrl", "%SiteHint", "%LocalSourceFolderDialog",
-                         "%AboutLogo", "%AboutVersion", "%AboutDescription", "%StoreLink", "%SourceLink", "%DocumentationLink", "%StarNote", "%StarLink"
+                         "%AboutLogo", "%AboutVersion", "%AboutDescription", "%AuthorLink", "%StoreLink", "%SourceLink", "%DocumentationLink", "%StarNote", "%StarLink"
                      })
                 Assertions.AssertObject(dialog.GetNodeOrNull(name)).IsNotNull();
             // The tabs find these nodes from their own scripts, which resolve % in the dialog's scene.

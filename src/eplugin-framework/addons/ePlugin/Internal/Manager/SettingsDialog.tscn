@@ -333,12 +333,21 @@ theme_type_variation = &"HeaderLarge"
 text = "ePlugin Framework"
 horizontal_alignment = 1
 
-[node name="AboutVersion" type="Label" parent="SettingsTabs/About"]
+[node name="AboutVersionLine" type="HBoxContainer" parent="SettingsTabs/About"]
+layout_mode = 2
+alignment = 1
+
+[node name="AboutVersion" type="Label" parent="SettingsTabs/About/AboutVersionLine"]
 unique_name_in_owner = true
 modulate = Color(1, 1, 1, 0.7)
 layout_mode = 2
 text = "Version"
-horizontal_alignment = 1
+
+[node name="AuthorLink" type="LinkButton" parent="SettingsTabs/About/AboutVersionLine"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+text = "Author"
 
 [node name="AboutDescription" type="Label" parent="SettingsTabs/About"]
 unique_name_in_owner = true

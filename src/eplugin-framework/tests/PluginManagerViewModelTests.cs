@@ -327,7 +327,9 @@ public class PluginManagerViewModelTests
             SourceUrl = "https://example.org/source", DocumentationUrl = "res://docs"
         };
         var about = AboutInfo.From(framework);
-        Assertions.AssertString(about.VersionLine).IsEqual("Version 0.11.0 · by Enaweg");
+        Assertions.AssertString(about.VersionLine).IsEqual("Version 0.11.0 · by");
+        Assertions.AssertString(about.Author).IsEqual("Enaweg");
+        Assertions.AssertString(about.AuthorUrl).IsEqual(AboutInfo.PublisherPage);
         Assertions.AssertString(about.Description).IsEqual("Declarative setup.");
         Assertions.AssertString(about.StoreUrl).IsEqual(AboutInfo.StorePage);
         Assertions.AssertString(about.SourceUrl).IsEqual("https://example.org/source");
@@ -338,9 +340,17 @@ public class PluginManagerViewModelTests
         // Without the framework's entry, e.g. a removed plugin.cfg, the repository's links remain.
         var fallback = AboutInfo.From(null);
         Assertions.AssertString(fallback.VersionLine).IsEqual("Version unknown");
+        Assertions.AssertString(fallback.Author).IsNull();
+        Assertions.AssertString(fallback.AuthorUrl).IsNull();
         Assertions.AssertString(fallback.Description).IsEmpty();
         Assertions.AssertString(fallback.SourceUrl).IsEqual(AboutInfo.DefaultSource);
         Assertions.AssertString(fallback.DocumentationUrl).IsEqual(AboutInfo.DefaultDocumentation);
+
+        // A fork's author is named, but not linked to Enaweg's website.
+        var fork = AboutInfo.From(framework with { Author = "Someone" });
+        Assertions.AssertString(fork.VersionLine).IsEqual("Version 0.11.0 · by Someone");
+        Assertions.AssertString(fork.Author).IsNull();
+        Assertions.AssertString(fork.AuthorUrl).IsNull();
     }
     [TestCase]
     public static void TheListShowsTheAuthorAfterThePluginName()

@@ -43,9 +43,11 @@ Progress feedback is best effort. If the helper is unavailable or stops respondi
 
 - **General** shows ePlugin's project settings, the same ones Project Settings lists under ePlugin with **Advanced Settings** shown: the [update settings](updating-plugins.md#update-settings), [accepting licenses automatically](plugin-licenses.md#accepting-licenses-automatically), [turning welcome pages off](plugin-welcome.md#turning-welcome-pages-off), and [debug logging](creating-plugins.md#troubleshooting). A change is saved to `project.godot` right away, so it applies to everyone working on the project once it is committed. Turning on **Accept every license without showing it** asks for confirmation first. Hover over a setting to see its description and its name in Project Settings.
 - **Update sources** lists where updates come from: the update sites the project sets for its plugins, your local directories with the plugin packages found in each, and ePlugin's read-only [built-in update sites](updating-plugins.md#built-in-update-sites). **Add site...**, **Edit...** and **Remove** change the project's update sites, which replace a plugin's `update_url` (still used when the site does not work) and are saved in the project; see [Project update sites](updating-plugins.md#project-update-sites). **Add directory...**, **Remove** and **Rescan** manage the local directories, folders with plugin ZIP packages that are user-wide settings; see [Local directories](updating-plugins.md#local-directories).
-- **About** shows the installed ePlugin Framework's logo, version, and description, with links to its page in the Godot Asset Store, its source code, and its documentation. A highlighted note asks you to star the project on GitHub if it is useful to you, and links to its GitHub page, where the **Star** button is. The links open in the system browser.
+- **About** shows the installed ePlugin Framework's logo, version, author (linked to its website), and description, with links to its page in the Godot Asset Store, its source code, and its documentation. A highlighted note asks you to star the project on GitHub if it is useful to you, and links to its GitHub page, where the **Star** button is. The links open in the system browser.
 
 ![The General tab of the ePlugin settings with the update, license, welcome page and logging settings](images/eplugin-settings.png)
+
+![The About tab of the ePlugin settings with the logo, version, author link, description, links and the request for a GitHub star](images/eplugin-about.png)
 
 ## Scheduled checks
 
