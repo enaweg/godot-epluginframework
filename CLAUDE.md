@@ -378,8 +378,9 @@ from any of them (a user's `HOLD` extends that once, used for restarts) and exit
 Editors of the OS user using the same `ProgressSession.Protocol` share one helper: it is published as
 `<token>.helper` in Godot's editor data directory (`eplugin/progress`), next to `<token>.commands`. Editors connect to
 the oldest running compatible helper whose command file they can open; missing or inaccessible command files are
-skipped. Raise `Protocol` whenever the command protocol or transport coordination changes. Protocol 3 requires every
-writer to acquire the helper's named mutex (`eplugin-progress-<token>`, with a 100 ms wait limit), seek to the end,
+skipped. Raise `Protocol` whenever the command protocol or transport coordination changes. Protocol 4 requires every
+writer to acquire the helper's named mutex (`Global\eplugin-progress-<token>`: without the prefix .NET scopes it to the
+terminal session on Linux and macOS; with a 100 ms wait limit), seek to the end,
 and write a complete command without buffering before releasing it. `FileMode.Append` on a persistent stream alone
 can overwrite another editor's commands. Older writers use a separate helper. The helper runs with redirected
 standard streams, so it never keeps the editor's output open.

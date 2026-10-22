@@ -153,6 +153,16 @@ public class ProgressSessionTests
     }
 
     [TestCase]
+    public static void WritersOfEveryTerminalSessionShareTheMutex()
+    {
+        // Without the prefix, .NET scopes a named mutex to the terminal session on Linux and macOS.
+        Assertions.AssertString(ProgressSession.MutexName("token")).IsEqual(@"Global\eplugin-progress-token");
+        using var mutex = new System.Threading.Mutex(false, ProgressSession.MutexName(Guid.NewGuid().ToString("N")));
+        Assertions.AssertBool(mutex.WaitOne(0)).IsTrue();
+        mutex.ReleaseMutex();
+    }
+
+    [TestCase]
     public async Task ConcurrentWritersKeepEveryCompleteCommand()
     {
         var commands = Helper("helper", new ProcessIdentity(1_000_001, 10));

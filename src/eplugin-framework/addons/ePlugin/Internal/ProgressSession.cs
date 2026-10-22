@@ -26,9 +26,11 @@ namespace Enaweg.Plugin.Internal;
 /// Records of helpers that no longer run are discarded.
 /// </para>
 /// <para>
-/// Protocol 3 writers acquire <c>eplugin-progress-&lt;token&gt;</c> with a 100 ms wait limit, seek to the file's end,
-/// and write each complete command without buffering before releasing the mutex. Earlier writers use a separate
-/// helper because their persistent append streams can overwrite other editors' commands.
+/// Protocol 4 writers acquire <c>Global\eplugin-progress-&lt;token&gt;</c> with a 100 ms wait limit, seek to the file's
+/// end, and write each complete command without buffering before releasing the mutex. Earlier writers use a separate
+/// helper: protocol 3 named the mutex without the prefix, which .NET scopes to the terminal session on Linux and macOS,
+/// so editors started from different sessions did not exclude each other; older ones used persistent append streams.
+/// Both can overwrite other editors' commands.
 /// </para>
 /// <para>
 /// A scheduled restart writes a handoff file into the project (<see cref="HandOver"/>), which the restarted editor
@@ -38,8 +40,9 @@ namespace Enaweg.Plugin.Internal;
 internal sealed class ProgressSession : IProgressHelper
 {
     /// <summary>Raised whenever the transport or command protocol changes; editors only share a compatible helper.</summary>
-    // Version 3 serializes append positions with a named mutex. Older writers would overwrite these commands.
-    internal const int Protocol = 3;
+    // Version 4 serializes append positions with a named mutex shared by every session of the OS user. Older writers
+    // would overwrite these commands.
+    internal const int Protocol = 4;
 
     private const string Record = ".helper";
     private const string Commands = ".commands";
@@ -59,13 +62,20 @@ internal sealed class ProgressSession : IProgressHelper
         _helper = helper;
         _handoff = handoff;
         _commands = commands;
-        try { _writeMutex = new Mutex(false, "eplugin-progress-" + token); }
+        try { _writeMutex = new Mutex(false, MutexName(token)); }
         catch
         {
             commands.Dispose();
             throw;
         }
     }
+
+    /// <summary>
+    /// The mutex every writer of a helper's command file holds while it writes. Without the <c>Global\</c> prefix, .NET
+    /// scopes it to the terminal session on Linux and macOS, so an editor started from a terminal and one started from
+    /// the desktop would not exclude each other. The helper's random token keeps it apart from other helpers.
+    /// </summary>
+    internal static string MutexName(string token) => @"Global\eplugin-progress-" + token;
 
     public TimeSpan Age => DateTime.UtcNow - new DateTime(_helper.StartUtcTicks, DateTimeKind.Utc);
 
