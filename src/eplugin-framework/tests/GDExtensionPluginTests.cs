@@ -244,6 +244,24 @@ public class GDExtensionPluginTests
     }
 
     [TestCase]
+    public void AnInstallOverAnUnknownVersionKeepsItsJournalReadableAndRollsBack()
+    {
+        const string addon = "servo";
+        var installed = Path.Combine(_root, "addons", addon);
+        WriteAddon(installed, "old library");
+
+        // the journal is read while the update runs (and after a restart); its old version is empty
+        var (package, directory) = StageAddon(addon, installed, "", "2.0.0", "new library");
+        UpdateJournal? read = null;
+        _host.OnSwap = () => read = UpdateJournal.Load(directory);
+        _host.Verified = false;
+        Assertions.AssertObject(_applier.Apply([package], directory)).IsEqual(UpdateOutcome.RolledBack);
+        Assertions.AssertString(read!.Plugins.Single().OldVersion).IsEmpty();
+        Assertions.AssertString(File.ReadAllText(Path.Combine(installed, "bin/servo.dll"))).IsEqual("old library");
+        Assertions.AssertString(_store.GetShared(addon)?.Version ?? "").IsEmpty();
+    }
+
+    [TestCase]
     public void AGDExtensionWithoutPluginCfgThatGainsOneBecomesAPluginAfterTheUpdate()
     {
         const string addon = "servo";

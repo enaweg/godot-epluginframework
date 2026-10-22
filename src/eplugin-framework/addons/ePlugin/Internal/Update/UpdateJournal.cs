@@ -96,9 +96,10 @@ internal sealed class UpdateJournal
         if (journal.Schema is < 1 or > 1 || journal.Id != Path.GetFileName(directory) || journal.AttemptId == Guid.Empty || !Enum.IsDefined(journal.State) || journal.Plugins is null || journal.Plugins.Count == 0 || journal.Recipes is null || journal.ProjectFiles is null || journal.AdditionalVersions is null || journal.Builds is null ||
             journal.Plugins.Select(p => p.Slug).Distinct(StringComparer.Ordinal).Count() != journal.Plugins.Count)
             throw new InvalidDataException("Unsupported or invalid update journal; restore its backups manually.");
+        // The old version is empty for a GDExtension add-on installed over a version ePlugin did not know.
         foreach (var plugin in journal.Plugins)
             if (PackageFiles.Normalize(plugin.Slug) != plugin.Slug || plugin.Slug.Contains('/') ||
-                !SemVer.TryParse(plugin.OldVersion, out _) || !SemVer.TryParse(plugin.NewVersion, out _))
+                !(plugin.OldVersion.Length == 0 || SemVer.TryParse(plugin.OldVersion, out _)) || !SemVer.TryParse(plugin.NewVersion, out _))
                 throw new InvalidDataException("Invalid plugin in update journal.");
         foreach (var path in journal.ProjectFiles)
             if (PackageFiles.Normalize(path) != path || path.Contains('/')) throw new InvalidDataException("Invalid project backup path.");
@@ -125,8 +126,9 @@ internal sealed class UpdateJournals(string root, Action<string>? log = null)
         foreach (var folder in System.IO.Directory.GetDirectories(root))
         {
             if (!File.Exists(Path.Combine(folder, "journal.json"))) continue;
+            // A journal Load refuses is skipped like an unreadable one, so it cannot stop every other update.
             try { result.Add(UpdateJournal.Load(folder)); }
-            catch (Exception ex) when (ex is IOException or JsonException or ArgumentException) { log?.Invoke($"Cannot read update journal {folder}: {ex.Message}"); }
+            catch (Exception ex) when (ex is IOException or JsonException or ArgumentException or InvalidDataException) { log?.Invoke($"Cannot read update journal {folder}: {ex.Message}"); }
         }
         // Groups of one batch resume in the order they were applied: a later group built on top of the earlier ones.
         return result.OrderBy(j => j.CreatedUtc).ThenBy(j => j.Group ?? 0).ToList();
