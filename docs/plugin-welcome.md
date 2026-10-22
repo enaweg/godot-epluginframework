@@ -46,7 +46,7 @@ A value that starts with `res://` is a path, anything else is the welcome text. 
 
 ## When it is shown
 
-The welcome dialog opens once a plugin is installed and enabled: after an ePlugin's recipe was installed, or after a plain Godot plugin was enabled. It waits until no plugin is being enabled, disabled or updated, and until no [license](plugin-licenses.md) dialog is open. A plugin whose license has to be accepted therefore shows its license first and its welcome page afterwards.
+The welcome dialog opens once a plugin is installed and enabled: after an ePlugin's recipe was installed, or after a plain Godot plugin was enabled. It waits until no plugin is being enabled, disabled or updated, no interrupted update is still being finished or recovered, and no [license](plugin-licenses.md) or update failure dialog is open. A plugin whose license has to be accepted therefore shows its license first and its welcome page afterwards.
 
 When several plugins are installed together, for example a plugin with the dependencies it enables, their welcome pages are collected into one dialog. The list on the left shows each plugin; select one to read its page. Close the dialog when you are done: closing it counts every page in it as read. Pages do not have to be opened one by one.
 
@@ -66,7 +66,7 @@ Pages are not recorded as shown while the setting is on, and the plugin details 
 
 ## Updates
 
-Updates never show a welcome page, also not when the new version changes it or has one for the first time. Installing an update records the updated plugins' welcome pages as shown.
+Updates never show a welcome page, not even when the new version changes it or has one for the first time. Installing an update records the updated plugins' welcome pages as shown.
 
 ## Reading a welcome page again
 
@@ -76,4 +76,4 @@ The plugin details of the [ePlugin Manager](eplugin-manager.md) link each plugin
 
 Shown welcome pages are recorded in the `welcomes` list of `res://addons/eplugin-state.json`, the [plugin state file](plugin-state.md), next to the plugin states and accepted licenses. Each entry holds the plugin slug, the plugin version and the time it was shown. Commit the file with the addon files, so teammates are not shown pages that were already shown for the project.
 
-The `welcomes` list is left out while no welcome page has been shown. Every released framework version reads it. If the file cannot be changed on disk in the meantime, pages shown in that state count as shown until the editor restarts and are shown again afterwards.
+The `welcomes` list is left out while no welcome page has been shown. Every released framework version reads it. If the file cannot be changed on disk in the meantime, pages shown in that state count as shown until the editor restarts or reloads its C# assemblies, for example after a build, and are shown again afterwards. While the plugin state file is read-only, for example because it has another `schemaVersion` (see [Plugin state files](plugin-state.md)), no welcome pages are shown.

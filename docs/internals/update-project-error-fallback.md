@@ -13,6 +13,13 @@ Where the implementation differs from the plan below:
   `BeforeRebuild;BeforeBuild;AssignProjectConfiguration`, not only `BeforeBuild`. Property values on the command line are
   MSBuild-escaped (an apostrophe in the path broke item transforms), `OutDir` has no trailing separator (a quoted
   `...\"` escapes its quote on Windows), and errors-only logs of parallel builds prefix lines with the node (`1:7>`).
+- Names: the causes are `ProjectCode`/`PluginCode` (not `ProjectOnly`/`Plugin`/`Project`); the probe is the
+  *plugins-only build*: `ICheckedDotnetCli.TryBuildPluginsOnly(PluginsOnlyBuild)` and `IUpdateHost.BuildPluginsOnly`
+  (not `TryProbeBuild(ProbeBuild)`/`IUpdateHost.ProbeBuild`), run from `UpdateApplier.BuildPasses` (not
+  `BuildFailureFallback`) and recorded in `journal.Builds` as `<name>-plugins-only`, e.g. `interim-plugins-only` (not
+  `probe-interim`), with its errors in `build-<name>-plugins-only.errors.log`.
+- The classifier reads the failed build's own output; only the plugins-only build writes an errors-only file log.
+  `CS2012` is transient too.
 - Not done: the review-step warning while another update is kept (corner case 26), and the group baseline follow-up.
 
 ## Problem
@@ -37,8 +44,8 @@ today.
   - self-updates, headless runs and grouped batches always roll back;
   - `ask` asks only for an update started from a plugin's details (`AskOnBuildFailure`); the batch **Update** rolls back.
 - `Keep` already exists and does what we need as the end state: marker `update_kept_build_failed`, journal
-  `CommittedWithErrors`, `BeforeReconcile` when the interim build failed. **Retry failed** builds; once the project
-  compiles it resumes (`ResumeAfterRestart`: restart into the new code, reconcile, final build, acknowledge).
+  `CommittedWithErrors`, `BeforeReconcile` when the interim build failed. **Retry** under **Needs attention** builds;
+  once the project compiles it resumes (`ResumeAfterRestart`: restart into the new code, reconcile, final build, acknowledge).
 - There is no way to roll back a kept update afterwards from the UI (Retry with a failing build just stays kept).
 - **A failed build deletes the editor's assembly** (S2, below). Today's Keep therefore only works until the next editor
   restart. This has to be fixed first, otherwise automatic keeping makes it much more common.
@@ -63,8 +70,8 @@ the dll is gone too.
 
 Editor restart in that state (`--headless --editor`, Godot 4.7.2): no error, no build attempt, the plugin's
 `_EnterTree` never runs; the plugin stays listed as enabled in `project.godot`. For ePlugin this means after a restart
-while an update is kept (or after any failed activation build, `EGlobal.cs:604` uses the same `TryRebuildSolution`):
-no framework, no ePlugin Manager, no **Retry failed**, no recovery, silently. The running editor is not affected,
+while an update is kept (or after any failed activation build, `EGlobal.cs` uses the same `TryRebuildSolution`):
+no framework, no ePlugin Manager, no **Retry**, no recovery, silently. The running editor is not affected,
 because it loaded the assembly into memory.
 
 Also seen: under the German SDK, diagnostic lines keep the English `error CS0117:` keyword and only the message is
@@ -96,8 +103,8 @@ Retry builds:
 3. **Probe succeeds** → the plugins are fine and the project code must be adapted: `Keep` the update, with the
    cause and the project errors recorded in the journal. No further full build (it would fail again with the same
    errors, since nothing changed in between). No restart: the editor keeps the code it runs, and after a restart it
-   loads the same assembly again (thanks to the S2 fix). When the user has fixed their code, **Retry failed** finishes
-   the update as today.
+   loads the same assembly again (thanks to the S2 fix). When the user has fixed their code, **Retry** (under
+   **Needs attention**) finishes the update as today.
 4. **Probe fails** (or step 1 ruled it out) → `Rollback` as today.
 
 ## Plugins-only build (MSBuild compile filter)
@@ -178,7 +185,7 @@ under `res://addons/<slug>/`, so they are covered.
 The rule "a grouped journal never keeps" exists because a project that does not build would fail every later group.
 With the classifier that is handled: a later group's build fails with the same project errors, is classified
 `ProjectOnly`, its probe (which includes the earlier group's new plugin code) passes, and it is kept too. Errors in
-plugin code still roll that group back. **Retry failed** resumes all kept journals once the project builds.
+plugin code still roll that group back. **Retry** resumes all kept journals once the project builds.
 Follow-up (not v1): record the kept group's project errors as a baseline and let a later group whose errors are a
 subset commit instead of being kept.
 
@@ -230,7 +237,7 @@ subset commit instead of being kept.
 | 19 | Probe must not trigger reload or clean the editor's output | Separate `OutDir`; `AssemblyReload.IsPending` unaffected (verify S1/S3) |
 | 20 | Failed `--no-incremental` build deletes the editor's assembly (**confirmed**, S2) | Snapshot/restore of the output folder in `DotnetCliBase` (first PR); also fixes today's Keep and failed activations |
 | 21 | Editor crash/close during the probe | Journal still `Swapped`/`Reconciled` → existing resume rolls back; probe folder is inside the journal folder |
-| 22 | Restart while kept | Loads the restored pre-update assembly; `CommittedWithErrors` + marker, Retry failed offered, icon red |
+| 22 | Restart while kept | Loads the restored pre-update assembly; `CommittedWithErrors` + marker, Retry offered under Needs attention, icon red |
 | 23 | User wants the old version after an automatic keep | New **Roll back** action (rebase first, see UI) |
 | 24 | User edited files in `addons/<slug>` while kept | Retry verifies version only; rollback warns that those edits are lost |
 | 25 | Plugins toggled while kept | Existing `RebaseRecipes` on Retry |

@@ -33,3 +33,14 @@ updates:
           - "xunit*"
     commit-message:
       prefix: "chore(deps)"
+  - package-ecosystem: nuget
+    directory: "/tools/ci-reports.Tests"
+    schedule:
+      interval: weekly
+    groups:
+      test-dependencies:
+        patterns:
+          - "Microsoft.NET.Test.Sdk"
+          - "xunit*"
+    commit-message:
+      prefix: "chore(deps)"

@@ -18,9 +18,8 @@ No external service is involved; everything stays in GitHub.
 | README | The coverage badge of the latest `main` measurement. |
 
 The `coverage-history` job writes the `coverage` branch after each push to `main` whose tests passed. It is the only job
-with a write token, and it never runs for pull requests. The branch is generated; do not edit it. The badge and the
-comparison in PR comments start working with the first push to `main` after this workflow lands. Until then the PR's
-comment says there is nothing to compare with.
+with `contents: write`, and it never runs for pull requests. The branch is generated; do not edit it. Without a
+`coverage` branch, a PR's comment says there is nothing to compare with.
 
 Coverage does not fail a check. It is reported, not enforced.
 
@@ -33,7 +32,8 @@ own assemblies but nothing of the framework. [tools/coverage.cs](../tools/covera
 1. instruments the built `EPluginFramework.dll` on disk with `dotnet-coverage instrument` (filtered by
    [coverage.settings.xml](../src/eplugin-framework/coverage.settings.xml)),
 2. starts a `dotnet-coverage collect` server session that the instrumented code in the Godot process reports to,
-3. runs `dotnet test` like before and writes a Cobertura report when the session shuts down,
+3. runs `dotnet test EPluginFramework.sln --configuration Debug --no-build --settings .runsettings` (plus any further
+   arguments) and writes a Cobertura report when the session shuts down,
 4. restores the original assembly, so an incremental build doesn't keep the instrumented one.
 
 [tools/ci-reports](../tools/ci-reports/CoverageReport.cs) merges the reports and writes the comment section and the branch

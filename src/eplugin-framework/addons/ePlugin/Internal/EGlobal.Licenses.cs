@@ -242,7 +242,7 @@ internal sealed partial class EGlobal
         }
 
         _ePluginContext?.Logger.Error(
-            "Accepted licenses could not be saved to addons/eplugin-state.json; they are asked for again after the editor restarts.");
+            "Accepted licenses could not be saved to addons/eplugin-state.json; they are asked for again after the editor restarts or reloads its C# assemblies.");
     }
 
     /// <summary>

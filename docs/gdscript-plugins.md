@@ -9,7 +9,7 @@ The project using the plugin needs the Godot .NET editor and a .NET SDK, because
 | Feature | What the plugin provides | Details |
 |---|---|---|
 | Listed, enabled and disabled in the ePlugin Manager, with progress window | Nothing | [ePlugin Manager](#in-the-eplugin-manager) |
-| Updates from GitHub, GitLab, Forgejo or Git | `update_url` in `plugin.cfg` | [Updates](#updates) |
+| Updates from GitHub, GitLab, Forgejo/Gitea or Git | `update_url` in `plugin.cfg` | [Updates](#updates) |
 | Downgrade or reinstall a published version | `update_url` in `plugin.cfg` | [Updates](#updates) |
 | Updates from local ZIP packages | A ZIP with one plugin folder | [Publish a release](#publish-a-release) |
 | Updates without an `update_url` of its own | Nothing; the project or ePlugin's built-in list sets the site | [Plugins without an update_url](#plugins-without-an-update_url) |
@@ -19,7 +19,7 @@ The project using the plugin needs the Godot .NET editor and a .NET SDK, because
 | Required or optional dependency of an ePlugin | A stable folder name and `version` | [Using a GDScript plugin from an ePlugin](#using-a-gdscript-plugin-from-an-eplugin) |
 | Plugin state shared with the team | A valid `version` | [Plugin state](#plugin-state) |
 
-NuGet packages, C# projects, managed autoloads and directories, dependencies of its own, startup initializers, and the progress and logging APIs need C#. See [When a plugin needs C#](#when-a-plugin-needs-c) for a way to add them without converting the GDScript plugin.
+NuGet packages, C# projects, managed autoloads and directories, dependencies of its own, startup initializers, the progress API and taking over ePlugin's logging need C#. See [When a plugin needs C#](#when-a-plugin-needs-c) for a way to add them without converting the GDScript plugin.
 
 ## Example plugin
 
@@ -93,7 +93,7 @@ update_url="https://github.com/owner/my_tool/tags"
 update_url="https://github.com/owner/my_tool.git?path=addons/my_tool#main"
 ```
 
-Only enabled plugins are checked. The update is offered in the manager like any other: check it in the **Version** column and choose **Update**, or choose a version in the plugin's details to downgrade or reinstall. Before the files are replaced, the updater validates the package, saves and closes open scenes, and disables the plugin; it enables it again afterwards. A package without C# files is installed without a build and without restarting the editor. A failed installation is rolled back.
+Only enabled plugins are checked. The update is offered in the manager like any other: check it in the **Version** column and choose **Update**, or choose a version in the plugin's details to downgrade or reinstall. Before the files are replaced, the updater validates the package, saves and closes open scenes, and disables the plugin; it enables it again afterwards. A package without C# files is installed without a build and without restarting the editor, unless the `restart_policy` [update setting](updating-plugins.md#update-settings) is `always`. A failed installation is rolled back.
 
 An update replaces the whole plugin folder, `plugin.cfg` included, so every release must contain the `update_url` again. The review before installation warns when the plugin's name, `update_url` or major version changes, and when its entry script changes language, for example from `plugin.gd` to a C# script. See [Review before installation](updating-plugins.md#review-before-installation).
 
@@ -151,7 +151,7 @@ The path is relative to the plugin folder. The license is shown as [BBCode](http
 
 Set `license_required=true` to have users accept the license before the plugin is enabled, from the ePlugin Manager or from **Project Settings > Plugins**. Declining, or closing the dialog, leaves the plugin disabled; accepting enables it.
 
-The manager asks before it enables the plugin. Project Settings enables a GDScript plugin before ePlugin can step in, so the framework disables it again in the next frame and shows the license then. The plugin's `_enable_plugin` and `_disable_plugin` therefore run once before the license is accepted; keep them free of work that should wait for the license.
+The manager asks before it enables the plugin. Project Settings enables a GDScript plugin before ePlugin can step in, so the framework disables it again in the next frame and shows the license then. The plugin's `_enter_tree`, `_enable_plugin`, `_disable_plugin` and `_exit_tree` therefore run once before the license is accepted, so a dock added in `_enter_tree`, as in the example above, appears briefly; keep them free of work that should wait for the license.
 
 An acceptance is recorded once per project and stays valid while the license comes from the same file path. To have users accept a changed license, ship it under a new name, such as `LICENSE-2.0.md`. An update that names a new license file, or requires a license for the first time, shows it before installation. See [Plugin licenses](plugin-licenses.md).
 
@@ -200,15 +200,15 @@ A GDScript plugin runs no ePlugin code itself, so the framework watches for it b
 - Disabling the GDScript plugin also disables the ePlugins that require it, and removes the optional recipes of other ePlugins that depend on it. The project is built once for all of them.
 - Enabling it installs the optional recipes of enabled ePlugins that it satisfies now, so it does not matter whether the ePlugin or the GDScript plugin is enabled first.
 
-Updates of plugins that depend on each other are installed together, also when one of them is a GDScript plugin. See [Create an ePlugin](creating-plugins.md#recipe-resources).
+Updates of plugins that depend on each other are installed together, also when one of them is a GDScript plugin. See [Builds, restart, and recovery](updating-plugins.md#builds-restart-and-recovery).
 
 ## Plugin state
 
-ePlugin records the version and enabled state of GDScript plugins in the committed `res://addons/eplugin-state.json`, next to ePlugins, so the whole team shares them. Their state is read at editor start and before a retry, including plugins toggled in Project Settings. A plugin without a `version` in `plugin.cfg` is recorded as invalid; add the version and use **Retry** under **Needs attention** in the manager. See [Plugin state files](plugin-state.md).
+ePlugin records the version and enabled state of GDScript plugins in the committed `res://addons/eplugin-state.json`, next to ePlugins, so the whole team shares them. Their state is read at editor start and before a retry, including plugins toggled in Project Settings. A plugin without a `version` in `plugin.cfg` gets an invalid record in the per-user local state, not in the committed file; add the version and use **Retry** under **Needs attention** in the manager. See [Plugin state files](plugin-state.md).
 
 ## When a plugin needs C#
 
-Recipes, dependencies of its own, startup initializers, `EPlugin.Progress` and ePlugin's logging are C# APIs. A GDScript plugin that needs them can stay as it is, with a small companion ePlugin in its own folder that requires it:
+Recipes, dependencies of its own, startup initializers, `EPlugin.Progress` and taking over ePlugin's logging need C#. A GDScript plugin that needs them can stay as it is, with a small companion ePlugin in its own folder that requires it:
 
 ```text
 addons/my_tool/                 GDScript plugin, unchanged
@@ -249,6 +249,6 @@ public partial class MyToolDotnetPlugin : EditorPlugin, IEEditorPlugin
 #endif
 ```
 
-Enabling `my_tool_dotnet` enables `my_tool` first, then installs the NuGet package and makes `src` visible; disabling it reverses that and leaves `my_tool` enabled. Projects without .NET install only `my_tool`.
+Enabling `my_tool_dotnet` enables `my_tool` first, then installs the NuGet package and makes `src` visible; disabling it reverses that and leaves `my_tool` enabled. Projects without .NET copy only the `my_tool` folder.
 
 The alternative is to make the plugin's entry script a C# ePlugin and keep the rest in GDScript. The plugin then always needs .NET and ePlugin, and its first update to the C# entry script shows an *entry-point language changed* warning. See [Create an ePlugin](creating-plugins.md).
