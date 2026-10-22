@@ -32,7 +32,7 @@ internal sealed partial class EGlobal
 
     private void InitializeUpdates(EPluginPlugin plugin)
     {
-        _updateCache ??= new UpdateStateStore(Path.Combine(ProjectSettings.GlobalizePath("res://.godot/eplugin"), "update-state.json"));
+        _updateCache ??= new UpdateStateStore(Path.Combine(UpdateProjectRoot, ".godot/eplugin/update-state.json"));
         _updateCache.Load();
         _updateService = new UpdateService(new UpdateSourceFactory(), new SystemClock(), _updateCache);
         InitializeUpdateSites();

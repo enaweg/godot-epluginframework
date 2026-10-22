@@ -29,6 +29,12 @@ internal interface IEditorHost
     /// <summary>The folder holding every plugin's directory, as a path Godot's file APIs can read.</summary>
     string AddonsDirectory { get; }
 
+    /// <summary>
+    /// The editor's configuration folder as an absolute path. It belongs to the user and is shared by all projects and
+    /// Godot versions, e.g. for the list of local directories.
+    /// </summary>
+    string ConfigDirectory { get; }
+
     /// <summary>The directory of a plugin, which holds its <c>plugin.cfg</c>, as a path Godot's file APIs can read.</summary>
     string PluginDirectory(string slug);
 
@@ -83,6 +89,8 @@ internal sealed class EditorHost : IEditorHost
     public string ProjectRoot => ProjectSettings.GlobalizePath("res://");
 
     public string AddonsDirectory => "res://addons";
+
+    public string ConfigDirectory => EditorInterface.Singleton.GetEditorPaths().GetConfigDir();
 
     public string PluginDirectory(string slug) => $"{AddonsDirectory}/{slug}";
 

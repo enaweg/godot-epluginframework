@@ -124,7 +124,7 @@ plugin dependencies (enabling/version-checking them before the dependent plugin)
 plugin's install recipe.
 
 Lifecycle code calls the editor only through `IEditorHost` (toggling plugins, the enabled list, the project root, the
-addons folder and plugin directories, the plugin nodes an assembly reload rebuilds contexts from, whether a slug is an
+addons folder and plugin directories, the user's editor config folder, the plugin nodes an assembly reload rebuilds contexts from, whether a slug is an
 ePlugin and the recipe of a disabled one, autoloads, filesystem scans, whether dialogs can show);
 keep new lifecycle code behind it so it stays testable. Recipes are created through `TryEnsureRecipe`, which puts the
 plugin in error and discards a half-built recipe when `CreateRecipe` throws. `FindDependencyCycle` fails an activation

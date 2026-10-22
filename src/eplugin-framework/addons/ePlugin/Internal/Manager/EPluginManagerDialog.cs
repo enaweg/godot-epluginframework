@@ -672,7 +672,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         using var progress = ActivationProgress.Begin((enable ? "Enabling " : "Disabling ") + name + "...");
         try
         {
-            EditorInterface.Singleton.SetPluginEnabled(slug, enable);
+            _global.SetPluginEnabled(slug, enable);
             // a plain plugin's dependants and optional recipes, before the list below shows them
             _global.ObservePluginToggles();
         }
@@ -690,7 +690,14 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         // The framework removes this dialog while it is disabled.
         Hide();
         var slug = _model.Plugins.First(p => p.Plugin.Kind == PluginKind.Framework).Plugin.Slug;
-        EditorInterface.Singleton.CallDeferred(EditorInterface.MethodName.SetPluginEnabled, slug, false);
+        // Not inside the confirmation's signal: disabling the framework releases this dialog.
+        CallDeferred(MethodName.DisableFrameworkNow, slug);
+    }
+
+    private void DisableFrameworkNow(string slug)
+    {
+        // An assembly reload replaced this dialog since the click; nothing is disabled without asking again.
+        if (IsInitialized) _global.SetPluginEnabled(slug, false);
     }
 
     private void OpenRelease()

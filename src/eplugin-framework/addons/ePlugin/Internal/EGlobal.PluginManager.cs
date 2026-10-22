@@ -63,6 +63,9 @@ internal sealed partial class EGlobal
         }
     }
 
+    /// <summary>Enables or disables a plugin in the editor, as the ePlugin Manager's list does; see <see cref="IEditorHost.SetPluginEnabled"/>.</summary>
+    internal void SetPluginEnabled(string slug, bool enabled) => _host.SetPluginEnabled(slug, enabled);
+
     /// <summary>Reads the plugins again for the next <see cref="CurrentManagerStatus"/>, e.g. after the ePlugin Manager changed update sites.</summary>
     internal void InvalidateManagerStatus() { _managerStatusKey = null; _nextManagerStatusCheck = 0; _nextNativeExtensionCheck = 0; }
 

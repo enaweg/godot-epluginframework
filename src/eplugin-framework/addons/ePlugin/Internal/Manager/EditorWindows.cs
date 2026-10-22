@@ -12,10 +12,11 @@ internal static class EditorWindows
     private static Image? _icon;
 
     /// <summary>The editor's display scale; 1 without an editor, e.g. when tests create a dialog.</summary>
-    public static float Scale => EditorInterface.Singleton?.GetEditorScale() ?? 1f;
+    public static float Scale => Engine.IsEditorHint() ? EditorInterface.Singleton.GetEditorScale() : 1f;
 
     /// <summary>The editor's theme; null without an editor.</summary>
-    public static Theme? Theme => EditorInterface.Singleton?.GetEditorTheme();
+    // Asking for EditorInterface outside the editor logs an error, so it is not asked at all.
+    public static Theme? Theme => Engine.IsEditorHint() ? EditorInterface.Singleton.GetEditorTheme() : null;
 
     /// <summary>Scales the sizes a scene authored for 100% editor scale, and shows the ePlugin icon whenever it opens.</summary>
     public static void Prepare(Window window, EditorSignalConnections signals, GodotObject owner, StringName visibilityChanged)

@@ -20,9 +20,9 @@ internal sealed partial class EGlobal
     /// <summary>Why the update sites cannot be changed; null when they can.</summary>
     internal string? UpdateSitesProblem => _updateSites?.Problem;
 
-    private void InitializeUpdateSites()
+    internal void InitializeUpdateSites()
     {
-        _updateSites = new UpdateSiteSettings(Path.GetFullPath(ProjectSettings.GlobalizePath(UpdateSitesPath)));
+        _updateSites = new UpdateSiteSettings(Path.GetFullPath(Path.Combine(_host.ProjectRoot, UpdateSitesPath["res://".Length..])));
         _updateSites.Load();
         if (_updateSites.Problem is { } problem) _ePluginContext?.Logger.Warn($"Update sites: {problem}");
     }
