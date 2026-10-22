@@ -11,7 +11,7 @@ namespace Enaweg.Plugin.Internal.Kinds;
 /// new code. The folder is moved as a whole, unless the plugin ships a GDExtension: then its files are replaced one by one
 /// like a <see cref="GDExtensionPluginWorkflow"/>'s, leaving the editor's runtime copies of the libraries alone. Its update
 /// always builds and restarts the editor, which loads the new libraries, so nothing is reloaded in place.
-/// GDExtensions in recipe directories (<c>AddDirectory</c>) are not supported.
+/// GDExtensions in recipe directories (<c>AddDirectory</c>) must be reloadable, see <see cref="ShowHideHelper"/>.
 /// </summary>
 internal sealed class EPluginWorkflow : PluginKindWorkflow
 {

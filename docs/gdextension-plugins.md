@@ -2,7 +2,7 @@
 
 A GDExtension plugin is a plugin below `res://addons` with a `plugin.cfg` that also ships a GDExtension: a `.gdextension` file and the native libraries it names. Its entry script can be GDScript or C#. The ePlugin Manager lists such a plugin with the type *GDExtension plugin*.
 
-A GDExtension without a `plugin.cfg`, in its own folder below `res://addons`, is a *GDExtension add-on*. It is no plugin for Godot, but ePlugin lists it, updates it and lets ePlugins depend on it; see [GDExtensions without plugin.cfg](#gdextensions-without-plugincfg).
+A GDExtension without a `plugin.cfg`, in its own folder below `res://addons`, is a *GDExtension add-on*. It is not a plugin for Godot, but ePlugin lists it, updates it and lets ePlugins depend on it; see [GDExtensions without plugin.cfg](#gdextensions-without-plugincfg).
 
 An ePlugin (a C# plugin with a recipe) can ship a GDExtension too. It is listed as an ePlugin, and its updates replace the libraries the same way (see [ePlugins with a GDExtension](#eplugins-with-a-gdextension)).
 
@@ -104,7 +104,7 @@ A GDExtension that is not reloadable cannot be unloaded safely while the editor 
 
 ### Publish a release
 
-Publish a release like for a [GDScript plugin](gdscript-plugins.md#publish-a-release), with the native libraries in the plugin folder. In addition:
+Publish a release as for a [GDScript plugin](gdscript-plugins.md#publish-a-release), with the native libraries in the plugin folder. In addition:
 
 - Every library and dependency that the `.gdextension` names must be inside the plugin folder, as a `res://addons/<slug>/…` path or a path relative to the `.gdextension` file. A library elsewhere in the project, or an absolute path, is refused, because an update could not replace it. Icons (`[icons]`) outside it are reported, since an update does not replace them either.
 - Include the library for every platform you support. When the `.gdextension` names a library for the editor's platform that the package does not contain, the update is refused. When it names none for that platform, the review warns that Godot will not load the extension. When a platform, or the release library of one, that the installed version supports is missing from the new one, the review warns: other team members or exported games may run on it.
@@ -112,10 +112,11 @@ Publish a release like for a [GDScript plugin](gdscript-plugins.md#publish-a-rel
 - Do not include Godot's `~` copies. They are left out of packages anyway, so a ZIP made from a project that the editor had open still works.
 - Set `reloadable = true` when the extension supports it, so updates do not restart the editor.
 - A plugin folder that is a link (a symlink or junction to another checkout) is not updated. Update it where it points to.
-- When a release has several ZIP assets, ePlugin downloads the one named exactly like the slug, else the one whose name contains it (`-`, `_` and `.` count as the same), leaving out demo, example, sample and tutorial ZIPs. Name a variant differently (`my_native+extras.zip` next to `my_native.zip`), or ePlugin falls back to the source archive, which has no built libraries.
+- When a release has several ZIP assets, ePlugin downloads the one named exactly like the slug, else the one whose name contains it (`-`, `_` and `.` count as the same), else an addon- or plugin-named one; among several such ZIPs, demo, example, sample and tutorial ZIPs are left out (see [Updating plugins](updating-plugins.md#configure-an-update-source)). Name a variant differently (`my_native+extras.zip` next to `my_native.zip`), or ePlugin falls back to the source archive, which has no built libraries.
 
 | Code | Severity | Reason |
 |---|---|---|
+| R2 | Error | A GDExtension add-on's package has neither a `plugin.cfg` nor a `.gdextension` file. |
 | R10 | Error | A package of ePlugin Framework ships a GDExtension. |
 | R18 | Error | A `.gdextension` file cannot be read, or names a library outside the plugin folder. |
 | R18 | Warning | A `.gdextension` file names an icon outside the plugin folder. |

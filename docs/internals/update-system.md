@@ -20,8 +20,8 @@ editor in `UpdateFlowTests`.
 
 Local directories (`LocalSourceSettings`, per-user JSON in the editor config folder, never in the project) are a
 second source next to `update_url`. `LocalPackageIndexer` reads only the central directory and `plugin.cfg` of every ZIP
-below them, using `SafeZipExtractor.PluginRoot` (one root `plugin.cfg`, sub-plugins below it, anything else ambiguous),
-so it never lists what staging would refuse; the root folder's name is the slug it matches.
+below them, using `SafeZipExtractor.PluginRoot` (a single shallowest `plugin.cfg`, sub-plugins below it, anything else
+ambiguous), so it never lists what staging would refuse; the root folder's name is the slug it matches.
 
 The index is rebuilt on every start and assembly reload by `EGlobal.LocalSources.cs` before the startup check.
 `LocalIndexCache` (per-user `local-index.json`, keyed by path, size and modification time) keeps unchanged ZIPs from
@@ -49,11 +49,11 @@ Regenerate the data with `tools/generate_known_plugins.cs` from the output of `t
 `tools/`); never edit it by hand. `build_godot_addons.cs` needs a GitHub token without scopes and reads three hosts at
 the same time: GitHub repositories from the godot-stars ranking (at least 20 stars, read in GraphQL batches one after
 another), and the searches of gitlab.com and codeberg.org for Godot projects (at least 5 stars; a token is optional, with
-one GitLab also leaves out forks). Each token comes from its environment variable (`GITHUB_TOKEN`, `GITLAB_TOKEN`,
-`CODEBERG_TOKEN`) or else from the host's CLI when it is logged in (`gh`, `glab`, a codeberg.org login of `tea`). Every
-add-on needs a commit or activity within two years and a release or version tag. The 500-entry maximum applies to the
-GitHub ranking only. Searches also find games: a repository with a game topic and no add-on topic is skipped, and
-entries found by a search are marked `searched`. Each slug is, in this order:
+one GitLab also leaves out forks). Each token comes from its environment variables (`GITHUB_TOKEN` or `GH_TOKEN`,
+`GITLAB_TOKEN` or `GITLAB_ACCESS_TOKEN`, `CODEBERG_TOKEN`) or else from the host's CLI when it is logged in (`gh`,
+`glab`, a codeberg.org login of `tea`). Every add-on needs a commit or activity within two years and a release or
+version tag. The 500-entry maximum applies to the GitHub ranking only. Searches also find games: a repository with a game
+topic and no add-on topic is skipped, and entries found by a search are marked `searched`. Each slug is, in this order:
 
 1. the one `tools/extra_addons.txt` gives;
 2. the plugin folder in the latest release's ZIP, chosen like the updater's `ReleaseAssets.Select` (file list only);
@@ -68,33 +68,35 @@ were added and filtered out, how many each kind of filter left out, and the ten 
 reason, the likeliest to be add-ons a filter missed. Each also compares its result with the previous one (the existing
 JSON file, the committed list): counts before and now, every new add-on (and changed slugs), the ten most-starred no
 longer listed with why they are left out now, and a warning when more than a tenth fewer are listed, which usually means
-a host, search or token failed. Add-ons the ranking and searches miss or leave out go in `tools/extra_addons.txt` (`slug;url` or `url` per line, any git host), which `build_godot_addons.cs` always lists
-regardless of stars and activity. GitLab and Forgejo repositories there are read through their APIs; other hosts only
-through their version tags.
+a host, search or token failed. Add-ons the ranking and searches miss or leave out go in `tools/extra_addons.txt`
+(`slug;url` or `url` per line, any git host), which `build_godot_addons.cs` always lists regardless of stars and
+activity. GitLab and Forgejo repositories there are read through their APIs; other hosts only through their version
+tags.
 
 ## Checks
 
-Checks use installed metadata and a 20-hour local cache, never the shared working-version index. A release announced as
-newer whose `plugin.cfg` is not (an author forgot to raise it) is an R6 review warning rather than a refusal; once it is
-installed, `UpdateService.WithoutInstalled` hides it using the revision and version that `Commit` records in
-`UpdateCache.Revisions`.
+Checks use installed metadata and a local cache that is refreshed every `eplugin/updates/check_interval_hours` (default
+20), never the shared working-version index. A release announced as newer whose `plugin.cfg` is not (an author forgot to
+raise it) is an R6 review warning rather than a refusal; once it is installed, `UpdateService.WithoutInstalled` hides it
+using the revision and version that `Commit` records in `UpdateCache.Revisions`. Checks do not skip a plugin blocked by
+an unfinished attempt; the manager and the validator refuse its update (R17).
 
 ## Plugin kinds
 
 `Internal/Kinds/` tells the kinds of plugins apart (`PluginKind`: Framework, EPlugin, CSharp, GDScript, GDExtension,
-Unknown, GDExtensionAddon) and gives each its own sealed `PluginKindWorkflow`, so the update steps that differ between kinds are in one
-class per kind and every decision is logged with the kind's name (`GDExtension plugin native: ...`). `UpdateApplier`
-runs the same steps for every kind: `BeforeSwap`, disable (`DisabledDuringSwap`), `Swap.Install`, the uid map and the
-interim bridge, `AfterSwap`; on rollback `Swap.Restore` and `AfterRestore`; `NeedsRestart` after commit and rollback.
-`Validate` adds the kind's findings to `AddonPackageValidator`.
+Unknown, GDExtensionAddon) and gives each its own sealed `PluginKindWorkflow`, so the update steps that differ between
+kinds are in one class per kind and every decision is logged with the kind's name (`GDExtension plugin native: ...`).
+`UpdateApplier` runs the same steps for every kind: `BeforeSwap`, disable (`DisabledDuringSwap`), `Swap.Install`, the
+uid map and the interim bridge, `AfterSwap`; on rollback `Swap.Restore` and `AfterRestore`; `NeedsRestart` after commit
+and rollback. `Validate` adds the kind's findings to `AddonPackageValidator`.
 
 `PluginKinds.Classify` is the manager's classification (an ePlugin by its compiled script type, a GDExtension plugin by
 a `.gdextension` file below its folder, otherwise by the entry script); a folder without `plugin.cfg` whose
-`.gdextension` lies outside hidden folders is a GDExtension add-on (`PluginKinds.IsExtensionAddon`, `EGlobal.ExtensionAddons.cs`).
-Updates use `ForPackage` (the installed framework, ePlugin or GDExtension add-on keeps its kind, a `.gdextension` in the
-installed or staged version makes it a GDExtension plugin)
-and record the kind by name in `UpdatePluginJournal.Kind`. Journals without it, or with a kind this version does not
-know, fall back to `IsEPlugin` (Framework, EPlugin or Unknown). The swap is chosen per plugin (`Swap(plugin)`): both
+`.gdextension` lies outside hidden folders is a GDExtension add-on (`PluginKinds.IsExtensionAddon`,
+`EGlobal.ExtensionAddons.cs`). Updates use `ForPackage` (the installed framework, ePlugin or GDExtension add-on keeps its
+kind, a `.gdextension` in the installed or staged version makes it a GDExtension plugin) and record the kind by name in
+`UpdatePluginJournal.Kind`. Journals without it, or with a kind this version does not know, fall back to `IsEPlugin`
+(Framework, EPlugin or Unknown). The swap is chosen per plugin (`Swap(plugin)`): both
 GDExtension workflows always use `AddonFileSwap`, the ePlugin workflow when `UpdatePluginJournal.NativeExtension` says
 the installed or staged version has a `.gdextension`, every other case the folder swap.
 
@@ -120,12 +122,12 @@ extension is reloaded in place or the editor restarts. `GDExtensionRules` refuse
 extension outside the editor's Godot version limits (R22, `GDExtensionConfig.CompatibilityProblem`, which follows
 Godot's own check), and warns about platforms or release libraries the installed version had and the new one drops
 (R23, `DroppedPlatforms`), for every kind with a GDExtension; R21 says whether the update reloads or restarts. An
-ePlugin with a GDExtension needs no reload logic: its
-update always builds and restarts, which loads the new libraries, and so does its rollback. Only the framework refuses a
-GDExtension (R10): it ships none, and early self-update recovery replaces its folder at startup, after Godot loaded
-every extension. GDExtensions in `AddDirectory` directories must be reloadable: `ShowHideHelper` unloads them through
-`IEditorHost.UnloadExtension` before hiding (which closes the runtime copies that keep the folder from being renamed on
-Windows), loads them after showing, and refuses to show a directory with one that is not reloadable.
+ePlugin with a GDExtension needs no reload logic: its update always builds and restarts, which loads the new libraries,
+and so does its rollback. Only the framework refuses a GDExtension (R10): it ships none, and early self-update recovery
+replaces its folder at startup, after Godot loaded every extension. GDExtensions in `AddDirectory` directories must be
+reloadable: `ShowHideHelper` unloads them through `IEditorHost.UnloadExtension` before hiding (which closes the runtime
+copies that keep the folder from being renamed on Windows), loads them after showing, and refuses to show a directory
+with one that is not reloadable.
 
 ### GDExtension add-ons
 
@@ -134,8 +136,9 @@ version is the one the shared state recorded (`PluginStateStore.GetShared`), wri
 any update's; until then it is "" (`PluginUpdateTarget.VersionUnknown`). A check then caches its latest release without
 returning it as an update (`CurrentCached` skips it, since the installed version cannot be compared), and so does listing
 its versions; the manager offers that release (`UpdateScheduler.CachedLatest`) while the update site's versions are not
-listed, and installs a chosen version with **Install**. `AddonPackageValidator` takes the announced version for a package without `plugin.cfg`
-(R6 is informational while the installed version is unknown, R24 when the new version brings a `plugin.cfg`), and
+listed, and installs a chosen version with **Install**. `AddonPackageValidator` takes the announced version for a
+package without `plugin.cfg` (R2 refuses one without a `.gdextension` either, R6 is informational while the installed
+version is unknown, R24 when the new version brings a `plugin.cfg`), and
 `UpdateApplier` reads the old version from the store (`InstalledVersion`) and the new one from the package
 (`PackageVersion`). The add-on is never disabled, `IUpdateHost.IsEnabled` counts it as enabled, and verification only
 checks that it is still an add-on or became a plugin. Staging finds its folder with `SafeZipExtractor.PackageRoot` /
@@ -147,8 +150,9 @@ its activated shared entry is not reported as a disabled plugin.
 
 Every apply requires dialog confirmation. Stage and validate the whole batch before touching addons: `PackageFetcher`
 leaves a package that cannot be fetched or is refused out of the batch, as a `RefusedPackage`, and fails only when all are
-refused. Then save and close all open scenes (`IUpdateHost.CloseScenes`; `close_scene` exists only from Godot 4.5) before
-the swap.
+refused. `IUpdateHost.Preflight` refuses to start while a scene is running, an untitled scene is open (detectable only
+from Godot 4.5) or an ePlugin of the batch is not `Activated`. Then save and close all open scenes
+(`IUpdateHost.CloseScenes`; `close_scene` exists only from Godot 4.5) before the swap.
 
 Managed plugins are updated in place without disabling or uninstalling them; plain plugins may be toggled under observer
 suppression. The interim bridge keeps old visible resources until the new assembly is loaded. Reconcile executes per-item
@@ -158,17 +162,18 @@ and output and forces non-incremental compilation, including on rollback (old ti
 
 ## Groups
 
-A staged batch is split by `UpdateGroups.Plan` (pure, tested): plugins connected by hard dependencies, also through
-plugins outside the batch, share a group; the implicit dependency on the framework does not join groups, and the
+A staged batch is split by `UpdateGroups.Plan` (pure, tested): a plugin shares a group with every plugin of the batch it
+depends on through hard dependencies, also through plugins outside the batch (two plugins that only share a dependency
+outside the batch stay apart); the implicit dependency on the framework does not join groups, and the
 framework's group goes first. `UpdateApplier.ApplyGroups` moves each later group's staging into its own transaction
 folder, then runs every group as an independent transaction (`UpdateJournal.Group` set; a single group keeps `Group`
 null and behaves exactly as before).
 
 A grouped journal never asks or keeps on a build failure; it rolls back. Only an update started from a plugin's details
 (`ApplyUpdatesAsync(askOnBuildFailure: true)`, persisted as `UpdateJournal.AskOnBuildFailure`) asks, for the interim and
-the final build (`UpdateFailureDecision.Policy`); the batch **Update** rolls back. The exception is a build that fails
-only in project code while the plugins compile on their own (below): it is kept, in a group too, because a later group
-then fails with the same project errors and is kept the same way.
+the final build (`UpdateFailureDecision.Policy`); the batch **Update** rolls back, unless `on_build_failure=keep` keeps a
+single group. The exception is a build that fails only in project code while the plugins compile on their own (below):
+it is kept, in a group too, because a later group then fails with the same project errors and is kept the same way.
 
 ## Build failures in project code
 
@@ -186,10 +191,12 @@ details. The marker is the usual `update_kept_build_failed`, so every framework 
 refreshes `ProjectErrors` while the project still fails; `ResumeAfterRestart` clears them.
 
 The plugins-only build (`ICheckedDotnetCli.TryBuildPluginsOnly`, `PluginsOnlyBuild`) builds the Godot `.csproj`
-non-incrementally with `-p:CustomAfterMicrosoftCommonTargets=<generated targets>` and `-p:OutDir=<journal folder>`.
-The targets file removes every `Compile` and `ProjectReference` item outside the plugin roots in a target that runs
-before `BeforeRebuild`/`BeforeBuild`/`AssignProjectConfiguration` (a Rebuild resolves references while cleaning, and
-item metadata cannot be used in evaluation conditions), only for the Godot project (global properties reach referenced
+non-incrementally with `-p:CustomAfterMicrosoftCommonTargets=<generated targets>` and
+`-p:OutDir=<journal>/<name>-plugins-only/bin`; that work folder (targets file and outputs) is deleted afterwards, its
+log and `build-<name>-plugins-only.errors.log` stay in the journal folder. The targets file removes every `Compile` and
+`ProjectReference` item outside the plugin roots in a target that runs before
+`BeforeRebuild`/`BeforeBuild`/`AssignProjectConfiguration` (a Rebuild resolves references while cleaning, and item
+metadata cannot be used in evaluation conditions), only for the Godot project (global properties reach referenced
 projects). Its `OutDir` must never be the editor's: its clean would empty it. Paths are MSBuild-escaped in the targets
 file and in the property values, and `OutDir` is passed without a trailing separator (a quoted `...\"` would escape the
 quote). Godot's own incremental build afterwards compiles the full project again.
@@ -211,8 +218,8 @@ applied; resuming reloads each journal because an earlier group may have changed
 
 When a journal commits or rolls back, `RebasePending` refreshes the `backup-project` of every journal that has not
 reconciled yet and, on commit, its recipe baselines for plugins it does not update, so a later rollback keeps the earlier
-group's changes. Reconcile leaves alone the recipes of plugins in another active journal or rolled back since the
-assembly was loaded (`UntouchedRecipes`).
+group's changes. Reconcile leaves the recipes of plugins in another active journal or rolled back since the assembly
+was loaded alone (`UntouchedRecipes`).
 
 ## Plugin state attempts
 
