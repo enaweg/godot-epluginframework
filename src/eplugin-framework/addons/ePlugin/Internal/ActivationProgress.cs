@@ -268,7 +268,9 @@ internal static class ActivationProgress
         {
             foreach (var user in Users)
             {
-                if (!user.Held && !user.Ended && user.Text is { } text) _helper?.Send(user.Id, Encode(text));
+                if (user.Held || user.Ended || user.Text is not { } text) continue;
+                try { _helper?.Send(user.Id, Encode(text)); }
+                catch (ProgressHelperBusyException) { /* the user's next text or heartbeat follows */ }
             }
         }
         catch (Exception)
@@ -302,6 +304,10 @@ internal static class ActivationProgress
             try
             {
                 _helper.Send(user.Id, command);
+                return;
+            }
+            catch (ProgressHelperBusyException)
+            {
                 return;
             }
             catch (Exception)
@@ -398,7 +404,10 @@ internal interface IProgressHelper : IDisposable
     /// <summary>How long the helper process has been running.</summary>
     TimeSpan Age { get; }
 
-    /// <summary>Sends one protocol command of a user. Throws when the helper is unavailable or the send fails.</summary>
+    /// <summary>
+    /// Sends one protocol command of a user. Throws when the helper is unavailable or the send fails, and
+    /// <see cref="ProgressHelperBusyException"/> when another editor kept the helper busy, which drops only this command.
+    /// </summary>
     void Send(string user, string command);
 
     /// <summary>Records the user so that the editor a restart starts can continue it.</summary>

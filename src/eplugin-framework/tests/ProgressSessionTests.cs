@@ -83,6 +83,32 @@ public class ProgressSessionTests
     }
 
     [TestCase]
+    [RequireGodotRuntime]
+    public void ARuntimeCopyCutOffByAKilledEditorIsReplaced()
+    {
+        var addon = Path.Combine(_root, "addon");
+        Directory.CreateDirectory(addon);
+        foreach (var name in new[] { "ActivationProgress.dll", "ActivationProgress.runtimeconfig.json" })
+            File.Copy(ProjectSettings.GlobalizePath("res://addons/ePlugin/progress/" + name), Path.Combine(addon, name));
+        var helper = Path.Combine(addon, "ActivationProgress.dll");
+        using var hash = System.Security.Cryptography.IncrementalHash.CreateHash(System.Security.Cryptography.HashAlgorithmName.SHA256);
+        hash.AppendData(File.ReadAllBytes(helper));
+        hash.AppendData(File.ReadAllBytes(Path.Combine(addon, "ActivationProgress.runtimeconfig.json")));
+        var runtime = Path.Combine(_shared, "runtime", Convert.ToHexString(hash.GetHashAndReset()));
+        Directory.CreateDirectory(runtime);
+        File.WriteAllBytes(Path.Combine(runtime, "ActivationProgress.dll"), File.ReadAllBytes(helper)[..100]);
+
+        using (var session = ProgressSession.Start(helper, _shared, _handoff, ["--max-lifetime-seconds", "1"]))
+        {
+            Assertions.AssertObject(session).IsNotNull();
+            session!.Send(User, "END");
+        }
+
+        Assertions.AssertThat(File.ReadAllBytes(Path.Combine(runtime, "ActivationProgress.dll"))).IsEqual(File.ReadAllBytes(helper));
+        Assertions.AssertThat(Directory.GetFiles(runtime, "*.partial")).IsEmpty();
+    }
+
+    [TestCase]
     public void EditorsConnectToTheOldestRunningHelperOfTheirProtocol()
     {
         var oldest = Helper("oldest", new ProcessIdentity(1_000_001, 10));

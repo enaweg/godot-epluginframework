@@ -380,6 +380,23 @@ public class ActivationProgressTests
     }
 
     [TestCase]
+    public void ABusyCommandFileDropsOnlyThatCommandAndKeepsTheHelper()
+    {
+        using (ActivationProgress.Begin("Activating A..."))
+        {
+            // another editor held the command file longer than the wait limit
+            _launched[0].Age = TimeSpan.FromMinutes(20);
+            _launched[0].Busy = 1;
+            _tick!();
+            ActivationProgress.SetText("Building...");
+        }
+
+        // an old helper that failed would have been replaced at once
+        Assertions.AssertInt(_launched.Count).IsEqual(1);
+        Assertions.AssertThat(_launched[0].Of(_launched[0].Users[0])).ContainsExactly("TEXT Activating A...", "TEXT Building...", "END");
+    }
+
+    [TestCase]
     public void FailedAgeCheckStillDisposesTheHelper()
     {
         using (ActivationProgress.Begin("Activating A..."))
@@ -575,6 +592,8 @@ public class ActivationProgressTests
 
         public List<string> HandedOver { get; } = [];
         public bool Dead { get; set; }
+        /// <summary>How many of the next commands find the command file busy.</summary>
+        public int Busy { get; set; }
         public bool Disposed { get; private set; }
         public bool CannotHandOver { get; set; }
         public bool CannotCheckAge { get; set; }
@@ -594,6 +613,7 @@ public class ActivationProgressTests
         public void Send(string user, string command)
         {
             if (Dead) throw new IOException("The helper exited.");
+            if (Busy > 0) { Busy--; throw new ProgressHelperBusyException(); }
             if (command.StartsWith("TEXT ", StringComparison.Ordinal))
                 command = "TEXT " + Encoding.UTF8.GetString(Convert.FromBase64String(command[5..]));
             lock (_received) _received.Add((user, command));
