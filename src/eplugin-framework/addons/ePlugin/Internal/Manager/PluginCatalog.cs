@@ -30,7 +30,7 @@ internal sealed record PluginInfo(string Slug, string Name, PluginKind Kind, boo
     /// <summary>Lifecycle state of an ePlugin that has an editor instance; null for every other plugin.</summary>
     public EEditorPluginState? State { get; init; }
     public string? Error { get; init; }
-    /// <summary>A local attempt that failed or was interrupted and needs Retry failed.</summary>
+    /// <summary>A local attempt that failed or was interrupted and is retried, rolled back or given up on under Needs attention.</summary>
     public LocalPluginAttempt? FailedAttempt { get; init; }
     /// <summary>The recipe, when the plugin already created it in this session.</summary>
     public EEditorPluginRecipe? Recipe { get; init; }

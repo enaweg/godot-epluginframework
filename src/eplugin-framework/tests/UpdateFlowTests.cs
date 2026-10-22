@@ -21,6 +21,8 @@ public class UpdateFlowTests : IDisposable
 {
     private FakeHost _host = null!;
     private LicenseReview? _askedLicenses;
+    private UpdateReview? _askedReview;
+    private Func<UpdateReview, bool> _review = _ => true;
     private Action<LicenseReview> _decide = review => review.AcceptAll();
     private readonly List<string> _progress = [];
     private readonly List<string> _status = [];
@@ -32,6 +34,8 @@ public class UpdateFlowTests : IDisposable
     {
         _host = new FakeHost();
         _askedLicenses = null;
+        _askedReview = null;
+        _review = _ => true;
         _decide = review => review.AcceptAll();
         _progress.Clear(); _status.Clear(); _swaps = 0; _alive = true;
     }
@@ -46,6 +50,10 @@ public class UpdateFlowTests : IDisposable
     }
 
     private UpdateFlow Flow() => new(_host, review =>
+    {
+        _askedReview = review;
+        return Task.FromResult(_review(review));
+    }, review =>
     {
         _askedLicenses = review;
         _decide(review);
@@ -70,7 +78,7 @@ public class UpdateFlowTests : IDisposable
         _host.Packages["a"] = [];
         var flow = Flow();
 
-        var outcome = await flow.InstallAsync(new([Candidate("a")]), false, View(), CancellationToken.None);
+        var outcome = await flow.InstallAsync(new([Candidate("a")]), View(), CancellationToken.None);
 
         Assertions.AssertObject(outcome.Step).IsEqual(InstallStep.Installed);
         Assertions.AssertBool(outcome.Refresh).IsTrue();
@@ -85,45 +93,74 @@ public class UpdateFlowTests : IDisposable
         Assertions.AssertThat(_status).ContainsExactly("Downloading and validating selected addons...", "Installing selected addons...");
         Assertions.AssertObject(flow.Staged).IsNull();
         Assertions.AssertObject(flow.Request).IsNull();
+        Assertions.AssertObject(_askedReview).IsNull();
     }
 
     [TestCase]
-    public async Task WarningsStopForReviewAndConfirmingInstallsTheStagedBatch()
+    public async Task WarningsAreReviewedBeforeAnythingIsInstalled()
     {
         _host.Packages["a"] = [Warning()];
-        var flow = Flow();
-        var request = new InstallRequest([Candidate("a")]);
-        IReadOnlyList<ValidatedPackage>? shown = null;
+        _host.Packages["b"] = [];
+        _review = _ =>
+        {
+            Assertions.AssertInt(_host.Applied.Count).IsEqual(0);
+            return true;
+        };
 
-        var review = await flow.InstallAsync(request, false, new InstallView { Staged = (packages, _) => shown = packages }, CancellationToken.None);
+        var outcome = await Flow().InstallAsync(new([Candidate("a"), Candidate("b")]), View(), CancellationToken.None);
 
-        Assertions.AssertObject(review.Step).IsEqual(InstallStep.Reviewing);
-        Assertions.AssertString(review.Notice).Contains("Review package warnings");
-        Assertions.AssertInt(shown!.Count).IsEqual(1);
-        Assertions.AssertInt(_host.Applied.Count).IsEqual(0);
-        Assertions.AssertObject(flow.Request).IsSame(request);
-        Assertions.AssertBool(Directory.Exists(_host.StagingDirectory)).IsTrue();
-
-        var installed = await flow.InstallAsync(flow.Request!, false, View(), CancellationToken.None);
-
-        Assertions.AssertObject(installed.Step).IsEqual(InstallStep.Installed);
-        Assertions.AssertInt(_host.Stagings).IsEqual(1);
-        Assertions.AssertInt(_host.Applied.Count).IsEqual(1);
+        Assertions.AssertObject(outcome.Step).IsEqual(InstallStep.Installed);
+        // only the package with a warning is listed; the other one is installed with it
+        Assertions.AssertThat(_askedReview!.Entries.Select(e => e.Slug).ToArray()).ContainsExactly("a");
+        Assertions.AssertInt(_askedReview.Unlisted).IsEqual(1);
+        Assertions.AssertThat(_host.Applied.Single().Packages.Select(p => p.Candidate.Slug).ToArray()).ContainsExactly("a", "b");
+        Assertions.AssertThat(_status).Contains("Review the updates.");
     }
 
     [TestCase]
-    public async Task AChangedUpdateHostWaitsUntilItIsTrusted()
+    public async Task UpdatesLeftOutInTheReviewAreNotInstalled()
+    {
+        _host.Packages["a"] = [Warning()];
+        _host.Packages["b"] = [];
+        _review = review => { review.Entries.Single().Install = false; return true; };
+
+        var outcome = await Flow().InstallAsync(new([Candidate("a"), Candidate("b")]), View(), CancellationToken.None);
+
+        Assertions.AssertThat(_host.Applied.Single().Packages.Select(p => p.Candidate.Slug).ToArray()).ContainsExactly("b");
+        Assertions.AssertString(outcome.Notice).Contains("Left out a 2.0.0.");
+        Assertions.AssertBool(outcome.IsError).IsFalse();
+    }
+
+    [TestCase]
+    public async Task CancelingTheReviewInstallsNothing()
+    {
+        _host.Packages["a"] = [Warning()];
+        _review = _ => false;
+        var flow = Flow();
+
+        var outcome = await flow.InstallAsync(new([Candidate("a")]), View(), CancellationToken.None);
+
+        Assertions.AssertObject(outcome.Step).IsEqual(InstallStep.Canceled);
+        Assertions.AssertString(outcome.Notice).IsEqual("Update canceled. Addon files were not changed.");
+        Assertions.AssertInt(_host.Applied.Count).IsEqual(0);
+        Assertions.AssertObject(flow.Staged).IsNull();
+        Assertions.AssertBool(Directory.Exists(_host.StagingDirectory)).IsFalse();
+    }
+
+    [TestCase]
+    public async Task AChangedUpdateHostIsInstalledOnlyWhenTheUserTrustsIt()
     {
         _host.Packages["a"] = [new Finding("source_changed", FindingSeverity.Info, "Update host changed", RequiresTrust: true)];
-        var flow = Flow();
-        var request = new InstallRequest([Candidate("a")]);
 
-        Assertions.AssertObject((await flow.InstallAsync(request, false, View(), CancellationToken.None)).Step).IsEqual(InstallStep.Reviewing);
-        Assertions.AssertBool(flow.StagedNeedsTrust).IsTrue();
-        Assertions.AssertObject((await flow.InstallAsync(request, false, View(), CancellationToken.None)).Step).IsEqual(InstallStep.Reviewing);
+        // not checked by default, so confirming the review installs nothing
+        var untrusted = await Flow().InstallAsync(new([Candidate("a")]), View(), CancellationToken.None);
+        Assertions.AssertBool(_askedReview!.Entries.Single().NeedsTrust).IsTrue();
+        Assertions.AssertObject(untrusted.Step).IsEqual(InstallStep.Canceled);
+        Assertions.AssertString(untrusted.Notice).StartsWith("No update was installed");
         Assertions.AssertInt(_host.Applied.Count).IsEqual(0);
 
-        Assertions.AssertObject((await flow.InstallAsync(request, true, View(), CancellationToken.None)).Step).IsEqual(InstallStep.Installed);
+        _review = review => { review.Entries.Single().Install = true; return true; };
+        Assertions.AssertObject((await Flow().InstallAsync(new([Candidate("a")]), View(), CancellationToken.None)).Step).IsEqual(InstallStep.Installed);
         Assertions.AssertBool(_host.Applied.Single().Trust).IsTrue();
     }
 
@@ -136,14 +173,14 @@ public class UpdateFlowTests : IDisposable
         _decide = review => { review.Accept("a"); review.Decline("b"); };
         var flow = Flow();
 
-        var outcome = await flow.InstallAsync(new([Candidate("a"), Candidate("b")]), false, View(), CancellationToken.None);
+        var outcome = await flow.InstallAsync(new([Candidate("a"), Candidate("b")]), View(), CancellationToken.None);
 
         Assertions.AssertObject(outcome.Step).IsEqual(InstallStep.Installed);
         Assertions.AssertThat(_host.Applied.Single().Packages.Select(p => p.Candidate.Slug).ToArray()).ContainsExactly("a");
         Assertions.AssertThat(_host.Recorded.Single().Accepted.Select(e => e.Slug).ToArray()).ContainsExactly("a");
 
         _decide = review => review.DeclineRemaining();
-        var canceled = await Flow().InstallAsync(new([Candidate("a"), Candidate("b")]), false, View(), CancellationToken.None);
+        var canceled = await Flow().InstallAsync(new([Candidate("a"), Candidate("b")]), View(), CancellationToken.None);
 
         Assertions.AssertObject(canceled.Step).IsEqual(InstallStep.Canceled);
         Assertions.AssertString(canceled.Notice).Contains("license was declined");
@@ -158,7 +195,7 @@ public class UpdateFlowTests : IDisposable
         _host.Packages["a"] = [];
         _host.Outcome = UpdateOutcome.AwaitingDecision;
 
-        var outcome = await Flow().InstallAsync(new([Candidate("a")], VersionInstall: true, AllowDowngrade: true), false, View(), CancellationToken.None);
+        var outcome = await Flow().InstallAsync(new([Candidate("a")], VersionInstall: true, AllowDowngrade: true), View(), CancellationToken.None);
 
         Assertions.AssertObject(outcome.Step).IsEqual(InstallStep.AwaitingDecision);
         Assertions.AssertBool(_host.Applied.Single().AskOnBuildFailure).IsTrue();
@@ -174,13 +211,13 @@ public class UpdateFlowTests : IDisposable
         using var canceled = new CancellationTokenSource();
         canceled.Cancel();
 
-        var cancel = await Flow().InstallAsync(new([Candidate("a")]), false, View(), canceled.Token);
+        var cancel = await Flow().InstallAsync(new([Candidate("a")]), View(), canceled.Token);
         Assertions.AssertObject(cancel.Step).IsEqual(InstallStep.Canceled);
         Assertions.AssertString(cancel.Notice).IsEqual("Download canceled. Addon files were not changed.");
 
         _host.ApplyFails = true;
         var flow = Flow();
-        var failed = await flow.InstallAsync(new([Candidate("a")]), false, View(), CancellationToken.None);
+        var failed = await flow.InstallAsync(new([Candidate("a")]), View(), CancellationToken.None);
         Assertions.AssertObject(failed.Step).IsEqual(InstallStep.Failed);
         Assertions.AssertBool(failed.IsError).IsTrue();
         Assertions.AssertString(failed.Notice).IsEqual("Update failed: no space left");
@@ -196,7 +233,7 @@ public class UpdateFlowTests : IDisposable
         _alive = false;
         var flow = Flow();
 
-        var outcome = await flow.InstallAsync(new([Candidate("a")]), false, View(), CancellationToken.None);
+        var outcome = await flow.InstallAsync(new([Candidate("a")]), View(), CancellationToken.None);
 
         Assertions.AssertObject(outcome.Step).IsEqual(InstallStep.Abandoned);
         Assertions.AssertInt(_host.Applied.Count).IsEqual(0);
@@ -204,16 +241,17 @@ public class UpdateFlowTests : IDisposable
     }
 
     [TestCase]
-    public async Task RefusedPackagesAreReportedAndTheRestIsInstalled()
+    public async Task RefusedPackagesAreReviewedAndTheRestIsInstalled()
     {
         _host.Packages["a"] = [];
         _host.Refused = [new RefusedPackage(Candidate("b"), "contains a GDExtension")];
-        IReadOnlyList<RefusedPackage>? shown = null;
 
-        var outcome = await Flow().InstallAsync(new([Candidate("a"), Candidate("b")]), false,
-            new InstallView { Staged = (_, refused) => shown = refused }, CancellationToken.None);
+        var outcome = await Flow().InstallAsync(new([Candidate("a"), Candidate("b")]), View(), CancellationToken.None);
 
-        Assertions.AssertString(shown!.Single().Reason).IsEqual("contains a GDExtension");
+        var refused = _askedReview!.Entries.Single();
+        Assertions.AssertString(refused.RefusedReason).IsEqual("contains a GDExtension");
+        Assertions.AssertBool(refused.CanInstall || refused.Install).IsFalse();
+        Assertions.AssertThat(_host.Applied.Single().Packages.Select(p => p.Candidate.Slug).ToArray()).ContainsExactly("a");
         Assertions.AssertObject(outcome.Step).IsEqual(InstallStep.Installed);
         Assertions.AssertBool(outcome.IsError).IsTrue();
         Assertions.AssertString(outcome.Notice).Contains("contains a GDExtension");

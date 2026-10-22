@@ -35,13 +35,11 @@ internal sealed record InstallRequest(IReadOnlyList<UpdateCandidate> Batch, bool
 
 internal enum InstallStep
 {
-    /// <summary>The batch is staged and waits for the user to review its warnings or trust a changed source.</summary>
-    Reviewing,
     /// <summary>The updates were installed; their results are in the notice.</summary>
     Installed,
     /// <summary>A build failed and the update failure dialog takes over the decision.</summary>
     AwaitingDecision,
-    /// <summary>The download was canceled or every license was declined; addon files were not changed.</summary>
+    /// <summary>The download or the review was canceled, or every update was left out; addon files were not changed.</summary>
     Canceled,
     /// <summary>Staging or installing failed before an outcome; addon files were not changed unless a journal says so.</summary>
     Failed,
@@ -63,8 +61,6 @@ internal sealed class InstallView
     /// <summary>Whether the manager is still shown; once it is not, a running installation stops before changing files.</summary>
     public Func<bool> Alive { get; init; } = () => true;
     public Action<string> Status { get; init; } = _ => { };
-    /// <summary>The packages were staged; the manager shows their findings and the refused ones.</summary>
-    public Action<IReadOnlyList<ValidatedPackage>, IReadOnlyList<RefusedPackage>> Staged { get; init; } = (_, _) => { };
     /// <summary>Addon files are about to be replaced; the manager can no longer be closed.</summary>
     public Action Swapping { get; init; } = () => { };
 }
@@ -73,10 +69,14 @@ internal sealed class InstallView
 /// The update workflows of the ePlugin Manager without its UI: checking for updates, loading a plugin's published
 /// versions, and staging, reviewing and installing a batch. The dialog shows what they report.
 /// </summary>
+/// <param name="reviewUpdates">
+/// Shows the Review updates dialog and completes once the user decided: true to install what the review selects, false
+/// to cancel the whole batch.
+/// </param>
 /// <param name="reviewLicenses">Shows the license dialog and completes once every license was decided.</param>
 /// <param name="beginProgress">Starts a progress scope in ePlugin's progress window.</param>
-internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<LicenseReview, Task<LicenseReview>> reviewLicenses,
-    Func<string, IEPluginProgressScope> beginProgress)
+internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Task<bool>> reviewUpdates,
+    Func<LicenseReview, Task<LicenseReview>> reviewLicenses, Func<string, IEPluginProgressScope> beginProgress)
 {
     private readonly Dictionary<string, IReadOnlyList<UpdateCandidate>> _remoteVersions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _remoteVersionErrors = new(StringComparer.Ordinal);
@@ -93,17 +93,14 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<LicenseReview, T
 
     public bool IsLoadingVersions(string slug) => _loadingVersions.Contains(slug);
 
-    /// <summary>The batch being staged or awaiting review; null when nothing is staged.</summary>
+    /// <summary>The batch being installed; null when none is.</summary>
     public InstallRequest? Request { get; private set; }
 
-    /// <summary>The validated packages of the batch awaiting review; null when nothing is staged.</summary>
+    /// <summary>The validated packages of the batch being installed; null before they are staged.</summary>
     public IReadOnlyList<ValidatedPackage>? Staged { get; private set; }
 
     /// <summary>Packages of the staged batch that were refused; the others are installed without them.</summary>
     public IReadOnlyList<RefusedPackage> Refused { get; private set; } = [];
-
-    /// <summary>Whether a staged package moves to another update host, which the user has to trust explicitly.</summary>
-    public bool StagedNeedsTrust => Staged?.Any(p => p.Findings.Any(f => f.RequiresTrust)) == true;
 
     private string? _directory;
 
@@ -168,61 +165,71 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<LicenseReview, T
     }
 
     /// <summary>
-    /// Stages and validates the batch, stops for review when its packages carry warnings or move to another host, asks
-    /// for changed licenses, then installs. Called again for a staged batch, it continues with the installation.
+    /// Stages and validates the batch, has the user review packages with warnings, a changed update host or a refusal,
+    /// asks for changed licenses, then installs.
     /// </summary>
-    public async Task<InstallOutcome> InstallAsync(InstallRequest request, bool trustChangedSource, InstallView view,
-        CancellationToken ct)
+    public async Task<InstallOutcome> InstallAsync(InstallRequest request, InstallView view, CancellationToken ct)
     {
         Request = request;
         try
         {
-            if (Staged is null)
+            var first = request.Batch[0];
+            var text = request.VersionInstall
+                ? $"Downloading and validating {first.PluginName} {first.NewVersion}..."
+                : "Downloading and validating selected addons...";
+            view.Status(text);
+            (IReadOnlyList<ValidatedPackage> Packages, IReadOnlyList<RefusedPackage> Refused, string Directory) staged;
+            using (var progress = beginProgress(text))
             {
-                var first = request.Batch[0];
-                var text = request.VersionInstall
-                    ? $"Downloading and validating {first.PluginName} {first.NewVersion}..."
-                    : "Downloading and validating selected addons...";
-                view.Status(text);
-                (IReadOnlyList<ValidatedPackage> Packages, IReadOnlyList<RefusedPackage> Refused, string Directory) staged;
-                using (var progress = beginProgress(text))
+                // Reported from the download thread; the scope ignores a report that arrives after it ended.
+                var shown = -1;
+                var relay = new InlineProgress(value =>
                 {
-                    // Reported from the download thread; the scope ignores a report that arrives after it ended.
-                    var shown = -1;
-                    var relay = new InlineProgress(value =>
-                    {
-                        var percent = (int)(value * 100);
-                        if (Interlocked.Exchange(ref shown, percent) != percent) progress.Report($"{text} {percent}%");
-                    });
-                    staged = await host.StageUpdatesAsync(request.Batch, relay, request.AllowDowngrade, request.AllowReinstall, ct);
-                }
+                    var percent = (int)(value * 100);
+                    if (Interlocked.Exchange(ref shown, percent) != percent) progress.Report($"{text} {percent}%");
+                });
+                staged = await host.StageUpdatesAsync(request.Batch, relay, request.AllowDowngrade, request.AllowReinstall, ct);
+            }
 
-                Staged = staged.Packages;
-                Refused = staged.Refused;
-                _directory = staged.Directory;
+            Staged = staged.Packages;
+            Refused = staged.Refused;
+            _directory = staged.Directory;
+            if (!view.Alive())
+            {
+                Clear();
+                return new(InstallStep.Abandoned);
+            }
+
+            // Warnings, a changed host and refusals discovered inside the packages are decided before the first project
+            // side effect.
+            IReadOnlyList<UpdateReviewEntry> leftOut = [];
+            var selected = Staged.Where(p => request.Batch.Any(c => c.Slug == p.Candidate.Slug)).ToArray();
+            if (UpdateReview.For(selected, Refused, request.VersionInstall) is { } review)
+            {
+                view.Status("Review the updates.");
+                var install = await reviewUpdates(review);
                 if (!view.Alive())
                 {
                     Clear();
                     return new(InstallStep.Abandoned);
                 }
 
-                view.Staged(Staged, Refused);
-                // Warnings discovered inside the packages are reviewed before the first project side effect.
-                if (Staged.Any(p => p.Findings.Any(f => f.Severity == FindingSeverity.Warning)) ||
-                    StagedNeedsTrust && !trustChangedSource)
+                if (!install)
                 {
-                    return new(InstallStep.Reviewing, PluginManagerViewModel.RefusedSummary(Refused) +
-                                                      "Review package warnings in the details, then confirm installation.");
+                    Clear();
+                    return new(InstallStep.Canceled, "Update canceled. Addon files were not changed.");
+                }
+
+                selected = review.Selected(selected).ToArray();
+                leftOut = review.LeftOut;
+                if (selected.Length == 0)
+                {
+                    Clear();
+                    return new(InstallStep.Canceled, "No update was installed: every update was left out or refused. Addon files were not changed.");
                 }
             }
 
             ct.ThrowIfCancellationRequested();
-            if (StagedNeedsTrust && !trustChangedSource)
-            {
-                return new(InstallStep.Reviewing);
-            }
-
-            var selected = Staged!.Where(p => request.Batch.Any(c => c.Slug == p.Candidate.Slug)).ToArray();
             // An update that keeps the accepted license file is not asked about again; a changed or new one is.
             if (host.ReviewUpdateLicenses(selected) is { } licenses)
             {
@@ -252,7 +259,8 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<LicenseReview, T
             view.Status(request.VersionInstall ? "Installing the selected version..." : "Installing selected addons...");
             // Independent groups are installed one after another; a failing group is rolled back without the others.
             // Only an update started from the plugin's details asks whether to keep a version that does not build.
-            var results = await host.ApplyUpdatesAsync(selected, _directory!, trustChangedSource,
+            // The review installs a package that moves to another host only when the user checked it.
+            var results = await host.ApplyUpdatesAsync(selected, _directory!, selected.Any(p => p.Findings.Any(f => f.RequiresTrust)),
                 askOnBuildFailure: request.VersionInstall);
             var skipped = Refused;
             // The transaction owns the staging directory now; it holds its journal and is not deleted here.
@@ -265,7 +273,7 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<LicenseReview, T
                 return new(InstallStep.AwaitingDecision, Refresh: refresh);
             }
 
-            return new(InstallStep.Installed, PluginManagerViewModel.UpdateSummary(results, host.IsRestartPending, skipped),
+            return new(InstallStep.Installed, PluginManagerViewModel.UpdateSummary(results, host.IsRestartPending, skipped, leftOut),
                 PluginManagerViewModel.AnyUpdateFailed(results) || skipped.Count > 0, refresh);
         }
         catch (OperationCanceledException)

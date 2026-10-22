@@ -204,7 +204,7 @@ Updates of plugins that depend on each other are installed together, also when o
 
 ## Plugin state
 
-ePlugin records the version and enabled state of GDScript plugins in the committed `res://addons/eplugin-state.json`, next to ePlugins, so the whole team shares them. Their state is read at editor start and before **Retry failed**, including plugins toggled in Project Settings. A plugin without a `version` in `plugin.cfg` is recorded as invalid; add the version and use **Retry failed** in the manager. See [Plugin state files](plugin-state.md).
+ePlugin records the version and enabled state of GDScript plugins in the committed `res://addons/eplugin-state.json`, next to ePlugins, so the whole team shares them. Their state is read at editor start and before a retry, including plugins toggled in Project Settings. A plugin without a `version` in `plugin.cfg` is recorded as invalid; add the version and use **Retry** under **Needs attention** in the manager. See [Plugin state files](plugin-state.md).
 
 ## When a plugin needs C#
 

@@ -1,0 +1,97 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/ePlugin/Internal/Manager/AttentionDialog.cs" id="1_script"]
+
+[node name="AttentionDialog" type="AcceptDialog"]
+auto_translate_mode = 2
+title = "ePlugin — Needs attention"
+initial_position = 2
+size = Vector2i(960, 560)
+min_size = Vector2i(640, 360)
+ok_button_text = "Close"
+script = ExtResource("1_script")
+
+[node name="Content" type="VBoxContainer" parent="."]
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 952.0
+offset_bottom = 511.0
+theme_override_constants/separation = 8
+
+[node name="Summary" type="Label" parent="Content"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(560, 0)
+layout_mode = 2
+text = "These plugins need a decision. Select one to see what happened and what you can do."
+autowrap_mode = 3
+
+[node name="Split" type="HSplitContainer" parent="Content"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="AttentionList" type="ItemList" parent="Content/Split"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+
+[node name="AttentionBox" type="VBoxContainer" parent="Content/Split"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="AttentionName" type="Label" parent="Content/Split/AttentionBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+theme_type_variation = &"HeaderMedium"
+text = "Plugin"
+autowrap_mode = 3
+
+[node name="AttentionText" type="RichTextLabel" parent="Content/Split/AttentionBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+focus_mode = 2
+theme_override_constants/line_separation = 6
+bbcode_enabled = true
+context_menu_enabled = true
+selection_enabled = true
+
+[node name="Actions" type="HFlowContainer" parent="Content/Split/AttentionBox"]
+layout_mode = 2
+
+[node name="RetryPluginButton" type="Button" parent="Content/Split/AttentionBox/Actions"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Retry"
+
+[node name="RollbackButton" type="Button" parent="Content/Split/AttentionBox/Actions"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Roll back"
+
+[node name="DisablePluginButton" type="Button" parent="Content/Split/AttentionBox/Actions"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Disable"
+
+[node name="OpenLogButton" type="Button" parent="Content/Split/AttentionBox/Actions"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Open the build log of the update."
+text = "Open log"
+
+[node name="OpenPluginFolderButton" type="Button" parent="Content/Split/AttentionBox/Actions"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Show the plugin's folder in the system file manager."
+text = "Open folder"
+
+[node name="RollbackConfirm" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+auto_translate_mode = 2
+title = "Roll back kept update"
+initial_position = 2
+size = Vector2i(520, 200)
+ok_button_text = "Roll back"
+dialog_autowrap = true

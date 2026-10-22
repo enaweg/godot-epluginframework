@@ -299,7 +299,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         if (!store.TryAcknowledgeVersions(journal.AttemptId, versions))
         {
             store.TryFail(journal.AttemptId, PersistedPluginState.Failed, "update_commit_failed");
-            journal.Failure = "Healthy update could not be acknowledged; merge the shared state file and use Retry failed in the ePlugin Manager.";
+            journal.Failure = "Healthy update could not be acknowledged; merge the shared state file and use Retry under Needs attention in the ePlugin Manager.";
             journal.Save(UpdatePhase.Verified);
             host.Log(journal.Failure);
             return UpdateOutcome.KeptWithErrors;
@@ -343,7 +343,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
     {
         store.TryFail(journal.AttemptId, PersistedPluginState.Failed, "update_kept_build_failed");
         journal.Save(UpdatePhase.CommittedWithErrors);
-        host.Log($"New versions kept with build errors. Fix the project and use Retry failed in the ePlugin Manager. Backup: {journal.Directory}");
+        host.Log($"New versions kept with build errors. Fix the project and use Retry under Needs attention in the ePlugin Manager. Backup: {journal.Directory}");
         return UpdateOutcome.KeptWithErrors;
     }
 
@@ -399,7 +399,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             store.TryFail(journal.AttemptId, PersistedPluginState.Failed, "update_rollback_failed");
             journal.Failure = reason + "; rollback failed: " + ex.Message;
             journal.Save(UpdatePhase.RollingBack);
-            host.Log(journal.Failure + ". Use Retry failed in the ePlugin Manager after repair. Backup: " + journal.Directory);
+            host.Log(journal.Failure + ". Use Retry under Needs attention in the ePlugin Manager after repair. Backup: " + journal.Directory);
             return UpdateOutcome.KeptWithErrors;
         }
     }
@@ -563,7 +563,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         var count = journal.ProjectErrors.Count;
         var errors = count >= BuildDiagnostics.MaxProjectErrors ? $"{count}+ errors" : count == 1 ? "1 error" : $"{count} errors";
         return $"The project's own code does not compile with the updated plugins ({errors}); the plugins compile on their own. " +
-               "Adapt the project's code, then use Retry failed in the ePlugin Manager to finish the update";
+               "Adapt the project's code, then use Retry under Needs attention in the ePlugin Manager to finish the update";
     }
 
     /// <summary>

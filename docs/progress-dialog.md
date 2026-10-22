@@ -6,7 +6,7 @@ ePlugin Framework shows progress in a separate native window while plugin work r
 
 ## Using the dialog
 
-The window opens automatically for enabling and disabling plugins, **Retry failed**, **Check for updates**, downloading and validating update packages, and installing updates. Start these actions in the [ePlugin Manager](eplugin-manager.md); enabling or disabling an ePlugin from Godot's Project Settings also reports progress through the framework's lifecycle helpers. Other C# editor tools can report their own work through `EPlugin.Progress`.
+The window opens automatically for enabling and disabling plugins, retrying failed plugins, **Check for updates**, downloading and validating update packages, and installing updates. Start these actions in the [ePlugin Manager](eplugin-manager.md); enabling or disabling an ePlugin from Godot's Project Settings also reports progress through the framework's lifecycle helpers. Other C# editor tools can report their own work through `EPlugin.Progress`.
 
 The window displays an animated progress bar and the current step. The bar indicates that work is running; download steps can also show a percentage in their text. It appears without taking keyboard focus from the editor and has no close or cancel button. Use the manager's **Cancel** action when it is available, such as during update downloads. The window closes automatically when the operations using it finish.
 

@@ -31,7 +31,7 @@ internal sealed class PluginRow(PluginInfo plugin, UpdateRow? update)
     /// <summary>Godot loads a GDExtension add-on whatever is enabled, so it has nothing to enable or disable.</summary>
     public bool CanToggle => !Plugin.Missing && Plugin.Kind != PluginKind.GDExtensionAddon;
     /// <summary>
-    /// The plugin failed, a failed attempt of it waits for Retry failed, or Godot does not run one of its GDExtensions
+    /// The plugin failed, a failed attempt of it waits for a decision under Needs attention, or Godot does not run one of its GDExtensions
     /// although it should.
     /// </summary>
     public bool NeedsAttention => Plugin.FailedAttempt is not null || Plugin.State == EEditorPluginState.Error ||
@@ -52,10 +52,7 @@ internal sealed class PluginManagerViewModel
 {
     public List<PluginRow> Plugins { get; } = [];
     public List<UpdateRow> Updates { get; } = [];
-    public bool TrustChangedSource { get; set; }
-    public bool RequiresTrust => Updates.Any(r => r.Selected && r.Findings.Any(f => f.RequiresTrust));
-    public bool CanApply => Selected.Count > 0 && (!RequiresTrust || TrustChangedSource);
-    public bool CanRetry => Plugins.Any(p => p.Plugin.FailedAttempt is not null);
+    public bool CanApply => Selected.Count > 0;
     /// <summary>
     /// A plugin that needs attention comes first; updates count only when they can be installed, so an update the
     /// project rules out neither turns the button green nor red.
@@ -76,7 +73,7 @@ internal sealed class PluginManagerViewModel
             {
                 if (candidate.SourceUrl is not null && !target.UpdateUrls.Contains(candidate.SourceUrl))
                     messages.Add(new("source_changed", FindingSeverity.Error, "The plugin's update site changed or was removed; check for updates again."));
-                if (target.IsBlocked || target.StoreReadOnly) messages.Add(new("R17", FindingSeverity.Error, "Resolve local state with Retry failed first."));
+                if (target.IsBlocked || target.StoreReadOnly) messages.Add(new("R17", FindingSeverity.Error, "Resolve the plugin's problem under Needs attention first."));
                 if (target.RecordedVersion is not null && target.RecordedVersion != target.InstalledVersion)
                     messages.Add(new("recorded_version", FindingSeverity.Info, "Last working version: " + target.RecordedVersion));
             }
@@ -148,7 +145,7 @@ internal sealed class PluginManagerViewModel
             return "This version is installed. Neither its update site nor a local directory offers it to reinstall.";
         if (row.Plugin.Missing || option.Candidate is null) return "The plugin folder is missing.";
         if (!row.Plugin.Enabled) return "Enable the plugin to change its version.";
-        if (row.Plugin.FailedAttempt is not null) return "Resolve the plugin's failed state with Retry failed first.";
+        if (row.Plugin.FailedAttempt is not null) return "Resolve the plugin's problem under Needs attention first.";
         if (option.IsDowngrade && row.Plugin.Kind == PluginKind.Framework)
             return "The ePlugin Framework cannot be downgraded: older releases cannot finish or recover the update that installs them.";
         return null;
@@ -226,7 +223,9 @@ internal sealed class PluginManagerViewModel
     /// The status line after installing a batch: what was installed and, per group that was not, why. A group that failed
     /// names its log folder. <paramref name="refused"/> are the packages left out when the batch was staged.
     /// </summary>
-    public static string UpdateSummary(IReadOnlyList<UpdateGroupResult> results, bool restarting, IReadOnlyList<RefusedPackage>? refused = null)
+    /// <param name="leftOut">The updates the user left out in the review.</param>
+    public static string UpdateSummary(IReadOnlyList<UpdateGroupResult> results, bool restarting, IReadOnlyList<RefusedPackage>? refused = null,
+        IReadOnlyList<UpdateReviewEntry>? leftOut = null)
     {
         static string Names(IEnumerable<ValidatedPackage> packages) => string.Join(", ", packages.Select(p => $"{p.Candidate.PluginName} {p.NewVersion}"));
         static string Reason(string? failure, string fallback) => (failure ?? fallback).TrimEnd('.');
@@ -239,11 +238,13 @@ internal sealed class PluginManagerViewModel
             else if (result.Outcome == UpdateOutcome.RolledBack) parts.Add($"Rolled back {Names(result.Packages)}: {Reason(result.Failure, "the update failed")}. Logs: {result.Directory}");
             else if (result is { Outcome: UpdateOutcome.KeptWithErrors, KeptForProjectCode: true })
                 parts.Add($"Kept {Names(result.Packages)}: {Reason(result.Failure, "the project's own code does not compile with it")}. " +
-                          $"The plugin's details list the errors and can roll it back. Logs: {result.Directory}");
+                          $"Needs attention lists the errors and can roll it back. Logs: {result.Directory}");
             else if (result.Outcome == UpdateOutcome.KeptWithErrors)
-                parts.Add($"{Names(result.Packages)} needs recovery: {Reason(result.Failure, "Use Retry failed in the ePlugin Manager")}. Logs: {result.Directory}");
+                parts.Add($"{Names(result.Packages)} needs recovery: {Reason(result.Failure, "Retry it under Needs attention in the ePlugin Manager")}. Logs: {result.Directory}");
         }
         if (refused is { Count: > 0 }) parts.Add(RefusedSummary(refused).TrimEnd());
+        if (leftOut is { Count: > 0 })
+            parts.Add($"Left out {string.Join(", ", leftOut.Select(e => $"{e.Candidate.PluginName} {e.NewVersion}"))}.");
         if (restarting)
             parts.Add(installed.Length switch
             {
@@ -262,15 +263,15 @@ internal sealed class PluginManagerViewModel
     public static bool AnyUpdateFailed(IReadOnlyList<UpdateGroupResult> results) =>
         results.Any(r => r.Outcome is null or UpdateOutcome.RolledBack or UpdateOutcome.KeptWithErrors);
 
-    /// <summary>The meta of the link in <see cref="KeptUpdateSection"/> that rolls back a kept update.</summary>
-    public const string RollbackKeptMeta = "eplugin-rollback-kept";
+    /// <summary>The meta of the link in <see cref="Describe"/> that opens the Needs attention dialog at the plugin.</summary>
+    public const string AttentionMeta = "eplugin-attention";
 
     /// <summary>Project errors listed in the details; the dialog and the build log have the rest.</summary>
     public const int ShownProjectErrors = 10;
 
     /// <summary>
-    /// An update kept with build errors: which versions it replaced, why it was kept, the errors left in the project's own
-    /// code, and a link that rolls it back.
+    /// An update kept with build errors: which versions it replaced, why it was kept, and the errors left in the project's
+    /// own code. The Needs attention dialog rolls it back.
     /// </summary>
     public static string KeptUpdateSection(UpdateJournal kept)
     {
@@ -283,8 +284,6 @@ internal sealed class PluginManagerViewModel
             if (kept.ProjectErrors.Count > ShownProjectErrors)
                 text.Append(CultureInfo.CurrentCulture, $"and {kept.ProjectErrors.Count - ShownProjectErrors} more, see the build log in {Escape(kept.Directory)}\n");
         }
-        var versions = string.Join(", ", kept.Plugins.Select(p => $"{p.Slug} {p.OldVersion}"));
-        text.Append(CultureInfo.CurrentCulture, $"[url={RollbackKeptMeta}]Roll back to {Escape(versions)}[/url]\n");
         return text.ToString();
     }
 
@@ -313,10 +312,8 @@ internal sealed class PluginManagerViewModel
     /// The details pane as BBCode, below the heading (<see cref="DetailsTitle"/>) and location. All plugin supplied text
     /// is escaped.
     /// </summary>
-    /// <param name="reviewed">Findings of a staged package for an explicitly chosen version, awaiting confirmation.</param>
     /// <param name="kept">The plugin's update kept with build errors, see <see cref="KeptUpdateSection"/>.</param>
-    public static string Describe(PluginRow row, IReadOnlyList<Finding>? reviewed = null, LicenseInfo? license = null,
-        WelcomeEntry? welcome = null, UpdateJournal? kept = null)
+    public static string Describe(PluginRow row, LicenseInfo? license = null, WelcomeEntry? welcome = null, UpdateJournal? kept = null)
     {
         var plugin = row.Plugin; var text = new StringBuilder();
         void Line(string label, string? value) { if (!string.IsNullOrWhiteSpace(value)) text.Append(CultureInfo.CurrentCulture, $"[b]{label}:[/b] {Escape(value)}\n"); }
@@ -325,6 +322,7 @@ internal sealed class PluginManagerViewModel
             if (value is null || !IsWebUrl(value)) Line(label, value);
             else text.Append(CultureInfo.CurrentCulture, $"[b]{label}:[/b] [url={value}]{Escape(value)}[/url]\n");
         }
+        if (row.NeedsAttention) text.Append(CultureInfo.CurrentCulture, $"[color=#ff7070]This plugin needs attention.[/color] [url={AttentionMeta}]See what happened and what you can do[/url]\n\n");
         if (!string.IsNullOrWhiteSpace(plugin.Description)) text.Append(Escape(plugin.Description.Trim())).Append("\n\n");
         Line("Type", PluginCatalog.KindName(plugin.Kind));
         Line("Status", StatusText(plugin));
@@ -376,12 +374,6 @@ internal sealed class PluginManagerViewModel
                 Link("Built-in update site", known.UpdateUrl);
         }
         if (plugin.LocalPackages > 0) Line("Local packages", plugin.LocalPackages.ToString(CultureInfo.CurrentCulture));
-
-        if (reviewed is { Count: > 0 })
-        {
-            text.Append("\n[b]Reviewed package[/b]\n");
-            foreach (var finding in reviewed) text.Append(CultureInfo.CurrentCulture, $"[color={Color(finding.Severity)}]{finding.Severity}:[/color] {Escape(finding.Message)}\n");
-        }
 
         if (plugin.Recipe is { } recipe)
         {

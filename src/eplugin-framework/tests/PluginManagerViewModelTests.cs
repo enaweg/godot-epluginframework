@@ -52,19 +52,6 @@ public class PluginManagerViewModelTests
         Assertions.AssertObject(model.Updates.Single(r => r.Candidate.Slug == "failed").Failed!).IsNotNull();
     }
     [TestCase]
-    public static void SourceTrustIsRequiredOnlyForSelectedRows()
-    {
-        var candidate = Candidate("plugin");
-        var model = new PluginManagerViewModel([], [candidate], [new("plugin", "Plugin", "1.0", candidate.SourceUrl, "/unused")], null,
-            _ => [new("R9", FindingSeverity.Warning, "Source host changed", true)]);
-        Assertions.AssertBool(model.CanApply).IsFalse();
-        model.TrustChangedSource = true;
-        Assertions.AssertBool(model.CanApply).IsTrue();
-        model.Updates[0].Selected = false;
-        Assertions.AssertBool(model.RequiresTrust).IsFalse();
-        Assertions.AssertBool(model.CanApply).IsFalse();
-    }
-    [TestCase]
     public static void MissingTargetCannotBeAppliedAndFrameworkAnnouncesRestart()
     {
         var model = new PluginManagerViewModel([], [Candidate("missing"), Candidate("ePlugin")],
@@ -90,7 +77,7 @@ public class PluginManagerViewModelTests
         Assertions.AssertBool(model.Find("orphan")!.Plugin.Missing).IsTrue();
         Assertions.AssertBool(model.Find("orphan")!.CanToggle).IsFalse();
         Assertions.AssertBool(model.Find("gamma")!.CanToggle && model.Find("ePlugin")!.CanToggle).IsTrue();
-        Assertions.AssertBool(model.CanRetry).IsFalse();
+        Assertions.AssertBool(model.Plugins.Any(p => p.NeedsAttention)).IsFalse();
     }
     [TestCase]
     public static void LocalPackagesShowTheirFileAndNeverAnUpdateSite()
@@ -106,12 +93,14 @@ public class PluginManagerViewModelTests
         Assertions.AssertString(PluginManagerViewModel.Describe(model.Find("gone")!)).NotContains("Update site");
     }
     [TestCase]
-    public static void FailedAttemptEnablesRetryAndIsShownInStatus()
+    public static void AFailedAttemptNeedsAttentionAndTheDetailsLinkToIt()
     {
         var attempt = new LocalPluginAttempt(Guid.NewGuid(), "broken", "1.0", PersistedPluginState.Activated, PersistedPluginState.Failed, "build_failed");
         var model = new PluginManagerViewModel([Plugin("broken", PluginKind.EPlugin) with { FailedAttempt = attempt }], [], [], null, _ => []);
-        Assertions.AssertBool(model.CanRetry).IsTrue();
+        Assertions.AssertBool(model.Plugins[0].NeedsAttention).IsTrue();
         Assertions.AssertString(PluginManagerViewModel.StatusText(model.Plugins[0].Plugin)).Contains("needs retry: build_failed");
+        Assertions.AssertString(PluginManagerViewModel.Describe(model.Plugins[0])).StartsWith("[color=#ff7070]This plugin needs attention.[/color] " +
+            $"[url={PluginManagerViewModel.AttentionMeta}]");
     }
     [TestCase]
     public static void StatusShowsInstallableUpdatesAndPluginsThatNeedAttention()
@@ -313,12 +302,12 @@ public class PluginManagerViewModelTests
         var kept = new UpdateGroupResult([Package("a")], "/updates/a", UpdateOutcome.KeptWithErrors, "The project's own code does not compile with the updated plugins (2 errors).", true);
         Assertions.AssertString(PluginManagerViewModel.UpdateSummary([kept], restarting: false)).IsEqual(
             "Kept a 2.0.0: The project's own code does not compile with the updated plugins (2 errors). " +
-            "The plugin's details list the errors and can roll it back. Logs: /updates/a");
+            "Needs attention lists the errors and can roll it back. Logs: /updates/a");
         var recovery = kept with { KeptForProjectCode = false, Failure = "Final build failed." };
         Assertions.AssertString(PluginManagerViewModel.UpdateSummary([recovery], restarting: false)).IsEqual("a 2.0.0 needs recovery: Final build failed. Logs: /updates/a");
     }
     [TestCase]
-    public static void TheDetailsOfAKeptUpdateListItsProjectErrorsAndOfferTheRollback()
+    public static void TheDetailsOfAKeptUpdateListItsProjectErrors()
     {
         var journal = new UpdateJournal { Directory = "/updates/a", Failure = "Only [project] code fails." };
         journal.Plugins.Add(new() { Slug = "a", OldVersion = "1.0.0", NewVersion = "2.0.0" });
@@ -330,7 +319,8 @@ public class PluginManagerViewModelTests
         Assertions.AssertString(details).Contains("[code]Main.cs(1,1): CS0117 no [lb]Api][/code]");
         Assertions.AssertString(details).NotContains($"Main.cs({PluginManagerViewModel.ShownProjectErrors + 1},1)");
         Assertions.AssertString(details).Contains("and 2 more, see the build log in /updates/a");
-        Assertions.AssertString(details).Contains($"[url={PluginManagerViewModel.RollbackKeptMeta}]Roll back to a 1.0.0[/url]");
+        // Needs attention rolls it back.
+        Assertions.AssertString(details).NotContains("Roll back");
     }
     [TestCase]
     public static void TheAboutDialogShowsTheFrameworksPluginCfgAndLeavesOutLinksThatAreNoWebUrls()

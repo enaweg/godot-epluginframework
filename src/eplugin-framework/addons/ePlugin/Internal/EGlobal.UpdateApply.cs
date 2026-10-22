@@ -216,7 +216,7 @@ internal sealed partial class EGlobal
             var attempts = _stateStore.LocalAttempts.Where(a => a.AttemptId == journal.AttemptId).ToArray();
             if (attempts.Any(a => a.Reason.StartsWith("update_", StringComparison.Ordinal)))
             {
-                _ePluginContext?.Logger.Warn($"Update needs manual recovery: {journal.Directory}. Use Retry failed in the ePlugin Manager.");
+                _ePluginContext?.Logger.Warn($"Update needs manual recovery: {journal.Directory}. Use Retry under Needs attention in the ePlugin Manager.");
                 continue;
             }
             UpdateOutcome result;
@@ -256,6 +256,13 @@ internal sealed partial class EGlobal
         if (_stateStore is null || _updateJournals is null) return null;
         var attempts = _stateStore.LocalAttempts.Where(a => a.Reason == "update_kept_build_failed").Select(a => a.AttemptId).ToHashSet();
         return _updateJournals.Read().LastOrDefault(j => j.State == UpdatePhase.CommittedWithErrors && attempts.Contains(j.AttemptId) && j.Plugins.Any(p => p.Slug == slug));
+    }
+
+    /// <summary>The journal of the update whose failed attempt blocks <paramref name="slug"/>, if there is one.</summary>
+    internal UpdateJournal? FailedUpdateJournal(string slug)
+    {
+        if (_stateStore?.GetLocal(slug) is not { } attempt || _updateJournals is null) return null;
+        return _updateJournals.Read().LastOrDefault(j => j.AttemptId == attempt.AttemptId);
     }
 
     /// <summary>Restores the versions an update kept with build errors replaced; asked for in the ePlugin Manager.</summary>

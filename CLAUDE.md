@@ -129,7 +129,7 @@ keep new lifecycle code behind it so it stays testable. Recipes are created thro
 plugin in error and discards a half-built recipe when `CreateRecipe` throws. `FindDependencyCycle` fails an activation
 whose hard dependencies lead back to the plugin (otherwise it waits for itself forever). Godot frees a plugin's instance
 on disable, so `AddContext` replaces a deactivated or freed context of the same slug. A transition has one participant
-per slug: when **Retry failed** re-enables a plugin whose failed activation disabled it, the new instance's
+per slug: when a manual retry re-enables a plugin whose failed activation disabled it, the new instance's
 `EnableEPlugin` replaces the stale participant, and the retry drops the old context instead of continuing with it. That includes the framework
 itself: its `_DisablePlugin` calls `EGlobal.Detach`, which drops the singleton, so the instance created when it is
 enabled again initializes like after an assembly reload instead of using the freed one. The compiled plugin types are read
@@ -299,13 +299,14 @@ built-in list), checks, staging, groups, plugin state attempts, restarts and rec
 `Internal/Manager/` holds the framework's only editor UI entry point, opened from the single Tools menu entry and
 the toolbar button that `EPluginPlugin.AddManagerUi` installs (the button's instance id is kept in Engine metadata
 so a stale one can be removed after an assembly reload). The puzzle piece of its icon (`id="piece"` in
-`eplugin_editor.svg`) is red while a plugin needs attention (failed or awaiting Retry failed) and green while an update
+`eplugin_editor.svg`) is red while a plugin needs attention (failed, or a failed attempt awaiting a decision) and green while an update
 can be installed (`PluginManagerViewModel.Status`). `EGlobal.CurrentManagerStatus` checks every 30 frames and only builds
 the view model when pending updates, enabled plugins or their states changed; the manager's `Refresh` invalidates it. When an update restarts the editor while the manager is open,
 `EGlobal.RestartRequested` writes `ManagerReopenMarker` (`.godot/eplugin/manager-open`, renewed by an interim restart,
 expires after an hour); the start that requests no further restart wraps `Initialize` in one `ActivationProgress` scope,
 reopens the manager and closes that progress window a few frames later. Every dialog is its own scene (`EPluginManagerDialog.tscn`,
-`SettingsDialog.tscn`, `UpdateFailureDialog.tscn`, `LicenseDialog.tscn`, `WelcomeDialog.tscn`); scripts only bind
+`SettingsDialog.tscn`, `AttentionDialog.tscn`, `UpdateReviewDialog.tscn`, `UpdateFailureDialog.tscn`, `LicenseDialog.tscn`,
+`WelcomeDialog.tscn`); scripts only bind
 `%`-unique nodes and set what a scene cannot store (e.g. Tree column titles/widths). Keep layout changes in the scenes.
 The manager's Settings button opens `SettingsDialog`, a `TabContainer` whose tabs (General, Update sources, About) each
 have their own script (`GeneralSettingsTab`, `UpdateSourcesTab`, `AboutTab`); the dialog owns the windows the tabs open.
@@ -326,9 +327,17 @@ their accent colors to the theme's status colors; draw new icons after `docs/int
 recognizes disabled ePlugins by the `ScriptPathAttribute` of their compiled type. `PluginManagerViewModel` is pure
 (rows, update selection, BBCode details) and unit-tested. The update workflows (checking, loading versions, staging,
 reviewing and installing) are in `UpdateFlow`, which the dialog only displays; it is tested without the editor in
-`UpdateFlowTests`. Start asynchronous work from a signal with `ObservedTask.Run` on an `async Task` method, never as an
+`UpdateFlowTests`. Decisions about a few plugins get a focused dialog that lists only those plugins, not the
+manager's list: `UpdateReviewDialog` (pure model `UpdateReview`) opens inside `UpdateFlow.InstallAsync` after staging
+when a package has a warning, moves to another update host (unchecked until the user trusts it) or was refused, and
+installs the checked and unlisted packages or nothing. `AttentionDialog` (pure model `AttentionItem`/`PluginAttention`,
+child of the manager scene like `SettingsDialog`) lists plugins that `NeedsAttention` with Retry (`EGlobal.RetryFailedPlugins`
+with slugs, widened by `RetryScope` to the same attempt and failed hard dependencies), Disable (`DisableFailedPlugin`, a
+manual retry as a deactivation), Roll back (a kept update), Open log and Retry all; the manager carries out the
+`Requested` decision and shows the list again. It opens from the manager's attention button, and by itself when the
+manager opens with a problem whose `AttentionItem.Key` is not in `EGlobal.ShownAttention`. Start asynchronous work from a signal with `ObservedTask.Run` on an `async Task` method, never as an
 `async void` handler, which would crash the editor on an unexpected exception. New user-facing actions belong in this dialog, not in
-additional Tools menu entries. Long-running actions (enabling/disabling, Retry failed, Check for updates,
+additional Tools menu entries. Long-running actions (enabling/disabling, retries, Check for updates,
 downloading and installing) show their progress through an `ActivationProgress` scope, not through the dialog: the
 dialog has no progress bar and only puts the outcome in its status line.
 

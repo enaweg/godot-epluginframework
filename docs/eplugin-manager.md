@@ -4,7 +4,7 @@ Open **ePlugin Manager** with the ePlugin button at the right of the editor's ma
 
 ![The ePlugin button at the right end of the editor's main toolbar, after the run buttons](images/eplugin-toolbar-button.png)
 
-The puzzle piece of the button turns red while a plugin failed, a failed attempt waits for **Retry failed**, or Godot did not load a GDExtension that it should (see [GDExtension plugins](gdextension-plugins.md#in-the-eplugin-manager)), and green while an update can be installed. Red takes precedence. Updates that cannot be installed leave the button unchanged.
+The puzzle piece of the button turns red while a plugin [needs attention](#needs-attention): it failed, a failed attempt waits for a decision, or Godot did not load a GDExtension that it should (see [GDExtension plugins](gdextension-plugins.md#in-the-eplugin-manager)), and green while an update can be installed. Red takes precedence. Updates that cannot be installed leave the button unchanged.
 
 ![ePlugin Manager listing the installed plugins, with the details of the selected SamplePlugin: status, missing license, welcome page and update source](images/eplugin-manager.png)
 
@@ -16,18 +16,18 @@ Select a plugin to see its description, status, author, documentation and source
 
 ## Actions
 
-The buttons at the top right of the manager are icons: **Retry failed**, **Check for updates** and **Settings**, from left to right. Hover over one to see its name and what it does.
+The buttons at the top right of the manager are icons: **Check for updates** and **Settings**. Hover over one to see its name and what it does. While plugins need attention, a button before them says how many and opens the [Needs attention](#needs-attention) dialog.
 
 - **On** enables or disables the selected plugin. Enabling an ePlugin installs its recipe and required dependencies. Plugins that ask for their [license](plugin-licenses.md) to be accepted show it first. Once installed, a plugin shows its [welcome page](plugin-welcome.md) if it has one and it was not shown for the project yet. Disabling a plugin also disables plugins that require it. The manager refreshes the list after toggles. Disabling ePlugin Framework itself requires confirmation because it closes the manager.
 - **Check for updates** checks immediately regardless of the scheduled interval and indexes local directories again.
 - **Settings** opens ePlugin's settings, in four tabs (see [Settings](#settings)).
 - **Update** installs the checked updates after validation and confirmation. See [Updating plugins](updating-plugins.md). Independent plugins are installed one after another, so a plugin that fails is rolled back without the others; a build failure is rolled back without asking. The manager stays open and reports the installed versions, and the plugins that were rolled back or skipped with their reason, when the update finishes; an update that restarts the editor reopens it afterwards.
-- **Retry failed** retries activation, deactivation, or update work that failed or was interrupted. See [Plugin state files](plugin-state.md).
-- A plugin whose update was kept although the project does not build with it, for example because only the project's own code has to be adapted, shows a **Kept update** section in its details: the versions, why it was kept, the remaining errors in the project's code, and a **Roll back to** link that restores the previous version. See [Updates that only break the project's code](updating-plugins.md#updates-that-only-break-the-projects-code).
+- **N plugins need attention** opens the [Needs attention](#needs-attention) dialog. A plugin that needs attention also says so at the top of its details, with a link to the dialog.
+- A plugin whose update was kept although the project does not build with it, for example because only the project's own code has to be adapted, shows a **Kept update** section in its details: the versions, why it was kept, and the remaining errors in the project's code. Roll it back under **Needs attention**. See [Updates that only break the project's code](updating-plugins.md#updates-that-only-break-the-projects-code).
 - **Open release page** opens the release notes for the selected update.
-- **Version** selects a published version for an enabled plugin with an `update_url` or a package in a local directory. Choose **Update** or **Downgrade** to install it, or **Reinstall** with the installed version selected to install it again: this gets new commits of a pinned Git branch whose version did not change, and repairs addon files changed in the project. Downgrades and reinstalls use the same download, validation, backup, and rollback flow as updates. When the project does not build with the installed version, a dialog asks whether to keep it, to fix the errors yourself and finish with **Retry failed**, or to roll it back (see [Builds, restart, and recovery](updating-plugins.md#builds-restart-and-recovery)). The ePlugin Framework itself cannot be downgraded because an older framework cannot complete or recover the update that installs it.
+- **Version** selects a published version for an enabled plugin with an `update_url` or a package in a local directory. Choose **Update** or **Downgrade** to install it, or **Reinstall** with the installed version selected to install it again: this gets new commits of a pinned Git branch whose version did not change, and repairs addon files changed in the project. Downgrades and reinstalls use the same download, validation, backup, and rollback flow as updates. When the project does not build with the installed version, a dialog asks whether to keep it, to fix the errors yourself and finish with **Retry** under **Needs attention**, or to roll it back (see [Builds, restart, and recovery](updating-plugins.md#builds-restart-and-recovery)). The ePlugin Framework itself cannot be downgraded because an older framework cannot complete or recover the update that installs it.
 
-Long-running actions (enabling and disabling, **Retry failed**, **Check for updates**, downloading and installing) show their progress in ePlugin's separate progress window; the manager's status line at the bottom right reports the outcome. While updates are downloaded and installed, a **Cancel** button stops them; otherwise the manager has no button to close it, use the window's close button or Escape. After the C# project was rebuilt, for example by an activation or an IDE build, the actions wait until the editor has loaded the rebuilt code, and the status line says *Waiting for the editor to load the rebuilt C# code...* meanwhile. They become available again after at most 15 seconds, even if the editor does not reload.
+Long-running actions (enabling and disabling, retrying, **Check for updates**, downloading and installing) show their progress in ePlugin's separate progress window; the manager's status line at the bottom right reports the outcome. While updates are downloaded and installed, a **Cancel** button stops them; otherwise the manager has no button to close it, use the window's close button or Escape. After the C# project was rebuilt, for example by an activation or an IDE build, the actions wait until the editor has loaded the rebuilt code, and the status line says *Waiting for the editor to load the rebuilt C# code...* meanwhile. They become available again after at most 15 seconds, even if the editor does not reload.
 
 The progress window comes from a small helper included in release archives (see [Requirements and installation](../README.md#requirements-and-installation)). The ePlugin logo fades in and splits apart around a panel whose progress bar and current step fade in. Closing reverses the animation from its current position without pausing on the joined logo. Short operations can finish without displaying a window.
 
@@ -36,6 +36,21 @@ Godot editors using compatible versions of ePlugin share one progress window, al
 Progress feedback is best effort. If the helper is unavailable or stops responding, plugin work continues and the manager still reports the outcome. Editors using incompatible versions of the progress helper use separate windows. See [Progress dialog](progress-dialog.md) for usage, timing, restart handoff, and failure handling.
 
 ![The ePlugin Framework progress window while Sample Dependant Plugin is activated](images/activation-progress.png)
+
+## Needs attention
+
+Decisions about plugins that went wrong have their own dialog, so they are not lost among the other plugins of the list. It lists only the plugins that need attention: a plugin whose activation, deactivation or update failed or was interrupted (see [Plugin state files](plugin-state.md)), an update kept although the project does not build with it, a plugin in an error state, and a GDExtension Godot does not run. Select one to see what happened and what each decision does. The buttons below offer the decisions that apply to it:
+
+- **Retry** retries its failed or interrupted work after you fixed the cause. It also retries the plugins that failed together with it and the failed plugins it depends on; the button's tooltip names them. For a kept update, it finishes the update once the project builds again.
+- **Roll back** restores the versions a kept update replaced, after a confirmation.
+- **Disable** gives up on enabling the plugin: it removes what its recipe installed and leaves it disabled. A plugin that runs with a problem, e.g. a GDExtension Godot did not load, is disabled like from the list.
+- **Open log** opens the build log of a failed update, and **Open folder** shows the plugin's folder in the system file manager for a manual repair.
+
+**Retry all** retries every failed attempt at once. The dialog shows the list again after each decision and closes when no plugin is left. The manager opens it by itself when it opens with a problem that was not shown yet in this editor session; otherwise the button at the top right opens it.
+
+![Needs attention dialog listing two plugins whose activation failed, with what happened to the selected one and the Retry, Disable, Open folder and Retry all buttons](images/needs-attention.png)
+
+The plugins and the error in the screenshot are sample data.
 
 ## Settings
 

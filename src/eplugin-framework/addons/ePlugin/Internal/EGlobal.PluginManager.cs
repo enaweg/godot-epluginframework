@@ -20,6 +20,12 @@ internal sealed partial class EGlobal
     private string _nativeExtensionProblems = "";
 
     /// <summary>
+    /// The <see cref="AttentionItem.Key"/>s of the problems the Needs attention dialog showed in this editor session; the
+    /// ePlugin Manager opens it by itself only for others. An assembly reload forgets them.
+    /// </summary>
+    internal HashSet<string> ShownAttention { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>
     /// What the toolbar button of the ePlugin Manager shows, as the manager would list it. Called every frame; looks again
     /// every <see cref="ManagerStatusCheckFrames"/> frames, and reads the plugins only when the pending updates, the
     /// enabled plugins, their states or the GDExtensions Godot does not run changed. While plugins are being changed it

@@ -69,10 +69,10 @@ at least 1.5 wide, filled in `#e0e0e0`.
 | `update.svg` | Update available in the plugin list | Closed | Up arrow (white mask) |
 | `rescan.svg` | Check for updates, Rescan (local directories) | Clockwise | Up arrow |
 | `settings.svg` | Settings | – | Gear |
-| `retry.svg` | Retry failed | Counter-clockwise | `!` in error |
+| `retry.svg` | Needs attention (manager button), Retry and Retry all | Counter-clockwise | `!` in error |
 | `upgrade.svg` | Update (version button, manager OK button) | Closed | Up arrow in success |
 | `reinstall.svg` | Reinstall (version button and confirmation) | Clockwise | Plus in success |
-| `downgrade.svg` | Downgrade (version button and confirmation) | Closed | Down arrow in warning |
+| `downgrade.svg` | Downgrade (version button and confirmation), Roll back (Needs attention) | Closed | Down arrow in warning |
 
 Rescan and upgrade differ by the ring and the color only, so don't put them next to each other without a label.
 

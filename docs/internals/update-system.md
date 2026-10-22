@@ -195,7 +195,7 @@ file and in the property values, and `OutDir` is passed without a trailing separ
 quote). Godot's own incremental build afterwards compiles the full project again.
 
 `IUpdateHost.KeepOnProjectErrors`, `PluginCodeRoots` and `BuildPluginsOnly` have defaults (off, none, failing) so test
-hosts opt in. `UpdateApplier.RollbackKept` (the manager's **Roll back to** link in a kept update's details) rebases
+hosts opt in. `UpdateApplier.RollbackKept` (**Roll back** in the manager's Needs attention dialog) rebases
 `backup-project` and the other plugins' recipes first when the journal was kept before reconciling, then rolls back.
 
 Every non-incremental build goes through `DotnetCliBase.BuildKeepingOutput`: a Rebuild cleans
