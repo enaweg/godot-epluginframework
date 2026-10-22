@@ -322,7 +322,9 @@ Scene roots set `auto_translate_mode = 2`,
 otherwise the editor translates the English UI into its own language. An autowrapping Label needs a
 `custom_minimum_size` width, or the dialog measures it at zero width and pops up taller than the screen. Scenes are
 authored for 100% editor scale: `EditorWindows.Prepare` scales the window's size and its controls' minimum sizes, and
-plugin BBCode pages go through `PluginManagerViewModel.ScaleFontSizes`. Icons come
+plugin BBCode pages go through `PluginManagerViewModel.ScaleFontSizes`. Read the editor's scale and theme through
+`EditorWindows.Scale`/`Theme` (1 and null without an editor), never `EditorInterface.Singleton` directly, so tests can
+create the dialogs (`ManagerDialogTests`). Icons come
 from `EditorIcons`, which renders the SVGs at the editor scale (a headless editor re-imports them at 100%) and maps
 their accent colors to the theme's status colors; draw new icons after `docs/internals/editor-icons.md`. `EGlobal.CollectPlugins` scans every `res://addons/<slug>/plugin.cfg`; `PluginCatalog.Classify`
 recognizes disabled ePlugins by the `ScriptPathAttribute` of their compiled type. `PluginManagerViewModel` is pure

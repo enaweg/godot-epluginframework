@@ -241,6 +241,32 @@ public class UpdateFlowTests : IDisposable
     }
 
     [TestCase]
+    public async Task AManagerClosedWhileADecisionIsAskedInstallsNothing()
+    {
+        _host.Packages["a"] = [Warning()];
+        _review = _ => { _alive = false; return true; };
+        var flow = Flow();
+
+        var review = await flow.InstallAsync(new([Candidate("a")]), View(), CancellationToken.None);
+
+        Assertions.AssertObject(review.Step).IsEqual(InstallStep.Abandoned);
+        Assertions.AssertObject(flow.Staged).IsNull();
+        Assertions.AssertBool(Directory.Exists(_host.StagingDirectory)).IsFalse();
+
+        _alive = true;
+        _host.Packages["a"] = [];
+        _host.LicensesToReview = ["a"];
+        _decide = licenses => { licenses.AcceptAll(); _alive = false; };
+        var license = await Flow().InstallAsync(new([Candidate("a")]), View(), CancellationToken.None);
+
+        Assertions.AssertObject(license.Step).IsEqual(InstallStep.Abandoned);
+        // the decision is kept, as the dialog recorded it before the manager was found closed
+        Assertions.AssertInt(_host.Recorded.Count).IsEqual(1);
+        Assertions.AssertInt(_host.Applied.Count).IsEqual(0);
+        Assertions.AssertBool(Directory.Exists(_host.StagingDirectory)).IsFalse();
+    }
+
+    [TestCase]
     public async Task RefusedPackagesAreReviewedAndTheRestIsInstalled()
     {
         _host.Packages["a"] = [];

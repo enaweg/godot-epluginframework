@@ -41,7 +41,7 @@ internal static class EditorIcons
 
     public static Texture2D? Logo => Get(LogoPath);
     /// <summary>The colored ePlugin logo at eight times its icon size, for the About tab of the settings.</summary>
-    public static Texture2D? LargeLogo => Get(LogoPath, EditorInterface.Singleton.GetEditorTheme(), EditorInterface.Singleton.GetEditorScale() * 8);
+    public static Texture2D? LargeLogo => Get(LogoPath, EditorWindows.Theme, EditorWindows.Scale * 8);
     public static Texture2D? EPlugin => Get(EPluginPath);
     /// <summary>A white update mask, so status colors can tint it without multiplying by the icon palette.</summary>
     public static Texture2D? UpdateIndicator => Get(UpdatePath, tintable: true);
@@ -53,11 +53,11 @@ internal static class EditorIcons
     public static Texture2D? Downgrade => Get(DowngradePath);
 
     /// <summary>The editor's color for something that went well, e.g. an available update.</summary>
-    public static Color SuccessColor => ThemeColor(EditorInterface.Singleton.GetEditorTheme(), Accents[0].Name, Accents[0].Fallback);
+    public static Color SuccessColor => ThemeColor(EditorWindows.Theme, Accents[0].Name, Accents[0].Fallback);
     /// <summary>The editor's color for warnings.</summary>
-    public static Color WarningColor => ThemeColor(EditorInterface.Singleton.GetEditorTheme(), Accents[1].Name, Accents[1].Fallback);
+    public static Color WarningColor => ThemeColor(EditorWindows.Theme, Accents[1].Name, Accents[1].Fallback);
     /// <summary>The editor's color for errors.</summary>
-    public static Color ErrorColor => ThemeColor(EditorInterface.Singleton.GetEditorTheme(), Accents[2].Name, Accents[2].Fallback);
+    public static Color ErrorColor => ThemeColor(EditorWindows.Theme, Accents[2].Name, Accents[2].Fallback);
 
     /// <summary>
     /// The ePlugin icon of the toolbar button: its puzzle piece is green while updates can be installed and red while an
@@ -65,21 +65,21 @@ internal static class EditorIcons
     /// </summary>
     public static Texture2D? Manager(ManagerStatus status)
     {
-        var theme = EditorInterface.Singleton.GetEditorTheme();
+        var theme = EditorWindows.Theme;
         Color? piece = status switch
         {
             ManagerStatus.UpdatesAvailable => SuccessColor,
             ManagerStatus.NeedsAttention => ErrorColor,
             _ => null
         };
-        return Get(EPluginPath, theme, EditorInterface.Singleton.GetEditorScale(), piece: piece);
+        return Get(EPluginPath, theme, EditorWindows.Scale, piece: piece);
     }
 
     private static Color ThemeColor(Theme? theme, string name, Color fallback) =>
         theme is not null && theme.HasColor(name, "Editor") ? theme.GetColor(name, "Editor") : fallback;
 
     private static Texture2D? Get(string path, bool tintable = false) =>
-        Get(path, EditorInterface.Singleton.GetEditorTheme(), EditorInterface.Singleton.GetEditorScale(), tintable);
+        Get(path, EditorWindows.Theme, EditorWindows.Scale, tintable);
 
     internal static Texture2D? Get(string path, Theme? theme, float scale, bool tintable = false, Color? piece = null)
     {

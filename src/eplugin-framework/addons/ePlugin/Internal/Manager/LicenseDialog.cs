@@ -124,7 +124,7 @@ internal sealed partial class LicenseDialog : AcceptDialog, ISerializationListen
         _source.Text = PluginLicense.Display(entry.Slug, entry.Source);
         _source.TooltipText = _source.Text;
         // the license is BBCode; a problem is plain text
-        var scale = EditorInterface.Singleton.GetEditorScale();
+        var scale = EditorWindows.Scale;
         _text.Text = entry.Problem is null ? PluginManagerViewModel.ScaleFontSizes(entry.Text, scale) : $"[color=#ff7070]{entry.Problem.Replace("[", "[lb]")}[/color]";
         _text.ScrollToLine(0);
         var neededBy = _review.NeededBy(slug).Select(a => a.Name).ToArray();
@@ -135,7 +135,7 @@ internal sealed partial class LicenseDialog : AcceptDialog, ISerializationListen
 
     private void Render()
     {
-        var theme = EditorInterface.Singleton.GetEditorTheme();
+        var theme = EditorWindows.Theme;
         Texture2D? Icon(string name) => theme is not null && theme.HasIcon(name, "EditorIcons") ? theme.GetIcon(name, "EditorIcons") : null;
         _list.Clear();
         foreach (var entry in _review.Entries)

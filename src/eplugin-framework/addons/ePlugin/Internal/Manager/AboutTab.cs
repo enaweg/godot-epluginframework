@@ -55,9 +55,9 @@ internal sealed partial class AboutTab : VBoxContainer
     /// <summary>A box in the editor's accent color, read on every open so it follows theme changes.</summary>
     private static StyleBoxFlat StarNoteStyle()
     {
-        var theme = EditorInterface.Singleton.GetEditorTheme();
+        var theme = EditorWindows.Theme;
         var accent = theme is not null && theme.HasColor("accent_color", "Editor") ? theme.GetColor("accent_color", "Editor") : new Color(0.44f, 0.73f, 0.98f);
-        var scale = EditorInterface.Singleton.GetEditorScale();
+        var scale = EditorWindows.Scale;
         var style = new StyleBoxFlat { BgColor = accent with { A = 0.15f }, BorderColor = accent with { A = 0.6f } };
         style.SetBorderWidthAll(Mathf.Max(1, (int)scale));
         style.SetCornerRadiusAll((int)(4 * scale));

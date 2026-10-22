@@ -119,6 +119,58 @@ public class DecisionDialogTests
     }
 
     [TestCase]
+    public static void EachFailureReasonIsExplainedForTheDirectionItFailedIn()
+    {
+        string Summary(string reason, PersistedPluginState target = PersistedPluginState.Activated) =>
+            new AttentionItem(new PluginRow(Plugin("a") with { FailedAttempt = Attempt("a", reason, target) }, null), null, null, []).Summary;
+
+        Assertions.AssertString(Summary("dependency_resolution_failed")).StartsWith("Enabling failed: a plugin it depends on");
+        Assertions.AssertString(Summary("recipe_creation_failed", PersistedPluginState.Deactivated)).StartsWith("Disabling failed: the plugin's CreateRecipe");
+        Assertions.AssertString(Summary("dependent_recipe_creation_failed")).Contains("CreateRecipe of a plugin that depends on it");
+        Assertions.AssertString(Summary("solution_build_failed")).IsEqual("Enabling failed: the project did not build afterwards.");
+        Assertions.AssertString(Summary("optional_recipe_failed")).Contains("recipe of an optional dependency");
+        Assertions.AssertString(Summary("invalid_plugin_version")).StartsWith("plugin.cfg has no valid version");
+        Assertions.AssertString(Summary("participant_blocked")).Contains("blocked by an earlier failure");
+        Assertions.AssertString(Summary("cannot_record_participant")).Contains("could not be saved in eplugin-state.json");
+        Assertions.AssertString(Summary("state_commit_failed")).Contains("could not be saved in eplugin-state.json");
+        Assertions.AssertString(Summary("deactivation_failed")).IsEqual("Disabling the plugin failed.");
+        Assertions.AssertString(Summary("update_commit_failed")).StartsWith("The update was installed, but recording");
+        Assertions.AssertString(Summary("update_rollback_failed")).StartsWith("Rolling back a failed update");
+        Assertions.AssertString(Summary("update_swap_failed")).IsEqual("The update failed (update_swap_failed).");
+        Assertions.AssertString(Summary("something_new", PersistedPluginState.Deactivated)).IsEqual("Disabling failed (something_new).");
+    }
+
+    [TestCase]
+    public static void AFailedUpdateIsDescribedByItsJournalAndAPluginWithoutDecisionsSaysWhatToDo()
+    {
+        var journal = new UpdateJournal { Directory = "/updates/failed", Failure = "Final build failed." };
+        journal.Plugins.Add(new() { Slug = "a", OldVersion = "1.0.0", NewVersion = "[2.0.0]" });
+        journal.Builds.Add(new JournalBuild("final", 1, "final.log"));
+        journal.Builds.Add(new JournalBuild("final-plugins-only", 1, "plugins-only.log"));
+        var update = new AttentionItem(new PluginRow(Plugin("a") with { FailedAttempt = Attempt("a", "update_swap_failed") }, null), journal, null, []);
+
+        var text = update.Describe();
+        Assertions.AssertString(text).Contains("a 1.0.0 → [lb]2.0.0]\nFinal build failed.\n");
+        Assertions.AssertString(text).Contains("• [b]Retry[/b]: finishes or rolls back the interrupted update.");
+        Assertions.AssertString(text).Contains("• [b]Open log[/b]");
+        // the log of the full build, not of the plugins-only build that followed it
+        Assertions.AssertString(update.Log).IsEqual(PackageFiles.Inside("/updates/failed", "final.log"));
+        Assertions.AssertBool(update.CanDisable).IsFalse();
+
+        var leaving = new AttentionItem(new PluginRow(Plugin("a") with { FailedAttempt = Attempt("a", "recipe_operation_failed", PersistedPluginState.Deactivated) }, null), null, null, []);
+        Assertions.AssertString(leaving.Describe()).Contains("• [b]Retry[/b]: disables the plugin again, after you fixed the cause.");
+
+        // a missing plugin in error can neither be retried nor disabled here
+        var stuck = new AttentionItem(new PluginRow(Plugin("a") with { State = EEditorPluginState.Error, Missing = true }, null), null, null, []);
+        Assertions.AssertString(stuck.Summary).IsEqual("The plugin is in an error state.");
+        Assertions.AssertString(stuck.Describe()).EndsWith("Fix the cause, for example by restarting the editor or updating the plugin, then check the list again.");
+
+        var running = new AttentionItem(new PluginRow(Plugin("a"), null), null, null, []);
+        Assertions.AssertString(running.Summary).IsEqual("The plugin needs attention.");
+        Assertions.AssertString(running.Describe()).Contains("• [b]Disable[/b]: turns the plugin off until the problem is fixed.");
+    }
+
+    [TestCase]
     public static void AnAttentionKeyChangesWithTheProblem()
     {
         var first = Attempt("a", "recipe_operation_failed");

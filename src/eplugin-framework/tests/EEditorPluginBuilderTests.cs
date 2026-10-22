@@ -68,6 +68,33 @@ public class EEditorPluginBuilderTests
     }
 
     [TestCase]
+    public static void AHelperDeclaringResourcesWorksForTheRootAndANestedRecipe()
+    {
+        // A plugin may share declarations between its root recipe and an optional dependency's through the base interface.
+        static IEEditorPluginRecipeBuilder Shared(IEEditorPluginRecipeBuilder recipe) => recipe
+            .AddAutoload("Shared", "res://addons/my-plugin/Shared.cs")
+            .AddProject("a.csproj", false)
+            .AddProject("b.csproj", "Folder", true)
+            .AddNugets("Newtonsoft.Json")
+            .AddNuget("Serilog", "4.0.0")
+            .AddDirectory("res://addons/my-plugin/.src");
+
+        var builder = EEditorPluginBuilder.Create();
+        Assertions.AssertObject(Shared(builder)).IsSame(builder);
+        builder.AddOptionalPluginDependency("other", null, optional => Shared(optional));
+
+        foreach (var recipe in new[] { builder.PluginRecipe, builder.PluginRecipe.OptionalPluginDependencies[0].Recipe })
+        {
+            Assertions.AssertThat(recipe.Autoloads).ContainsExactly(new EEditorPluginRecipe.Autoload("Shared", "res://addons/my-plugin/Shared.cs"));
+            Assertions.AssertThat(recipe.Projects).ContainsExactly(
+                new EEditorPluginRecipe.Project("a.csproj", null, false), new EEditorPluginRecipe.Project("b.csproj", "Folder", true));
+            Assertions.AssertThat(recipe.Nugets).ContainsExactly(
+                new EEditorPluginRecipe.Nuget("Newtonsoft.Json", null, null), new EEditorPluginRecipe.Nuget("Serilog", "4.0.0", null));
+            Assertions.AssertThat(recipe.Directories).ContainsExactly("res://addons/my-plugin/.src");
+        }
+    }
+
+    [TestCase]
     public static void AnOptionalDependencyKeepsItsResourcesInItsOwnRecipe()
     {
         var builder = EEditorPluginBuilder.Create();
