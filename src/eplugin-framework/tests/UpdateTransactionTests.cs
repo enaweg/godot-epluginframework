@@ -610,6 +610,22 @@ public class UpdateTransactionTests
         Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/plugin/plugin.cfg")).Contains("2.0.0")).IsTrue();
         Assertions.AssertInt(_store.LocalAttempts.Count).IsEqual(0);
     }
+    [TestCase]
+    public void CleanupFailureAfterARollbackDoesNotMarkItAsRollingBackAgain()
+    {
+        _host.Managed = true;
+        _host.Builds.Enqueue(new(1, ["compile error"]));
+        _host.Builds.Enqueue(new(0, []));
+        var package = Package(true);
+        var applier = new UpdateApplier(_root, _store, _host, new ThrowingCache());
+
+        Assertions.AssertObject(applier.Apply([package.Package], package.Directory)).IsEqual(UpdateOutcome.RolledBack);
+
+        // a journal left rolling back would restore the project files again at the next start
+        Assertions.AssertObject(UpdateJournal.Load(package.Directory).State).IsEqual(UpdatePhase.RolledBack);
+        Assertions.AssertInt(_store.LocalAttempts.Count).IsEqual(0);
+        Assertions.AssertInt(_host.Reloads).IsEqual(1);
+    }
     private sealed class ThrowingCache : IUpdateStateStore { public UpdateCache State { get; } = new(); public void Save() => throw new IOException("cleanup failure"); }
     private static string Config(string version) => $"[plugin]\nname=\"Plugin\"\nversion=\"{version}\"\nscript=\"plugin.gd\"\n";
     private sealed class MemoryStore : IUpdateStateStore { public UpdateCache State { get; } = new(); public void Save() { } }

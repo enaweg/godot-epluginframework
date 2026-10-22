@@ -73,5 +73,26 @@ public class ShowHideHelperTests : IDisposable
             .IsInstanceOf<InvalidOperationException>();
         Assertions.AssertBool(Directory.Exists(Path.Combine(_root, ".src")) && Directory.Exists(Path.Combine(_root, "src"))).IsTrue();
     }
+
+    [TestCase]
+    public void ThePluginsOwnDirectoryAndTheOnesHoldingItAreRefused()
+    {
+        var addon = Path.Combine(_root, "addons", "plugin");
+        Directory.CreateDirectory(addon);
+        var context = new PluginContext(null, _pluginBase, new NullLogger()) { Slug = "plugin", Directory = addon };
+
+        // e.g. AddDirectory(this.GetPluginDirectory()) or AddDirectory("res://addons")
+        foreach (var directory in new[] { addon, Path.Combine(_root, "addons"), _root, Path.Combine(_root, "addons", ".plugin") })
+        {
+            Assertions.AssertThrown(() => ShowHideHelper.HideDirectory(context, directory)).IsInstanceOf<InvalidOperationException>();
+            Assertions.AssertThrown(() => ShowHideHelper.ShowDirectory(context, directory)).IsInstanceOf<InvalidOperationException>();
+        }
+        Assertions.AssertBool(Directory.Exists(addon)).IsTrue();
+
+        // a sibling of the plugin stays possible, as before
+        Directory.CreateDirectory(Path.Combine(_root, "addons", "plugin_data"));
+        ShowHideHelper.HideDirectory(context, Path.Combine(_root, "addons", "plugin_data"));
+        Assertions.AssertBool(Directory.Exists(Path.Combine(_root, "addons", ".plugin_data"))).IsTrue();
+    }
 }
 #endif

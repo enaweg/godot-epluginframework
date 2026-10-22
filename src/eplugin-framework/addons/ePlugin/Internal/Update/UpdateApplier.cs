@@ -320,7 +320,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             }
             cache.Save();
             journal.Save(UpdatePhase.Committed);
-            System.IO.Directory.Delete(journal.Directory, true);
+            AddonFiles.DeleteTree(journal.Directory);
         }
         catch (Exception ex) { host.Log("Update was committed; cleanup will be retried at startup: " + ex.Message); }
         if (journal.Plugins.Any(p => p.IsEPlugin && p.ContainsCSharp) && !RunsInterimBuild(journal))
@@ -383,16 +383,6 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             if (journal.Plugins.Any(p => p.ContainsCSharp) && Build(journal, "rollback").ExitCode != 0) throw new IOException("Restored project failed to build.");
             if (store.LocalAttempts.Any(a => a.AttemptId == journal.AttemptId) && !store.TryAbandonAttempt(journal.AttemptId)) throw new IOException("Cannot clear the rollback marker.");
             journal.Save(UpdatePhase.RolledBack);
-            RebasePending(journal, false);
-            foreach (var plugin in journal.Plugins)
-            {
-                if (!cache.State.FailedUpdates.TryGetValue(plugin.Slug, out var failures)) cache.State.FailedUpdates[plugin.Slug] = failures = [];
-                failures.Add(new(plugin.NewVersion, reason, DateTimeOffset.UtcNow));
-            }
-            cache.Save();
-            host.Log($"Update rolled back: {reason}. Logs: {journal.Directory}");
-            if (journal.Plugins.Any(p => p.ContainsCSharp || PluginKinds.Workflow(p).NeedsRestart(p))) host.RequestReload(journal);
-            return UpdateOutcome.RolledBack;
         }
         catch (Exception ex)
         {
@@ -402,6 +392,26 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             host.Log(journal.Failure + ". Use Retry under Needs attention in the ePlugin Manager after repair. Backup: " + journal.Directory);
             return UpdateOutcome.KeptWithErrors;
         }
+        // The rollback is complete. Nothing after this may mark it as rolling back again: repeating it would restore the
+        // project files over changes made since.
+        RebasePending(journal, false);
+        try
+        {
+            foreach (var plugin in journal.Plugins)
+            {
+                if (!cache.State.FailedUpdates.TryGetValue(plugin.Slug, out var failures)) cache.State.FailedUpdates[plugin.Slug] = failures = [];
+                failures.Add(new(plugin.NewVersion, reason, DateTimeOffset.UtcNow));
+            }
+            cache.Save();
+        }
+        catch (Exception ex) { host.Log("Cannot record the rolled-back versions as failed: " + ex.Message); }
+        host.Log($"Update rolled back: {reason}. Logs: {journal.Directory}");
+        if (journal.Plugins.Any(p => p.ContainsCSharp || PluginKinds.Workflow(p).NeedsRestart(p)))
+        {
+            try { host.RequestReload(journal); }
+            catch (Exception ex) { host.Log("Update rolled back. Reopen the editor to load the restored plugins: " + ex.Message); }
+        }
+        return UpdateOutcome.RolledBack;
     }
 
     /// <summary>

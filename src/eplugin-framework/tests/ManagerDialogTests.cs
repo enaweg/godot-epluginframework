@@ -53,6 +53,22 @@ public class ManagerDialogTests
     }
 
     [TestCase]
+    public static void TheBuildFailureDialogGoesWithAnAssemblyReloadWithoutDeciding()
+    {
+        var decisions = new List<bool>();
+        var dialog = UpdateFailureDialog.Create(FailedJournal(), decisions.Add);
+        try
+        {
+            // its buttons would decide nothing after the reload, which asks again
+            dialog.OnBeforeSerialize();
+
+            Assertions.AssertBool(dialog.IsQueuedForDeletion()).IsTrue();
+            Assertions.AssertThat(decisions).IsEmpty();
+        }
+        finally { Free(dialog); }
+    }
+
+    [TestCase]
     public static void TheBuildFailureDialogShowsTheErrorsOfTheBuildLog()
     {
         var directory = Path.Combine(Path.GetTempPath(), "eplugin-failure-" + Guid.NewGuid().ToString("N"));

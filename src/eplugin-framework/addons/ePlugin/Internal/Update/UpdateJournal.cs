@@ -93,6 +93,15 @@ internal sealed class UpdateJournal
     public static UpdateJournal Load(string directory)
     {
         var journal = JsonSerializer.Deserialize<UpdateJournal>(File.ReadAllText(Path.Combine(directory, "journal.json")), UpdateStateStore.JsonOptions) ?? throw new InvalidDataException("Empty update journal.");
+        // The serializer accepts an explicit null for any entry, which the checks below would otherwise dereference.
+        try { Validate(journal, directory); }
+        catch (NullReferenceException) { throw new InvalidDataException("Update journal has missing entries; restore its backups manually."); }
+        journal.Directory = directory;
+        return journal;
+    }
+
+    private static void Validate(UpdateJournal journal, string directory)
+    {
         if (journal.Schema is < 1 or > 1 || journal.Id != Path.GetFileName(directory) || journal.AttemptId == Guid.Empty || !Enum.IsDefined(journal.State) || journal.Plugins is null || journal.Plugins.Count == 0 || journal.Recipes is null || journal.ProjectFiles is null || journal.AdditionalVersions is null || journal.Builds is null ||
             journal.Plugins.Select(p => p.Slug).Distinct(StringComparer.Ordinal).Count() != journal.Plugins.Count)
             throw new InvalidDataException("Unsupported or invalid update journal; restore its backups manually.");
@@ -113,8 +122,6 @@ internal sealed class UpdateJournal
         foreach (var plugin in journal.Plugins) foreach (var path in plugin.Preserved) PackageFiles.Normalize(path);
         // Only shown to the user: a journal without them, or with an invalid list, is still recoverable.
         journal.ProjectErrors = journal.ProjectErrors?.Where(e => e is not null).ToList() ?? [];
-        journal.Directory = directory;
-        return journal;
     }
 }
 internal sealed class UpdateJournals(string root, Action<string>? log = null)

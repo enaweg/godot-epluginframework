@@ -26,9 +26,11 @@ namespace Enaweg.Plugin.Internal;
 /// Records of helpers that no longer run are discarded.
 /// </para>
 /// <para>
-/// Protocol 3 writers acquire <c>eplugin-progress-&lt;token&gt;</c> with a 100 ms wait limit, seek to the file's end,
-/// and write each complete command without buffering before releasing the mutex. Earlier writers use a separate
-/// helper because their persistent append streams can overwrite other editors' commands.
+/// Protocol 4 writers acquire <c>Global\eplugin-progress-&lt;token&gt;</c> with a 100 ms wait limit, seek to the file's
+/// end, and write each complete command without buffering before releasing the mutex. Earlier writers use a separate
+/// helper: protocol 3 named the mutex without the prefix, which .NET scopes to the terminal session on Linux and macOS,
+/// so editors started from different sessions did not exclude each other; older ones used persistent append streams.
+/// Both can overwrite other editors' commands.
 /// </para>
 /// <para>
 /// A scheduled restart writes a handoff file into the project (<see cref="HandOver"/>), which the restarted editor
@@ -38,8 +40,9 @@ namespace Enaweg.Plugin.Internal;
 internal sealed class ProgressSession : IProgressHelper
 {
     /// <summary>Raised whenever the transport or command protocol changes; editors only share a compatible helper.</summary>
-    // Version 3 serializes append positions with a named mutex. Older writers would overwrite these commands.
-    internal const int Protocol = 3;
+    // Version 4 serializes append positions with a named mutex shared by every session of the OS user. Older writers
+    // would overwrite these commands.
+    internal const int Protocol = 4;
 
     private const string Record = ".helper";
     private const string Commands = ".commands";
@@ -59,13 +62,20 @@ internal sealed class ProgressSession : IProgressHelper
         _helper = helper;
         _handoff = handoff;
         _commands = commands;
-        try { _writeMutex = new Mutex(false, "eplugin-progress-" + token); }
+        try { _writeMutex = new Mutex(false, MutexName(token)); }
         catch
         {
             commands.Dispose();
             throw;
         }
     }
+
+    /// <summary>
+    /// The mutex every writer of a helper's command file holds while it writes. Without the <c>Global\</c> prefix, .NET
+    /// scopes it to the terminal session on Linux and macOS, so an editor started from a terminal and one started from
+    /// the desktop would not exclude each other. The helper's random token keeps it apart from other helpers.
+    /// </summary>
+    internal static string MutexName(string token) => @"Global\eplugin-progress-" + token;
 
     public TimeSpan Age => DateTime.UtcNow - new DateTime(_helper.StartUtcTicks, DateTimeKind.Utc);
 
@@ -101,11 +111,7 @@ internal sealed class ProgressSession : IProgressHelper
         hash.AppendData(File.ReadAllBytes(configPath));
         var runtime = Path.Combine(directory, "runtime", Convert.ToHexString(hash.GetHashAndReset()));
         Directory.CreateDirectory(runtime);
-        foreach (var source in new[] { helperPath, configPath })
-        {
-            var target = Path.Combine(runtime, Path.GetFileName(source));
-            if (!File.Exists(target)) File.Copy(source, target);
-        }
+        foreach (var source in new[] { helperPath, configPath }) CopyOnce(source, Path.Combine(runtime, Path.GetFileName(source)));
 
         var token = Guid.NewGuid().ToString("N");
         var commandFile = PathOf(directory, token, Commands);
@@ -158,6 +164,25 @@ internal sealed class ProgressSession : IProgressHelper
         finally
         {
             process?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Copies <paramref name="source"/> into the runtime folder unless it is already there. The copy is moved into place
+    /// in one step: a copy cut off by a killed editor would otherwise stay, and the folder is named after the source's
+    /// hash, so every later start would run it. Another editor copying it at the same time wins as well.
+    /// </summary>
+    private static void CopyOnce(string source, string target)
+    {
+        if (File.Exists(target) && new FileInfo(target).Length == new FileInfo(source).Length) return;
+        var partial = target + "." + Guid.NewGuid().ToString("N") + ".partial";
+        File.Copy(source, partial);
+        try { File.Move(partial, target, overwrite: true); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // A running helper keeps the complete copy open on Windows.
+            File.Delete(partial);
+            if (!File.Exists(target)) throw;
         }
     }
 
@@ -256,8 +281,7 @@ internal sealed class ProgressSession : IProgressHelper
         // commands written by the others. Bound the wait so feedback cannot stall a plugin operation.
         try
         {
-            if (!_writeMutex.WaitOne(TimeSpan.FromMilliseconds(100)))
-                throw new IOException("The progress command file is busy.");
+            if (!_writeMutex.WaitOne(TimeSpan.FromMilliseconds(100))) throw new ProgressHelperBusyException();
         }
         catch (AbandonedMutexException)
         {
@@ -286,6 +310,12 @@ internal sealed class ProgressSession : IProgressHelper
         finally { _writeMutex.Dispose(); }
     }
 }
+
+/// <summary>
+/// Another editor held the command file longer than the wait limit. The helper is still there, so only this command is
+/// dropped; the next heartbeat or text follows within seconds.
+/// </summary>
+internal sealed class ProgressHelperBusyException() : IOException("The progress command file is busy.");
 
 /// <summary>A process, identified by its id and start time so that a reused id is not mistaken for it.</summary>
 internal readonly record struct ProcessIdentity(int Id, long StartUtcTicks)

@@ -159,7 +159,7 @@ dependencies carrying a nested recipe via `AddOptionalPluginDependency`, and the
 `addons/sample_addedcode_plugin` (`AddDirectory` example), and `addons/sample_optional_plugin`
 (`AddOptionalPluginDependency` example) for minimal reference implementations, and `docs/creating-plugins.md` for the
 full builder surface. `EditorPluginExtensions` gives authors public helpers on `EditorPlugin` (`GetPluginSlug`,
-`GetPluginDirectory`, `ReadMetadata`, `Cli()`), and `EPlugin.RegisterInitializer` runs an `IInitialize` at startup.
+`GetPluginDirectory`, `ReadMetadata`, `Cli()`), and `EPlugin.RegisterInitializer` runs an `IInitialize` at startup (or right away once the framework is ready).
 
 `IEEditorPlugin` is an interface rather than an abstract base class specifically to work around C# bugs in
 Godot 4.5+ EditorPlugin handling — don't "simplify" this back to a base class.
@@ -247,7 +247,8 @@ enough in `sln`/`nuget`/reference command behavior to need separate implementati
 through an `IProcessRunner` (`GodotProcessRunner` uses `OS.Execute`); tests record the arguments instead. The
 `dotnet --version` probe is cached until the assembly reloads. A CLI is created for a project root and assembly name
 (`IEditorHost.ProjectRoot`/`AssemblyName`; tests pass a scratch project), and the CLI classes never read
-`ProjectSettings`. Any new dotnet CLI operation needs a corresponding
+`ProjectSettings` (only `user://` NuGet sources are globalized through it; the Godot project is the `.csproj` named
+after the assembly, local NuGet sources are relative to the project root like `nuget.config` records them). Any new dotnet CLI operation needs a corresponding
 abstract member on `DotnetCliBase`/`IDotnetCli` implemented in both `DotnetCli9` and `DotnetCli10`, with its arguments
 checked in `IDotnetCliTests`. Pass arguments one per element and unquoted (`OS.Execute` quotes them; outside Windows it runs them through `/bin/sh`
 in double quotes, so `GodotProcessRunner` escapes `\ " $` and backticks), and project
@@ -378,8 +379,9 @@ from any of them (a user's `HOLD` extends that once, used for restarts) and exit
 Editors of the OS user using the same `ProgressSession.Protocol` share one helper: it is published as
 `<token>.helper` in Godot's editor data directory (`eplugin/progress`), next to `<token>.commands`. Editors connect to
 the oldest running compatible helper whose command file they can open; missing or inaccessible command files are
-skipped. Raise `Protocol` whenever the command protocol or transport coordination changes. Protocol 3 requires every
-writer to acquire the helper's named mutex (`eplugin-progress-<token>`, with a 100 ms wait limit), seek to the end,
+skipped. Raise `Protocol` whenever the command protocol or transport coordination changes. Protocol 4 requires every
+writer to acquire the helper's named mutex (`Global\eplugin-progress-<token>`: without the prefix .NET scopes it to the
+terminal session on Linux and macOS; with a 100 ms wait limit), seek to the end,
 and write a complete command without buffering before releasing it. `FileMode.Append` on a persistent stream alone
 can overwrite another editor's commands. Older writers use a separate helper. The helper runs with redirected
 standard streams, so it never keeps the editor's output open.
@@ -459,7 +461,8 @@ outside any `ILogger` (or `[StackTraceHidden]` method) as the location; without 
 without a leading `.` (POSIX-style hidden dirs) and toggling the Windows hidden attribute. Used for shipping
 plugin source that should stay inert until the plugin is activated. A recipe may name either form (`src` or `.src`).
 A directory already in the wanted state is left alone and one missing in both forms is only logged as a warning. It fails
-when both forms exist at once (neither can be renamed onto the other) or when a GDExtension inside is not reloadable or
+when both forms exist at once (neither can be renamed onto the other), when it names the plugin's own directory or one
+holding it (`res://addons`, the project) or when a GDExtension inside is not reloadable or
 cannot be unloaded.
 
 ## Commit and PR messages

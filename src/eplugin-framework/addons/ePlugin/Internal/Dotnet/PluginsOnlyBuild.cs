@@ -67,9 +67,11 @@ internal sealed record PluginsOnlyBuild(string WorkDirectory, IReadOnlyList<stri
 
     /// <summary>
     /// MSBuild's special characters escaped, for the targets file and for property values on the command line: MSBuild
-    /// expands a property inside item transforms, which an apostrophe in the path would end.
+    /// expands a property inside item transforms, which an apostrophe in the path would end, and <c>-p:</c> separates
+    /// properties at a comma as well as at a semicolon.
     /// </summary>
     private static string Escape(string value) =>
-        value.Replace("%", "%25").Replace("$", "%24").Replace("@", "%40").Replace("'", "%27").Replace(";", "%3B").Replace("*", "%2A").Replace("?", "%3F");
+        value.Replace("%", "%25").Replace("$", "%24").Replace("@", "%40").Replace("'", "%27").Replace(";", "%3B").Replace(",", "%2C")
+            .Replace("*", "%2A").Replace("?", "%3F");
 }
 #endif

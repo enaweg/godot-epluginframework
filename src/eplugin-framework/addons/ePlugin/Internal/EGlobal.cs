@@ -44,6 +44,9 @@ internal sealed partial class EGlobal
     private ILoggerFactory? _loggerFactory;
 
     private readonly Stack<PluginContext> _toCheckEnable = new();
+    // Plugins that enabled the framework because it was disabled: unlike the ones a start finds enabled, they still
+    // have to be installed once the framework is initialized.
+    private readonly HashSet<PluginContext> _enabledWithFramework = [];
     private readonly Stack<PluginContext> _toCheckDisable = new();
     private readonly Queue<IInitialize> _toInitialize = new();
     private PluginTransition? _transition;
@@ -172,28 +175,32 @@ internal sealed partial class EGlobal
             plugin.Logger);
         RefreshPlainPlugins();
         InitializePluginToggles();
-
-        if (_toCheckEnable.Count > 0)
-        {
-            // Take the waiting plugins off the stack first: EnableEPlugin pushes a plugin back while one of its
-            // dependencies is still being enabled, which would break enumerating the stack, and draining it until
-            // empty would never end for a dependency that cannot be enabled.
-            var waitingPlugins = _toCheckEnable.ToArray();
-            _toCheckEnable.Clear();
-            foreach (var pluginContext in waitingPlugins)
-            {
-                EnableEPlugin(pluginContext, false);
-            }
-
-            if (FinishTransition())
-            {
-                RefreshEditor(rebuild: false);
-            }
-        }
-
+        ResumeWaitingPlugins();
         ResumeUpdates();
         ReviewEnabledLicenses();
         InitializeUpdates(plugin);
+    }
+
+    /// <summary>Activates the plugins that were enabled before the framework was initialized.</summary>
+    internal void ResumeWaitingPlugins()
+    {
+        _enabledWithFramework.Clear();
+        if (_toCheckEnable.Count == 0) return;
+
+        // Take the waiting plugins off the stack first: EnableEPlugin pushes a plugin back while one of its
+        // dependencies is still being enabled, which would break enumerating the stack, and draining it until
+        // empty would never end for a dependency that cannot be enabled.
+        var waitingPlugins = _toCheckEnable.ToArray();
+        _toCheckEnable.Clear();
+        foreach (var pluginContext in waitingPlugins)
+        {
+            EnableEPlugin(pluginContext, false);
+        }
+
+        if (FinishTransition())
+        {
+            RefreshEditor(rebuild: false);
+        }
     }
 
     /// <summary>
@@ -746,14 +753,7 @@ internal sealed partial class EGlobal
         if (context.PluginBase is IInitialize initialize)
         {
             // before the framework is set up there is nothing to pass yet; it initializes the plugin then
-            if (_ePluginContext is null)
-            {
-                AddInitializer(initialize);
-            }
-            else
-            {
-                RunInitializer(initialize);
-            }
+            AddInitializer(initialize);
         }
     }
 
@@ -764,10 +764,11 @@ internal sealed partial class EGlobal
 
     private void EnsureEEditorPluginEnabled(PluginContext context)
     {
-        if (!_host.IsPluginEnabled("ePlugin"))
+        if (!_host.IsPluginEnabled(FrameworkSlug))
         {
-            _toCheckEnable.Push(context);
-            _host.SetPluginEnabled("ePlugin", true);
+            // Waits on the stack below until the framework is initialized, which happens on its first frame.
+            _enabledWithFramework.Add(context);
+            _host.SetPluginEnabled(FrameworkSlug, true);
         }
     }
 
@@ -938,7 +939,15 @@ internal sealed partial class EGlobal
             {
                 _toCheckEnable.Push(context);
                 _host.SetPluginEnabled(slug, true);
-                return DependencyReadiness.Wait; // EnableEPlugin will be called by the newly enabled plugin
+                if (_host.IsPluginEnabled(slug))
+                {
+                    return DependencyReadiness.Wait; // EnableEPlugin will be called by the newly enabled plugin
+                }
+
+                // Godot refused it (e.g. its script does not load), so no activation callback would resume this plugin.
+                context.Logger?.Warn($"Plugin {slug} cannot be enabled!");
+                FailAllUncheckedPluginsAndRefresh($"Plugin dependency {slug} cannot be enabled!");
+                return DependencyReadiness.Failed;
             }
 
             // A plain plugin runs no framework code when it is enabled, so nothing would resume this plugin. It is
@@ -1530,7 +1539,7 @@ internal sealed partial class EGlobal
 
                 var context = GetOrCreateContext(pluginBase);
 
-                context.State = changeTriggered
+                context.State = changeTriggered || _enabledWithFramework.Contains(context)
                     ?
                     // was a change to plugins, so this is a new plugin need to bootstrap.
                     EEditorPluginState.Created
@@ -1669,12 +1678,19 @@ internal sealed partial class EGlobal
 
     public void AddInitializer(IInitialize initializer)
     {
-        _toInitialize.Enqueue(initializer);
-
-        if (_ePluginContext?.EnableDebugLogging ?? false)
+        // The queue is only run while the framework starts: one registered later, e.g. by a plugin enabled since, runs now.
+        if (!IsValid())
         {
-            _ePluginContext.Logger?.Log($"Initializer {initializer.GetType().FullName} enqueued.");
+            _toInitialize.Enqueue(initializer);
+            return;
         }
+
+        if (_ePluginContext!.EnableDebugLogging)
+        {
+            _ePluginContext.Logger?.Log($"Initializer {initializer.GetType().FullName} runs now, the framework is ready.");
+        }
+
+        RunInitializer(initializer);
     }
 }
 #endif

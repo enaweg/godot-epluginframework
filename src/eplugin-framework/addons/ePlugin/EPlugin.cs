@@ -34,22 +34,26 @@ public static class EPlugin
     /// </summary>
     /// <remarks>
     /// The first access walks the editor's scene tree to find the <see cref="EPluginPlugin"/> child of
-    /// the editor base control's parent; subsequent accesses return the cached reference.
+    /// the editor base control's parent; subsequent accesses return the cached reference while it is still in the
+    /// tree. Disabling the framework frees its node, and enabling it again creates a new one.
     /// </remarks>
     public static IEPlugin? Instance
     {
         get
         {
-            _instanceCache ??= (IEPlugin?)(EditorInterface.Singleton.GetBaseControl().GetParent().GetChildren()
-                .FirstOrDefault(c => c is IEPlugin));
+            if (_instanceCache is not Node { } cached || !GodotObject.IsInstanceValid(cached) || !cached.IsInsideTree())
+            {
+                _instanceCache = (IEPlugin?)EditorInterface.Singleton.GetBaseControl().GetParent().GetChildren()
+                    .FirstOrDefault(c => c is IEPlugin);
+            }
 
             return _instanceCache;
         }
     }
 
     /// <summary>
-    /// Queues an initializer whose <see cref="IInitialize.Initialize"/> is called once the framework has finished
-    /// starting up.
+    /// Registers an initializer whose <see cref="IInitialize.Initialize"/> is called once the framework has finished
+    /// starting up, or right away when it already has.
     /// </summary>
     /// <param name="initializer">The initializer to call.</param>
     public static void RegisterInitializer(IInitialize initializer)

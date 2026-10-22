@@ -144,6 +144,41 @@ public class EGlobalEditorStateTests : IDisposable
     }
 
     [TestCase]
+    public void APluginThatEnablesTheDisabledFrameworkIsInstalledOnceTheFrameworkStarts()
+    {
+        var global = new EGlobal(_fixture.Host) { StateStore = _fixture.Store };
+        _fixture.Host.Enabled.Remove("ePlugin");
+        _fixture.AddPlainPlugin("ePlugin");
+        _fixture.AddEPlugin("sample_plugin", null);
+        var sample = Track(new SamplePlugin());
+        // Godot adds the plugin's node, then calls its _EnablePlugin, which enables the framework
+        _fixture.Host.Nodes.AddRange([_fixture.Framework, sample]);
+        _fixture.Host.Enabled.Add("sample_plugin");
+        var context = new PluginContext(sample, sample, new RecordingLogger(_fixture.Log, "sample")) { Slug = "sample_plugin", Cli = _fixture.Cli };
+        global.AddContext(context);
+        global.EnableEPlugin(context);
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("ePlugin")).IsTrue();
+        Assertions.AssertThat(_fixture.Operations).IsEmpty();
+
+        // the framework's first frame initializes it
+        global.Attach(_fixture.Framework, new Logging.GenericLoggerFactory(c => new RecordingLogger(_fixture.Log, c)), _fixture.Cli);
+        global.ReloadContexts(null, false);
+        global.ResumeWaitingPlugins();
+
+        Assertions.AssertObject(context.State).IsEqual(EEditorPluginState.Activated);
+        Assertions.AssertThat(_fixture.Operations).ContainsExactly("add-nuget ZLogger", "build");
+
+        // a start finds it enabled and installed
+        _fixture.Operations.Clear();
+        var restarted = new EGlobal(_fixture.Host) { StateStore = _fixture.Store };
+        restarted.Attach(_fixture.Framework, new Logging.GenericLoggerFactory(c => new RecordingLogger(_fixture.Log, c)), _fixture.Cli);
+        restarted.ReloadContexts(null, false);
+        restarted.ResumeWaitingPlugins();
+        Assertions.AssertObject(restarted.Contexts.Single(c => c.PluginBase == sample).State).IsEqual(EEditorPluginState.Activated);
+        Assertions.AssertThat(_fixture.Operations).IsEmpty();
+    }
+
+    [TestCase]
     public void AReloadComparesThePluginsWithTheirRecordedState()
     {
         var sample = Track(new SamplePlugin());
