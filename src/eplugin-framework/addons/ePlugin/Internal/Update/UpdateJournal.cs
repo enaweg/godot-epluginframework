@@ -68,7 +68,7 @@ internal sealed class UpdateJournal
     /// </summary>
     public bool AskOnBuildFailure { get; set; }
     /// <summary>
-    /// Kept, or awaiting the decision, after a build that ran before the recipes were reconciled: Retry failed resumes
+    /// Kept, or awaiting the decision, after a build that ran before the recipes were reconciled: Retry resumes
     /// the update with reconciling once the project builds.
     /// </summary>
     public bool BeforeReconcile { get; set; }

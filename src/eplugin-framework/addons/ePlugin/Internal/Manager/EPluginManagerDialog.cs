@@ -31,9 +31,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private Tree _tree = null!;
     private Label _status = null!;
     private Button _check = null!;
-    private Button _retry = null!;
+    private Button _attentionButton = null!;
     private Button _release = null!;
-    private CheckBox _trust = null!;
     private ConfirmationDialog _disableFrameworkConfirm = null!;
     private TextureRect _detailsIcon = null!;
     private Label _detailsName = null!;
@@ -47,10 +46,12 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private Button _installVersion = null!;
     private Label _versionHint = null!;
     private ConfirmationDialog _versionConfirm = null!;
-    private ConfirmationDialog _rollbackKeptConfirm = null!;
     // The selected plugin's update kept with build errors, read when its details are shown.
     private UpdateJournal? _keptUpdate;
     private SettingsDialog _settings = null!;
+    private AttentionDialog _attention = null!;
+    // The plugins that need attention, read with the list.
+    private IReadOnlyList<AttentionItem> _attentionItems = [];
     // Checking, loading versions, staging and installing; this dialog shows what they report.
     private UpdateFlow _updates = null!;
     private IReadOnlyList<PluginUpdateTarget> _targets = [];
@@ -102,17 +103,16 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private void Initialize(EGlobal global, CancellationToken lifetime)
     {
         _global = global; _lifetime = lifetime;
-        _updates = new UpdateFlow(global, ReviewLicenses, text => ActivationProgress.Begin(text));
+        _updates = new UpdateFlow(global, ReviewUpdates, ReviewLicenses, text => ActivationProgress.Begin(text));
         _tree = GetNode<Tree>("%PluginTree"); _status = GetNode<Label>("%Status");
-        _check = GetNode<Button>("%CheckButton"); _retry = GetNode<Button>("%RetryButton"); _release = GetNode<Button>("%ReleaseButton");
-        _trust = GetNode<CheckBox>("%TrustCheck");
+        _check = GetNode<Button>("%CheckButton"); _attentionButton = GetNode<Button>("%AttentionButton"); _release = GetNode<Button>("%ReleaseButton");
         _disableFrameworkConfirm = GetNode<ConfirmationDialog>("%DisableFrameworkConfirm");
         _detailsIcon = GetNode<TextureRect>("%DetailsIcon"); _detailsName = GetNode<Label>("%DetailsName"); _detailsText = GetNode<RichTextLabel>("%DetailsText");
         _versionSeparator = GetNode<Control>("%VersionSeparator"); _versionRow = GetNode<Control>("%VersionRow");
         _versionSelect = GetNode<OptionButton>("%VersionSelect"); _installVersion = GetNode<Button>("%InstallVersionButton");
         _versionHint = GetNode<Label>("%VersionHint"); _versionConfirm = GetNode<ConfirmationDialog>("%VersionConfirm");
-        _rollbackKeptConfirm = GetNode<ConfirmationDialog>("%RollbackKeptConfirm");
         _settings = GetNode<SettingsDialog>("%SettingsDialog"); _settings.Initialize(global);
+        _attention = GetNode<AttentionDialog>("%AttentionDialog"); _attention.Initialize();
         _locationRow = GetNode<Control>("%LocationRow"); _locationLink = GetNode<LinkButton>("%LocationLink"); _openFolder = GetNode<Button>("%OpenFolderButton");
         RefreshTheme();
         _signals.Connect(this, Control.SignalName.ThemeChanged, Callable.From(() => CallDeferred(nameof(RefreshTheme))));
@@ -120,15 +120,17 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         // Column titles and sizing are not scene properties of Tree.
         _tree.SetColumnTitle(EnabledColumn, "On"); _tree.SetColumnTitle(NameColumn, "Plugin"); _tree.SetColumnTitle(VersionColumn, "Version");
         _tree.SetColumnExpand(EnabledColumn, false); _tree.SetColumnExpand(NameColumn, false); _tree.SetColumnExpand(VersionColumn, true);
-        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm, _rollbackKeptConfirm }) EditorWindows.Prepare(window, _signals, this, nameof(QueueWindowIcons));
+        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm }) EditorWindows.Prepare(window, _signals, this, nameof(QueueWindowIcons));
         var scale = EditorInterface.Singleton.GetEditorScale();
         _tree.SetColumnCustomMinimumWidth(EnabledColumn, (int)(40 * scale));
         _tree.SetColumnCustomMinimumWidth(VersionColumn, (int)(VersionMinimumWidth * scale));
+        // The scene's line spacing of the details, which keeps their links apart, is for 100% editor scale.
+        _detailsText.AddThemeConstantOverride("line_separation", (int)(_detailsText.GetThemeConstant("line_separation") * scale));
 
         _signals.Connect(_check, BaseButton.SignalName.Pressed, Callable.From(CheckNow));
         _signals.Connect(GetNode<Button>("%SettingsButton"), BaseButton.SignalName.Pressed,
             Callable.From(() => _settings.Open(_model.Plugins.FirstOrDefault(r => r.Plugin.Kind == PluginKind.Framework)?.Plugin)));
-        _signals.Connect(_retry, BaseButton.SignalName.Pressed, Callable.From(RetryFailed));
+        _signals.Connect(_attentionButton, BaseButton.SignalName.Pressed, Callable.From(() => OpenAttention(null)));
         _signals.Connect(_release, BaseButton.SignalName.Pressed, Callable.From(OpenRelease));
         _signals.Connect(_locationLink, BaseButton.SignalName.Pressed, Callable.From(() => { if (_selectedSlug is not null) EditorInterface.Singleton.SelectFile(PluginDirectory(_selectedSlug)); }));
         _signals.Connect(_openFolder, BaseButton.SignalName.Pressed, Callable.From(() => { if (_selectedSlug is not null) OS.ShellShowInFileManager(ProjectSettings.GlobalizePath(PluginDirectory(_selectedSlug)), true); }));
@@ -141,12 +143,10 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         {
             if (_pendingVersion is { } version) Install(new([version], true, _pendingDowngrade, _pendingReinstall));
         }));
-        _signals.Connect(_rollbackKeptConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(RollbackKept));
         _signals.Connect(_tree, Tree.SignalName.ItemSelected, Callable.From(() => ShowDetails(SlugOf(_tree.GetSelected()))));
         _signals.Connect(_tree, Tree.SignalName.ItemActivated, Callable.From(OpenRelease));
         _signals.Connect(_tree, Tree.SignalName.ButtonClicked, Callable.From<TreeItem, long, long, long>((item, _, _, _) => item.Select(NameColumn)));
         _signals.Connect(_tree, Tree.SignalName.Resized, Callable.From(() => { if (_model is not null) FitColumns(); }));
-        _signals.Connect(_trust, BaseButton.SignalName.Toggled, Callable.From<bool>(value => { _model.TrustChangedSource = value; Buttons(); }));
         _signals.Connect(this, AcceptDialog.SignalName.Confirmed, Callable.From(Confirm));
         _signals.Connect(this, AcceptDialog.SignalName.Canceled, Callable.From(Cancel));
         _signals.Connect(this, Window.SignalName.CloseRequested, Callable.From(Cancel));
@@ -155,7 +155,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private void QueueWindowIcons() => CallDeferred(nameof(RefreshWindowIcons));
     private void RefreshWindowIcons()
     {
-        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm, _rollbackKeptConfirm })
+        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm })
             EditorWindows.ApplyIcon(window);
     }
 
@@ -169,7 +169,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         var inset = editorTheme is not null && editorTheme.HasStylebox("normal", "Label") ? editorTheme.GetStylebox("normal", "Label").GetMargin(Side.Left) : 0;
         _detailsText.AddThemeStyleboxOverride("normal", new StyleBoxEmpty { ContentMarginLeft = inset });
         _ePluginIcon = EditorIcons.EPlugin; _logo = EditorIcons.Logo; _updateIcon = EditorIcons.UpdateIndicator;
-        _check.Icon = EditorIcons.Rescan; _retry.Icon = EditorIcons.Retry;
+        _check.Icon = EditorIcons.Rescan;
+        _attentionButton.Icon = EditorIcons.Retry;
         GetNode<Button>("%SettingsButton").Icon = EditorIcons.Settings;
         _settings.RefreshTheme();
         // Render the existing model rather than refreshing it: a theme change must preserve a staged update.
@@ -182,6 +183,16 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         Refresh();
         PopupCenteredClamped(Size, 0.9f);
         _tree.GrabFocus();
+        // Problems shown already in this editor session wait for the button; new ones open the list on top.
+        if (_attentionItems.Any(i => !_global.ShownAttention.Contains(i.Key))) CallDeferred(MethodName.OpenAttention, "");
+    }
+
+    /// <summary>Opens the Needs attention dialog at <paramref name="slug"/>, or at its first plugin when null or empty.</summary>
+    private void OpenAttention(string? slug)
+    {
+        if (!IsInitialized || !Visible || _attentionItems.Count == 0) return;
+        foreach (var item in _attentionItems) _global.ShownAttention.Add(item.Key);
+        _attention.Open(_attentionItems, string.IsNullOrEmpty(slug) ? null : slug);
     }
 
     public void Refresh()
@@ -192,9 +203,11 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         var plugins = _global.CollectPlugins();
         _targets = _global.CollectUpdateTargets();
         _model = new(plugins, _global.PendingUpdates, _targets, _global.UpdateCache, candidate => _global.UpdatePreflightFindings([candidate]));
+        _attentionItems = PluginAttention.Collect(_model, _global.FailedUpdateJournal, _global.KeptUpdate,
+            slug => _global.RetryScope([slug], dependencies: true).Select(a => a.Slug).Where(s => s != slug).ToArray());
         // Update sites, local directories and retries change what the toolbar button shows, too.
         _global.InvalidateManagerStatus();
-        _trust.SetPressedNoSignal(false);
+        if (_attention.Visible) _attention.Update(_attentionItems);
         Render();
     }
 
@@ -202,7 +215,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     {
         _tree.Clear(); var root = _tree.CreateItem();
         TreeItem? selected = null;
-        var editable = !Busy && _updates.Staged is null;
+        var editable = !Busy;
         foreach (var row in _model.Plugins)
         {
             var plugin = row.Plugin;
@@ -297,10 +310,9 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _detailsIcon.Texture = row?.IsEPlugin == true ? _logo : null;
         // Without an icon its separation would indent the name further than the lines below.
         _detailsIcon.Visible = _detailsIcon.Texture is not null;
-        _detailsName.Text = row?.Plugin.Name ?? "No plugin selected";
-        var reviewed = _updates.Request?.VersionInstall == true ? _updates.Staged?.FirstOrDefault(p => p.Candidate.Slug == slug)?.Findings : null;
+        _detailsName.Text = row is null ? "No plugin selected" : PluginManagerViewModel.DetailsTitle(row.Plugin);
         _keptUpdate = row is null ? null : _global.KeptUpdate(row.Plugin.Slug);
-        _detailsText.Text = row is null ? "Select a plugin to see its details." : PluginManagerViewModel.Describe(row, reviewed, LicenseOf(row), WelcomeOf(row), _keptUpdate);
+        _detailsText.Text = row is null ? "Select a plugin to see its details." : PluginManagerViewModel.Describe(row, LicenseOf(row), WelcomeOf(row), _keptUpdate);
         _release.Visible = IsSafeUrl(row?.Update?.Candidate.ReleaseUrl);
         _locationRow.Visible = row is not null;
         if (row is not null)
@@ -340,23 +352,47 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         else if (link == PluginManagerViewModel.WelcomeMeta && _selectedSlug is not null && _model.Find(_selectedSlug) is { } shown &&
                  WelcomeOf(shown) is { Problem: null } welcome)
             WelcomeDialog.Create([welcome]).Open();
-        else if (link == PluginManagerViewModel.RollbackKeptMeta && _keptUpdate is { } kept && !Busy && _updates.Staged is null)
+        else if (link == PluginManagerViewModel.AttentionMeta) OpenAttention(_selectedSlug);
+    }
+
+    /// <summary>Carries out a decision made in the Needs attention dialog, which shows the list again afterwards.</summary>
+    private void AttentionRequested(AttentionAction action, AttentionItem? item)
+    {
+        switch (action)
         {
-            var versions = string.Join(", ", kept.Plugins.Select(p => $"{p.Slug} {p.OldVersion}"));
-            _rollbackKeptConfirm.DialogText = $"Restore {versions}?\n\nOpen scenes are saved first. Changes made inside the plugin's folder since the update are lost. " +
-                (kept.BeforeReconcile
-                    ? "Project files you changed since then (.csproj, .sln, nuget.config) stay as they are. "
-                    : "Project files (.csproj, .sln, nuget.config) are restored as they were before the update. ") +
-                "If you already adapted the project's code to the new version, it will not build with the old one.";
-            _rollbackKeptConfirm.PopupCentered();
+            case AttentionAction.RetryAll: RetryFailed(null, "Retrying failed plugins..."); break;
+            case AttentionAction.Retry when item is not null: RetryFailed([item.Slug], $"Retrying {item.Plugin.Name}..."); break;
+            case AttentionAction.Rollback when item?.Kept is { } kept:
+                if (!BeginPluginOperation()) return;
+                try { _global.RollbackKeptUpdate(kept); }
+                finally { CompletePluginOperation(); }
+                break;
+            case AttentionAction.Disable when item is not null: DisableFailed(item.Slug, item.Plugin.Name); break;
         }
     }
 
-    private void RollbackKept()
+    private void DisableFailed(string slug, string name)
     {
-        if (_keptUpdate is not { } kept || _updates.Staged is not null || !BeginPluginOperation()) return;
-        try { _global.RollbackKeptUpdate(kept); }
-        finally { CompletePluginOperation(); }
+        if (!BeginPluginOperation()) return;
+        _status.Text = "Disabling " + name + "...";
+        bool handled;
+        try
+        {
+            using (ActivationProgress.Begin("Disabling " + name + "..."))
+            {
+                handled = _global.DisableFailedPlugin(slug);
+                // a plain plugin's dependants and optional recipes
+                if (handled) _global.ObservePluginToggles();
+            }
+        }
+        catch (Exception ex)
+        {
+            GD.PushError($"Cannot disable {slug}: {ex.Message}");
+            handled = true;
+        }
+        // Without a failed attempt of its own it is disabled like from the list, outside this signal.
+        if (handled) CompletePluginOperation();
+        else CallDeferred(MethodName.SetPluginEnabled, slug, name, false);
     }
 
     /// <summary>
@@ -423,7 +459,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         // A newer listed version is now a pending update; read the list again so the plugin shows it. Never discard a
         // staged batch awaiting review or interrupt work.
         var pending = _global.PendingUpdates.FirstOrDefault(c => c.Slug == slug);
-        if (!_working && _updates.Staged is null && pending?.NewVersion != _model.Find(slug)?.Update?.Candidate.NewVersion) Refresh();
+        if (!_working && pending?.NewVersion != _model.Find(slug)?.Update?.Candidate.NewVersion) Refresh();
         else if (_selectedSlug == slug) RenderVersions(_model.Find(slug));
     }
 
@@ -452,7 +488,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         }
         var blocked = PluginManagerViewModel.VersionChangeBlocked(row, option);
         _installVersion.Text = option.Action; _installVersion.Icon = VersionIcon(option.IsDowngrade, option.IsReinstall);
-        _installVersion.Disabled = blocked is not null || Busy || _updates.Staged is not null;
+        _installVersion.Disabled = blocked is not null || Busy;
         _installVersion.TooltipText = blocked ?? (option.IsReinstall
             ? $"Install version {option.Version} of {row.Plugin.Name} again, replacing its files."
             : $"Install version {option.Version} of {row.Plugin.Name}.");
@@ -494,8 +530,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         var busy = Busy;
         // Set native input state before queuing the operation. It remains locked even while C# state is reloaded.
         GuiDisableInput = _pluginOperation.IsBusy || _global.IsChangingPlugins || _reloadPending;
-        var staged = _updates.Staged is not null;
-        var editable = !busy && !staged;
+        var editable = !busy;
         for (var item = _tree.GetRoot()?.GetFirstChild(); item is not null; item = item.GetNext())
         {
             var row = SlugOf(item) is { } slug ? _model.Find(slug) : null;
@@ -503,24 +538,20 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             if (row?.Update is { } update) item.SetEditable(VersionColumn, editable && !update.HasError);
         }
         GetNode<Button>("%SettingsButton").Disabled = busy;
-        _trust.Disabled = busy;
         _versionSelect.Disabled = busy || _versionOptions.Count < 2;
-        GetOkButton().Text = !staged ? _model.OkText : _updates.Request?.VersionInstall == true ? "Install reviewed version" : "Install reviewed updates";
-        GetOkButton().Icon = staged && _updates.Request is { } request
-            ? VersionIcon(request.AllowDowngrade, request.AllowReinstall)
-            : EditorIcons.Upgrade;
-        GetOkButton().Disabled = busy || !CanProceed;
-        GetOkButton().Visible = _model.Updates.Count > 0 || staged;
+        GetOkButton().Text = _model.OkText;
+        GetOkButton().Icon = EditorIcons.Upgrade;
+        GetOkButton().Disabled = busy || !_model.CanApply;
+        GetOkButton().Visible = _model.Updates.Count > 0;
         GetCancelButton().Disabled = _swapping || _pluginOperation.IsBusy || _global.IsChangingPlugins || _reloadPending;
         GetCancelButton().Visible = _installing && !_swapping;
-        _trust.Visible = NeedsTrust;
-        _check.Disabled = busy || staged;
-        _retry.Disabled = busy || staged || !_model.CanRetry;
+        _check.Disabled = busy;
+        _attentionButton.Visible = _attentionItems.Count > 0;
+        _attentionButton.Text = PluginAttention.ButtonText(_attentionItems.Count);
+        _attentionButton.Disabled = busy;
+        _attention.SetBusy(busy);
         VersionButtons();
     }
-
-    private bool NeedsTrust => _updates.Staged is not null ? _updates.StagedNeedsTrust : _model.RequiresTrust;
-    private bool CanProceed => _updates.Staged is not null ? !NeedsTrust || _model.TrustChangedSource : _model.CanApply;
 
     private static string? SlugOf(TreeItem? item) =>
         item?.GetMetadata(NameColumn).VariantType == Variant.Type.String ? item.GetMetadata(NameColumn).AsString() : null;
@@ -531,7 +562,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         var item = _tree.GetEdited();
         var row = SlugOf(item) is { } slug ? _model.Find(slug) : null;
         if (item is null || row is null) return;
-        if (Busy || _updates.Staged is not null)
+        if (Busy)
         {
             // Undo the click; the tree is rebuilt outside its own edit signal.
             if (_reloadPending) _status.Text = ReloadNotice;
@@ -618,6 +649,14 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         }).Open();
     }
 
+    private static Task<bool> ReviewUpdates(UpdateReview review)
+    {
+        // continue the installation after the dialog's signal, not inside it
+        var decided = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        UpdateReviewDialog.Create(review, decided.SetResult).Open();
+        return decided.Task;
+    }
+
     private static Task<LicenseReview> ReviewLicenses(LicenseReview review)
     {
         // continue the installation after the dialog's signal, not inside it
@@ -666,8 +705,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     /// <summary>A new local index can add or remove local versions and updates, so the lists are read again.</summary>
     private void LocalIndexChanged()
     {
-        // Never discard a staged batch awaiting review or interrupt work; those refresh when they finish.
-        if (!IsShown || !Visible || _working || _updates.Staged is not null) return;
+        // Never interrupt work; it refreshes when it finishes.
+        if (!IsShown || !Visible || _working) return;
         if (_global.IsIndexingLocalSources) Render();
         else Refresh();
     }
@@ -679,16 +718,17 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private void SettingsChanged()
     {
         _updates.ClearVersions();
-        if (!IsShown || _working || _updates.Staged is not null) return;
+        if (!IsShown || _working) return;
         Refresh();
     }
 
-    private void RetryFailed()
+    /// <param name="slugs">The plugins to retry with what they need; null retries every failed attempt.</param>
+    private void RetryFailed(IReadOnlyCollection<string>? slugs, string text)
     {
-        if (_updates.Staged is not null || !BeginPluginOperation()) return;
+        if (!BeginPluginOperation()) return;
         try
         {
-            using (ActivationProgress.Begin("Retrying failed plugins...")) _global.RetryFailedPlugins();
+            using (ActivationProgress.Begin(text)) _global.RetryFailedPlugins(slugs);
         }
         finally { CompletePluginOperation(); }
     }
@@ -713,15 +753,14 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
 
     private void Confirm()
     {
-        if (_updates is { Staged: not null, Request: { } staged }) Install(staged);
-        else if (_model.CanApply) Install(new InstallRequest(_model.Selected));
+        if (_model.CanApply) Install(new InstallRequest(_model.Selected));
     }
 
     private void Install(InstallRequest request) => Run(InstallAsync(request), "Installing updates");
 
     /// <summary>
-    /// Stages and validates the batch, stops for review when the packages carry warnings, then installs. A second call
-    /// with the batch already staged continues with the installation.
+    /// Stages and validates the batch, has the user review packages that need a decision in their own dialog, then
+    /// installs.
     /// </summary>
     private async Task InstallAsync(InstallRequest request)
     {
@@ -732,19 +771,10 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         InstallOutcome outcome;
         try
         {
-            outcome = await _updates.InstallAsync(request, _model.TrustChangedSource, new InstallView
+            outcome = await _updates.InstallAsync(request, new InstallView
             {
                 Alive = () => !_lifetime.IsCancellationRequested && IsShown,
                 Status = text => _status.Text = text,
-                Staged = (packages, refused) =>
-                {
-                    if (request.VersionInstall) return; // the details show the reviewed package of a chosen version
-                    foreach (var package in packages)
-                        _model.Updates.FirstOrDefault(r => r.Candidate.Slug == package.Candidate.Slug)?.Findings.AddRange(package.Findings);
-                    // A refused package stays out of this batch; its details say why.
-                    foreach (var package in refused)
-                        _model.Updates.FirstOrDefault(r => r.Candidate.Slug == package.Candidate.Slug)?.Findings.Add(new("refused", FindingSeverity.Error, package.Reason));
-                },
                 Swapping = () => { _swapping = true; Buttons(); }
             }, _cancel.Token);
         }
@@ -791,7 +821,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         if (pending == _reloadPending && locked == GuiDisableInput) return;
         _reloadPending = pending;
         // Not while staging or installing: those render their own progress and refresh when done.
-        if (_working || _updates.Staged is not null) Buttons();
+        if (_working) Buttons();
         else Render();
     }
 
@@ -800,6 +830,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         base._EnterTree();
         if (_global is not null) _global.LocalIndexChanged += LocalIndexChanged;
         if (_settings is not null) _settings.Changed += SettingsChanged;
+        if (_attention is not null) _attention.Requested += AttentionRequested;
     }
 
     private void ReleaseCallbacks()
@@ -808,6 +839,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _cancel?.Cancel(); _cancel?.Dispose(); _cancel = null;
         if (_global is not null) _global.LocalIndexChanged -= LocalIndexChanged;
         if (_settings is not null) _settings.Changed -= SettingsChanged;
+        if (_attention is not null) _attention.Requested -= AttentionRequested;
     }
 
     // Reload serializes every script before disposing any of them, so callback targets are still valid here.

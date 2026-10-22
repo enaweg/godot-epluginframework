@@ -1,8 +1,9 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" uid="uid://bvv1rdcwentgp" path="res://addons/ePlugin/Internal/Manager/EPluginManagerDialog.cs" id="1_script"]
 [ext_resource type="Texture2D" uid="uid://sbphlpbrf2br" path="res://addons/ePlugin/icons/rescan.svg" id="2_rescan"]
 [ext_resource type="PackedScene" path="res://addons/ePlugin/Internal/Manager/SettingsDialog.tscn" id="3_settings"]
+[ext_resource type="PackedScene" path="res://addons/ePlugin/Internal/Manager/AttentionDialog.tscn" id="4_attention"]
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_details"]
 
@@ -33,13 +34,13 @@ size_flags_horizontal = 3
 text = "Selected addons will be replaced. Open scenes are saved first.
 Files and project references are backed up and restored if installation fails."
 
-[node name="RetryButton" type="Button" parent="Content/Header"]
+[node name="AttentionButton" type="Button" parent="Content/Header"]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 size_flags_vertical = 4
-tooltip_text = "Retry failed
-Retry plugin activations, deactivations and updates that failed or were interrupted."
-flat = true
+tooltip_text = "Show the plugins whose activation, deactivation or update failed or was interrupted, or that run with a problem, and decide what to do about each."
+text = "1 plugin needs attention"
 
 [node name="CheckButton" type="Button" parent="Content/Header"]
 unique_name_in_owner = true
@@ -132,6 +133,7 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 focus_mode = 2
+theme_override_constants/line_separation = 6
 theme_override_styles/normal = SubResource("StyleBoxEmpty_details")
 bbcode_enabled = true
 text = "Select a plugin to see its details."
@@ -183,12 +185,6 @@ autowrap_mode = 3
 [node name="Footer" type="HBoxContainer" parent="Content"]
 layout_mode = 2
 
-[node name="TrustCheck" type="CheckBox" parent="Content/Footer"]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-text = "I trust the changed update source"
-
 [node name="Status" type="Label" parent="Content/Footer"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(200, 0)
@@ -218,13 +214,8 @@ size = Vector2i(520, 200)
 ok_button_text = "Install"
 dialog_autowrap = true
 
-[node name="RollbackKeptConfirm" type="ConfirmationDialog" parent="."]
-unique_name_in_owner = true
-title = "Roll back kept update"
-initial_position = 2
-size = Vector2i(520, 200)
-ok_button_text = "Roll back"
-dialog_autowrap = true
-
 [node name="SettingsDialog" parent="." instance=ExtResource("3_settings")]
+unique_name_in_owner = true
+
+[node name="AttentionDialog" parent="." instance=ExtResource("4_attention")]
 unique_name_in_owner = true

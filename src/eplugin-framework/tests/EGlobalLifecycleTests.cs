@@ -484,6 +484,80 @@ public class EGlobalLifecycleTests : IDisposable
     }
 
     [TestCase]
+    public void RetryingOnePluginLeavesTheOtherFailedPluginsBlocked()
+    {
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"));
+        _fixture.AddEPlugin("other", b => b.AddNuget("Other.Package"));
+        foreach (var slug in new[] { "app", "other" })
+        {
+            Assertions.AssertBool(_fixture.Store.TryBeginAttempt(slug, "1.0.0", PersistedPluginState.Activated, out var id)).IsTrue();
+            Assertions.AssertBool(_fixture.Store.TryFail(id, PersistedPluginState.Failed, "recipe_operation_failed")).IsTrue();
+        }
+
+        _fixture.Global.RetryFailedPlugins(["app"]);
+
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Activated);
+        Assertions.AssertThat(_fixture.Operations).ContainsExactly("add-nuget App.Package", "build");
+        Assertions.AssertObject(_fixture.Store.GetLocal("app")).IsNull();
+        Assertions.AssertObject(_fixture.Store.GetLocal("other")).IsNotNull();
+    }
+
+    [TestCase]
+    public void ARetryCoversTheFailedDependenciesOfThePlugin()
+    {
+        _fixture.AddEPlugin("lib", b => b.AddNuget("Lib.Package"));
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package").AddPluginDependency("lib"));
+        _fixture.Enable("app");
+        Assertions.AssertObject(_fixture.State("lib")).IsEqual(EEditorPluginState.Activated);
+        foreach (var slug in new[] { "lib", "app" })
+        {
+            Assertions.AssertBool(_fixture.Store.TryBeginAttempt(slug, "1.0.0", PersistedPluginState.Activated, out var id)).IsTrue();
+            Assertions.AssertBool(_fixture.Store.TryFail(id, PersistedPluginState.Failed, "recipe_operation_failed")).IsTrue();
+        }
+
+        Assertions.AssertThat(_fixture.Global.RetryScope(["app"], dependencies: true).Select(a => a.Slug).Order().ToArray()).ContainsExactly("app", "lib");
+        Assertions.AssertThat(_fixture.Global.RetryScope(["lib"], dependencies: true).Select(a => a.Slug).ToArray()).ContainsExactly("lib");
+        Assertions.AssertThat(_fixture.Global.RetryScope(["app"], dependencies: false).Select(a => a.Slug).ToArray()).ContainsExactly("app");
+    }
+
+    [TestCase]
+    public void DisablingAFailedPluginUndoesItsActivationAndLeavesItDisabled()
+    {
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"));
+        Assertions.AssertBool(_fixture.Store.TryBeginAttempt("app", "1.0.0", PersistedPluginState.Activated, out var id)).IsTrue();
+        Assertions.AssertBool(_fixture.Store.TryFail(id, PersistedPluginState.Failed, "recipe_operation_failed")).IsTrue();
+
+        Assertions.AssertBool(_fixture.Global.DisableFailedPlugin("app")).IsTrue();
+
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Deactivated);
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsFalse();
+        Assertions.AssertThat(_fixture.Operations).Contains("remove-nuget App.Package");
+        Assertions.AssertObject(_fixture.Store.GetLocal("app")).IsNull();
+        Assertions.AssertObject(_fixture.Store.GetShared("app")!.State).IsEqual(PersistedPluginState.Deactivated);
+    }
+
+    [TestCase]
+    public void DisablingAPluginWithoutVersionDropsItsAttemptAndAFailedUpdateIsNotDisabled()
+    {
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"), version: "");
+        _fixture.Enable("app");
+        Assertions.AssertString(_fixture.Store.GetLocal("app")!.Reason).IsEqual("invalid_plugin_version");
+
+        Assertions.AssertBool(_fixture.Global.DisableFailedPlugin("app")).IsTrue();
+
+        Assertions.AssertObject(_fixture.Store.GetLocal("app")).IsNull();
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsFalse();
+        Assertions.AssertThat(_fixture.Operations).IsEmpty();
+
+        _fixture.AddEPlugin("updated", b => b.AddNuget("Updated.Package"));
+        Assertions.AssertBool(_fixture.Store.TryBeginAttempt("updated", "1.0.0", PersistedPluginState.Activated, out var id)).IsTrue();
+        Assertions.AssertBool(_fixture.Store.TryFail(id, PersistedPluginState.Failed, "update_kept_build_failed")).IsTrue();
+        Assertions.AssertBool(_fixture.Global.DisableFailedPlugin("updated")).IsFalse();
+        Assertions.AssertObject(_fixture.Store.GetLocal("updated")).IsNotNull();
+        Assertions.AssertBool(_fixture.Global.DisableFailedPlugin("unknown")).IsFalse();
+    }
+
+    [TestCase]
     public void DisablingTheFrameworkIsRecordedInTheSharedState()
     {
         _fixture.Global.RecordFrameworkDisabled(_fixture.Framework);

@@ -339,7 +339,14 @@ internal sealed partial class EGlobal
 
     private IReadOnlySet<string> GetEnabledPluginSlugs() => _host.EnabledPluginSlugs();
 
-    public void RetryFailedPlugins()
+    /// <summary>Retries every failed or interrupted attempt.</summary>
+    public void RetryFailedPlugins() => RetryFailedPlugins(null);
+
+    /// <summary>
+    /// Retries the failed attempts of <paramref name="slugs"/> together with those <see cref="RetryScope"/> adds; null
+    /// retries every attempt.
+    /// </summary>
+    public void RetryFailedPlugins(IReadOnlyCollection<string>? slugs)
     {
         RefreshPlainPlugins();
         if (_stateStore is null || _stateStore.IsReadOnly)
@@ -347,9 +354,68 @@ internal sealed partial class EGlobal
             return;
         }
 
-        var retriedUpdates = new HashSet<Guid>();
-        foreach (var attempt in OrderRetries(_stateStore.LocalAttempts))
+        Retry(slugs is null ? _stateStore.LocalAttempts : RetryScope(slugs, dependencies: true), disable: null);
+    }
+
+    /// <summary>
+    /// Gives up on a plugin whose activation or deactivation failed: undoes what it installed and disables it. The other
+    /// plugins of the same attempt are retried. False when it has no such attempt, e.g. after a failed update, which is
+    /// retried or rolled back instead; the ePlugin Manager then disables it like any other plugin.
+    /// </summary>
+    public bool DisableFailedPlugin(string slug)
+    {
+        RefreshPlainPlugins();
+        if (_stateStore is null || _stateStore.IsReadOnly || _stateStore.GetLocal(slug) is not { } attempt || IsUpdateAttempt(attempt))
         {
+            return false;
+        }
+
+        if (attempt.Reason == "invalid_plugin_version")
+        {
+            // The version is checked before anything is installed, and a plugin without one cannot complete a transition.
+            if (!_stateStore.TryAbandonAttempt(attempt.AttemptId)) return false;
+            if (_contexts.FirstOrDefault(c => c.Slug == slug) is { } invalid) invalid.State = EEditorPluginState.Deactivated;
+            if (_host.IsPluginEnabled(slug)) _host.SetPluginEnabled(slug, false);
+            return true;
+        }
+
+        Retry(RetryScope([slug], dependencies: false), disable: slug);
+        return true;
+    }
+
+    /// <summary>
+    /// The failed attempts a retry of <paramref name="slugs"/> covers: theirs, those of the plugins that failed in the
+    /// same attempt (a retry replaces the attempt of all of them), and with <paramref name="dependencies"/> those of the
+    /// failed hard dependencies they need.
+    /// </summary>
+    internal IReadOnlyCollection<LocalPluginAttempt> RetryScope(IEnumerable<string> slugs, bool dependencies)
+    {
+        if (_stateStore is null) return [];
+        var attempts = _stateStore.LocalAttempts;
+        var scope = new Dictionary<string, LocalPluginAttempt>(StringComparer.Ordinal);
+        var queue = new Queue<string>(slugs);
+        while (queue.TryDequeue(out var slug))
+        {
+            if (_stateStore.GetLocal(slug) is not { } attempt || !scope.TryAdd(slug, attempt)) continue;
+            foreach (var related in attempts.Where(a => a.AttemptId == attempt.AttemptId)) queue.Enqueue(related.Slug);
+            if (dependencies)
+                foreach (var dependency in GetHardDependencySlugs(slug)) queue.Enqueue(dependency);
+        }
+        return scope.Values;
+    }
+
+    private bool IsUpdateAttempt(LocalPluginAttempt attempt) =>
+        attempt.Reason.StartsWith("update_", StringComparison.Ordinal) ||
+        _updateJournals?.Read().Any(j => j.AttemptId == attempt.AttemptId) == true;
+
+    /// <param name="disable">A plugin whose failed attempt is retried as a deactivation, whatever it aimed for.</param>
+    private void Retry(IReadOnlyCollection<LocalPluginAttempt> attempts, string? disable)
+    {
+        if (_stateStore is null) return;
+        var retriedUpdates = new HashSet<Guid>();
+        foreach (var failed in OrderRetries(attempts))
+        {
+            var attempt = failed.Slug == disable ? failed with { TargetState = PersistedPluginState.Deactivated } : failed;
             var updateJournal = _updateJournals?.Read().FirstOrDefault(j => j.AttemptId == attempt.AttemptId);
             if (updateJournal is not null || attempt.Reason.StartsWith("update_", StringComparison.Ordinal))
             {

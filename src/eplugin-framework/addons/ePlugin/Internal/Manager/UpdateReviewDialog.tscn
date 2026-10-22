@@ -1,0 +1,63 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/ePlugin/Internal/Manager/UpdateReviewDialog.cs" id="1_script"]
+
+[node name="UpdateReviewDialog" type="ConfirmationDialog"]
+auto_translate_mode = 2
+title = "ePlugin — Review updates"
+initial_position = 2
+size = Vector2i(960, 560)
+min_size = Vector2i(640, 360)
+ok_button_text = "Install"
+dialog_hide_on_ok = false
+cancel_button_text = "Cancel update"
+script = ExtResource("1_script")
+
+[node name="Content" type="VBoxContainer" parent="."]
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 952.0
+offset_bottom = 511.0
+theme_override_constants/separation = 8
+
+[node name="Summary" type="Label" parent="Content"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(560, 0)
+layout_mode = 2
+text = "These updates need your decision before they are installed."
+autowrap_mode = 3
+
+[node name="Split" type="HSplitContainer" parent="Content"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="ReviewTree" type="Tree" parent="Content/Split"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(400, 0)
+layout_mode = 2
+columns = 3
+column_titles_visible = true
+hide_root = true
+select_mode = 1
+
+[node name="ReviewBox" type="VBoxContainer" parent="Content/Split"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ReviewName" type="Label" parent="Content/Split/ReviewBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+theme_type_variation = &"HeaderMedium"
+text = "Plugin"
+autowrap_mode = 3
+
+[node name="ReviewText" type="RichTextLabel" parent="Content/Split/ReviewBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+focus_mode = 2
+theme_override_constants/line_separation = 6
+bbcode_enabled = true
+context_menu_enabled = true
+selection_enabled = true

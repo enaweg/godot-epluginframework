@@ -35,7 +35,7 @@ public class SettingsDialogTests
                          "%AutoAcceptCheck", "%AutoAcceptWarning", "%AutoAcceptConfirm", "%GeneralStatus",
                          "%SourceTree", "%SourceStatus", "%RescanLocalSourcesButton", "%AddSiteButton", "%AddLocalSourceButton", "%EditSiteButton", "%RemoveSourceButton",
                          "%SiteEditor", "%SiteSlug", "%SiteUrl", "%SiteHint", "%LocalSourceFolderDialog",
-                         "%AboutLogo", "%AboutVersion", "%AboutDescription", "%StoreLink", "%SourceLink", "%DocumentationLink", "%StarNote", "%StarLink"
+                         "%AboutLogo", "%AboutVersion", "%AboutDescription", "%AuthorLink", "%StoreLink", "%SourceLink", "%DocumentationLink", "%StarNote", "%StarLink"
                      })
                 Assertions.AssertObject(dialog.GetNodeOrNull(name)).IsNotNull();
             // The tabs find these nodes from their own scripts, which resolve % in the dialog's scene.
@@ -46,10 +46,26 @@ public class SettingsDialogTests
             {
                 Assertions.AssertObject(manager.GetNodeOrNull("%SettingsButton")).IsNotNull();
                 Assertions.AssertObject(manager.GetNodeOrNull("%SettingsDialog")).IsInstanceOf<SettingsDialog>();
+                Assertions.AssertObject(manager.GetNodeOrNull("%AttentionDialog")).IsInstanceOf<AttentionDialog>();
+                Assertions.AssertObject(manager.GetNodeOrNull("%AttentionButton")).IsNotNull();
+                foreach (var name in new[] { "%AttentionList", "%AttentionName", "%AttentionText", "%RetryPluginButton", "%RollbackButton",
+                             "%DisablePluginButton", "%OpenLogButton", "%OpenPluginFolderButton", "%RollbackConfirm" })
+                    Assertions.AssertObject(manager.GetNode("%AttentionDialog").GetNodeOrNull(name)).IsNotNull();
+                // decisions moved to their own dialogs
+                foreach (var name in new[] { "%RetryButton", "%TrustCheck", "%RollbackKeptConfirm" })
+                    Assertions.AssertObject(manager.GetNodeOrNull(name)).IsNull();
                 foreach (var name in new[] { "%LocalSourcesButton", "%UpdateSitesButton", "%AboutButton" })
                     Assertions.AssertObject(manager.GetNodeOrNull(name)).IsNull();
             }
             finally { manager.Free(); }
+
+            var review = GD.Load<PackedScene>(UpdateReviewDialog.ScenePath).Instantiate<UpdateReviewDialog>();
+            try
+            {
+                foreach (var name in new[] { "%Summary", "%ReviewTree", "%ReviewName", "%ReviewText" })
+                    Assertions.AssertObject(review.GetNodeOrNull(name)).IsNotNull();
+            }
+            finally { review.Free(); }
         }
         finally { dialog.Free(); }
     }

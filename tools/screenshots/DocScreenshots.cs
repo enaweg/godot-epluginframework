@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Enaweg.Plugin.Internal;
+using Enaweg.Plugin.Internal.Kinds;
 using Enaweg.Plugin.Internal.Licenses;
 using Enaweg.Plugin.Internal.Manager;
 using Enaweg.Plugin.Internal.Update;
@@ -49,6 +50,8 @@ public partial class DocScreenshots : Node
             await Licenses();
             await Welcome();
             await UpdateFailure();
+            await UpdateReview();
+            await Attention();
             await Progress();
         }
         catch (Exception ex)
@@ -171,6 +174,49 @@ public partial class DocScreenshots : Node
         _editor.AddChild(dialog);
         dialog.Open();
         await Shot("update-build-failure", dialog);
+        EditorWindows.Release(dialog);
+        await Seconds(0.5);
+    }
+
+    private async Task UpdateReview()
+    {
+        static ValidatedPackage Package(string slug, string name, string version, params Finding[] findings) =>
+            new(new UpdateCandidate(slug, name, "1.0", version, $"https://github.com/example/{slug}/releases", null, null,
+                new ZipPackageRef($"https://github.com/example/{slug}/releases/download/v{version}/{slug}.zip", slug)),
+                "", SemVer.TryParse(version, out var parsed) ? parsed : default, $"https://codeberg.org/example/{slug}/releases", false, findings);
+        // Three updates of a batch: one moves to another host, one has a warning, one has nothing to review.
+        var review = Internal.Manager.UpdateReview.For(
+        [
+            Package("sample_plugin", "SamplePlugin", "1.1.0",
+                new Finding("R9", FindingSeverity.Warning, "Update source changed: https://codeberg.org/example/sample_plugin/releases", RequiresTrust: true)),
+            Package("sample_dependant_plugin", "Sample Dependant Plugin", "2.0.0",
+                new Finding("R14", FindingSeverity.Warning, "Major version change: your project code may need changes.")),
+            Package(OptionalSlug, "Sample Optional Plugin", "1.1.0")
+        ], [])!;
+        var dialog = UpdateReviewDialog.Create(review, _ => { });
+        dialog.Open();
+        await Shot("update-review", dialog);
+        EditorWindows.Release(dialog);
+        await Seconds(0.5);
+    }
+
+    private async Task Attention()
+    {
+        PluginRow Row(string slug, string name, string reason, string? error = null) => new(new PluginInfo(slug, name, PluginKind.EPlugin, false)
+        {
+            Version = "1.0", State = EEditorPluginState.Error, Error = error,
+            FailedAttempt = new LocalPluginAttempt(Guid.NewGuid(), slug, "1.0", PersistedPluginState.Activated, PersistedPluginState.Failed, reason)
+        }, null);
+        var dialog = GD.Load<PackedScene>(AttentionDialog.ScenePath).Instantiate<AttentionDialog>();
+        _editor.AddChild(dialog);
+        dialog.Initialize();
+        dialog.Open(
+        [
+            new AttentionItem(Row("sample_dependant_plugin", "Sample Dependant Plugin", "recipe_operation_failed",
+                "Cannot add NuGet package Example.Package: the package source cannot be reached."), null, null, ["sample_plugin"]),
+            new AttentionItem(Row("sample_plugin", "SamplePlugin", "dependency_resolution_failed"), null, null, [])
+        ], null);
+        await Shot("needs-attention", dialog);
         EditorWindows.Release(dialog);
         await Seconds(0.5);
     }

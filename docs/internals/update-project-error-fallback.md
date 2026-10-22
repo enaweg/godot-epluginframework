@@ -8,7 +8,7 @@ Decided: project code is isolated with an MSBuild compile filter, not by renamin
 Where the implementation differs from the plan below:
 
 - No dialog after an *automatic* keep: closing the failure dialog means rollback. The status line says it was kept, and
-  the plugin's details show a **Kept update** section with the project errors and the **Roll back to** link.
+  the plugin's details show a **Kept update** section with the project errors; the Needs attention dialog rolls it back.
 - S1 found that a Rebuild resolves project references while cleaning, so the filter target runs before
   `BeforeRebuild;BeforeBuild;AssignProjectConfiguration`, not only `BeforeBuild`. Property values on the command line are
   MSBuild-escaped (an apostrophe in the path broke item transforms), `OutDir` has no trailing separator (a quoted

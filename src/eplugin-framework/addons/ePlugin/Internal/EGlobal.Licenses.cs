@@ -45,7 +45,7 @@ internal sealed partial class EGlobal
         {
             // A dependency whose license was not reviewed with the plugin that enables it, because its recipe could
             // not be read beforehand. The waiting chain cannot pause for a dialog, so it fails like a missing dependency.
-            var reason = $"The license of {names} has to be accepted first. Enable {context.Name} on its own to review it, then use Retry failed.";
+            var reason = $"The license of {names} has to be accepted first. Enable {context.Name} on its own to review it, then retry it under Needs attention in the ePlugin Manager.";
             context.Logger?.Error(reason);
             context.State = EEditorPluginState.Error;
             context.ErrorDetail = new InvalidOperationException(reason);

@@ -54,6 +54,8 @@ internal static class EditorIcons
 
     /// <summary>The editor's color for something that went well, e.g. an available update.</summary>
     public static Color SuccessColor => ThemeColor(EditorInterface.Singleton.GetEditorTheme(), Accents[0].Name, Accents[0].Fallback);
+    /// <summary>The editor's color for warnings.</summary>
+    public static Color WarningColor => ThemeColor(EditorInterface.Singleton.GetEditorTheme(), Accents[1].Name, Accents[1].Fallback);
     /// <summary>The editor's color for errors.</summary>
     public static Color ErrorColor => ThemeColor(EditorInterface.Singleton.GetEditorTheme(), Accents[2].Name, Accents[2].Fallback);
 

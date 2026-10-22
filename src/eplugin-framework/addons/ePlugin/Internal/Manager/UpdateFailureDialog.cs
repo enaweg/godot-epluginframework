@@ -38,13 +38,11 @@ internal sealed partial class UpdateFailureDialog : AcceptDialog, ISerialization
         GetNode<Label>("%Summary").Text = string.Join("\n", journal.Plugins.Select(p => $"{p.Slug} {p.OldVersion} → {p.NewVersion}")) +
                                           (_projectCode
                                               ? "\nOnly the project's own code does not compile with the installed version; the plugins compile on their own." +
-                                                "\nKeep it and adapt the project's code, then use Retry failed in the ePlugin Manager to finish the update."
+                                                "\nKeep it and adapt the project's code, then use Retry under Needs attention in the ePlugin Manager to finish the update."
                                               : "\nThe project does not compile with the installed version." +
                                                 (journal.FailureCause == BuildFailureCause.PluginCode ? " The errors are in plugin code." : "") +
-                                                "\nKeep it to fix the errors yourself, then use Retry failed in the ePlugin Manager to finish the update.");
-        // The full build that failed, not the plugins-only build that followed it.
-        var logName = journal.Builds.LastOrDefault(b => !b.Name.EndsWith("-plugins-only", StringComparison.Ordinal))?.LogFile;
-        var log = logName is not null ? PackageFiles.Inside(journal.Directory, logName) : null;
+                                                "\nKeep it to fix the errors yourself, then use Retry under Needs attention in the ePlugin Manager to finish the update.");
+        var log = AttentionItem.FailedBuildLog(journal);
         _log = log;
         GetNode<TextEdit>("%BuildOutput").Text = _projectCode && journal.ProjectErrors.Count > 0
             ? string.Join("\n", journal.ProjectErrors.Select(BuildDiagnostics.Format))
