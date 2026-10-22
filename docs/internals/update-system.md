@@ -131,8 +131,10 @@ Windows), loads them after showing, and refuses to show a directory with one tha
 
 A GDExtension add-on has no `plugin.cfg`, so nothing in its files names a version or an update site. Its installed
 version is the one the shared state recorded (`PluginStateStore.GetShared`), written by `TryAcknowledgeVersions` like
-any update's; until then it is "" and `CheckForUpdatesAsync` leaves it out (`Checked`), while versions are still listed
-and installed from the manager. `AddonPackageValidator` takes the announced version for a package without `plugin.cfg`
+any update's; until then it is "" (`PluginUpdateTarget.VersionUnknown`). A check then caches its latest release without
+returning it as an update (`CurrentCached` skips it, since the installed version cannot be compared), and so does listing
+its versions; the manager offers that release (`UpdateScheduler.CachedLatest`) while the update site's versions are not
+listed, and installs a chosen version with **Install**. `AddonPackageValidator` takes the announced version for a package without `plugin.cfg`
 (R6 is informational while the installed version is unknown, R24 when the new version brings a `plugin.cfg`), and
 `UpdateApplier` reads the old version from the store (`InstalledVersion`) and the new one from the package
 (`PackageVersion`). The add-on is never disabled, `IUpdateHost.IsEnabled` counts it as enabled, and verification only

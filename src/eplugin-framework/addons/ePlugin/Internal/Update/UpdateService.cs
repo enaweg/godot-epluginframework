@@ -28,13 +28,16 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
 
     /// <summary>
     /// Checks the update site of every target that has one and caches the result. A project update site is tried first,
-    /// then the plugin.cfg update_url, then the built-in one, each when the ones before are unsupported or fail.
+    /// then the plugin.cfg update_url, then the built-in one, each when the ones before are unsupported or fail. The latest
+    /// release of a target whose version is unknown (<see cref="PluginUpdateTarget.VersionUnknown"/>) is cached but not
+    /// returned as an update, see <see cref="UpdateScheduler.CachedLatest"/>.
     /// </summary>
     public async Task<UpdateCheckResult> CheckAsync(IReadOnlyList<PluginUpdateTarget> targets, UpdateCheckOptions options,
         CancellationToken ct)
     {
         targets = targets.Where(t => t.UpdateUrls.Count > 0).ToArray();
         var updates = new ConcurrentBag<UpdateCandidate>();
+        var latest = new ConcurrentBag<UpdateCandidate>();
         var failures = new ConcurrentBag<UpdateCheckFailure>();
         var fallbacks = new ConcurrentBag<UpdateCheckFailure>();
         using var slots = new SemaphoreSlim(4);
@@ -43,13 +46,15 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
             await slots.WaitAsync(ct).ConfigureAwait(false);
             try
             {
-                if (!SemVer.TryParse(target.InstalledVersion, out var installed))
+                var installed = default(SemVer);
+                if (!target.VersionUnknown && !SemVer.TryParse(target.InstalledVersion, out installed))
                     throw new InvalidOperationException($"Installed version '{target.InstalledVersion}' cannot be compared.");
                 var (candidate, _, fallback) = await FirstWorkingSiteAsync(target, TimeSpan.FromSeconds(options.TimeoutSeconds),
                     (source, site, token) => source.CheckAsync(site, options, token), ct).ConfigureAwait(false);
                 if (fallback is not null) fallbacks.Add(new(target.Slug, fallback));
-                if (candidate is not null && SemVer.TryParse(candidate.NewVersion, out var remote) &&
-                    IsUpdate(installed, remote)) updates.Add(candidate);
+                if (candidate is null || !SemVer.TryParse(candidate.NewVersion, out var remote)) { }
+                else if (target.VersionUnknown) latest.Add(candidate);
+                else if (IsUpdate(installed, remote)) updates.Add(candidate);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (Exception ex) { failures.Add(new(target.Slug, ex is OperationCanceledException ? "Request timed out." : ex.Message)); }
@@ -61,7 +66,7 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
         if (targets.Count == 0 || failures.Count < targets.Count)
         {
             store.State.LastCheckUtc = result.CheckedAtUtc;
-            store.State.Results = result.Updates.ToList();
+            store.State.Results = result.Updates.Concat(latest.OrderBy(x => x.Slug, StringComparer.Ordinal)).ToList();
             store.Save();
         }
         return result;
@@ -155,8 +160,11 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
     /// </summary>
     private void RecordListedUpdate(PluginUpdateTarget target, string url, IReadOnlyList<UpdateCandidate> versions)
     {
-        if (!SemVer.TryParse(target.InstalledVersion, out var installed)) return;
-        var newest = versions.FirstOrDefault(v => SemVer.TryParse(v.NewVersion, out var version) && IsUpdate(installed, version));
+        var installed = default(SemVer);
+        if (!target.VersionUnknown && !SemVer.TryParse(target.InstalledVersion, out installed)) return;
+        // Of a target whose version is unknown, the latest release is cached, as a check would.
+        var newest = versions.FirstOrDefault(v => SemVer.TryParse(v.NewVersion, out var version) &&
+                                                  (target.VersionUnknown ? Offers(target, version) : IsUpdate(installed, version)));
         if (newest is null || !SemVer.TryParse(newest.NewVersion, out var listed)) return;
         var cached = store.State.Results.FirstOrDefault(c => c.Slug == target.Slug && c.SourceUrl is { } source && target.UpdateUrls.Contains(source));
         if (cached is not null && SemVer.TryParse(cached.NewVersion, out var known) && known.CompareTo(listed) >= 0) return;

@@ -251,6 +251,19 @@ public class PluginManagerViewModelTests
         Assertions.AssertString(PluginManagerViewModel.VersionChangeBlocked(disabled, listed)).Contains("Enable");
     }
     [TestCase]
+    public static void AnUnknownInstalledVersionIsReplacedByInstallingAnyVersion()
+    {
+        // a GDExtension add-on ePlugin did not install
+        var options = PluginManagerViewModel.VersionOptions("", [Version("1.0.0"), Version("2.0.0")]);
+        Assertions.AssertArray(options.Select(o => o.Version).ToArray()).ContainsExactly("2.0.0", "1.0.0");
+        Assertions.AssertBool(options.All(o => o.ReplacesUnknown && !o.Installed && !o.IsDowngrade && !o.IsReinstall)).IsTrue();
+        Assertions.AssertArray(options.Select(o => o.Action).ToArray()).ContainsExactly("Install", "Install");
+        Assertions.AssertString(PluginManagerViewModel.VersionLabel(options[0], latest: true)).IsEqual("2.0.0 (latest)");
+        var addon = new PluginRow(new PluginInfo("beta", "Beta", PluginKind.GDExtensionAddon, true) { UpdateSite = "https://example.org/releases" }, null);
+        Assertions.AssertObject(PluginManagerViewModel.VersionChangeBlocked(addon, options[0])).IsNull();
+        Assertions.AssertBool(PluginManagerViewModel.VersionOptions("1.5.0", [Version("2.0.0")]).Any(o => o.ReplacesUnknown)).IsFalse();
+    }
+    [TestCase]
     public static void VersionLabelsMarkLatestInstalledAndLocalVersions()
     {
         var local = Version("2.1.0") with { SourceUrl = null, Package = new LocalZipPackageRef("/packages/beta.zip") };

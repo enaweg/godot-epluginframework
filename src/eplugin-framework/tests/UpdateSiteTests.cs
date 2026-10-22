@@ -145,6 +145,32 @@ public class UpdateSiteTests
     }
 
     [TestCase]
+    public static async Task TheLatestReleaseOfAnAddonOfUnknownVersionIsCachedButNoUpdate()
+    {
+        var store = new MemoryStore();
+        var service = new UpdateService(new Factory(), new SystemClock(), store);
+        var addon = Target(site: null) with { InstalledVersion = "", Kind = PluginKind.GDExtensionAddon };
+        Assertions.AssertBool(addon.VersionUnknown).IsTrue();
+        Assertions.AssertBool((addon with { InstalledVersion = "1.0.0" }).VersionUnknown).IsFalse();
+        Assertions.AssertBool((addon with { Kind = PluginKind.Unknown }).VersionUnknown).IsFalse();
+
+        var result = await service.CheckAsync([addon, Target()], new(), CancellationToken.None);
+        Assertions.AssertArray(result.Updates.Select(u => u.SourceUrl).ToArray()).ContainsExactly(Site);
+        Assertions.AssertInt(result.Failures.Count).IsEqual(0);
+        Assertions.AssertString(UpdateScheduler.CachedLatest(store.State, addon)!.NewVersion).IsEqual("2.0.0");
+        Assertions.AssertInt(UpdateScheduler.CurrentCached(store.State, [addon]).Count).IsEqual(0);
+        Assertions.AssertObject(UpdateScheduler.CachedLatest(store.State, Target())).IsNull();
+        // once a version was installed, the cached release is an update of it
+        Assertions.AssertInt(UpdateScheduler.CurrentCached(store.State, [addon with { InstalledVersion = "1.0.0" }]).Count).IsEqual(1);
+
+        // listing its versions caches the latest too
+        var listing = new MemoryStore();
+        await new UpdateService(new Factory(), new SystemClock(), listing).ListVersionsAsync(addon, new(), CancellationToken.None);
+        Assertions.AssertString(UpdateScheduler.CachedLatest(listing.State, addon)!.SourceUrl).IsEqual(Config);
+        Assertions.AssertInt(UpdateScheduler.CurrentCached(listing.State, [addon]).Count).IsEqual(0);
+    }
+
+    [TestCase]
     public static void ManagerAcceptsUpdatesFromEitherSiteAndShowsTheProjectSite()
     {
         var plugin = new PluginInfo("plugin", "Plugin", PluginKind.GDScript, true) { Version = "1.0.0", UpdateUrl = Config, UpdateSite = Site };

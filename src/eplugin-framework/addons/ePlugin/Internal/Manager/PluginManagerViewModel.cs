@@ -39,13 +39,14 @@ internal sealed class PluginRow(PluginInfo plugin, UpdateRow? update)
 }
 /// <summary>What the toolbar button of the ePlugin Manager shows with the color of its puzzle piece.</summary>
 internal enum ManagerStatus { Normal, UpdatesAvailable, NeedsAttention }
-internal sealed record VersionOption(string Version, UpdateCandidate? Candidate, bool Installed, bool IsDowngrade)
+/// <param name="ReplacesUnknown">The installed version is unknown (a GDExtension add-on ePlugin did not install).</param>
+internal sealed record VersionOption(string Version, UpdateCandidate? Candidate, bool Installed, bool IsDowngrade, bool ReplacesUnknown = false)
 {
     public bool IsLocal => Candidate?.Package is LocalZipPackageRef;
     /// <summary>The installed version offered again, e.g. new commits of a pinned git branch or to repair changed files.</summary>
     public bool IsReinstall => Installed && Candidate is not null;
     /// <summary>The text of the button and confirmation that install this version.</summary>
-    public string Action => Installed ? "Reinstall" : IsDowngrade ? "Downgrade" : "Update";
+    public string Action => Installed ? "Reinstall" : IsDowngrade ? "Downgrade" : ReplacesUnknown ? "Install" : "Update";
 }
 internal sealed class PluginManagerViewModel
 {
@@ -113,7 +114,8 @@ internal sealed class PluginManagerViewModel
         {
             var valid = SemVer.TryParse(candidate.NewVersion, out var version);
             var current = known && valid && version.CompareTo(installed) == 0;
-            return new VersionOption(candidate.NewVersion, candidate, current, known && valid && version.CompareTo(installed) < 0);
+            return new VersionOption(candidate.NewVersion, candidate, current, known && valid && version.CompareTo(installed) < 0,
+                installedVersion.Length == 0);
         }).ToList();
         // A GDExtension add-on ePlugin did not install has no known version to list.
         if (!options.Any(o => o.Installed) && installedVersion.Length > 0) options.Add(new(installedVersion, null, true, false));
@@ -350,7 +352,8 @@ internal sealed class PluginManagerViewModel
                         "not know it, and no local plugin directory holds a package of it.\n");
         if (plugin.Kind == PluginKind.GDExtensionAddon && plugin.Version.Length == 0 && row.IsUpdatable)
             text.Append("ePlugin does not know the installed version, because the add-on has no plugin.cfg and ePlugin did not " +
-                        "install it, so no update is offered. Choose a version and install it; from then on, updates are found.\n");
+                        "install it, so no update is offered. Install the latest version, which is preselected below, or choose another; " +
+                        "from then on, updates are found.\n");
         if (plugin.UpdateSite is not null)
         {
             var replaced = plugin.UpdateUrl is not null && plugin.UpdateUrl != plugin.UpdateSite;
