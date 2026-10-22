@@ -182,6 +182,20 @@ public class PluginManagerViewModelTests
         Assertions.AssertString(none).NotContains("Source:");
     }
     [TestCase]
+    public static void DetailsNameTheVersionInTheHeadingAndStartWithTheDescription()
+    {
+        var plugin = Plugin("docs", PluginKind.EPlugin) with { Description = " Declares [things]. " };
+        Assertions.AssertString(PluginManagerViewModel.DetailsTitle(plugin)).IsEqual("docs 1.0.0");
+        Assertions.AssertString(PluginManagerViewModel.DetailsTitle(plugin with { Version = "" })).IsEqual("docs");
+        Assertions.AssertString(PluginManagerViewModel.DetailsTitle(Plugin("servo", PluginKind.GDExtensionAddon) with { Version = "" }))
+            .IsEqual("servo (version unknown)");
+
+        var details = PluginManagerViewModel.Describe(new(plugin, null));
+        Assertions.AssertString(details).StartsWith("Declares [lb]things].\n\n[b]Type:[/b]");
+        Assertions.AssertString(details).NotContains("[b]Version:[/b]");
+        Assertions.AssertString(PluginManagerViewModel.Describe(new(plugin with { Description = "" }, null))).StartsWith("[b]Type:[/b]");
+    }
+    [TestCase]
     public static void ClassifiesPluginScripts()
     {
         var types = typeof(PluginCatalog).Assembly.GetTypes();

@@ -132,6 +132,7 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 focus_mode = 2
+theme_override_constants/line_separation = 6
 theme_override_styles/normal = SubResource("StyleBoxEmpty_details")
 bbcode_enabled = true
 text = "Select a plugin to see its details."

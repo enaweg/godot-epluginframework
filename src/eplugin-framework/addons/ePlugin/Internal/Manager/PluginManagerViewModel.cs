@@ -158,6 +158,11 @@ internal sealed class PluginManagerViewModel
     public static string VersionText(PluginInfo plugin) =>
         plugin.Version.Length == 0 && plugin.Kind == PluginKind.GDExtensionAddon ? "unknown" : plugin.Version;
 
+    /// <summary>The heading of the details: the plugin's name followed by its installed version.</summary>
+    public static string DetailsTitle(PluginInfo plugin) =>
+        plugin.Version.Length > 0 ? $"{plugin.Name} {plugin.Version}"
+        : plugin.Kind == PluginKind.GDExtensionAddon ? $"{plugin.Name} (version unknown)" : plugin.Name;
+
     /// <summary>The plugin as the list shows it: its name, followed by its author in parentheses when it names one.</summary>
     public static string ListName(PluginInfo plugin) =>
         string.IsNullOrWhiteSpace(plugin.Author) ? plugin.Name : $"{plugin.Name} ({plugin.Author.Trim()})";
@@ -304,7 +309,10 @@ internal sealed class PluginManagerViewModel
         return text.ToString();
     }
 
-    /// <summary>The details pane as BBCode. All plugin supplied text is escaped.</summary>
+    /// <summary>
+    /// The details pane as BBCode, below the heading (<see cref="DetailsTitle"/>) and location. All plugin supplied text
+    /// is escaped.
+    /// </summary>
     /// <param name="reviewed">Findings of a staged package for an explicitly chosen version, awaiting confirmation.</param>
     /// <param name="kept">The plugin's update kept with build errors, see <see cref="KeptUpdateSection"/>.</param>
     public static string Describe(PluginRow row, IReadOnlyList<Finding>? reviewed = null, LicenseInfo? license = null,
@@ -317,9 +325,9 @@ internal sealed class PluginManagerViewModel
             if (value is null || !IsWebUrl(value)) Line(label, value);
             else text.Append(CultureInfo.CurrentCulture, $"[b]{label}:[/b] [url={value}]{Escape(value)}[/url]\n");
         }
+        if (!string.IsNullOrWhiteSpace(plugin.Description)) text.Append(Escape(plugin.Description.Trim())).Append("\n\n");
         Line("Type", PluginCatalog.KindName(plugin.Kind));
         Line("Status", StatusText(plugin));
-        Line("Version", VersionText(plugin));
         Line("Author", plugin.Author);
         // ePlugin's built-in list fills in what plugin.cfg does not set
         Link("Documentation", plugin.DocumentationUrl ?? plugin.Known?.DocumentationUrl);
@@ -328,7 +336,6 @@ internal sealed class PluginManagerViewModel
         if (plugin.Known?.WebsiteUrl is { } website && website != source) Link("Website", website);
         text.Append(LicenseLine(license));
         text.Append(WelcomeLine(welcome));
-        if (!string.IsNullOrWhiteSpace(plugin.Description)) text.Append('\n').Append(Escape(plugin.Description)).Append('\n');
         if (plugin.Error is not null) text.Append(CultureInfo.CurrentCulture, $"\n[color=#ff7070]{Escape(plugin.Error)}[/color]\n");
         text.Append(ExtensionSection(plugin.Extensions));
         if (kept is not null) text.Append(KeptUpdateSection(kept));

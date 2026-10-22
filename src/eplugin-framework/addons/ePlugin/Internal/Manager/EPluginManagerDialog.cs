@@ -124,6 +124,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         var scale = EditorInterface.Singleton.GetEditorScale();
         _tree.SetColumnCustomMinimumWidth(EnabledColumn, (int)(40 * scale));
         _tree.SetColumnCustomMinimumWidth(VersionColumn, (int)(VersionMinimumWidth * scale));
+        // The scene's line spacing of the details, which keeps their links apart, is for 100% editor scale.
+        _detailsText.AddThemeConstantOverride("line_separation", (int)(_detailsText.GetThemeConstant("line_separation") * scale));
 
         _signals.Connect(_check, BaseButton.SignalName.Pressed, Callable.From(CheckNow));
         _signals.Connect(GetNode<Button>("%SettingsButton"), BaseButton.SignalName.Pressed,
@@ -297,7 +299,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _detailsIcon.Texture = row?.IsEPlugin == true ? _logo : null;
         // Without an icon its separation would indent the name further than the lines below.
         _detailsIcon.Visible = _detailsIcon.Texture is not null;
-        _detailsName.Text = row?.Plugin.Name ?? "No plugin selected";
+        _detailsName.Text = row is null ? "No plugin selected" : PluginManagerViewModel.DetailsTitle(row.Plugin);
         var reviewed = _updates.Request?.VersionInstall == true ? _updates.Staged?.FirstOrDefault(p => p.Candidate.Slug == slug)?.Findings : null;
         _keptUpdate = row is null ? null : _global.KeptUpdate(row.Plugin.Slug);
         _detailsText.Text = row is null ? "Select a plugin to see its details." : PluginManagerViewModel.Describe(row, reviewed, LicenseOf(row), WelcomeOf(row), _keptUpdate);
