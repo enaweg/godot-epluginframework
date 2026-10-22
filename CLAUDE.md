@@ -6,8 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ePlugin Framework — a C# editor-plugin framework for Godot 4.4-4.7 (targets `net8.0`, tested against .NET 8/10).
 It solves problems in Godot's native C# plugin system: editor plugins can't use project references or NuGet
-packages, can't live outside the main game project (avoiding assembly-reload churn), and can't declare
-dependencies on other plugins. ePlugin lets a plugin author declare what it needs (NuGet packages, project
+packages, have to live inside the game project (so every change to their C# code reloads its assembly), and can't
+declare dependencies on other plugins. ePlugin lets a plugin author declare what it needs (NuGet packages, project
 references, autoloads, managed asset directories, other plugin dependencies) and installs/uninstalls all of
 it automatically when the plugin is enabled/disabled in the Godot editor.
 
@@ -27,10 +27,13 @@ The whole project lives under `src/eplugin-framework/` (Godot project root — `
   repo's own test suite), not an example of the ePlugin API. Treat it as a **read-only** code dependency:
   don't modify it unless explicitly asked.
 - `src/eplugin-framework/tests/` — gdUnit4 test suite for the framework.
+- `src/eplugin-framework/addons/eplugin-state.json` — the project's shared plugin state file (`docs/plugin-state.md`).
+- `src/activation-progress/` (+ `.Tests`) — the separate progress window helper (see ePlugin Manager below).
+- `tools/` — repository tooling (see Commands); `docs/` — user and internals documentation.
 - `design/` — logo/icon assets referenced by the README.
 
 Almost all framework code is wrapped in `#if TOOLS`, since it only runs inside the Godot editor, never in
-exported games.
+exported games (exceptions: `IEPlugin.cs`, `IInitialize.cs` and `Logging/`).
 
 ## Commands
 
@@ -61,8 +64,10 @@ dotnet test "src/activation-progress.Tests/ActivationProgress.Tests.csproj"
 ```
 Repository tooling is C# on .NET 10, not Python or shell scripts: single-file apps in `tools/` (`dotnet run tools/<name>.cs
 -- <args>`: `coverage.cs`, `progress_smoke.cs`, `package_release.cs` (a test build of the release archive),
-`screenshots/capture.cs`, the known-plugins generators) and the CI reports project `tools/ci-reports` (coverage summary
-and `coverage` branch, static-analysis summary, and the single PR comment combining them), tested with:
+`screenshots/capture.cs`, and the known-plugins generators, run from `tools/` as `dotnet run build_godot_addons.cs`
+(needs a GitHub token) and then `dotnet run generate_known_plugins.cs`, which writes `KnownPlugins.Data.cs` from its
+output) and the CI reports project `tools/ci-reports` (coverage summary and `coverage` branch, static-analysis summary,
+and the single PR comment combining them), tested with:
 ```
 dotnet test "tools/ci-reports.Tests/CiReports.Tests.csproj"
 ```
@@ -82,11 +87,11 @@ directly. `EGlobal` reaches the editor only through `IEditorHost` (`Internal/Edi
 Godot, with plugins in a temporary addons folder, a `RecordingCli` and real state files. Update transactions go through
 `EGlobal.UpdateHost` (`GodotUpdateHost` in the editor), which tests replace with a fake, and `EGlobal.UseInstance`
 lets tests drive the public `EnableEPlugin`/`DisableEPlugin` extensions against a fixture. Tests are compiled into the
-project assembly, so they use `internal` members; don't reach private ones through reflection. Known failures on
-Windows: two `ProgressSessionTests` read a command file another handle keeps open.
+project assembly, so they use `internal` members; don't reach private ones through reflection.
 
 Static analysis uses SDK analyzers during builds and `actionlint` for workflows. See
-`docs/static-analysis.md` for local commands and CI policy. `.editorconfig` still specifies UTF-8 only.
+`docs/static-analysis.md` for local commands and CI policy. `.editorconfig` sets only UTF-8 and turns off CA1050 and
+CA1707 for the sample plugins (`addons/sample*`); it has no formatting rules.
 
 Documentation screenshots (`docs/images`) are regenerated with `dotnet run tools/screenshots/capture.cs` (needs a
 desktop session with X11 or Xwayland and `GODOT_BIN`; `EPLUGIN_SCREENSHOTS_DARK=1` on GNOME). It
@@ -105,10 +110,13 @@ assembly-reload behavior, which wipes static state (including `EGlobal`) without
 
 Every build of the project assembly (an activation's `TryRebuildSolution`, but also Rider or `dotnet test`) makes
 GodotTools' `HotReloadAssemblyWatcher` reload it in place within half a second, and Godot 4.7.2's in-place reload is
-fragile. Two rules follow. Never hand Godot a C# delegate for later work: use `CallDeferred(MethodName.X, args)` or
-`new Callable(this, MethodName.X)` on a GodotObject (Godot resolves those on the reloaded instance, so guard against a
-stale one), and `EGlobal.Post` from anywhere else, including background threads (`OnEditorThread` uses it; a queue
-drained by `EPluginPlugin._Process` that a reload discards). And do not start a plugin operation while a reload is due:
+fragile. Two rules follow. Never hand Godot a C# delegate for deferred or timed work: use `CallDeferred(MethodName.X,
+args)` or `new Callable(this, MethodName.X)` on a GodotObject (Godot resolves those on the reloaded instance, so guard
+against a stale one), and `EGlobal.Post` from anywhere else, including background threads (`OnEditorThread` uses it; a
+queue drained by `EPluginPlugin._Process` that a reload discards). UI signal handlers may use `Callable.From` only
+through `EditorSignalConnections` (`Internal/Manager/`), which disconnects them before their C# targets are disposed.
+`AssemblyUnloadCleanup` (registered from `_Process`) releases references outside libraries hold to the project's types,
+so the collectible assembly can unload. And do not start a plugin operation while a reload is due:
 `AssemblyReload.IsPending` compares the build's timestamp against the one this assembly was loaded from. The ePlugin
 Manager also locks native input and its editable cells as soon as a plugin operation is queued, through dependency
 callbacks and the build. If the operation produced a pending reload, its gate stays locked until the reloaded manager
@@ -126,7 +134,7 @@ plugin's install recipe.
 Lifecycle code calls the editor only through `IEditorHost` (toggling plugins, the enabled list, the project root and
 assembly name, the addons folder and plugin directories, the user's editor config folder, the plugin nodes an assembly reload rebuilds contexts from, whether a slug is an
 ePlugin and the recipe of a disabled one, autoloads, filesystem scans and whether one runs, pausing imports while
-unfocused, restarting the editor, whether dialogs can show);
+unfocused, restarting the editor, whether dialogs can show, loading/unloading GDExtensions and whether one is loaded);
 keep new lifecycle code behind it so it stays testable. Recipes are created through `TryEnsureRecipe`, which puts the
 plugin in error and discards a half-built recipe when `CreateRecipe` throws. `FindDependencyCycle` fails an activation
 whose hard dependencies lead back to the plugin (otherwise it waits for itself forever). Godot frees a plugin's instance
@@ -144,21 +152,24 @@ A consumer plugin implements `IEEditorPlugin.CreateRecipe(IEEditorPluginBuilder 
 extension methods `this.EnableEPlugin()` / `this.DisableEPlugin()` (`IEEditorPluginExtensions`) from its own
 `_EnablePlugin()` / `_DisablePlugin()` overrides. `CreateRecipe` must be deterministic and side-effect free —
 it only declares requirements via the fluent `IEEditorPluginBuilder` (NuGets, project references/solution
-entries, autoloads, managed directories, plugin dependencies via `AddPluginDependency`, and optional plugin
-dependencies carrying a nested recipe via `AddOptionalPluginDependency`). See
+entries, autoloads, managed directories, plugin dependencies via `AddPluginDependency`, optional plugin
+dependencies carrying a nested recipe via `AddOptionalPluginDependency`, and the license and welcome page via
+`SetLicense`/`SetWelcome`). See
 `addons/sample_plugin`, `addons/sample_dependant_plugin` (dependency example),
 `addons/sample_addedcode_plugin` (`AddDirectory` example), and `addons/sample_optional_plugin`
-(`AddOptionalPluginDependency` example) for minimal reference implementations, and the
-README's "Advanced Plugin" example for the full builder surface.
+(`AddOptionalPluginDependency` example) for minimal reference implementations, and `docs/creating-plugins.md` for the
+full builder surface. `EditorPluginExtensions` gives authors public helpers on `EditorPlugin` (`GetPluginSlug`,
+`GetPluginDirectory`, `ReadMetadata`, `Cli()`), and `EPlugin.RegisterInitializer` runs an `IInitialize` at startup.
 
 `IEEditorPlugin` is an interface rather than an abstract base class specifically to work around C# bugs in
-Godot 4.5.x/4.6.x EditorPlugin handling — don't "simplify" this back to a base class.
+Godot 4.5+ EditorPlugin handling — don't "simplify" this back to a base class.
 
 ### Builder → Recipe → install/uninstall
 
 The public builder surface is split in two: `IEEditorPluginRecipeBuilder` declares resources (`AddAutoload`,
 `AddProject`, `AddNuget(s)`, `AddDirectory`), and `IEEditorPluginBuilder` extends it with dependency
-declarations. Only the root recipe may declare dependencies — nested recipes get the resource-only interface.
+declarations and `SetLicense`/`SetWelcome`. Only the root recipe may declare those — nested recipes get the
+resource-only interface.
 The root interface re-declares the inherited members with `new` and an `IEEditorPluginBuilder` return type so
 fluent chains can still reach the dependency methods; `EEditorPluginBuilder` therefore carries explicit
 interface forwarders for the base-typed variants.
@@ -203,8 +214,9 @@ Both hooks sit in `EnableEPlugin`/`DisableEPlugin`, which return early for plugi
 `EGlobal.PlainPlugins.cs` notices them: `EPluginPlugin._Process` calls `ObservePluginToggles` after ProjectSettings'
 `settings_changed` (connected as a method callable), after (re)initializing and, while it returns false (a reload is
 pending), every frame; the manager also calls it right after its own toggle. It diffs `editor_plugins/enabled`
-against `PluginToggles` (pure, tested). The known set lives in Engine metadata, so a toggle between a build and its
-reload is not lost; disabling the framework removes it. A newly enabled plain plugin passes the license gate first
+against `PluginToggles` (pure, tested; not to be confused with `PlainPluginObserver`, which records plain plugins'
+states in the shared state file at startup, before retries and updates, and when the manager lists plugins). The
+known set lives in Engine metadata, so a toggle between a build and its reload is not lost; disabling the framework removes it. A newly enabled plain plugin passes the license gate first
 (otherwise it is disabled again inside a progress scope, which reopens Project Settings, and the review is
 queued), then `ReevaluateOptionalDependencies`. A disabled one disables the activated ePlugins that require it (their
 optional snapshot is filled first, since the editor no longer has the plugin) and runs `UninstallOptionalDependenciesOn`,
@@ -304,9 +316,11 @@ built-in list), checks, staging, groups, plugin state attempts, restarts and rec
 `Internal/Manager/` holds the framework's only editor UI entry point, opened from the single Tools menu entry and
 the toolbar button that `EPluginPlugin.AddManagerUi` installs (the button's instance id is kept in Engine metadata
 so a stale one can be removed after an assembly reload). The puzzle piece of its icon (`id="piece"` in
-`eplugin_editor.svg`) is red while a plugin needs attention (failed, or a failed attempt awaiting a decision) and green while an update
-can be installed (`PluginManagerViewModel.Status`). `EGlobal.CurrentManagerStatus` checks every 30 frames and only builds
-the view model when pending updates, enabled plugins or their states changed; the manager's `Refresh` invalidates it. When an update restarts the editor while the manager is open,
+`eplugin_editor.svg`) is red while a plugin needs attention (failed, a failed attempt awaiting a decision, or a
+GDExtension Godot should have loaded but did not) and green while an update can be installed
+(`PluginManagerViewModel.Status`). `EGlobal.CurrentManagerStatus` checks every 30 frames and only builds the view model
+when pending updates, failed attempts, enabled plugins, their states or unloaded GDExtensions changed; the manager's
+`Refresh` invalidates it. When an update restarts the editor while the manager is open,
 `EGlobal.RestartRequested` writes `ManagerReopenMarker` (`.godot/eplugin/manager-open`, renewed by an interim restart,
 expires after an hour); the start that requests no further restart wraps `Initialize` in one `ActivationProgress` scope,
 reopens the manager and closes that progress window a few frames later. Every dialog is its own scene (`EPluginManagerDialog.tscn`,
@@ -331,8 +345,10 @@ plugin BBCode pages go through `PluginManagerViewModel.ScaleFontSizes`. Read the
 never `EditorInterface.Singleton` directly, so tests can create the dialogs (`ManagerDialogTests`) and run the manager
 on `LifecycleFixture` (`PluginManagerDialogTests`, which clicks check boxes through `CellEdited`). Icons come
 from `EditorIcons`, which renders the SVGs at the editor scale (a headless editor re-imports them at 100%) and maps
-their accent colors to the theme's status colors; draw new icons after `docs/internals/editor-icons.md`. `EGlobal.CollectPlugins` scans every `res://addons/<slug>/plugin.cfg`; `PluginCatalog.Classify`
-recognizes disabled ePlugins by the `ScriptPathAttribute` of their compiled type. `PluginManagerViewModel` is pure
+their accent colors to the theme's status colors; draw new icons after `docs/internals/editor-icons.md`.
+`EGlobal.CollectPlugins` scans every `res://addons/<slug>/plugin.cfg` and adds GDExtension add-ons and plugins left only
+as a failed local attempt; `PluginKinds.Classify` (through `PluginCatalog.ScriptPaths`) recognizes disabled ePlugins by
+the `ScriptPathAttribute` of their compiled type. `PluginManagerViewModel` is pure
 (rows, update selection, BBCode details) and unit-tested. The update workflows (checking, loading versions, staging,
 reviewing and installing) are in `UpdateFlow`, which the dialog only displays; it is tested without the editor in
 `UpdateFlowTests`. Decisions about a few plugins get a focused dialog that lists only those plugins, not the
@@ -442,8 +458,9 @@ outside any `ILogger` (or `[StackTraceHidden]` method) as the location; without 
 `ShowHideHelper` implements `AddDirectory`: it toggles a managed directory's visibility by renaming it with/
 without a leading `.` (POSIX-style hidden dirs) and toggling the Windows hidden attribute. Used for shipping
 plugin source that should stay inert until the plugin is activated. A recipe may name either form (`src` or `.src`).
-A directory already in the wanted state is left alone, one missing in both forms is only logged as a warning, and only
-both forms existing at once fails, because neither can be renamed onto the other.
+A directory already in the wanted state is left alone and one missing in both forms is only logged as a warning. It fails
+when both forms exist at once (neither can be renamed onto the other) or when a GDExtension inside is not reloadable or
+cannot be unloaded.
 
 ## Commit and PR messages
 
@@ -452,11 +469,14 @@ The release notes are generated, so message prefixes decide where a change appea
 GitHub release from everything merged since the previous semver tag. Each **pull request becomes one entry, and the
 entry is its title**. The commits inside the PR and the `Merge pull request #N from …` commit never appear. In HYBRID mode a
 commit pushed straight to `main` without a PR can also be listed, by its subject line. A regex on
-that title gives the entry its category:
+that title gives the entry its category. `.github/workflows/ci-pr-title.yml` checks titles with:
 
 ```
-^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\(scope\))?(!)?: <description>
+^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([A-Za-z0-9_.-]+\))?!?: [A-Za-z0-9]
 ```
+
+The release workflow's `label_extractor` (`ci-release.yml`) is looser (`: ([\w ])+…` also accepts extra spaces or an
+underscore), so the title check is what enforces exactly one space and a letter or digit after the colon.
 
 | Prefix | Section |
 |---|---|
@@ -473,8 +493,8 @@ keep its pattern in step with the release workflow's `label_extractor`. Rules:
   types for anything users won't notice. If a PR does both, prefix by the change users care about most. The whole
   PR is a single entry under that one prefix, so don't open a PR that mixes unrelated features and fixes.
 - Write the type in lowercase, follow it with `: ` (colon and exactly one space), and start the description with a
-  letter or digit. The regex is case-sensitive and requires a word character right after the space, so
-  `Fix: …`, `fix:…` and ``fix: `Foo` …`` all fall into Other. Write a short imperative description in lowercase, with
+  letter or digit. Both regexes are case-sensitive, so `Fix: …`, `fix:…` and ``fix: `Foo` …`` fall into Other (and
+  fail the title check). Write a short imperative description in lowercase, with
   no trailing period. The entry reads as a sentence on its own, e.g. `fix: keep the ePlugin Manager open after a
   successful update`.
 - Scope is optional and may only contain letters, digits, `_`, `-` and `.` (`feat(manager): …`). Mark breaking
@@ -495,10 +515,13 @@ keep its pattern in step with the release workflow's `label_extractor`. Rules:
 
 ## Known constraints (see README for full list)
 
-- Activating/deactivating an ePlugin freezes the Godot editor UI for the duration of the install/uninstall.
-- A failure mid-install/uninstall can leave the project in a non-compilable state requiring manual fixup.
-- The Godot editor's plugin UI does not auto-refresh; newly-activated dependent plugins only appear after
-  reopening the plugin UI.
+- Activating/deactivating an ePlugin freezes the Godot editor UI for the duration of the install/uninstall
+  (`OS.Execute` blocks); on supported desktops the separate progress window stays responsive.
+- A failure mid-install/uninstall can leave the project in a state that does not build; after fixing the cause, the
+  ePlugin Manager's **Needs attention** dialog retries it (`docs/plugin-state.md`).
+- Refreshing Godot's Plugins list (`ProjectSettingsDialog` hides an open Project Settings during plugin operations and
+  reopens it) relies on Godot's internal dialog and menu nodes; if a Godot version changes them, it is skipped and the
+  list only refreshes when Project Settings is reopened by hand.
 - External Assets (scenes, models, non-code resources) aren't supported directly — only whole directories
   toggled via `AddDirectory`, since Godot requires a unique ID per asset that external files can't have.
 - Godot 4.5+ has a regression with `EditorPlugin` ([godotengine/godot#110971](https://github.com/godotengine/godot/issues/110971)); this is the reason `IEEditorPlugin` is an interface, not a base class.
