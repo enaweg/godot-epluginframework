@@ -63,6 +63,9 @@ internal sealed partial class EGlobal
 
     private readonly IEditorHost _host;
 
+    /// <summary>The shared plugin state, <c>addons/eplugin-state.json</c> of the host's project.</summary>
+    private string StateFilePath => Path.GetFullPath(Path.Combine(_host.ProjectRoot, "addons", "eplugin-state.json"));
+
     private EGlobal() : this(new EditorHost())
     {
     }
@@ -152,8 +155,7 @@ internal sealed partial class EGlobal
             context.Cli = GetCli(context.Logger);
         }
 
-        _stateStore = new PluginStateStore(
-            Path.GetFullPath(ProjectSettings.GlobalizePath("res://addons/eplugin-state.json")), plugin.Logger);
+        _stateStore = new PluginStateStore(StateFilePath, plugin.Logger);
         _stateStore.Load();
         InitializeUpdateJournals();
         ReloadContexts(_loggerFactory, false);
@@ -255,8 +257,7 @@ internal sealed partial class EGlobal
 
     public void RecordFrameworkDisabled(EPluginPlugin plugin)
     {
-        _stateStore ??= new PluginStateStore(
-            Path.GetFullPath(ProjectSettings.GlobalizePath("res://addons/eplugin-state.json")), plugin.Logger);
+        _stateStore ??= new PluginStateStore(StateFilePath, plugin.Logger);
         if (!_stateStore.HasSharedFile && !_stateStore.IsReadOnly)
         {
             _stateStore.Load();
