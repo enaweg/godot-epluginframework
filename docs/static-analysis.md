@@ -4,7 +4,7 @@ Pull requests and pushes to `main` run the following checks:
 
 | Workflow / job | What it checks | Failure policy |
 | --- | --- | --- |
-| [CI-Analysis-Jobs / managed-analysis](../.github/workflows/ci-analysis-jobs.yml) | SDK analyzers, compiler diagnostics, and NuGet Audit for the framework, progress helper and helper tests | Build errors, high/critical dependency vulnerabilities, and failure to retrieve vulnerability data fail the job. Existing analyzer warnings remain informational. |
+| [CI-Analysis-Jobs / managed-analysis](../.github/workflows/ci-analysis-jobs.yml) | SDK analyzers, compiler diagnostics, and NuGet Audit for the framework, progress helper and helper tests, after the reporting tests (`tools/ci-reports.Tests`) | Failing reporting tests, build errors, high/critical dependency vulnerabilities, and failure to retrieve vulnerability data fail the job. Existing analyzer warnings remain informational. |
 | [CI-Analysis-Jobs / workflow-lint](../.github/workflows/ci-analysis-jobs.yml) | All Actions workflow files, expressions, action inputs, and embedded Bash scripts through actionlint and ShellCheck | Lint findings fail the job. |
 | [CI-CodeQL / codeql-csharp](../.github/workflows/ci-codeql.yml) | C# security dataflow with the `security-extended` query suite | Extraction, build or analysis failures fail the job; security findings are reported through GitHub's separate code-scanning results check. |
 | [CI-PR](../.github/workflows/ci-pr.yml) | Existing .NET/Godot compatibility and native progress-helper tests | Build, runtime test and smoke-test failures fail the relevant matrix job. |
@@ -19,10 +19,11 @@ tag-triggered.
 ## Analyzer policy and reports
 
 [src/Directory.Build.props](../src/Directory.Build.props) enables the SDK's
-`8.0-recommended` rules for all three managed projects, including local builds.
+`8.0-recommended` rules for the three projects under `src/` (framework, progress
+helper and its tests), including local builds. `tools/ci-reports` is outside it.
 The dedicated analysis and CodeQL jobs use SDK 10.0.401. Other test jobs retain
-the .NET 8/10 matrix. Update the dedicated SDK version in both analysis workflows
-deliberately and review the changed diagnostics.
+the .NET 8/10 matrix. Update the dedicated SDK version in `ci-analysis-jobs.yml`
+and `ci-codeql.yml` deliberately and review the changed diagnostics.
 
 The Godot project must be built with `--configuration Debug`: it defines `TOOLS`,
 which includes the editor framework. Export configurations omit that code.
@@ -61,8 +62,7 @@ PRs and uses the workflow's GitHub token, without additional service secrets.
 CI-PR's `pr-comment` job writes it with `tools/ci-reports comment` from the reports
 the jobs upload as `pr-comment-*` artifacts.
 Custom numeric trends are not automatically added to GitHub's general Insights
-charts; the JSON artifact provides those values for a future dashboard. Badges
-and scheduled scans start showing `main` results after these workflows land.
+charts; the JSON artifact provides those values for a future dashboard.
 
 The reporting tests run in CI and can be run locally with
 `dotnet test tools/ci-reports.Tests/CiReports.Tests.csproj`. To render existing local SARIF reports,
@@ -77,7 +77,8 @@ correctness findings before promoting individual rules to errors in
 Godot lifecycle conventions and native interop need specific judgment.
 
 Whitespace/style enforcement and additional Sonar analyzers remain follow-up
-work. `.editorconfig` still specifies only UTF-8; no formatting rewrite is part
+work. `.editorconfig` specifies UTF-8 and turns off CA1050 and CA1707 for the
+sample plugins; it has no formatting rules, and no formatting rewrite is part
 of these checks.
 
 ## Run the checks locally
@@ -117,8 +118,8 @@ docker run --rm -v "$PWD:/repo:ro" -w /repo \
 ## GitHub configuration
 
 The workflow files produce status checks; repository rules decide which ones
-must pass before merging. After the first GitHub runs finish, require
-`managed-analysis` and `workflow-lint` alongside the existing test checks.
+must pass before merging. Require `managed-analysis` and `workflow-lint`
+alongside the existing test checks.
 For CodeQL, require successful `codeql-csharp` execution **and** the CodeQL
 results gate for high/critical security findings and error-level findings.
 A successful analyzer execution can still have security alerts.
@@ -133,5 +134,8 @@ Weekly scans begin once the workflow reaches the default branch.
 
 The workflows use `pull_request` without service secrets or privileged fork-code
 execution. They have no path filters, so documentation-only PRs also finish
-the checks. New Actions are pinned by commit and the lint image by digest.
-Dependabot updates Actions and the two directories with NuGet dependencies weekly.
+the checks. CI-Analysis-Jobs and CI-CodeQL pin their actions by commit and the
+lint image by digest; the other workflows reference actions by version tag.
+Dependabot updates Actions and the three directories with NuGet dependencies
+(`src/eplugin-framework`, `src/activation-progress.Tests`, `tools/ci-reports.Tests`)
+weekly.
