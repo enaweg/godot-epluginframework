@@ -71,8 +71,15 @@ internal sealed partial class UpdateFailureDialog : AcceptDialog, ISerialization
         else if (action == "log" && _log is not null) OS.ShellOpen(_log);
     }
 
-    // Reload serializes every script before disposing any of them, so callback targets are still valid here.
-    public void OnBeforeSerialize() => _signals.Dispose();
+    // Reload serializes every script before disposing any of them, so callback targets are still valid here. Its buttons
+    // would decide nothing afterwards, so the dialog goes with the reload; the journal still awaits the decision, which
+    // the reloaded framework asks for again.
+    public void OnBeforeSerialize()
+    {
+        _signals.Dispose();
+        if (_decided) return;
+        _decided = true; EditorWindows.Release(this);
+    }
     public void OnAfterDeserialize() { }
 
     protected override void Dispose(bool disposing)
