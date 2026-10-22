@@ -112,7 +112,7 @@ Publish a release like for a [GDScript plugin](gdscript-plugins.md#publish-a-rel
 - Do not include Godot's `~` copies. They are left out of packages anyway, so a ZIP made from a project that the editor had open still works.
 - Set `reloadable = true` when the extension supports it, so updates do not restart the editor.
 - A plugin folder that is a link (a symlink or junction to another checkout) is not updated. Update it where it points to.
-- When a release has several ZIP assets, ePlugin downloads the one named like the slug (`-`, `_` and `.` count as the same), leaving out demo, example, sample and tutorial ZIPs.
+- When a release has several ZIP assets, ePlugin downloads the one named exactly like the slug, else the one whose name contains it (`-`, `_` and `.` count as the same), leaving out demo, example, sample and tutorial ZIPs. Name a variant differently (`my_native+extras.zip` next to `my_native.zip`), or ePlugin falls back to the source archive, which has no built libraries.
 
 | Code | Severity | Reason |
 |---|---|---|

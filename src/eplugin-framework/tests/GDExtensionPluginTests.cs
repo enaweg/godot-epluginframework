@@ -187,6 +187,9 @@ public class GDExtensionPluginTests
         // an exact name still wins, and two add-on ZIPs leave the choice open
         Assertions.AssertString(Select("my_plugin", "my_plugin.zip", "my-plugin-extras.zip")).IsEqual("my_plugin.zip");
         Assertions.AssertObject(Select("native", "native-windows.zip", "native-linux.zip")).IsNull();
+        // e.g. lua-gdextension, which releases a variant next to it
+        Assertions.AssertString(Select("lua-gdextension", "lua-gdextension+luajit.zip", "lua-gdextension.zip")).IsEqual("lua-gdextension.zip");
+        Assertions.AssertString(Select("lua_gdextension", "Lua-GDExtension.zip", "lua-gdextension+luajit.zip")).IsEqual("Lua-GDExtension.zip");
     }
 
     [TestCase]
