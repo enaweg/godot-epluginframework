@@ -18,11 +18,11 @@ internal sealed partial class EGlobal
         var previous = _recipeUpdateJournal?.Recipes.GetValueOrDefault(context.Slug)?.Applied.Nugets.FirstOrDefault(n => n.Name == nuget.Name);
         if (context.Cli?.AddNugetToProject(nuget.Name, nuget.Version, nuget.Source) != true)
             throw new InvalidOperationException($"Adding NuGet {nuget.Name} to the project failed.");
-        if (nuget.Source is not null && !NugetConfigManager.RegisterSource(context.Slug, nuget.Source, context.Logger))
+        if (nuget.Source is not null && !NugetConfigManager.RegisterSource(_host.ProjectRoot, context.Slug, nuget.Source, context.Logger))
             throw new InvalidOperationException($"Registering NuGet source for {nuget.Name} failed.");
         if (previous?.Source is not null && previous.Source != nuget.Source &&
             _recipeUpdateJournal?.Recipes[context.Slug].Target?.Nugets.Any(n => n.Source == previous.Source) != true &&
-            !NugetConfigManager.UnregisterSource(context.Slug, previous.Source, context.Logger))
+            !NugetConfigManager.UnregisterSource(_host.ProjectRoot, context.Slug, previous.Source, context.Logger))
             throw new InvalidOperationException($"Unregistering previous source for {nuget.Name} failed.");
     }
     private void ReverseNuget(PluginContext context, EEditorPluginRecipe.Nuget nuget)
@@ -32,7 +32,7 @@ internal sealed partial class EGlobal
         if (!shared && (context.Cli is not ICheckedDotnetCli cli || !cli.TryRemoveNugetFromProject(nuget.Name)))
             throw new InvalidOperationException($"Removing NuGet {nuget.Name} failed.");
         var keepsSource = _recipeUpdateJournal?.Recipes.GetValueOrDefault(context.Slug)?.Target?.Nugets.Any(n => n.Source == nuget.Source) == true;
-        if (nuget.Source is not null && !keepsSource && !NugetConfigManager.UnregisterSource(context.Slug, nuget.Source, context.Logger))
+        if (nuget.Source is not null && !keepsSource && !NugetConfigManager.UnregisterSource(_host.ProjectRoot, context.Slug, nuget.Source, context.Logger))
             throw new InvalidOperationException($"Unregistering NuGet source for {nuget.Name} failed.");
     }
     private static void ApplyProject(PluginContext context, EEditorPluginRecipe.Project project)

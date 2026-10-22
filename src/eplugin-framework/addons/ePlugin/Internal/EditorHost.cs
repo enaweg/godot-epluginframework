@@ -26,6 +26,12 @@ internal interface IEditorHost
     /// <summary>The project's folder (<c>res://</c>) as an absolute path, where update journals and backups are kept.</summary>
     string ProjectRoot { get; }
 
+    /// <summary>
+    /// The C# assembly the project builds (<c>dotnet/project/assembly_name</c>), which names its solution; empty to find
+    /// the solution by itself.
+    /// </summary>
+    string AssemblyName { get; }
+
     /// <summary>The folder holding every plugin's directory, as a path Godot's file APIs can read.</summary>
     string AddonsDirectory { get; }
 
@@ -87,6 +93,8 @@ internal sealed class EditorHost : IEditorHost
         ParseEnabledPlugins(ProjectSettings.GetSetting("editor_plugins/enabled", Array.Empty<string>()).AsStringArray());
 
     public string ProjectRoot => ProjectSettings.GlobalizePath("res://");
+
+    public string AssemblyName => ProjectSettings.GetSetting("dotnet/project/assembly_name").AsString();
 
     public string AddonsDirectory => "res://addons";
 

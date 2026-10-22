@@ -85,7 +85,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         ShowWelcomes();
     }
 
-    private static ManagerReopenMarker ManagerReopen => new(ProjectSettings.GlobalizePath("res://.godot/eplugin/manager-open"));
+    private static ManagerReopenMarker ManagerReopen => new(Path.Combine(EGlobal.Instance.Host.ProjectRoot, ".godot/eplugin/manager-open"));
 
     /// <summary>Opens the ePlugin Manager that was open when an update restarted the editor, then closes the progress window.</summary>
     private void ReopenManager()
@@ -336,8 +336,9 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
             if (ActivationProgress.ResumeAfterRestart())
                 _reopenProgress = ActivationProgress.Begin("Finishing the plugin update...");
             Engine.Singleton.SetMeta(recoveryKey, false);
-            var recovery = UpdateRecovery.RunIfNeeded(ProjectSettings.GlobalizePath("res://"), Logger,
-                () => new DotnetVersionManager(Logger, EnableDebugLogging).Create(Logger) is ICheckedDotnetCli cli && cli.TryBuild().ExitCode == 0,
+            var host = EGlobal.Instance.Host;
+            var recovery = UpdateRecovery.RunIfNeeded(host.ProjectRoot, Logger,
+                () => new DotnetVersionManager(Logger, EnableDebugLogging).Create(Logger, host.ProjectRoot, host.AssemblyName) is ICheckedDotnetCli cli && cli.TryBuild().ExitCode == 0,
                 RestoreEarlyUpdateSettings);
             if (recovery != UpdateRecovery.Outcome.Continue)
             {

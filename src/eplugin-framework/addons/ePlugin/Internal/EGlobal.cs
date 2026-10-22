@@ -87,6 +87,9 @@ internal sealed partial class EGlobal
         return new Deferral(() => _instance = previous);
     }
 
+    /// <summary>The editor this instance works with, e.g. for the project's folder.</summary>
+    internal IEditorHost Host => _host;
+
     /// <summary>The plugin contexts, for tests.</summary>
     internal List<PluginContext> Contexts => _contexts;
 
@@ -756,7 +759,7 @@ internal sealed partial class EGlobal
 
     public IDotnetCli? GetCli(ILogger? logger)
     {
-        return CliService?.Create(logger);
+        return CliService?.Create(logger, _host.ProjectRoot, _host.AssemblyName);
     }
 
     private void EnsureEEditorPluginEnabled(PluginContext context)

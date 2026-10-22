@@ -67,6 +67,22 @@ public class EGlobalLifecycleTests : IDisposable
     }
 
     [TestCase]
+    public void ALocalNuGetSourceIsMirroredIntoTheProjectsNugetConfigWhileThePluginIsEnabled()
+    {
+        _fixture.AddEPlugin("a", b => b.AddNuget("A.Package", "1.0.0", "res://addons/a/.nuget"));
+        var config = Path.Combine(_fixture.Root, "nuget.config");
+
+        _fixture.Enable("a");
+
+        Assertions.AssertString(File.ReadAllText(config)).Contains("value=\"./addons/a/.nuget\"");
+        Assertions.AssertString(File.ReadAllText(config)).Contains("used-by=\"a\"");
+
+        _fixture.Disable("a");
+
+        Assertions.AssertBool(File.Exists(config)).IsFalse();
+    }
+
+    [TestCase]
     public void EnablingAPluginEnablesItsDependenciesFirstInOneTransition()
     {
         _fixture.AddPlainPlugin("tool", "1.4");

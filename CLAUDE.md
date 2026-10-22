@@ -123,8 +123,8 @@ enable/disable state machine (`EEditorPluginState`: `Created → Activated`/`Dea
 plugin dependencies (enabling/version-checking them before the dependent plugin), and applies/reverses each
 plugin's install recipe.
 
-Lifecycle code calls the editor only through `IEditorHost` (toggling plugins, the enabled list, the project root, the
-addons folder and plugin directories, the user's editor config folder, the plugin nodes an assembly reload rebuilds contexts from, whether a slug is an
+Lifecycle code calls the editor only through `IEditorHost` (toggling plugins, the enabled list, the project root and
+assembly name, the addons folder and plugin directories, the user's editor config folder, the plugin nodes an assembly reload rebuilds contexts from, whether a slug is an
 ePlugin and the recipe of a disabled one, autoloads, filesystem scans, whether dialogs can show);
 keep new lifecycle code behind it so it stays testable. Recipes are created through `TryEnsureRecipe`, which puts the
 plugin in error and discards a half-built recipe when `CreateRecipe` throws. `FindDependencyCycle` fails an activation
@@ -223,7 +223,8 @@ When a recipe's NuGet entry has an external/local `source`, `NugetConfigManager`
 restore the package. Entries it creates are tagged with a deterministic `ePlugin-<hash>` key and a
 preceding XML comment tracking which plugin slugs currently depend on that source (multiple plugins can
 share one entry); it never touches sources it didn't create, and only deletes `nuget.config` entirely once
-removing the last managed entry leaves nothing else in the file.
+removing the last managed entry leaves nothing else in the file. It works on the project root it is given
+(`IEditorHost.ProjectRoot`); relative sources are relative to it, and Godot paths other than `res://` are outside it.
 
 ### Dotnet CLI abstraction
 
@@ -231,7 +232,9 @@ removing the last managed entry leaves nothing else in the file.
 `DotnetCli9` (both `DotnetCliBase : ExecuteCliBase, IDotnetCli`) — the two dotnet CLI generations differ
 enough in `sln`/`nuget`/reference command behavior to need separate implementations. `ExecuteCliBase` runs commands
 through an `IProcessRunner` (`GodotProcessRunner` uses `OS.Execute`); tests record the arguments instead. The
-`dotnet --version` probe is cached until the assembly reloads. Any new dotnet CLI operation needs a corresponding
+`dotnet --version` probe is cached until the assembly reloads. A CLI is created for a project root and assembly name
+(`IEditorHost.ProjectRoot`/`AssemblyName`; tests pass a scratch project), and the CLI classes never read
+`ProjectSettings`. Any new dotnet CLI operation needs a corresponding
 abstract member on `DotnetCliBase`/`IDotnetCli` implemented in both `DotnetCli9` and `DotnetCli10`, with its arguments
 checked in `IDotnetCliTests`. Pass arguments one per element and unquoted (`OS.Execute` quotes them; outside Windows it runs them through `/bin/sh`
 in double quotes, so `GodotProcessRunner` escapes `\ " $` and backticks), and project

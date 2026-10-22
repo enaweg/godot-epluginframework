@@ -6,29 +6,49 @@ using System.Linq;
 using Enaweg.Plugin.Internal.Dotnet;
 using Enaweg.Plugin.Logging;
 using GdUnit4;
-using Godot;
 
 namespace Enaweg.Plugin.Tests;
 
+/// <summary>The nuget.config of a project in a temporary folder.</summary>
 [TestSuite]
 public class NugetConfigManagerTests
 {
-    private static string ConfigPath => Path.Combine(ProjectSettings.GlobalizePath("res://"), "nuget.config");
+    private static readonly string Root = Path.Combine(Path.GetTempPath(), "eplugin-nuget-" + Guid.NewGuid().ToString("N"));
+
+    private static string ConfigPath => Path.Combine(Root, "nuget.config");
+
+    [BeforeTest]
+    public static void Setup() => Directory.CreateDirectory(Root);
 
     [AfterTest]
     public static void Cleanup()
     {
-        if (File.Exists(ConfigPath))
+        if (Directory.Exists(Root))
         {
-            File.Delete(ConfigPath);
+            Directory.Delete(Root, true);
         }
+    }
+
+    [TestCase]
+    public static void LocalSourcesAreRelativeToTheProjectAndOtherGodotPathsAreOutsideIt()
+    {
+        var log = new List<string>();
+        NugetConfigManager.RegisterSource(Root, "plugin_a", "addons/a/.nuget", new NullLogger());
+        NugetConfigManager.RegisterSource(Root, "plugin_b", Path.Combine(Root, "addons", "b", ".nuget"), new NullLogger());
+        Assertions.AssertBool(NugetConfigManager.RegisterSource(Root, "plugin_c", "user://feed", new RecordingLogger(log, "nuget"))).IsTrue();
+
+        var content = File.ReadAllText(ConfigPath);
+        Assertions.AssertThat(content).Contains("value=\"./addons/a/.nuget\"");
+        Assertions.AssertThat(content).Contains("value=\"./addons/b/.nuget\"");
+        Assertions.AssertThat(content).NotContains("plugin_c");
+        Assertions.AssertInt(log.Count(l => l.Contains("is outside the project"))).IsEqual(1);
     }
 
     [TestCase]
     [RequireGodotRuntime]
     public static void RegisterSourceCreatesFileWithManagedEntry()
     {
-        NugetConfigManager.RegisterSource("sample_plugin", "res://addons/sample_plugin/.nuget", new NullLogger());
+        NugetConfigManager.RegisterSource(Root, "sample_plugin", "res://addons/sample_plugin/.nuget", new NullLogger());
 
         Assertions.AssertBool(File.Exists(ConfigPath)).IsTrue();
 
@@ -41,8 +61,8 @@ public class NugetConfigManagerTests
     [RequireGodotRuntime]
     public static void RegisterSourceSameSourceFromTwoPluginsSharesOneEntry()
     {
-        NugetConfigManager.RegisterSource("plugin_a", "res://addons/shared/.nuget", new NullLogger());
-        NugetConfigManager.RegisterSource("plugin_b", "res://addons/shared/.nuget", new NullLogger());
+        NugetConfigManager.RegisterSource(Root, "plugin_a", "res://addons/shared/.nuget", new NullLogger());
+        NugetConfigManager.RegisterSource(Root, "plugin_b", "res://addons/shared/.nuget", new NullLogger());
 
         var content = File.ReadAllText(ConfigPath);
         Assertions.AssertInt(CountOccurrences(content, "<add key=\"ePlugin-")).IsEqual(1);
@@ -53,10 +73,10 @@ public class NugetConfigManagerTests
     [RequireGodotRuntime]
     public static void UnregisterSourceOneOfTwoUsersKeepsEntry()
     {
-        NugetConfigManager.RegisterSource("plugin_a", "res://addons/shared/.nuget", new NullLogger());
-        NugetConfigManager.RegisterSource("plugin_b", "res://addons/shared/.nuget", new NullLogger());
+        NugetConfigManager.RegisterSource(Root, "plugin_a", "res://addons/shared/.nuget", new NullLogger());
+        NugetConfigManager.RegisterSource(Root, "plugin_b", "res://addons/shared/.nuget", new NullLogger());
 
-        NugetConfigManager.UnregisterSource("plugin_a", "res://addons/shared/.nuget", new NullLogger());
+        NugetConfigManager.UnregisterSource(Root, "plugin_a", "res://addons/shared/.nuget", new NullLogger());
 
         var content = File.ReadAllText(ConfigPath);
         Assertions.AssertThat(content).Contains("used-by=\"plugin_b\"");
@@ -67,9 +87,9 @@ public class NugetConfigManagerTests
     [RequireGodotRuntime]
     public static void UnregisterSourceLastUserRemovesFileWhenOtherwiseEmpty()
     {
-        NugetConfigManager.RegisterSource("sample_plugin", "res://addons/sample_plugin/.nuget", new NullLogger());
+        NugetConfigManager.RegisterSource(Root, "sample_plugin", "res://addons/sample_plugin/.nuget", new NullLogger());
 
-        NugetConfigManager.UnregisterSource("sample_plugin", "res://addons/sample_plugin/.nuget", new NullLogger());
+        NugetConfigManager.UnregisterSource(Root, "sample_plugin", "res://addons/sample_plugin/.nuget", new NullLogger());
 
         Assertions.AssertBool(File.Exists(ConfigPath)).IsFalse();
     }
@@ -81,8 +101,8 @@ public class NugetConfigManagerTests
         File.WriteAllText(ConfigPath,
             "<configuration><packageSources><add key=\"nuget.org\" value=\"https://api.nuget.org/v3/index.json\" /></packageSources></configuration>");
 
-        NugetConfigManager.RegisterSource("sample_plugin", "res://addons/sample_plugin/.nuget", new NullLogger());
-        NugetConfigManager.UnregisterSource("sample_plugin", "res://addons/sample_plugin/.nuget", new NullLogger());
+        NugetConfigManager.RegisterSource(Root, "sample_plugin", "res://addons/sample_plugin/.nuget", new NullLogger());
+        NugetConfigManager.UnregisterSource(Root, "sample_plugin", "res://addons/sample_plugin/.nuget", new NullLogger());
 
         Assertions.AssertBool(File.Exists(ConfigPath)).IsTrue();
         var content = File.ReadAllText(ConfigPath);
@@ -97,7 +117,7 @@ public class NugetConfigManagerTests
         File.WriteAllText(ConfigPath,
             "<configuration><packageSources><add key=\"my-feed\" value=\"https://example.com/feed/index.json\" /></packageSources></configuration>");
 
-        NugetConfigManager.RegisterSource("sample_plugin", "https://example.com/feed/index.json", new NullLogger());
+        NugetConfigManager.RegisterSource(Root, "sample_plugin", "https://example.com/feed/index.json", new NullLogger());
 
         var content = File.ReadAllText(ConfigPath);
         Assertions.AssertInt(CountOccurrences(content, "<add ")).IsEqual(1);
@@ -110,7 +130,7 @@ public class NugetConfigManagerTests
     {
         const string url = "https://example.com/feed/index.json";
 
-        NugetConfigManager.RegisterSource("sample_plugin", url, new NullLogger());
+        NugetConfigManager.RegisterSource(Root, "sample_plugin", url, new NullLogger());
 
         var content = File.ReadAllText(ConfigPath);
         Assertions.AssertThat(content).Contains(url);
@@ -123,9 +143,9 @@ public class NugetConfigManagerTests
         var log = new List<string>();
         var outside = Path.Combine(Path.GetTempPath(), "eplugin-feed");
 
-        Assertions.AssertBool(NugetConfigManager.RegisterSource("sample_plugin", outside, new RecordingLogger(log, "nuget"))).IsTrue();
-        Assertions.AssertBool(NugetConfigManager.RegisterSource("sample_plugin", " ", new RecordingLogger(log, "nuget"))).IsTrue();
-        Assertions.AssertBool(NugetConfigManager.UnregisterSource("sample_plugin", outside, new RecordingLogger(log, "nuget"))).IsTrue();
+        Assertions.AssertBool(NugetConfigManager.RegisterSource(Root, "sample_plugin", outside, new RecordingLogger(log, "nuget"))).IsTrue();
+        Assertions.AssertBool(NugetConfigManager.RegisterSource(Root, "sample_plugin", " ", new RecordingLogger(log, "nuget"))).IsTrue();
+        Assertions.AssertBool(NugetConfigManager.UnregisterSource(Root, "sample_plugin", outside, new RecordingLogger(log, "nuget"))).IsTrue();
 
         Assertions.AssertBool(File.Exists(ConfigPath)).IsFalse();
         Assertions.AssertInt(log.Count(l => l.Contains("is outside the project"))).IsEqual(2);
@@ -135,12 +155,12 @@ public class NugetConfigManagerTests
     [RequireGodotRuntime]
     public static void UnregisteringASourceThatIsNotListedLeavesTheFileAlone()
     {
-        Assertions.AssertBool(NugetConfigManager.UnregisterSource("sample_plugin", "https://example.com/feed/index.json", new NullLogger())).IsTrue();
+        Assertions.AssertBool(NugetConfigManager.UnregisterSource(Root, "sample_plugin", "https://example.com/feed/index.json", new NullLogger())).IsTrue();
         Assertions.AssertBool(File.Exists(ConfigPath)).IsFalse();
 
         const string config = "<configuration><packageSources><add key=\"nuget.org\" value=\"https://api.nuget.org/v3/index.json\" /></packageSources></configuration>";
         File.WriteAllText(ConfigPath, config);
-        Assertions.AssertBool(NugetConfigManager.UnregisterSource("sample_plugin", "https://example.com/feed/index.json", new NullLogger())).IsTrue();
+        Assertions.AssertBool(NugetConfigManager.UnregisterSource(Root, "sample_plugin", "https://example.com/feed/index.json", new NullLogger())).IsTrue();
         Assertions.AssertString(File.ReadAllText(ConfigPath)).IsEqual(config);
     }
 
@@ -151,8 +171,8 @@ public class NugetConfigManagerTests
         var log = new List<string>();
         File.WriteAllText(ConfigPath, "<configuration><packageSources>");
 
-        Assertions.AssertBool(NugetConfigManager.RegisterSource("sample_plugin", "https://example.com/feed/index.json", new RecordingLogger(log, "nuget"))).IsFalse();
-        Assertions.AssertBool(NugetConfigManager.UnregisterSource("sample_plugin", "https://example.com/feed/index.json", new RecordingLogger(log, "nuget"))).IsFalse();
+        Assertions.AssertBool(NugetConfigManager.RegisterSource(Root, "sample_plugin", "https://example.com/feed/index.json", new RecordingLogger(log, "nuget"))).IsFalse();
+        Assertions.AssertBool(NugetConfigManager.UnregisterSource(Root, "sample_plugin", "https://example.com/feed/index.json", new RecordingLogger(log, "nuget"))).IsFalse();
 
         Assertions.AssertString(File.ReadAllText(ConfigPath)).IsEqual("<configuration><packageSources>");
         Assertions.AssertBool(log.Any(l => l.StartsWith("error: nuget: Failed to update nuget.config for source", StringComparison.Ordinal))).IsTrue();
@@ -164,7 +184,7 @@ public class NugetConfigManagerTests
     public static void AManagedEntryWhoseCommentWasEditedGetsItsMarkerBack()
     {
         const string url = "https://example.com/feed/index.json";
-        NugetConfigManager.RegisterSource("plugin_a", url, new NullLogger());
+        NugetConfigManager.RegisterSource(Root, "plugin_a", url, new NullLogger());
         // someone removed the marker comment, or replaced it with their own
         foreach (var replacement in new[] { "", "<!-- reviewed by the team -->" })
         {
@@ -173,7 +193,7 @@ public class NugetConfigManagerTests
             var end = content.IndexOf("-->", start, StringComparison.Ordinal) + 3;
             File.WriteAllText(ConfigPath, content[..start] + replacement + content[end..]);
 
-            NugetConfigManager.RegisterSource("plugin_b", url, new NullLogger());
+            NugetConfigManager.RegisterSource(Root, "plugin_b", url, new NullLogger());
 
             content = File.ReadAllText(ConfigPath);
             Assertions.AssertInt(CountOccurrences(content, "<add key=\"ePlugin-")).IsEqual(1);

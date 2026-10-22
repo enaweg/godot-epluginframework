@@ -163,6 +163,8 @@ internal sealed class FakeEditorHost(LifecycleFixture fixture) : IEditorHost
 
     public string ProjectRoot => fixture.Root;
 
+    public string AssemblyName => "";
+
     public string AddonsDirectory => Path.Combine(fixture.Root, "addons").Replace('\\', '/');
 
     /// <summary>The user's configuration folder, inside the fixture's temporary folder.</summary>
