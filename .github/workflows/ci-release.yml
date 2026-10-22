@@ -8,6 +8,7 @@ on:
 jobs:
   draft-release:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
       pull-requests: read
@@ -16,27 +17,30 @@ jobs:
       DOTNET_NOLOGO: true
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 200
           fetch-tags: true
+          # Nothing here pushes with git; the release steps get the token as an input. Without it in .git/config,
+          # the build's packages and tools cannot reach it.
+          persist-credentials: false
 
       - name: Setup .NET for the tools
         # The C# tools under tools/ need .NET 10. A separate installation, so the SDK below still decides what builds, tests
         # and publishes the release.
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         env:
           DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet-tools
         with:
           dotnet-version: 10.0.x
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: 8.0.x
 
       - name: Setup Godot .NET
-        uses: chickensoft-games/setup-godot@v2
+        uses: chickensoft-games/setup-godot@ac93246ea68518a384c1c280a496e5989341f2f6 # v2
         with:
           version: 4.7.2
           use-dotnet: true
@@ -69,13 +73,24 @@ jobs:
         shell: bash
         run: |
           # The tag without its leading v, prerelease suffix included (v1.2.0-beta.1 -> 1.2.0-beta.1), so the
-          # released plugin.cfg is a prerelease to the updater as well.
-          echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          # released plugin.cfg is a prerelease to the updater as well. Semantic Versioning 2.0.0, as the PR build checks,
+          # or the updater cannot compare it.
+          version="${GITHUB_REF_NAME#v}"
+          id='(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)'
+          semver="^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-$id(\.$id)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?\$"
+          if [[ ! "$version" =~ $semver ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME is not v followed by a semantic version (MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD])"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
 
-      - name: Set Version to plugin.ini
+      - name: Set version in plugin.cfg
         shell: bash
+        env:
+          PLUGIN_CFG: src/eplugin-framework/addons/ePlugin/plugin.cfg
         run: |
-          sed -i "s/version=\".*\"/version=\"${{ env.VERSION }}\"/g" src/eplugin-framework/addons/ePlugin/plugin.cfg
+          sed -i -E "s/^version=\"[^\"]*\"/version=\"$VERSION\"/" "$PLUGIN_CFG"
+          grep -qFx "version=\"$VERSION\"" "$PLUGIN_CFG"
 
       - name: Publish progress helper
         shell: bash
@@ -101,7 +116,7 @@ jobs:
 
       - name: Build Changelog
         id: build_changelog
-        uses: mikepenz/release-changelog-builder-action@v6.4.0
+        uses: mikepenz/release-changelog-builder-action@aa013739bbc8e7067dbbecd4525ff11aeb51a84b # v6.4.0
         with:
           mode: "HYBRID"
           configurationJson: |
@@ -143,7 +158,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Release
-        uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1
         with:
           tag: ${{ github.ref_name }}
           name: "ePlugin-v${{ env.VERSION }}"
