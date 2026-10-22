@@ -6,8 +6,8 @@
 auto_translate_mode = 2
 title = "About ePlugin Framework"
 initial_position = 2
-size = Vector2i(520, 400)
-min_size = Vector2i(440, 340)
+size = Vector2i(520, 480)
+min_size = Vector2i(440, 420)
 ok_button_text = "Close"
 script = ExtResource("1_script")
 
@@ -15,7 +15,7 @@ script = ExtResource("1_script")
 offset_left = 8.0
 offset_top = 8.0
 offset_right = 512.0
-offset_bottom = 351.0
+offset_bottom = 431.0
 theme_override_constants/separation = 8
 
 [node name="AboutLogo" type="TextureRect" parent="AboutBox"]
@@ -69,6 +69,27 @@ text = "Source code"
 unique_name_in_owner = true
 layout_mode = 2
 text = "Documentation"
+
+[node name="StarNote" type="PanelContainer" parent="AboutBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="StarBox" type="VBoxContainer" parent="AboutBox/StarNote"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="StarText" type="Label" parent="AboutBox/StarNote/StarBox"]
+custom_minimum_size = Vector2(380, 0)
+layout_mode = 2
+text = "Stars on GitHub help other Godot developers find ePlugin Framework. If it is useful to you, please star it."
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="StarLink" type="LinkButton" parent="AboutBox/StarNote/StarBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Star it on GitHub"
 
 [node name="ButtonSpace" type="Control" parent="AboutBox"]
 custom_minimum_size = Vector2(0, 16)
