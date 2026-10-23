@@ -191,7 +191,8 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             var slug = package.Candidate.Slug;
             if (!host.IsEnabled(slug)) throw new InvalidOperationException($"Plugin {slug} is no longer enabled.");
             var old = InstalledVersion(slug, package.Kind);
-            if (old != package.Candidate.InstalledVersion) throw new InvalidOperationException($"Plugin {slug} changed since the update check; check again.");
+            // The check read the version through Godot, which reads an unquoted 1.2.0 as 1.2.
+            if (!SemVer.Same(old, package.Candidate.InstalledVersion)) throw new InvalidOperationException($"Plugin {slug} changed since the update check; check again.");
             var next = PackageVersion(package);
             var managed = host.IsManaged(slug);
             journal.Plugins.Add(new() { Slug = slug, OldVersion = old!, NewVersion = next, IsEPlugin = managed,
@@ -601,8 +602,8 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
 
     private void BackupProject(UpdateJournal journal, bool replace = false)
     {
-        var backup = Path.Combine(journal.Directory, "backup-project");
-        // A replaced backup is written next to the old one and swapped in, so it is never half written.
+        var backup = Path.Combine(journal.Directory, ProjectBackup.Folder);
+        // A replaced backup is written next to the old one and swapped in, so it is never half written; see ProjectBackup.
         var target = replace ? backup + ".new" : backup;
         if (replace && System.IO.Directory.Exists(target)) System.IO.Directory.Delete(target, true);
         System.IO.Directory.CreateDirectory(target);
@@ -626,8 +627,9 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
     {
         // The live editor owns project.godot; normal rollback restores autoloads via recipe operations.
         // Its backup is reserved for independent early recovery, which reloads settings before restart.
-        foreach (var file in journal.ProjectFiles.Where(f => f != "project.godot")) File.Copy(PackageFiles.Inside(Path.Combine(journal.Directory, "backup-project"), file), PackageFiles.Inside(projectRoot, file), true);
-        if (!journal.ProjectFiles.Any(p => p.Equals("nuget.config", StringComparison.OrdinalIgnoreCase)) && File.Exists(Path.Combine(projectRoot, "nuget.config"))) File.Delete(Path.Combine(projectRoot, "nuget.config"));
+        var (backup, files) = ProjectBackup.Find(journal.Directory, journal.ProjectFiles);
+        foreach (var file in files.Where(f => f != "project.godot")) File.Copy(PackageFiles.Inside(backup, file), PackageFiles.Inside(projectRoot, file), true);
+        if (!files.Any(p => p.Equals("nuget.config", StringComparison.OrdinalIgnoreCase)) && File.Exists(Path.Combine(projectRoot, "nuget.config"))) File.Delete(Path.Combine(projectRoot, "nuget.config"));
     }
     private static void Move(string from, string to) => AddonFiles.MoveDirectory(from, to);
 }

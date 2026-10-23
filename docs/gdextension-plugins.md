@@ -111,7 +111,6 @@ Publish a release as for a [GDScript plugin](gdscript-plugins.md#publish-a-relea
 - Set `compatibility_minimum` (and `compatibility_maximum`, if any) to the Godot versions the extension supports. An update that the editor's Godot version cannot load is refused, before anything is replaced.
 - Do not include Godot's `~` copies. They are left out of packages anyway, so a ZIP made from a project that the editor had open still works.
 - Set `reloadable = true` when the extension supports it, so updates do not restart the editor.
-- A plugin folder that is a link (a symlink or junction to another checkout) is not updated. Update it where it points to.
 - When a release has several ZIP assets, ePlugin downloads the one named exactly like the slug, else the one whose name contains it (`-`, `_` and `.` count as the same), else an addon- or plugin-named one; among several such ZIPs, demo, example, sample and tutorial ZIPs are left out (see [Updating plugins](updating-plugins.md#configure-an-update-source)). Name a variant differently (`my_native+extras.zip` next to `my_native.zip`), or ePlugin falls back to the source archive, which has no built libraries.
 
 | Code | Severity | Reason |
@@ -122,7 +121,6 @@ Publish a release as for a [GDScript plugin](gdscript-plugins.md#publish-a-relea
 | R18 | Warning | A `.gdextension` file names an icon outside the plugin folder. |
 | R19 | Error | The library for the editor's platform is missing from the package. |
 | R19 | Warning | The `.gdextension` names no library for the editor's platform. |
-| R20 | Error | The plugin folder is a link. |
 | R21 | Info | Whether the extension is reloaded in place or the editor restarts. |
 | R22 | Error | The editor's Godot version cannot load the extension: it is outside `compatibility_minimum`/`compatibility_maximum`, or `compatibility_minimum` is missing or older than 4.1. |
 | R23 | Warning | The new version no longer ships a platform, or the release library of a platform, that the installed version has. |

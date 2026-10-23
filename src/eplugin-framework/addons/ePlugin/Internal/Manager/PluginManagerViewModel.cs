@@ -74,13 +74,13 @@ internal sealed class PluginManagerViewModel
                 if (candidate.SourceUrl is not null && !target.UpdateUrls.Contains(candidate.SourceUrl))
                     messages.Add(new("source_changed", FindingSeverity.Error, "The plugin's update site changed or was removed; check for updates again."));
                 if (target.IsBlocked || target.StoreReadOnly) messages.Add(new("R17", FindingSeverity.Error, "Resolve the plugin's problem under Needs attention first."));
-                if (target.RecordedVersion is not null && target.RecordedVersion != target.InstalledVersion)
+                if (target.RecordedVersion is not null && !SemVer.Same(target.RecordedVersion, target.InstalledVersion))
                     messages.Add(new("recorded_version", FindingSeverity.Info, "Last working version: " + target.RecordedVersion));
             }
             if (SemVer.TryParse(candidate.InstalledVersion, out var old) && SemVer.TryParse(candidate.NewVersion, out var next) && next.Major != old.Major)
                 messages.Add(new("R14", FindingSeverity.Warning, "Major version change: your project code may need changes."));
             if (candidate.Slug == "ePlugin") messages.Add(new("restart", FindingSeverity.Info, "The editor will restart after this update."));
-            var failure = cache?.FailedUpdates.GetValueOrDefault(candidate.Slug)?.LastOrDefault(f => SameVersion(f.Version, candidate.NewVersion));
+            var failure = cache?.LastFailure(candidate);
             Updates.Add(new(candidate, messages, failure));
         }
         foreach (var plugin in plugins) Plugins.Add(new(plugin, Updates.FirstOrDefault(u => u.Candidate.Slug == plugin.Slug)));
@@ -424,6 +424,5 @@ internal sealed class PluginManagerViewModel
     internal static bool IsWebUrl(string? value) =>
         Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme is "https" or "http" && uri.UserInfo.Length == 0 &&
         value!.IndexOfAny(['[', ']']) < 0;
-    private static bool SameVersion(string left, string right) => SemVer.TryParse(left, out var l) && SemVer.TryParse(right, out var r) ? l.CompareTo(r) == 0 : left == right;
 }
 #endif

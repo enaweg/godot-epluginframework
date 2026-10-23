@@ -145,13 +145,11 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
             .OrderByDescending(c => c.Version).DistinctBy(c => c.Version.Key)
             .Select(c => new UpdateCandidate(target.Slug, target.Name, target.InstalledVersion, c.Version.ToString(),
                 target.UpdateUrl, null, c.Commit, new GitPackageRef(url.Repository, url.Path, c.Commit!))).ToArray();
-    /// <summary>Deletes a git working folder. git writes its object files read-only, which Windows refuses to delete.</summary>
-    private static void DeleteWork(string work)
-    {
-        if (!Directory.Exists(work)) return;
-        foreach (var file in Directory.EnumerateFiles(work, "*", SearchOption.AllDirectories)) File.SetAttributes(file, FileAttributes.Normal);
-        Directory.Delete(work, true);
-    }
+    /// <summary>
+    /// Deletes a git working folder. git writes its object files read-only, which Windows refuses to delete, and a
+    /// checked-out link must not make files outside the folder writable.
+    /// </summary>
+    private static void DeleteWork(string work) => AddonFiles.DeleteTree(work);
     private static async Task<GitOutcome> Checked(IGitRunner runner, string directory, string[] args, CancellationToken ct, bool trace = false)
     {
         var result = await runner.RunAsync(directory, args, ct, trace).ConfigureAwait(false);

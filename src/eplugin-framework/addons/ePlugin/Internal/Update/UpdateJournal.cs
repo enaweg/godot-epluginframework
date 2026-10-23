@@ -140,6 +140,13 @@ internal sealed class UpdateJournals(string root, Action<string>? log = null)
         // Groups of one batch resume in the order they were applied: a later group built on top of the earlier ones.
         return result.OrderBy(j => j.CreatedUtc).ThenBy(j => j.Group ?? 0).ToList();
     }
+    /// <summary>
+    /// Folders without a journal last written before <paramref name="before"/>: batches the ePlugin Manager staged but did
+    /// not install. It deletes those itself, but an assembly reload or a crash forgets them.
+    /// </summary>
+    public IReadOnlyList<string> AbandonedStaging(DateTime before) => !System.IO.Directory.Exists(root) ? []
+        : System.IO.Directory.GetDirectories(root)
+            .Where(folder => !File.Exists(Path.Combine(folder, "journal.json")) && System.IO.Directory.GetLastWriteTimeUtc(folder) < before).ToArray();
     public bool OwnsAttempt(Guid? id) => id is not null && Read().Any(j => j.IsActive && j.AttemptId == id);
     public IReadOnlySet<string> OwnedSlugs => Read().Where(j => j.IsActive).SelectMany(j => j.Plugins.Select(p => p.Slug).Concat(j.AdditionalVersions.Keys)).ToHashSet(StringComparer.Ordinal);
     public string NewDirectory() => Path.Combine(root, DateTimeOffset.UtcNow.ToString("yyyyMMddTHHmmss", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N")[..8]);

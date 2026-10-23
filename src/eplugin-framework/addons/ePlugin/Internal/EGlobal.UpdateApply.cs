@@ -56,6 +56,8 @@ internal sealed partial class EGlobal
         var directory = _updateJournals.NewDirectory();
         try
         {
+            // Validating a GDExtension needs the editor's version, which only the editor thread may ask Godot for.
+            _ = GDExtensionConfig.EditorVersion;
             var result = await Task.Run(() => new PackageFetcher(new(), new GitRunner()).FetchAsync(candidates, targets, directory, progress, ct, allowDowngrade, allowReinstall), ct);
             foreach (var refused in result.Refused) _ePluginContext?.Logger.Warn($"Skipping the update of {refused.Candidate.Slug} {refused.Candidate.NewVersion}: {refused.Reason}");
             return (result.Packages, result.Refused, directory);
@@ -195,6 +197,15 @@ internal sealed partial class EGlobal
         // Cache is needed by recovery before the first scheduled check.
         _updateCache ??= new UpdateStateStore(Path.Combine(UpdateProjectRoot, ".godot/eplugin/update-state.json"));
         _updateCache.Load();
+        // A batch is staged within minutes, so a folder this old without a journal is no longer in use.
+        foreach (var folder in _updateJournals.AbandonedStaging(DateTime.UtcNow - TimeSpan.FromHours(6)))
+        {
+            try { AddonFiles.DeleteTree(folder); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _ePluginContext?.Logger.Warn($"Cannot delete the abandoned update download {folder} yet; it is tried again at the next start: {ex.Message}");
+            }
+        }
         // Groups of one batch restart the editor once, after the last of them.
         using var restarts = DeferRestarts();
         foreach (var listed in _updateJournals.Read())
@@ -396,7 +407,7 @@ internal sealed partial class EGlobal
             if (PluginKinds.Workflow(plugin) is GDExtensionAddonWorkflow)
                 return global.IsExtensionAddon(plugin.Slug) || File.Exists(Path.Combine(ProjectSettings.GlobalizePath(global._host.PluginDirectory(plugin.Slug)), "plugin.cfg"));
             var metadata = EditorPluginExtensions.ReadMetadata($"{global._host.PluginDirectory(plugin.Slug)}/plugin.cfg");
-            return (plugin.Slug != "ePlugin" || global.IsValid()) && IsEnabled(plugin.Slug) && metadata?.Version == plugin.NewVersion &&
+            return (plugin.Slug != "ePlugin" || global.IsValid()) && IsEnabled(plugin.Slug) && SemVer.Same(metadata?.Version, plugin.NewVersion) &&
                 global._contexts.FirstOrDefault(c => c.Slug == plugin.Slug)?.State != EEditorPluginState.Error;
         }
         public void Log(string message) => global._ePluginContext?.Logger.Log(message);

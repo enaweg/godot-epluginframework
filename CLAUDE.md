@@ -277,7 +277,7 @@ Its updates use `AddonFileSwap`, because the editor on Windows
 loads each library from a `~<library>` copy in the same folder that cannot be moved (`PackageFiles.IsRuntimeCopy` keeps
 those copies out of packages, backups and deletions), and reload reloadable extensions in place or restart the editor.
 `GDExtensionRules` also refuses an extension the editor's Godot version cannot load (R22, `GDExtensionConfig.EditorVersion`
-is asked from Godot lazily; suites without a Godot runtime set it) and warns about dropped platforms (R23).
+is asked from Godot lazily, by staging on the editor thread before it validates off it; suites without a Godot runtime set it) and warns about dropped platforms (R23).
 An ePlugin with a GDExtension stays an ePlugin and swaps its files the same way (`UpdatePluginJournal.NativeExtension`);
 its update restarts anyway. ePlugin Framework ships no GDExtension (R10 refuses one). GDExtensions inside `AddDirectory`
 directories must be reloadable: `ShowHideHelper` loads them after showing and unloads them before hiding through

@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Enaweg.Plugin.Internal;
 using Enaweg.Plugin.Internal.Dotnet;
+using Enaweg.Plugin.Internal.Kinds;
 using Enaweg.Plugin.Internal.Update;
 using GdUnit4;
 
@@ -86,6 +87,32 @@ public class EGlobalUpdateApplyTests : IDisposable
         var staged = await _fixture.Global.StageUpdatesAsync(_fixture.Global.PendingUpdates, null, CancellationToken.None);
         Assertions.AssertThat(staged.Refused).IsEmpty();
         return await _fixture.Global.ApplyUpdatesAsync(staged.Packages, staged.Directory, false, askOnBuildFailure);
+    }
+
+    [TestCase]
+    public async Task TheEditorVersionIsAskedBeforeStagingLeavesTheEditorThread()
+    {
+        // Validating a GDExtension (R22) needs the editor's version on the thread-pool thread that stages the packages,
+        // where Godot must not be called, so it is asked on the editor thread first.
+        GDExtensionConfig.ResetEditorVersion();
+        PluginWithNewerPackage("tool");
+        await Index();
+        await _fixture.Global.StageUpdatesAsync(_fixture.Global.PendingUpdates, null, CancellationToken.None);
+        Assertions.AssertBool(GDExtensionConfig.EditorVersionKnown).IsTrue();
+    }
+
+    [TestCase]
+    public async Task AnUnquotedVersionIsComparedByItsValue()
+    {
+        // Godot reads version=1.0.0 without quotes as 1.0, the updater's own reader as written.
+        PluginWithNewerPackage("tool");
+        File.WriteAllText(Path.Combine(_fixture.Addon("tool"), "plugin.cfg"), "[plugin]\nname=\"tool\"\nversion=1.0.0\nscript=\"plugin.gd\"\n");
+        await Index();
+
+        var results = await Install();
+
+        Assertions.AssertObject(results.Single().Outcome).IsEqual(UpdateOutcome.Completed);
+        Assertions.AssertString(Installed("tool")).Contains("version=\"2.0.0\"");
     }
 
     [TestCase]

@@ -106,6 +106,37 @@ public class UpdatePackageTests
     }
 
     [TestCase]
+    public void LinkedPluginFoldersAreNotUpdated()
+    {
+        // A developer links addons/plugin to a working copy: replacing the link would drop it for the downloaded copy.
+        var checkout = Path.Combine(_root, "checkout");
+        var installed = Path.Combine(_root, "installed");
+        var stage = Path.Combine(_root, "plugin");
+        Directory.CreateDirectory(checkout); Directory.CreateDirectory(stage);
+        Directory.CreateSymbolicLink(installed, checkout);
+        File.WriteAllText(Path.Combine(checkout, "plugin.cfg"), Config("1.0.0"));
+        File.WriteAllText(Path.Combine(checkout, "plugin.gd"), "extends EditorPlugin");
+        File.WriteAllText(Path.Combine(stage, "plugin.cfg"), Config("2.0.0"));
+        File.WriteAllText(Path.Combine(stage, "plugin.gd"), "extends EditorPlugin");
+        var candidate = new UpdateCandidate("plugin", "Plugin", "1.0.0", "2.0.0", "https://example.org/releases", null, null, new ZipPackageRef("https://example.org/plugin.zip", "plugin"));
+        var target = new PluginUpdateTarget("plugin", "Plugin", "1.0.0", candidate.SourceUrl, installed);
+        foreach (var kind in new[] { PluginKind.GDScript, PluginKind.CSharp, PluginKind.EPlugin, PluginKind.Framework })
+        {
+            var validated = new AddonPackageValidator().Validate(new(target with { Kind = kind }, candidate, stage));
+            Assertions.AssertBool(validated.IsValid).IsFalse();
+            Assertions.AssertInt(validated.Findings.Count(f => f.Code == "R20" && f.Severity == FindingSeverity.Error)).IsEqual(1);
+        }
+        try
+        {
+            AddonFolderSwap.Instance.Install(installed, stage, Path.Combine(_root, "backup", "plugin"), Path.Combine(_root, "discarded"));
+            throw new InvalidOperationException("A linked plugin folder was swapped.");
+        }
+        catch (IOException ex) { Assertions.AssertString(ex.Message).Contains("is a link"); }
+        Assertions.AssertBool((File.GetAttributes(installed) & FileAttributes.ReparsePoint) != 0).IsTrue();
+        Assertions.AssertBool(Directory.Exists(stage)).IsTrue();
+    }
+
+    [TestCase]
     public void ReleaseAnnouncedAsNewerButNotRaisedInsideNeedsReview()
     {
         var installed = Path.Combine(_root, "installed");
@@ -265,6 +296,44 @@ public class UpdatePackageTests
             .Single(f => f.Code == "R9");
         Assertions.AssertBool(overridden.RequiresTrust).IsFalse();
         Assertions.AssertString(overridden.Message).Contains("https://github.com/fork/plugin/releases");
+    }
+
+    [TestCase]
+    public void AnotherRepositoryOnTheSameHostRequiresTrust()
+    {
+        // Every GitHub repository shares a host: a package from another author's repository, found through the built-in
+        // list when the plugin's own update site failed or naming such a repository as its update_url, must be trusted.
+        const string own = "https://github.com/owner/plugin/releases", other = "https://github.com/other/plugin/releases";
+        var installed = Path.Combine(_root, "installed"); var stage = Path.Combine(_root, "plugin");
+        Directory.CreateDirectory(installed); Directory.CreateDirectory(stage);
+        File.WriteAllText(Path.Combine(installed, "plugin.cfg"), Config("1.0.0").Replace("https://example.org/releases", own));
+        File.WriteAllText(Path.Combine(stage, "plugin.gd"), "extends EditorPlugin");
+        var target = new PluginUpdateTarget("plugin", "Plugin", "1.0.0", own, installed, KnownUrl: other);
+        bool Trust(PluginUpdateTarget installedTarget, string? source, string? updateUrl)
+        {
+            File.WriteAllText(Path.Combine(stage, "plugin.cfg"), updateUrl is null
+                ? Config("2.0.0").Replace("update_url=\"https://example.org/releases\"\n", "")
+                : Config("2.0.0").Replace("https://example.org/releases", updateUrl));
+            var candidate = new UpdateCandidate("plugin", "Plugin", "1.0.0", "2.0.0", source, null, null, new ZipPackageRef("https://example.org/plugin.zip", "plugin"));
+            return new AddonPackageValidator().Validate(new(installedTarget, candidate, stage)).Findings.Any(f => f.RequiresTrust);
+        }
+        // from the built-in list's repository, whatever the package names
+        Assertions.AssertBool(Trust(target, other, own)).IsTrue();
+        Assertions.AssertBool(Trust(target, other, null)).IsTrue();
+        Assertions.AssertBool(Trust(target, other, other)).IsTrue();
+        // from the plugin's own site, but moving its updates to another repository
+        Assertions.AssertBool(Trust(target, own, other)).IsTrue();
+        Assertions.AssertBool(Trust(target, own, "https://github.com/other/plugin.git")).IsTrue();
+        // the same repository named another way is no move
+        Assertions.AssertBool(Trust(target, own, own)).IsFalse();
+        Assertions.AssertBool(Trust(target, "https://github.com/owner/plugin.git", "https://github.com/Owner/plugin/releases/tag/v2.0.0")).IsFalse();
+        Assertions.AssertBool(Trust(target, own, "https://github.com/owner/plugin/tags")).IsFalse();
+        Assertions.AssertBool(Trust(target, own, null)).IsFalse();
+        // the project's update site is the project's choice, and the built-in list is the only site of a plugin without one
+        Assertions.AssertBool(Trust(target with { OverrideUrl = other }, other, own)).IsFalse();
+        Assertions.AssertBool(Trust(target with { UpdateUrl = null }, other, null)).IsFalse();
+        // a local package
+        Assertions.AssertBool(Trust(target, null, own)).IsFalse();
     }
 
     [TestCase]

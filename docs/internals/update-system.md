@@ -35,7 +35,11 @@ Project update sites (`UpdateSiteSettings`, the committed `res://addons/eplugin-
 `plugin.cfg` value (the validator's R9 compares new packages against it) and `OverrideUrl` holds the project's site;
 `UpdateUrls` lists the override first. `UpdateService.FirstWorkingSiteAsync` tries them in order, so an unsupported or
 failing site falls back to `plugin.cfg` (reported in `UpdateCheckResult.Fallbacks`), and a candidate from either URL
-belongs to the plugin (`CurrentCached`, `source_changed`). `CollectUpdateTargets` and `CollectPlugins` reload the file.
+belongs to the plugin (`CurrentCached`, `source_changed`). Trust compares repositories (`UpdateSourceFactory.Repository`:
+host and path, so another owner on the same host differs, and a release page, tag page or git URL of one repository is
+the same): R9 when the package's `update_url` names another repository than the installed one, R25 when the candidate's
+`SourceUrl` is neither the project's site nor the `plugin.cfg` repository, i.e. the built-in site of a plugin that has its
+own. Both set `RequiresTrust`, which leaves the review entry unchecked. `CollectUpdateTargets` and `CollectPlugins` reload the file.
 Like `LocalSourceSettings`, it is never overwritten when it is unreadable or was written by a newer version, and it is
 deleted with its last entry.
 
@@ -62,8 +66,10 @@ topic and no add-on topic is skipped, and entries found by a search are marked `
 
 A searched entry is listed only when its slug is named like its repository (one contains the other, ignoring `-`, `_`,
 `.` and "godot"), because games and projects often hold someone else's add-on in `addons/`. A slug claimed by several
-repositories goes to the one with the most stars. Release ZIPs the updater refuses (no or several plugin roots) leave the
-add-on out. Entries are not installed or validated in advance. Both tools end with statistics: how many repositories
+repositories goes to the one with the most stars. Since entries match by slug only, `generate_known_plugins.cs` leaves
+out add-ons whose name says they are made for Godot 3 (the input has no Godot version) and slugs too generic to tell an
+add-on from a project's own folder (`genericSlugs`, e.g. `plugin`, `misc`, `log`). Release ZIPs the updater refuses
+(no or several plugin roots) leave the add-on out. Entries are not installed or validated in advance. Both tools end with statistics: how many repositories
 were added and filtered out, how many each kind of filter left out, and the ten most-starred ones left out with their
 reason, the likeliest to be add-ons a filter missed. Each also compares its result with the previous one (the existing
 JSON file, the committed list): counts before and now, every new add-on (and changed slugs), the ten most-starred no
@@ -76,7 +82,8 @@ tags.
 ## Checks
 
 Checks use installed metadata and a local cache that is refreshed every `eplugin/updates/check_interval_hours` (default
-20), never the shared working-version index. A release announced as newer whose `plugin.cfg` is not (an author forgot to
+20), never the shared working-version index. Checks and version lists run off the editor thread, but `UpdateService`
+reads and writes the cache (`UpdateStateStore`) only through `OnEditorThread`, where `UpdateApplier` changes it too. A release announced as newer whose `plugin.cfg` is not (an author forgot to
 raise it) is an R6 review warning rather than a refusal; once it is installed, `UpdateService.WithoutInstalled` hides it
 using the revision and version that `Commit` records in `UpdateCache.Revisions`. Checks do not skip a plugin blocked by
 an unfinished attempt; the manager and the validator refuse its update (R17).
@@ -118,8 +125,7 @@ version: the same files, all `reloadable` in both, and nothing discarded reload 
 restarts the editor. `NativeSession` names the editor process the flags refer to: after a rollback, an editor that
 neither reloaded nor restarted since the swap still runs the restored libraries and needs nothing; otherwise the restored
 extension is reloaded in place or the editor restarts. `GDExtensionRules` refuses libraries outside the plugin folder
-(R18, a warning for icons), a missing library for the editor's platform (R19), a linked plugin folder (R20) and an
-extension outside the editor's Godot version limits (R22, `GDExtensionConfig.CompatibilityProblem`, which follows
+(R18, a warning for icons), a missing library for the editor's platform (R19) and an extension outside the editor's Godot version limits (R22, `GDExtensionConfig.CompatibilityProblem`, which follows
 Godot's own check), and warns about platforms or release libraries the installed version had and the new one drops
 (R23, `DroppedPlatforms`), for every kind with a GDExtension; R21 says whether the update reloads or restarts. An
 ePlugin with a GDExtension needs no reload logic: its update always builds and restarts, which loads the new libraries,
@@ -150,7 +156,10 @@ its activated shared entry is not reported as a disabled plugin.
 
 Every apply requires dialog confirmation. Stage and validate the whole batch before touching addons: `PackageFetcher`
 leaves a package that cannot be fetched or is refused out of the batch, as a `RefusedPackage`, and fails only when all are
-refused. `IUpdateHost.Preflight` refuses to start while a scene is running, an untitled scene is open (detectable only
+refused. The manager deletes a staged batch it does not install (`UpdateFlow.Clear`); since an assembly reload or a
+crash forgets it, `ResumeUpdates` deletes folders without a journal last written more than six hours ago
+(`UpdateJournals.AbandonedStaging`). A plugin folder that is a link (to a working copy) is refused for every kind (R20), and both swaps refuse it
+too (`AddonFiles.RefuseLink`), since moving it would replace the link with the downloaded copy. `IUpdateHost.Preflight` refuses to start while a scene is running, an untitled scene is open (detectable only
 from Godot 4.5) or an ePlugin of the batch is not `Activated`. Then save and close all open scenes
 (`IUpdateHost.CloseScenes`; `close_scene` exists only from Godot 4.5) before the swap.
 
@@ -218,7 +227,9 @@ applied; resuming reloads each journal because an earlier group may have changed
 
 When a journal commits or rolls back, `RebasePending` refreshes the `backup-project` of every journal that has not
 reconciled yet and, on commit, its recipe baselines for plugins it does not update, so a later rollback keeps the earlier
-group's changes. Reconcile leaves the recipes of plugins in another active journal or rolled back since the assembly
+group's changes. A replaced `backup-project` is copied to `backup-project.new`, the old one moved to `.old` and the new
+one into place before the journal is saved; when a crash leaves neither in place, rollback and early recovery restore
+the new copy with its own files (`ProjectBackup.Find`). Reconcile leaves the recipes of plugins in another active journal or rolled back since the assembly
 was loaded alone (`UntouchedRecipes`).
 
 ## Plugin state attempts

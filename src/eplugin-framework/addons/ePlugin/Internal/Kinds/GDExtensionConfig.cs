@@ -31,7 +31,8 @@ internal sealed partial record GDExtensionConfig(bool Reloadable, IReadOnlyList<
     private static (int Major, int Minor, int Patch)? _editorVersion;
 
     /// <summary>
-    /// The version of the editor running here (major, minor, patch), asked from Godot when first needed. Settable so tests,
+    /// The version of the editor running here (major, minor, patch), asked from Godot when first needed, which has to be on
+    /// the editor thread: staging asks for it before it validates packages on a thread-pool thread. Settable so tests,
     /// also those without a Godot runtime, check the version limits of <see cref="CompatibilityProblem"/> against a known
     /// version; <see cref="ResetEditorVersion"/> asks Godot again.
     /// </summary>
@@ -42,6 +43,9 @@ internal sealed partial record GDExtensionConfig(bool Reloadable, IReadOnlyList<
     }
 
     internal static void ResetEditorVersion() => _editorVersion = null;
+
+    /// <summary>Whether <see cref="EditorVersion"/> was asked or set since the assembly was loaded.</summary>
+    internal static bool EditorVersionKnown => _editorVersion is not null;
 
     private static (int, int, int) ReadEditorVersion()
     {

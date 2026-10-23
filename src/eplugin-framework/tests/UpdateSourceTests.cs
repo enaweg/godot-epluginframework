@@ -46,6 +46,20 @@ public class UpdateSourceTests
     }
 
     [TestCase]
+    public static async Task ReleasePagesKeepGitInsideRepositoryNames()
+    {
+        // Only a trailing ".git" is no part of the name.
+        var requested = new List<string>();
+        using var client = new HttpClient(new Handler(request => { requested.Add(request.RequestUri!.AbsoluteUri); return Json("[]"); }));
+        var factory = new UpdateSourceFactory(new(client));
+        foreach (var url in new[] { "https://github.com/owner/foo.github-tools/releases", "https://github.com/owner/foo.github-tools.git/releases",
+                     "https://codeberg.org/owner/foo.github-tools/releases", "https://codeberg.org/owner/foo.github-tools.git/releases" })
+            await factory.Create(url).CheckAsync(Target(), new(), CancellationToken.None);
+        Assertions.AssertInt(requested.Count).IsEqual(4);
+        foreach (var request in requested) Assertions.AssertString(request).Contains("/owner/foo.github-tools/releases");
+    }
+
+    [TestCase]
     public static async Task GitLabSupportsSubgroupsAndSourceArchives()
     {
         string? requested = null;
@@ -461,6 +475,29 @@ public class UpdateSourceTests
     }
 
     [TestCase]
+    public static async Task DeletingTheGitWorkFolderLeavesLinkedFoldersAlone()
+    {
+        // A checked-out repository may link a folder outside it; git writes its object files read-only, so the work folder
+        // is made writable before it is deleted, which must not reach through the link.
+        var root = Path.Combine(Path.GetTempPath(), "git-link-" + Guid.NewGuid().ToString("N"));
+        var outside = Path.Combine(root, "outside");
+        Directory.CreateDirectory(outside);
+        var file = Path.Combine(outside, "kept.txt");
+        File.WriteAllText(file, "");
+        File.SetAttributes(file, FileAttributes.ReadOnly);
+        try
+        {
+            var package = new GitPackageRef("https://host/repo.git", "addon", FakeGit.Commit);
+            await new GitSource(new(), new FakeGit(link: outside), new("https://host/repo.git", "addon", null))
+                .FetchAsync(package, "plugin", Path.Combine(root, "staged"), CancellationToken.None);
+            Assertions.AssertBool(File.Exists(file)).IsTrue();
+            Assertions.AssertBool((File.GetAttributes(file) & FileAttributes.ReadOnly) != 0).IsTrue();
+            Assertions.AssertBool(Directory.EnumerateDirectories(root, "git-work-*").Any()).IsFalse();
+        }
+        finally { AddonFiles.DeleteTree(root); }
+    }
+
+    [TestCase]
     public static async Task TheGitRunnerReportsOutputErrorsAndExitCodes()
     {
         var root = Path.Combine(Path.GetTempPath(), "git-runner-" + Guid.NewGuid().ToString("N"));
@@ -523,8 +560,9 @@ public class UpdateSourceTests
     /// <summary>A repository with one plugin in <paramref name="folder"/> ("" at its root) next to a project.godot.</summary>
     private sealed record OtherPackageRef : UpdatePackageRef;
     /// <param name="capabilities">What ls-remote reports with packet tracing; without "filter" partial fetches are refused.</param>
+    /// <param name="link">A folder the checkout links to from its root, read-only files and all.</param>
     private sealed class FakeGit(string folder = "addon", string? refs = null, string? tree = null, string version = "2.0.0",
-        string capabilities = "fetch=shallow filter", string fetchError = "") : IGitRunner
+        string capabilities = "fetch=shallow filter", string fetchError = "", string? link = null) : IGitRunner
     {
         public const string Commit = "0123456789012345678901234567890123456789";
         public List<IReadOnlyList<string>> Calls { get; } = [];
@@ -539,6 +577,7 @@ public class UpdateSourceTests
                 if (folder.Length > 0) File.WriteAllText(Path.Combine(directory, "project.godot"), "");
                 Directory.CreateDirectory(Path.Combine(directory, folder));
                 File.WriteAllText(Path.Combine(directory, prefix + "plugin.cfg"), config);
+                if (link is not null) Directory.CreateSymbolicLink(Path.Combine(directory, "linked"), link);
             }
             var output = args.Contains("--version") ? "git version 2.56.0"
                 : args.Contains("ls-remote") ? refs ?? $"{Commit}\trefs/heads/main\n{Commit}\trefs/tags/v2.0.0\n"

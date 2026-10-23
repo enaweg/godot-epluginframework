@@ -101,16 +101,27 @@ internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules 
         // An add-on's name is its slug or the built-in list's name, never one from its files.
         if (!addon && metadata.GetValueOrDefault("name") != installed.Name) Add("R8", FindingSeverity.Warning, "Plugin name changed.");
         var newUrl = metadata.GetValueOrDefault("update_url");
+        var ownRepository = UpdateSourceFactory.Repository(installed.UpdateUrl);
         if (newUrl != installed.UpdateUrl)
         {
-            var oldHost = Uri.TryCreate(installed.UpdateUrl, UriKind.Absolute, out var before) ? before.Host : installed.UpdateUrl;
-            var newHost = Uri.TryCreate(newUrl, UriKind.Absolute, out var after) ? after.Host : newUrl;
             // Checks keep using an update site the project sets, so the new plugin.cfg source is not trusted for anything.
+            // Otherwise later updates come from the new one; another repository may belong to someone else, also on the
+            // same host.
             if (installed.OverrideUrl is { } site)
                 Add("R9", FindingSeverity.Warning, $"Update source changed: {newUrl ?? "removed"}. Updates still come from the project's update site {site}.");
             else
-                Add("R9", FindingSeverity.Warning, "Update source changed: " + (newUrl ?? "removed"), !string.IsNullOrWhiteSpace(newUrl) && oldHost != newHost);
+                Add("R9", FindingSeverity.Warning, "Update source changed: " + (newUrl ?? "removed"),
+                    !string.IsNullOrWhiteSpace(newUrl) && UpdateSourceFactory.Repository(newUrl) != ownRepository);
         }
+        // A package from the built-in list's site, used because the plugin's own one failed, may be someone else's plugin
+        // with the same slug. The project's update site is the project's choice, and a plugin without an update site of
+        // its own has only the built-in one.
+        if (candidate.SourceUrl is { } source && ownRepository is not null && source != installed.OverrideUrl &&
+            UpdateSourceFactory.Repository(source) != ownRepository)
+            Add("R25", FindingSeverity.Warning, $"The update comes from {source}, not from the plugin's update site {installed.UpdateUrl}.", true);
+        // A plugin folder linked to a working copy would be replaced by the downloaded copy, the link and all.
+        if (Directory.Exists(installed.Directory) && (File.GetAttributes(installed.Directory) & FileAttributes.ReparsePoint) != 0)
+            Add("R20", FindingSeverity.Error, "The plugin folder is a link; update the plugin where it points to.");
         var installedFiles = Directory.Exists(installed.Directory) ? PackageFiles.Files(installed.Directory).ToArray() : [];
         // What differs between plugin kinds, e.g. the native libraries of a GDExtension plugin.
         var kind = PluginKinds.ForPackage(installed, script, files, installedFiles);

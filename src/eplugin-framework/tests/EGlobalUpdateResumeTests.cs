@@ -103,6 +103,29 @@ public class EGlobalUpdateResumeTests : IDisposable
     }
 
     [TestCase]
+    public void StagingFoldersWithoutAJournalAreDeletedOnceTheyAreOld()
+    {
+        // The manager deletes a batch it staged but did not install; an assembly reload or a crash forgets it.
+        var updates = Path.Combine(_fixture.Root, ".godot", "eplugin", "updates");
+        var abandoned = Path.Combine(updates, "abandoned");
+        var staging = Path.Combine(updates, "staging-now");
+        foreach (var folder in new[] { abandoned, staging })
+        {
+            Directory.CreateDirectory(Path.Combine(folder, "staging", "tool"));
+            File.WriteAllText(Path.Combine(folder, "staging", "tool", "plugin.cfg"), "");
+        }
+        Directory.SetLastWriteTimeUtc(abandoned, DateTime.UtcNow.AddDays(-1));
+        var kept = Journal(UpdatePhase.RolledBack, Guid.NewGuid());
+        Directory.SetLastWriteTimeUtc(kept.Directory, DateTime.UtcNow.AddDays(-1));
+
+        _fixture.Global.ResumeUpdates();
+
+        Assertions.AssertBool(Directory.Exists(abandoned)).IsFalse();
+        Assertions.AssertBool(Directory.Exists(staging)).IsTrue();
+        Assertions.AssertBool(Directory.Exists(kept.Directory)).IsTrue();
+    }
+
+    [TestCase]
     public void AVerifiedUpdateIsCommittedAndOneThatLostItsMarkerIsLeftForRepair()
     {
         var verified = Journal(UpdatePhase.Verified, Attempt());

@@ -259,7 +259,7 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
             view.Status(request.VersionInstall ? "Installing the selected version..." : "Installing selected addons...");
             // Independent groups are installed one after another; a failing group is rolled back without the others.
             // Only an update started from the plugin's details asks whether to keep a version that does not build.
-            // The review installs a package that moves to another host only when the user checked it.
+            // The review installs a package from or moving to another repository only when the user checked it.
             var results = await host.ApplyUpdatesAsync(selected, _directory!, selected.Any(p => p.Findings.Any(f => f.RequiresTrust)),
                 askOnBuildFailure: request.VersionInstall);
             var skipped = Refused;

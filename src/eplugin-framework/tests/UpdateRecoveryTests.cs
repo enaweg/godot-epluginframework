@@ -67,6 +67,21 @@ public class UpdateRecoveryTests
         Assertions.AssertBool(Directory.Exists(Path.Combine(addon, ".new"))).IsTrue();
     }
     [TestCase]
+    public void EarlyRecoveryUsesTheNewProjectBackupWhenReplacingItWasInterrupted()
+    {
+        // The new backup was complete when the old one was moved aside; the journal, saved afterwards, still lists the old
+        // one's files.
+        var backup = Path.Combine(_folder, "backup-project");
+        Directory.Move(backup, backup + ".new");
+        File.WriteAllText(Path.Combine(backup + ".new", "nuget.config"), "<configuration />");
+        Directory.CreateDirectory(backup + ".old");
+        File.WriteAllText(Path.Combine(backup + ".old", "Game.csproj"), "older project");
+        _journal.StartCount = 1; _journal.Save();
+        Assertions.AssertObject(Recover()).IsEqual(UpdateRecovery.Outcome.Restart);
+        Assertions.AssertString(File.ReadAllText(Path.Combine(_root, "Game.csproj"))).IsEqual("working project");
+        Assertions.AssertBool(File.Exists(Path.Combine(_root, "nuget.config"))).IsTrue();
+    }
+    [TestCase]
     public void HealthyMarkerPreventsEarlyRollback()
     {
         _journal.StartCount = 9; _journal.Save();

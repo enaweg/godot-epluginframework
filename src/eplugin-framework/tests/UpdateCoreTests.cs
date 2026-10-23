@@ -176,6 +176,37 @@ public class UpdateCoreTests
     }
 
     [TestCase]
+    public static async Task ChecksChangeTheCacheOnlyWhereItsOtherWritersRun()
+    {
+        // Checks and version lists run on a thread-pool thread, while installing an update changes the cache on the editor
+        // thread: the cache is read and written only through the work handed to the editor thread.
+        var store = new MemoryStore();
+        var queued = new List<Action>();
+        var service = new UpdateService(new Factory(), new SystemClock(), store, (action, _) => { queued.Add(action); return Task.CompletedTask; });
+        await service.CheckAsync([Target("healthy")], new(), CancellationToken.None);
+        await service.ListVersionsAsync(Target("listed", "1.5.0") with { UpdateUrl = "https://example.org/listed/releases" }, new(), CancellationToken.None);
+        Assertions.AssertObject(store.State.LastCheckUtc).IsNull();
+        Assertions.AssertInt(store.State.Results.Count).IsEqual(0);
+        Assertions.AssertInt(queued.Count).IsEqual(2);
+        foreach (var action in queued) action();
+        Assertions.AssertObject(store.State.LastCheckUtc).IsNotNull();
+        Assertions.AssertArray(store.State.Results.Select(c => c.Slug).ToArray()).ContainsExactly("healthy", "listed");
+    }
+
+    [TestCase]
+    public static void VersionsOfFailuresAndInstalledReleasesAreComparedByValue()
+    {
+        // A failure records the plugin.cfg version, a release announces its tag's; Godot reads an unquoted 1.2.0 as 1.2.
+        var cache = new UpdateCache();
+        cache.FailedUpdates["plugin"] = [new("1.2.0", "failed", DateTimeOffset.UtcNow)];
+        Assertions.AssertObject(cache.LastFailure(Candidate("plugin", "v1.2.0"))).IsNotNull();
+        Assertions.AssertObject(cache.LastFailure(Candidate("plugin", "v1.2.1"))).IsNull();
+        var installed = Candidate("plugin", "v1.3.0") with { InstalledVersion = "1.2", ResolvedRevision = "abc", SourceUrl = "https://example.org/plugin" };
+        var revisions = new Dictionary<string, AppliedRevision> { ["plugin"] = new("https://example.org/plugin", "abc", DateTimeOffset.UtcNow, "1.2.0") };
+        Assertions.AssertThat(UpdateService.WithoutInstalled([installed], revisions)).IsEmpty();
+    }
+
+    [TestCase]
     public static void UpdatesMoveToTheNextBetterVersionOfTheSameKind()
     {
         static bool IsUpdate(string installed, string version) =>
