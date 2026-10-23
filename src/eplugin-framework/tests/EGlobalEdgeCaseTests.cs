@@ -165,6 +165,34 @@ public partial class EGlobalEdgeCaseTests : IDisposable
     }
 
     [TestCase]
+    public void APluginCanStillBeToggledAfterAPullChangedTheStateFile()
+    {
+        _fixture.AddEPlugin("a", b => b.AddNuget("A.Package"));
+        _fixture.AddEPlugin("b", b => b.AddNuget("B.Package"));
+        _fixture.Enable("a");
+        // a git pull brings a teammate's plugin state while the editor runs
+        var path = Path.Combine(_fixture.Root, "addons", "eplugin-state.json");
+        var copy = Path.Combine(_fixture.Root, "pulled.json");
+        File.Copy(path, copy);
+        var teammate = new PluginStateStore(copy, null);
+        Assertions.AssertBool(teammate.Load()).IsTrue();
+        Assertions.AssertBool(teammate.TryBeginAttempt("other", "3.0", PersistedPluginState.Activated, out var id)).IsTrue();
+        Assertions.AssertBool(teammate.TryComplete(id, [new SharedPluginState("other", "3.0", PersistedPluginState.Activated)])).IsTrue();
+        File.Copy(copy, path, true);
+
+        _fixture.Enable("b");
+        _fixture.Disable("a");
+
+        Assertions.AssertObject(_fixture.State("b")).IsEqual(EEditorPluginState.Activated);
+        Assertions.AssertObject(_fixture.State("a")).IsEqual(EEditorPluginState.Deactivated);
+        var reloaded = new PluginStateStore(path, null);
+        Assertions.AssertBool(reloaded.Load()).IsTrue();
+        Assertions.AssertObject(reloaded.GetShared("other")!.State).IsEqual(PersistedPluginState.Activated);
+        Assertions.AssertObject(reloaded.GetShared("b")!.State).IsEqual(PersistedPluginState.Activated);
+        Assertions.AssertObject(reloaded.GetShared("a")!.State).IsEqual(PersistedPluginState.Deactivated);
+    }
+
+    [TestCase]
     public void EnablingAPluginThatABlockedPluginWouldUseOptionallyFails()
     {
         _fixture.AddEPlugin("extra", b => b.AddNuget("Extra.Package"));

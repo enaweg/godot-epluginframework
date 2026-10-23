@@ -152,7 +152,8 @@ public class LicenseTests
         Assertions.AssertBool(File.Exists(path)).IsFalse();
 
         var changed = StoreWithBaseline(out var shared);
-        File.AppendAllText(shared, " ");
+        // an unresolved merge conflict
+        File.WriteAllText(shared, "<<<<<<< HEAD\n");
         Assertions.AssertBool(changed.TryRecordLicenses([Accepted("plugin")])).IsFalse();
         Assertions.AssertBool(changed.IsLicenseAccepted("plugin", "LICENSE")).IsTrue();
     }

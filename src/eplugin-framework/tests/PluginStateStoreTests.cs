@@ -116,14 +116,15 @@ public class PluginStateStoreTests
     }
 
     [TestCase]
-    public void ExternalEditPreventsFinalization()
+    public void AnExternalEditOfTheSamePluginPreventsFinalization()
     {
         var (store, path) = NewStore();
-        Assertions.AssertBool(store.TryCreateBaseline([])).IsTrue();
+        Assertions.AssertBool(store.TryCreateBaseline([new SharedPluginState("sample_plugin", "1.0", PersistedPluginState.Deactivated)])).IsTrue();
         Assertions.AssertBool(store.TryBeginAttempt("sample_plugin", "1.0", PersistedPluginState.Activated,
             out var id)).IsTrue();
 
-        File.AppendAllText(path, " ");
+        // a teammate enabled it too, in another version
+        Pull(path, other => Complete(other, "sample_plugin", "1.1", PersistedPluginState.Activated));
         var edited = File.ReadAllBytes(path);
         Assertions.AssertBool(store.TryComplete(id, [
             new SharedPluginState("sample_plugin", "1.0", PersistedPluginState.Activated)
@@ -131,6 +132,54 @@ public class PluginStateStoreTests
 
         Assertions.AssertBool(edited.SequenceEqual(File.ReadAllBytes(path))).IsTrue();
         Assertions.AssertBool(File.Exists(path + ".user")).IsTrue();
+    }
+
+    [TestCase]
+    public void AnExternalEditOfOtherEntriesIsKeptWhenAPluginIsFinalized()
+    {
+        var (store, path) = NewStore();
+        Assertions.AssertBool(store.TryCreateBaseline([])).IsTrue();
+        Assertions.AssertBool(store.TryBeginAttempt("sample_plugin", "1.0", PersistedPluginState.Activated,
+            out var id)).IsTrue();
+
+        // e.g. a git pull of another plugin's state, a license and a welcome page while the editor runs
+        Pull(path, other =>
+        {
+            Complete(other, "other_plugin", "2.0", PersistedPluginState.Activated);
+            Assertions.AssertBool(other.TryRecordLicenses([new AcceptedLicense("other_plugin", "LICENSE", "2.0", DateTimeOffset.UnixEpoch, false)])).IsTrue();
+        });
+        Assertions.AssertBool(store.TryComplete(id, [
+            new SharedPluginState("sample_plugin", "1.0", PersistedPluginState.Activated)
+        ])).IsTrue();
+        Assertions.AssertBool(store.TryRecordWelcomes([new ShownWelcome("sample_plugin", "1.0", DateTimeOffset.UnixEpoch)])).IsTrue();
+
+        Assertions.AssertBool(store.IsBlocked("sample_plugin")).IsFalse();
+        var reloaded = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(reloaded.Load()).IsTrue();
+        Assertions.AssertObject(reloaded.GetShared("sample_plugin")!.State).IsEqual(PersistedPluginState.Activated);
+        Assertions.AssertString(reloaded.GetShared("other_plugin")!.Version).IsEqual("2.0");
+        Assertions.AssertBool(reloaded.IsLicenseAccepted("other_plugin", "LICENSE")).IsTrue();
+        Assertions.AssertBool(reloaded.IsWelcomeShown("sample_plugin")).IsTrue();
+    }
+
+    /// <summary>Changes the shared file like a git pull of a teammate's change: through another store on a copy of it.</summary>
+    private void Pull(string path, Action<PluginStateStore> change)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "eplugin-state-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        _directories.Add(directory);
+        var copy = Path.Combine(directory, "eplugin-state.json");
+        File.Copy(path, copy);
+        var other = new PluginStateStore(copy, new NullLogger());
+        Assertions.AssertBool(other.Load()).IsTrue();
+        change(other);
+        File.Copy(copy, path, true);
+    }
+
+    private static void Complete(PluginStateStore store, string slug, string version, PersistedPluginState state)
+    {
+        Assertions.AssertBool(store.TryBeginAttempt(slug, version, state, out var id)).IsTrue();
+        Assertions.AssertBool(store.TryComplete(id, [new SharedPluginState(slug, version, state)])).IsTrue();
     }
 
     [TestCase]
@@ -355,7 +404,7 @@ public class PluginStateStoreTests
     }
 
     [TestCase]
-    public void AnUnchangedCompletionStillRefusesAFileEditedOnDisk()
+    public void AnUnchangedCompletionLeavesAFileEditedOnDiskAsItIs()
     {
         var (store, path) = NewStore();
         Assertions.AssertBool(store.TryCreateBaseline([
@@ -363,9 +412,25 @@ public class PluginStateStoreTests
         ])).IsTrue();
         Assertions.AssertBool(store.TryBeginAttempt("sample_plugin", "1.0", PersistedPluginState.Activated, out var id)).IsTrue();
         File.AppendAllText(path, " ");
+        var edited = File.ReadAllBytes(path);
+
+        Assertions.AssertBool(store.TryComplete(id, [new("sample_plugin", "1.0", PersistedPluginState.Activated)])).IsTrue();
+        Assertions.AssertBool(store.IsBlocked("sample_plugin")).IsFalse();
+        Assertions.AssertBool(edited.SequenceEqual(File.ReadAllBytes(path))).IsTrue();
+    }
+
+    [TestCase]
+    public void AnUnreadableEditOnDiskStillPreventsFinalization()
+    {
+        var (store, path) = NewStore();
+        Assertions.AssertBool(store.TryCreateBaseline([])).IsTrue();
+        Assertions.AssertBool(store.TryBeginAttempt("sample_plugin", "1.0", PersistedPluginState.Activated, out var id)).IsTrue();
+        // an unresolved merge conflict
+        File.WriteAllText(path, "<<<<<<< HEAD\n{}\n=======\n{}\n>>>>>>> other\n");
 
         Assertions.AssertBool(store.TryComplete(id, [new("sample_plugin", "1.0", PersistedPluginState.Activated)])).IsFalse();
         Assertions.AssertBool(store.IsBlocked("sample_plugin")).IsTrue();
+        Assertions.AssertString(File.ReadAllText(path)).StartsWith("<<<<<<< HEAD");
     }
 
     [TestCase]

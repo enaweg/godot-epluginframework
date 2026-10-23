@@ -162,7 +162,8 @@ public class UpdateTransactionTests
     [TestCase]
     public void ExternalSharedChangePreventsCommitAndPreservesHealthyFiles()
     {
-        _host.OnScan = () => File.AppendAllText(_shared, " ");
+        // a teammate's change of the same plugin's entry, pulled while the update runs
+        _host.OnScan = () => File.WriteAllText(_shared, File.ReadAllText(_shared).Replace("\"0.9.0\"", "\"0.9.5\""));
         var package = Package();
         Assertions.AssertObject(_applier.Apply([package.Package], package.Directory)).IsEqual(UpdateOutcome.KeptWithErrors);
         Assertions.AssertString(_store.GetLocal("plugin")!.Reason).IsEqual("update_commit_failed");
@@ -434,8 +435,8 @@ public class UpdateTransactionTests
     [TestCase]
     public void RetryRollsBackAnUpdateWhosePluginsNoLongerVerify()
     {
-        // a commit that failed
-        _host.OnScan = () => File.AppendAllText(_shared, " ");
+        // a commit that failed: a teammate's change of the same plugin's entry was pulled while the update ran
+        _host.OnScan = () => File.WriteAllText(_shared, File.ReadAllText(_shared).Replace("\"0.9.0\"", "\"0.9.5\""));
         var package = Package();
         Assertions.AssertObject(_applier.Apply([package.Package], package.Directory)).IsEqual(UpdateOutcome.KeptWithErrors);
         Assertions.AssertString(_store.GetLocal("plugin")!.Reason).IsEqual("update_commit_failed");

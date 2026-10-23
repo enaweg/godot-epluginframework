@@ -159,24 +159,10 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
                 : JsonSerializer.Deserialize<LocalDocument>(localBytes, JsonOptions)
                   ?? throw new InvalidDataException("Local plugin state is null.");
             Validate(shared, local);
-            _shared = shared.Plugins!.ToDictionary(x => x.Slug!, x =>
-                new SharedPluginState(x.Slug!, x.Version!, x.State!.Value), StringComparer.Ordinal);
+            UseShared(shared);
             _local = local.Attempts!.ToDictionary(x => x.Slug!, x =>
                 new LocalPluginAttempt(x.AttemptId!.Value, x.Slug!, x.InstalledVersion,
                     x.TargetState!.Value, x.State!.Value, x.Reason!), StringComparer.Ordinal);
-            _licenses = (shared.Licenses ?? []).ToDictionary(x => x.Slug!, x =>
-                new AcceptedLicense(x.Slug!, x.License!, x.Version ?? "", x.AcceptedUtc ?? default, x.Automatic),
-                StringComparer.Ordinal);
-            _welcomes = (shared.Welcomes ?? []).ToDictionary(x => x.Slug!, x =>
-                new ShownWelcome(x.Slug!, x.Version ?? "", x.ShownUtc ?? default), StringComparer.Ordinal);
-            _lastCompletedAttemptId = shared.LastCompletedAttemptId;
-            _sharedExtras = new Extras
-            {
-                Document = shared.Unknown,
-                Plugins = Unknown(shared.Plugins, x => x.Slug, x => x.Unknown),
-                Licenses = Unknown(shared.Licenses, x => x.Slug, x => x.Unknown),
-                Welcomes = Unknown(shared.Welcomes, x => x.Slug, x => x.Unknown)
-            };
             _localExtras = new Extras { Document = local.Unknown, Plugins = Unknown(local.Attempts, x => x.Slug, x => x.Unknown) };
             IsReadOnly = false;
 
@@ -205,6 +191,26 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
             logger?.Error($"Cannot load plugin state at {_sharedPath} or {_localPath}: {ex.Message}. Files were preserved.");
             return false;
         }
+    }
+
+    /// <summary>Takes the entries of a read shared document as this store's own.</summary>
+    private void UseShared(SharedDocument shared)
+    {
+        _shared = shared.Plugins!.ToDictionary(x => x.Slug!, x =>
+            new SharedPluginState(x.Slug!, x.Version!, x.State!.Value), StringComparer.Ordinal);
+        _licenses = (shared.Licenses ?? []).ToDictionary(x => x.Slug!, x =>
+            new AcceptedLicense(x.Slug!, x.License!, x.Version ?? "", x.AcceptedUtc ?? default, x.Automatic),
+            StringComparer.Ordinal);
+        _welcomes = (shared.Welcomes ?? []).ToDictionary(x => x.Slug!, x =>
+            new ShownWelcome(x.Slug!, x.Version ?? "", x.ShownUtc ?? default), StringComparer.Ordinal);
+        _lastCompletedAttemptId = shared.LastCompletedAttemptId;
+        _sharedExtras = new Extras
+        {
+            Document = shared.Unknown,
+            Plugins = Unknown(shared.Plugins, x => x.Slug, x => x.Unknown),
+            Licenses = Unknown(shared.Licenses, x => x.Slug, x => x.Unknown),
+            Welcomes = Unknown(shared.Welcomes, x => x.Slug, x => x.Unknown)
+        };
     }
 
     /// <summary>Creates the one-time baseline only when no shared file exists.</summary>
@@ -380,16 +386,8 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
 
         // Recovery asks whether an update was acknowledged, so only an acknowledgement records its attempt. Enabling and
         // disabling keep the committed file as it is when no entry changed, so teammates do not get a needless change.
-        var unchanged = next.Count == _shared.Count && next.All(x => _shared.TryGetValue(x.Key, out var y) && y == x.Value);
-        if (!acknowledgeVersions && unchanged)
-        {
-            if (!EqualBytes(File.Exists(_sharedPath) ? File.ReadAllBytes(_sharedPath) : null, _sharedBytes))
-            {
-                logger?.Error($"Plugin state changed on disk at {_sharedPath}; refusing to overwrite it.");
-                return false;
-            }
-        }
-        else if (!SaveShared(next, acknowledgeVersions ? attemptId : _lastCompletedAttemptId))
+        if (!SaveShared(next, acknowledgeVersions ? attemptId : _lastCompletedAttemptId,
+                touched: participants.Select(p => p.Slug).ToArray(), onlyWhenChanged: !acknowledgeVersions))
         {
             return false;
         }
@@ -409,18 +407,27 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
         return true;
     }
 
+    /// <param name="touched">Plugins whose entries this write decides, also when their value stays the same.</param>
+    /// <param name="onlyWhenChanged">Leaves the file as it is when nothing in it would change.</param>
     private bool SaveShared(Dictionary<string, SharedPluginState> states, Guid? completedAttemptId,
-        Dictionary<string, AcceptedLicense>? licenses = null, Dictionary<string, ShownWelcome>? welcomes = null)
+        Dictionary<string, AcceptedLicense>? licenses = null, Dictionary<string, ShownWelcome>? welcomes = null,
+        IReadOnlyCollection<string>? touched = null, bool onlyWhenChanged = false)
     {
         licenses ??= _licenses;
         welcomes ??= _welcomes;
         try
         {
             var actual = File.Exists(_sharedPath) ? File.ReadAllBytes(_sharedPath) : null;
-            if (!EqualBytes(actual, _sharedBytes))
+            if (!EqualBytes(actual, _sharedBytes) && !Rebase(actual, touched ?? [], ref states, ref completedAttemptId, ref licenses, ref welcomes))
             {
-                logger?.Error($"Plugin state changed on disk at {_sharedPath}; refusing to overwrite it.");
+                logger?.Error($"Plugin state changed on disk at {_sharedPath} in the same entries; refusing to overwrite it.");
                 return false;
+            }
+
+            if (onlyWhenChanged && SameEntries(states, _shared) && SameEntries(licenses, _licenses) &&
+                SameEntries(welcomes, _welcomes) && completedAttemptId == _lastCompletedAttemptId)
+            {
+                return true;
             }
 
             var document = new SharedDocument
@@ -523,8 +530,28 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
 
     private static void Validate(SharedDocument shared, LocalDocument local)
     {
-        if (shared.SchemaVersion != SchemaVersion || local.SchemaVersion != SchemaVersion ||
-            shared.Plugins is null || local.Attempts is null)
+        if (local.SchemaVersion != SchemaVersion || local.Attempts is null)
+        {
+            throw new InvalidDataException("Unsupported or incomplete plugin state schema.");
+        }
+
+        ValidateShared(shared);
+        var slugs = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var entry in local.Attempts)
+        {
+            if (entry.AttemptId is null || entry.AttemptId == Guid.Empty ||
+                !ValidSlug(entry.Slug) || entry.TargetState is null || !IsCompleted(entry.TargetState.Value) ||
+                entry.State is not (PersistedPluginState.Failed or PersistedPluginState.Invalid) ||
+                string.IsNullOrWhiteSpace(entry.Reason) || !slugs.Add(entry.Slug!))
+            {
+                throw new InvalidDataException("Local plugin state has an invalid or duplicate attempt.");
+            }
+        }
+    }
+
+    private static void ValidateShared(SharedDocument shared)
+    {
+        if (shared.SchemaVersion != SchemaVersion || shared.Plugins is null)
         {
             throw new InvalidDataException("Unsupported or incomplete plugin state schema.");
         }
@@ -556,18 +583,6 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
                 throw new InvalidDataException("Shared plugin state has an invalid or duplicate welcome page.");
             }
         }
-
-        slugs.Clear();
-        foreach (var entry in local.Attempts)
-        {
-            if (entry.AttemptId is null || entry.AttemptId == Guid.Empty ||
-                !ValidSlug(entry.Slug) || entry.TargetState is null || !IsCompleted(entry.TargetState.Value) ||
-                entry.State is not (PersistedPluginState.Failed or PersistedPluginState.Invalid) ||
-                string.IsNullOrWhiteSpace(entry.Reason) || !slugs.Add(entry.Slug!))
-            {
-                throw new InvalidDataException("Local plugin state has an invalid or duplicate attempt.");
-            }
-        }
     }
 
     private static bool IsCompleted(PersistedPluginState state) =>
@@ -582,6 +597,79 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
     private static bool ValidSlug(string? slug) =>
         !string.IsNullOrWhiteSpace(slug) && slug != "." && slug != ".." &&
         slug.IndexOfAny(['/', '\\']) < 0;
+
+    /// <summary>
+    /// Moves this store's changes onto a shared file that changed on disk since it was read, e.g. by a git pull: the file
+    /// becomes the store's state, and the entries the changes set (and <paramref name="touched"/>) are set in it. Returns
+    /// false, leaving the store as it was, when the file is gone, cannot be read, or changed one of those entries too.
+    /// </summary>
+    private bool Rebase(byte[]? actual, IReadOnlyCollection<string> touched, ref Dictionary<string, SharedPluginState> states,
+        ref Guid? completedAttemptId, ref Dictionary<string, AcceptedLicense> licenses, ref Dictionary<string, ShownWelcome> welcomes)
+    {
+        if (actual is null || _sharedBytes is null)
+        {
+            return false;
+        }
+
+        SharedDocument disk;
+        try
+        {
+            disk = JsonSerializer.Deserialize<SharedDocument>(actual, JsonOptions) ?? throw new InvalidDataException("Shared plugin state is null.");
+            ValidateShared(disk);
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidDataException)
+        {
+            logger?.Warn($"Plugin state at {_sharedPath} changed on disk and cannot be read: {ex.Message}");
+            return false;
+        }
+
+        var (baseStates, baseLicenses, baseWelcomes, baseCompleted) = (_shared, _licenses, _welcomes, _lastCompletedAttemptId);
+        var baseExtras = _sharedExtras;
+        UseShared(disk);
+        var mergedStates = Merge(baseStates, states, _shared, touched);
+        var mergedLicenses = Merge(baseLicenses, licenses, _licenses, []);
+        var mergedWelcomes = Merge(baseWelcomes, welcomes, _welcomes, []);
+        var completedChanged = completedAttemptId != baseCompleted;
+        if (mergedStates is null || mergedLicenses is null || mergedWelcomes is null ||
+            completedChanged && _lastCompletedAttemptId != baseCompleted)
+        {
+            (_shared, _licenses, _welcomes, _lastCompletedAttemptId, _sharedExtras) = (baseStates, baseLicenses, baseWelcomes, baseCompleted, baseExtras);
+            return false;
+        }
+
+        _sharedBytes = actual;
+        logger?.Log($"Plugin state changed on disk at {_sharedPath}; its other entries are kept.");
+        (states, licenses, welcomes) = (mergedStates, mergedLicenses, mergedWelcomes);
+        completedAttemptId = completedChanged ? completedAttemptId : _lastCompletedAttemptId;
+        return true;
+    }
+
+    /// <summary>
+    /// <paramref name="disk"/> with the entries <paramref name="ours"/> changed against <paramref name="original"/>, and
+    /// those of <paramref name="touched"/>; null when the disk changed one of them as well.
+    /// </summary>
+    private static Dictionary<string, T>? Merge<T>(Dictionary<string, T> original, Dictionary<string, T> ours,
+        Dictionary<string, T> disk, IReadOnlyCollection<string> touched)
+    {
+        var changed = original.Keys.Union(ours.Keys).Where(slug => !Equals(original.GetValueOrDefault(slug), ours.GetValueOrDefault(slug)))
+            .Union(touched).ToArray();
+        if (changed.Any(slug => !Equals(original.GetValueOrDefault(slug), disk.GetValueOrDefault(slug))))
+        {
+            return null;
+        }
+
+        var merged = new Dictionary<string, T>(disk, StringComparer.Ordinal);
+        foreach (var slug in changed)
+        {
+            if (ours.TryGetValue(slug, out var value)) merged[slug] = value;
+            else merged.Remove(slug);
+        }
+
+        return merged;
+    }
+
+    private static bool SameEntries<T>(Dictionary<string, T> first, Dictionary<string, T> second) =>
+        first.Count == second.Count && first.All(x => second.TryGetValue(x.Key, out var y) && Equals(x.Value, y));
 
     private static bool EqualBytes(byte[]? first, byte[]? second) =>
         first is null ? second is null : second is not null && first.SequenceEqual(second);
