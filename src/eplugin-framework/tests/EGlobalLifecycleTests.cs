@@ -293,6 +293,28 @@ public class EGlobalLifecycleTests : IDisposable
     }
 
     [TestCase]
+    public void DisablingAPluginWithAnOptionalRecipeForItsOwnDependantDisablesBoth()
+    {
+        _fixture.AddEPlugin("core", b => b
+            .AddNuget("Core.Package")
+            .AddOptionalPluginDependency("extension", null, optional => optional.AddNuget("Core.Extension")));
+        _fixture.AddEPlugin("extension", b => b.AddNuget("Extension.Package").AddPluginDependency("core"));
+        _fixture.Enable("core");
+        _fixture.Enable("extension");
+        Assertions.AssertThat(_fixture.Operations).Contains("add-nuget Core.Extension");
+
+        var start = _fixture.Operations.Count;
+        _fixture.Disable("core");
+
+        Assertions.AssertObject(_fixture.State("core")).IsEqual(EEditorPluginState.Deactivated);
+        Assertions.AssertObject(_fixture.State("extension")).IsEqual(EEditorPluginState.Deactivated);
+        Assertions.AssertThat(OperationsSince(start)).ContainsExactly(
+            "remove-nuget Extension.Package", "remove-nuget Core.Extension", "remove-nuget Core.Package", "build");
+        Assertions.AssertObject(_fixture.Store.GetLocal("core")).IsNull();
+        Assertions.AssertObject(_fixture.Store.GetShared("extension")!.State).IsEqual(PersistedPluginState.Deactivated);
+    }
+
+    [TestCase]
     public void APlainPluginEnabledInProjectSettingsWaitsForItsLicense()
     {
         _fixture.AddPlainPlugin("tool", extraConfig: "license_required=true");

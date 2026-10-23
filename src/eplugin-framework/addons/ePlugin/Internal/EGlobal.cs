@@ -1146,7 +1146,7 @@ internal sealed partial class EGlobal
     {
         foreach (var other in _contexts.ToArray())
         {
-            if (other.Slug == enabledSlug || other.Plugin is null)
+            if (other.Slug == enabledSlug || other.Plugin is null || IsBeingDeactivated(other))
             {
                 continue;
             }
@@ -1195,6 +1195,10 @@ internal sealed partial class EGlobal
         }
     }
 
+    /// <summary>Whether the current transition disables the plugin, now or once its dependants are disabled.</summary>
+    private bool IsBeingDeactivated(PluginContext context) =>
+        _transition?.Participants.GetValueOrDefault(context) == PersistedPluginState.Deactivated || _toCheckDisable.Contains(context);
+
     /// <summary>
     /// Reverses the nested recipes that other installed plugins got because the plugin
     /// <paramref name="disabledSlug"/> was available. Without this their code would keep referencing a
@@ -1204,7 +1208,9 @@ internal sealed partial class EGlobal
     {
         foreach (var other in _contexts.ToArray())
         {
-            if (other.Slug == disabledSlug || other.Plugin is null)
+            // a plugin this transition disables reverses its whole snapshot itself, e.g. one that a dependant of it
+            // declares an optional dependency of
+            if (other.Slug == disabledSlug || other.Plugin is null || IsBeingDeactivated(other))
             {
                 continue;
             }
