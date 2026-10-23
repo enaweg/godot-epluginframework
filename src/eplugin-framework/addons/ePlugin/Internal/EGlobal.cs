@@ -1332,6 +1332,18 @@ internal sealed partial class EGlobal
             return;
         }
 
+        if (!IsValid())
+        {
+            // Without the framework there is no dotnet CLI or state file to uninstall with, and Godot frees the plugin
+            // right after this callback, so its uninstall cannot wait for the framework either. A partial uninstall that
+            // records nothing would leave the project in a state no retry knows about.
+            var warning = $"{context.Slug} was disabled while the ePlugin framework is not running, so its recipe stays installed. " +
+                          "Enable the framework, then enable and disable the plugin again to remove it.";
+            if (context.Logger is { } logger) logger.Warn(warning);
+            else GD.PushWarning(warning);
+            return;
+        }
+
         if (_toCheckEnable.Contains(context))
         {
             // plugin in process of enablement, skip disable
