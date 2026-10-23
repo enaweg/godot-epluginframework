@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using Enaweg.Plugin.Internal.Dotnet;
 using Enaweg.Plugin.Logging;
 using GdUnit4;
@@ -219,6 +220,47 @@ public class NugetConfigManagerTests
 
         Assertions.AssertThat(Directory.GetFiles(Root).Select(Path.GetFileName).ToArray()).ContainsExactly("NuGet.Config");
         Assertions.AssertThat(File.ReadAllText(own)).NotContains("addons/a");
+    }
+
+    [TestCase]
+    public static void TheProjectsFormattingIsKeptAndOnlyTheManagedEntryChanges()
+    {
+        // committed and shared by the team: four spaces, CRLF, a byte order mark and a declaration without encoding
+        const string config = "<?xml version=\"1.0\"?>\r\n<configuration>\r\n    <packageSources>\r\n" +
+                              "        <add key=\"team\" value=\"https://feed.example.com/v3/index.json\" />\r\n" +
+                              "    </packageSources>\r\n</configuration>\r\n";
+        byte[] original = [.. Encoding.UTF8.Preamble, .. Encoding.UTF8.GetBytes(config)];
+        File.WriteAllBytes(ConfigPath, original);
+
+        NugetConfigManager.RegisterSource(Root, "plugin_a", "addons/a/.nuget", new NullLogger());
+
+        var content = File.ReadAllText(ConfigPath);
+        Assertions.AssertString(content).StartsWith("<?xml version=\"1.0\"?>\r\n<configuration>\r\n    <packageSources>\r\n" +
+                                                    "        <add key=\"team\" value=\"https://feed.example.com/v3/index.json\" />\r\n" +
+                                                    "        <!-- ePlugin-managed used-by=\"plugin_a\" -->\r\n        <add key=\"ePlugin-");
+        Assertions.AssertString(content).EndsWith(" value=\"./addons/a/.nuget\" />\r\n    </packageSources>\r\n</configuration>\r\n");
+
+        NugetConfigManager.UnregisterSource(Root, "plugin_a", "addons/a/.nuget", new NullLogger());
+
+        Assertions.AssertBool(File.ReadAllBytes(ConfigPath).SequenceEqual(original)).IsTrue();
+        Assertions.AssertThat(Directory.GetFiles(Root).Select(Path.GetFileName).ToArray()).ContainsExactly("nuget.config");
+    }
+
+    [TestCase]
+    public static void ANewFileIsIndentedAndAFileOnOneLineStaysOnOne()
+    {
+        NugetConfigManager.RegisterSource(Root, "plugin_a", "addons/a/.nuget", new NullLogger());
+        var content = File.ReadAllText(ConfigPath).ReplaceLineEndings("\n");
+        Assertions.AssertString(content).StartsWith("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<configuration>\n  <packageSources>\n" +
+                                                    "    <!-- ePlugin-managed used-by=\"plugin_a\" -->\n    <add key=\"ePlugin-");
+        Assertions.AssertString(content).EndsWith("/>\n  </packageSources>\n</configuration>\n");
+
+        const string inline = "<configuration><packageSources><add key=\"team\" value=\"https://feed.example.com/v3/index.json\" /></packageSources></configuration>";
+        File.WriteAllText(ConfigPath, inline);
+        NugetConfigManager.RegisterSource(Root, "plugin_a", "addons/a/.nuget", new NullLogger());
+        Assertions.AssertString(File.ReadAllText(ConfigPath)).NotContains("\n");
+        NugetConfigManager.UnregisterSource(Root, "plugin_a", "addons/a/.nuget", new NullLogger());
+        Assertions.AssertString(File.ReadAllText(ConfigPath)).IsEqual(inline);
     }
 
     private static int CountOccurrences(string haystack, string needle)
