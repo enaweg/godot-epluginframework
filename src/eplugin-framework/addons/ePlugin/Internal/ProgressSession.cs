@@ -141,9 +141,17 @@ internal sealed class ProgressSession : IProgressHelper
             var helper = ProcessIdentity.Of(process);
             Write(PathOf(directory, token, Record), [Protocol.ToString(CultureInfo.InvariantCulture), .. helper.Fields]);
             // Another editor may have started one at the same time: everybody uses the oldest, and the other one exits
-            // before anybody wrote to it.
-            if (Running(directory).FirstOrDefault() is var (oldest, older) && oldest != token &&
-                Connect(directory, oldest, older, handoff) is { } shared)
+            // before anybody wrote to it. None is running when the helper just started exited already, which leaves
+            // nothing to connect to, like a helper that did not start.
+            var running = Running(directory);
+            if (running.Count == 0)
+            {
+                commands.Dispose();
+                Discard(directory, token);
+                return null;
+            }
+
+            if (running[0] is var (oldest, older) && oldest != token && Connect(directory, oldest, older, handoff) is { } shared)
             {
                 commands.Dispose();
                 process.Kill();
