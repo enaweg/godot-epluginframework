@@ -84,7 +84,7 @@ Note: gdUnit4 editor tests are not currently possible in Godot (upstream
 [gdUnit4#911](https://github.com/MikeSchulze/gdUnit4/issues/911)), so tests exercise framework internals
 directly. `EGlobal` reaches the editor only through `IEditorHost` (`Internal/EditorHost.cs`); the lifecycle tests use
 `tests/LifecycleFixture.cs`, whose `FakeEditorHost` runs a plugin's enable/disable callback inside the toggle like
-Godot, with plugins in a temporary addons folder, a `RecordingCli` and real state files. Update transactions go through
+Godot (and throws when a plugin is disabled inside its own enable callback, which would free it there: `Post` that), with plugins in a temporary addons folder, a `RecordingCli` and real state files. Update transactions go through
 `EGlobal.UpdateHost` (`GodotUpdateHost` in the editor), which tests replace with a fake, and `EGlobal.UseInstance`
 lets tests drive the public `EnableEPlugin`/`DisableEPlugin` extensions against a fixture. Tests are compiled into the
 project assembly, so they use `internal` members; don't reach private ones through reflection.

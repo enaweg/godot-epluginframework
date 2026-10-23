@@ -108,8 +108,11 @@ public class EGlobalLifecycleTests : IDisposable
         _fixture.Enable("app");
 
         Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Error);
+        // disabled on the next frame, not inside its own _EnablePlugin, and nothing is built
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsTrue();
+        EGlobal.RunPosted();
         Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsFalse();
-        Assertions.AssertBool(_fixture.Operations.Any(o => o.StartsWith("add-", StringComparison.Ordinal))).IsFalse();
+        Assertions.AssertThat(_fixture.Operations).IsEmpty();
         Assertions.AssertString(_fixture.Store.GetLocal("app")!.Reason).IsEqual("dependency_resolution_failed");
         Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsFalse();
     }
@@ -145,6 +148,7 @@ public class EGlobalLifecycleTests : IDisposable
         _fixture.AddEPlugin("app", b => b.AddPluginDependency("missing"));
 
         _fixture.Enable("app");
+        EGlobal.RunPosted();
 
         Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Error);
         Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsFalse();
@@ -159,6 +163,7 @@ public class EGlobalLifecycleTests : IDisposable
         _fixture.Host.Broken.Add("base");
 
         _fixture.Enable("app");
+        EGlobal.RunPosted();
 
         Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Error);
         Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsFalse();
@@ -435,6 +440,7 @@ public class EGlobalLifecycleTests : IDisposable
 
         _fixture.Enable("a");
         _fixture.Enable("self");
+        EGlobal.RunPosted();
 
         Assertions.AssertObject(_fixture.State("a")).IsEqual(EEditorPluginState.Error);
         Assertions.AssertObject(_fixture.State("self")).IsEqual(EEditorPluginState.Error);

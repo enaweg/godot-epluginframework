@@ -1055,18 +1055,28 @@ internal sealed partial class EGlobal
 
     private void FailAllUncheckedPluginsAndRefresh(string reason)
     {
-        // disabling a plugin runs its DisableEPlugin, which leaves a plugin that is still waiting alone
-        foreach (var plugin in _toCheckEnable.ToArray())
+        var failed = _toCheckEnable.ToArray();
+        foreach (var plugin in failed)
         {
             plugin.State = EEditorPluginState.Error;
             plugin.ErrorDetail ??= new InvalidOperationException(reason);
-            _host.SetPluginEnabled(plugin.Slug, false);
         }
 
         _toCheckEnable.Clear();
 
         FailTransition("dependency_resolution_failed");
-        RefreshEditor();
+        // Godot may still be running the _EnablePlugin of each of them: the plugin that failed and those waiting for it
+        // as their dependency. Disabling one right away would free it inside its own callback, so they are disabled on
+        // the next frame. In error, the DisableEPlugin that runs changes nothing.
+        Post(() =>
+        {
+            foreach (var plugin in failed.Where(p => _host.IsPluginEnabled(p.Slug)))
+            {
+                _host.SetPluginEnabled(plugin.Slug, false);
+            }
+        });
+        // nothing of the failed activation is built: it is retried as a whole
+        RefreshEditor(rebuild: false);
     }
 
     /// <summary>
