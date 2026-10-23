@@ -19,8 +19,7 @@ internal sealed partial class EGlobal
     /// <summary>
     /// No plugin is being enabled, disabled or updated, so the welcome pages of the installed plugins can be shown.
     /// </summary>
-    private bool WelcomeQuiet => _transition is null && _toCheckEnable.Count == 0 && _toCheckDisable.Count == 0 &&
-                                 _recipeUpdateJournal is null && _pendingLicenseReview is null;
+    private bool WelcomeQuiet => !IsChangingPlugins && _recipeUpdateJournal is null && _pendingLicenseReview is null;
 
     /// <summary>
     /// The welcome pages of enabled plugins that were not shown for the project yet. Called every frame; looks for new

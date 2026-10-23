@@ -128,7 +128,8 @@ internal sealed partial class EGlobal
         }
         catch
         {
-            // Valid only once everything ran: a framework that is half set up would carry on with what is missing.
+            // An initialization that threw leaves the framework invalid, although it was valid while it ran: half set up,
+            // it would carry on with what is missing. EPluginPlugin tries again later.
             _ePluginContext = null;
             throw;
         }
@@ -151,7 +152,7 @@ internal sealed partial class EGlobal
         _stateStore = new PluginStateStore(StateFilePath, plugin.Logger);
         _stateStore.Load();
         InitializeUpdateJournals();
-        ReloadContexts(_loggerFactory, false);
+        ReloadContexts(_loggerFactory);
         CreateStateBaseline();
         RecordFrameworkEnabled(plugin);
         _plainPluginObserver = new PlainPluginObserver(_stateStore, GetEnabledPluginSlugs,
@@ -384,7 +385,7 @@ internal sealed partial class EGlobal
     /// <summary>
     /// If assembly reload is triggered based on code changes the contexts are lost. Need to rebuild it from active plugins.
     /// </summary>
-    internal void ReloadContexts(ILoggerFactory? loggerFactory, bool changeTriggered)
+    internal void ReloadContexts(ILoggerFactory? loggerFactory)
     {
         var logger = loggerFactory?.CreateLogger(GetType().FullName ?? "UNKNOWN");
         var children = _host.PluginNodes();
@@ -432,10 +433,10 @@ internal sealed partial class EGlobal
 
                 var context = GetOrCreateContext(pluginBase);
 
-                context.State = changeTriggered || _enabledWithFramework.Contains(context) || _toCheckEnable.Contains(context)
+                context.State = _enabledWithFramework.Contains(context) || _toCheckEnable.Contains(context)
                     ?
-                    // was a change to plugins, or the plugin was enabled while the framework was not initialized and
-                    // waits for its activation, so this is a new plugin need to bootstrap.
+                    // the plugin was enabled while the framework was not initialized and waits for its activation, so
+                    // this is a new plugin need to bootstrap.
                     EEditorPluginState.Created
                     :
                     // initial start or assembly reload, nothing need to be done as installation already happened
