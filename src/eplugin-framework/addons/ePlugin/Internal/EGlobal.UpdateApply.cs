@@ -56,6 +56,8 @@ internal sealed partial class EGlobal
         var directory = _updateJournals.NewDirectory();
         try
         {
+            // Validating a GDExtension needs the editor's version, which only the editor thread may ask Godot for.
+            _ = GDExtensionConfig.EditorVersion;
             var result = await Task.Run(() => new PackageFetcher(new(), new GitRunner()).FetchAsync(candidates, targets, directory, progress, ct, allowDowngrade, allowReinstall), ct);
             foreach (var refused in result.Refused) _ePluginContext?.Logger.Warn($"Skipping the update of {refused.Candidate.Slug} {refused.Candidate.NewVersion}: {refused.Reason}");
             return (result.Packages, result.Refused, directory);
