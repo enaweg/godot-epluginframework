@@ -54,7 +54,11 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
         // Column titles and sizing are not scene properties of Tree.
         _tree.SetColumnTitle(PluginColumn, "Plugin"); _tree.SetColumnTitle(SourceColumn, "Update source");
         _tree.SetColumnExpand(PluginColumn, false); _tree.SetColumnCustomMinimumWidth(PluginColumn, (int)(220 * EditorWindows.Scale));
-        _signals.Connect(_rescan, BaseButton.SignalName.Pressed, Callable.From(() => { _error = null; _ = _global.RebuildLocalIndexAsync(); }));
+        _signals.Connect(_rescan, BaseButton.SignalName.Pressed, Callable.From(() =>
+        {
+            _error = null;
+            ObservedTask.Run(_global.RebuildLocalIndexAsync(), ex => GD.PushError($"Rescanning the local directories failed: {ex.Message}"));
+        }));
         _signals.Connect(_addSite, BaseButton.SignalName.Pressed, Callable.From(() => OpenEditor(null)));
         _signals.Connect(_addDirectory, BaseButton.SignalName.Pressed, Callable.From(() => _folderDialog.PopupCentered()));
         _signals.Connect(_edit, BaseButton.SignalName.Pressed, Callable.From(() => OpenEditor(SelectedSlug())));

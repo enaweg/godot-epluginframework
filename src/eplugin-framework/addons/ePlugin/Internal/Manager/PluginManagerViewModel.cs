@@ -213,7 +213,7 @@ internal sealed class PluginManagerViewModel
         if (entry.Problem is not null)
             return !license.Required && entry.Source == PluginLicense.DefaultFile
                 ? $"[b]License:[/b] missing (no {PluginLicense.DefaultFile} file in the plugin directory)\n"
-                : $"[b]License:[/b] [color=#ff7070]{Escape(entry.Problem)}[/color]\n";
+                : $"[b]License:[/b] [color={TextColors.Error}]{Escape(entry.Problem)}[/color]\n";
         var state = !license.Required ? ""
             : license.IsAccepted ? $" (accepted {license.Accepted!.AcceptedUtc.ToLocalTime():d}{(license.Accepted.Automatic ? " automatically" : "")})"
             : license.Accepted is not null ? " (not accepted yet, an earlier license was)"
@@ -227,7 +227,7 @@ internal sealed class PluginManagerViewModel
     /// <summary>The welcome page line of the details: a link that shows the page again; empty without a page.</summary>
     public static string WelcomeLine(WelcomeEntry? welcome) =>
         welcome is null ? ""
-        : welcome.Problem is not null ? $"[b]Welcome page:[/b] [color=#ff7070]{Escape(welcome.Problem)}[/color]\n"
+        : welcome.Problem is not null ? $"[b]Welcome page:[/b] [color={TextColors.Error}]{Escape(welcome.Problem)}[/color]\n"
         : $"[b]Welcome page:[/b] [url={WelcomeMeta}]{Escape(PluginLicense.Display(welcome.Slug, welcome.Source))}[/url]\n";
 
     /// <summary>
@@ -287,7 +287,7 @@ internal sealed class PluginManagerViewModel
     public static string KeptUpdateSection(UpdateJournal kept)
     {
         var text = new StringBuilder("\n[b]Kept update[/b]\n");
-        foreach (var plugin in kept.Plugins) text.Append(CultureInfo.CurrentCulture, $"{Escape(plugin.Slug)} {Escape(plugin.OldVersion)} → [color=#ff7070]{Escape(plugin.NewVersion)}[/color]\n");
+        foreach (var plugin in kept.Plugins) text.Append(CultureInfo.CurrentCulture, $"{Escape(plugin.Slug)} {Escape(plugin.OldVersion)} → [color={TextColors.Error}]{Escape(plugin.NewVersion)}[/color]\n");
         text.Append(Escape((kept.Failure ?? "The project does not build with the new version").TrimEnd('.'))).Append(".\n");
         if (kept.ProjectErrors.Count > 0)
         {
@@ -309,12 +309,12 @@ internal sealed class PluginManagerViewModel
         foreach (var extension in extensions)
         {
             var state = extension.Config is null ? "" : !extension.ForThisPlatform ? "not for this platform"
-                : extension.Loaded ? "loaded" : "[color=#ff7070]not loaded[/color]";
+                : extension.Loaded ? "loaded" : $"[color={TextColors.Error}]not loaded[/color]";
             var reload = extension.Config is null ? "" : extension.Config.Reloadable ? "reloadable" : "not reloadable";
             var details = string.Join(", ", new[] { state, reload }.Where(d => d.Length > 0));
             text.Append(CultureInfo.CurrentCulture, $"{Escape(extension.File)}{(details.Length > 0 ? ": " + details : "")}\n");
             if (extension.Platforms.Count > 0) text.Append("Platforms: ").Append(Escape(string.Join(", ", extension.Platforms))).Append('\n');
-            if (extension.Problem is { } problem) text.Append(CultureInfo.CurrentCulture, $"[color=#ff7070]{Escape(problem)}[/color]\n");
+            if (extension.Problem is { } problem) text.Append(CultureInfo.CurrentCulture, $"[color={TextColors.Error}]{Escape(problem)}[/color]\n");
         }
         return text.ToString();
     }
@@ -333,7 +333,7 @@ internal sealed class PluginManagerViewModel
             if (value is null || !IsWebUrl(value)) Line(label, value);
             else text.Append(CultureInfo.CurrentCulture, $"[b]{label}:[/b] [url={value}]{Escape(value)}[/url]\n");
         }
-        if (row.NeedsAttention) text.Append(CultureInfo.CurrentCulture, $"[color=#ff7070]This plugin needs attention.[/color] [url={AttentionMeta}]See what happened and what you can do[/url]\n\n");
+        if (row.NeedsAttention) text.Append(CultureInfo.CurrentCulture, $"[color={TextColors.Error}]This plugin needs attention.[/color] [url={AttentionMeta}]See what happened and what you can do[/url]\n\n");
         if (!string.IsNullOrWhiteSpace(plugin.Description)) text.Append(Escape(plugin.Description.Trim())).Append("\n\n");
         Line("Type", PluginCatalog.KindName(plugin.Kind));
         Line("Status", StatusText(plugin));
@@ -345,19 +345,19 @@ internal sealed class PluginManagerViewModel
         if (plugin.Known?.WebsiteUrl is { } website && website != source) Link("Website", website);
         text.Append(LicenseLine(license));
         text.Append(WelcomeLine(welcome));
-        if (plugin.Error is not null) text.Append(CultureInfo.CurrentCulture, $"\n[color=#ff7070]{Escape(plugin.Error)}[/color]\n");
+        if (plugin.Error is not null) text.Append(CultureInfo.CurrentCulture, $"\n[color={TextColors.Error}]{Escape(plugin.Error)}[/color]\n");
         text.Append(ExtensionSection(plugin.Extensions));
         if (kept is not null) text.Append(KeptUpdateSection(kept));
 
         text.Append("\n[b]Update[/b]\n");
         if (row.Update is { } update)
         {
-            text.Append(CultureInfo.CurrentCulture, $"{Escape(update.Candidate.InstalledVersion)} → [color=#70e070]{Escape(update.Candidate.NewVersion)}[/color]\n");
+            text.Append(CultureInfo.CurrentCulture, $"{Escape(update.Candidate.InstalledVersion)} → [color={TextColors.Success}]{Escape(update.Candidate.NewVersion)}[/color]\n");
             if (update.Candidate.Package is LocalZipPackageRef local) Line("Local package", local.Path);
             else Link("Update site", update.Candidate.SourceUrl);
             if (update.Candidate.ReleaseUrl is not null) Link("Release", update.Candidate.ReleaseUrl);
             foreach (var finding in update.Findings) text.Append(CultureInfo.CurrentCulture, $"[color={Color(finding.Severity)}]{finding.Severity}:[/color] {Escape(finding.Message)}\n");
-            if (update.Failed is { } failed) text.Append(CultureInfo.CurrentCulture, $"[color=#ff7070]Previously failed {failed.Utc:u}:[/color] {Escape(failed.Reason)}\n");
+            if (update.Failed is { } failed) text.Append(CultureInfo.CurrentCulture, $"[color={TextColors.Error}]Previously failed {failed.Utc:u}:[/color] {Escape(failed.Reason)}\n");
         }
         else if ((plugin.UpdateSite ?? plugin.UpdateUrl ?? plugin.Known?.UpdateUrl) is { } site) Link("Update site", site);
         else if (plugin.Kind == PluginKind.GDExtensionAddon)
@@ -409,7 +409,7 @@ internal sealed class PluginManagerViewModel
     private static string Version(string? version) => string.IsNullOrWhiteSpace(version) ? "" : " " + version;
     private static string Color(FindingSeverity severity) => severity switch
     {
-        FindingSeverity.Error => "#ff7070", FindingSeverity.Warning => "#ffd070", _ => "#a0c0ff"
+        FindingSeverity.Error => TextColors.Error, FindingSeverity.Warning => TextColors.Warning, _ => TextColors.Info
     };
     internal static string Escape(string value) => value.Replace("[", "[lb]");
     /// <summary>An http(s) URL without credentials that can be embedded in a BBCode url tag and opened in a browser.</summary>

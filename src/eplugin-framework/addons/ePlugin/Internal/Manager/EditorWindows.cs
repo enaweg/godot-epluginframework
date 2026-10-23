@@ -33,10 +33,14 @@ internal static class EditorWindows
         dialog.PopupCenteredClamped(dialog.Size, 0.9f);
     }
 
-    /// <summary>Scales the sizes a scene authored for 100% editor scale, and shows the ePlugin icon whenever it opens.</summary>
+    /// <summary>
+    /// Scales the sizes a scene authored for 100% editor scale, takes the theme's status colors for its texts, and shows the
+    /// ePlugin icon whenever it opens.
+    /// </summary>
     public static void Prepare(Window window, EditorSignalConnections signals, GodotObject owner, StringName visibilityChanged)
     {
         var scale = Scale;
+        TextColors.Use(Theme);
         window.Size = (Vector2I)((Vector2)window.Size * scale);
         window.MinSize = (Vector2I)((Vector2)window.MinSize * scale);
         ScaleMinimumSizes(window, scale);

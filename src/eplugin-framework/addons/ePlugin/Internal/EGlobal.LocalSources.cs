@@ -59,7 +59,8 @@ internal sealed partial class EGlobal
         finally
         {
             // Reading the file before a change also picks up what other editors changed.
-            if (!before.SequenceEqual(_localSources.Directories, PackageFiles.PathComparer)) _ = RebuildLocalIndexAsync();
+            if (!before.SequenceEqual(_localSources.Directories, PackageFiles.PathComparer))
+                Manager.ObservedTask.Run(RebuildLocalIndexAsync(), ex => GD.PushError($"Indexing the local directories failed: {ex.Message}"));
         }
     }
 

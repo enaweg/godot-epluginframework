@@ -208,7 +208,7 @@ internal sealed class Commands(IProgressWindow window, string? commandFile, stri
         Environment.Exit(0);
     }
 
-    private static string ReadAppendedLine(StreamReader input, StringBuilder pending)
+    internal static string ReadAppendedLine(StreamReader input, StringBuilder pending)
     {
         // Keep incomplete lines until their newline is written. EOF is temporary while editors restart.
         while (true)

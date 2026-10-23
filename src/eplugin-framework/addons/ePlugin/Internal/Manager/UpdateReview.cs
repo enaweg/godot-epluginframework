@@ -106,7 +106,7 @@ internal sealed class UpdateReview
         else if (candidate.SourceUrl is { } source) text.Append(CultureInfo.CurrentCulture, $"[b]Update site:[/b] {Link(source)}\n");
         if (candidate.ReleaseUrl is { } release) text.Append(CultureInfo.CurrentCulture, $"[b]Release:[/b] {Link(release)}\n");
         if (entry.RefusedReason is { } reason)
-            text.Append(CultureInfo.CurrentCulture, $"\n[color=#ff7070]Refused:[/color] {Escape(reason)}\nIt is not installed; its files are not changed.\n");
+            text.Append(CultureInfo.CurrentCulture, $"\n[color={TextColors.Error}]Refused:[/color] {Escape(reason)}\nIt is not installed; its files are not changed.\n");
         if (entry.Findings.Count > 0) text.Append('\n');
         foreach (var finding in entry.Findings)
             text.Append(CultureInfo.CurrentCulture, $"[color={Color(finding.Severity)}]{finding.Severity}:[/color] {Escape(finding.Message)}\n");
@@ -124,7 +124,7 @@ internal sealed class UpdateReview
     private static string Escape(string value) => PluginManagerViewModel.Escape(value);
     private static string Color(FindingSeverity severity) => severity switch
     {
-        FindingSeverity.Error => "#ff7070", FindingSeverity.Warning => "#ffd070", _ => "#a0c0ff"
+        FindingSeverity.Error => TextColors.Error, FindingSeverity.Warning => TextColors.Warning, _ => TextColors.Info
     };
 }
 #endif

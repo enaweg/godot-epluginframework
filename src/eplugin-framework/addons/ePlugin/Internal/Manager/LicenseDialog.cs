@@ -125,7 +125,7 @@ internal sealed partial class LicenseDialog : AcceptDialog, ISerializationListen
         _source.TooltipText = _source.Text;
         // the license is BBCode; a problem is plain text
         var scale = EditorWindows.Scale;
-        _text.Text = entry.Problem is null ? PluginManagerViewModel.ScaleFontSizes(entry.Text, scale) : $"[color=#ff7070]{entry.Problem.Replace("[", "[lb]")}[/color]";
+        _text.Text = entry.Problem is null ? PluginManagerViewModel.ScaleFontSizes(entry.Text, scale) : $"[color={TextColors.Error}]{entry.Problem.Replace("[", "[lb]")}[/color]";
         _text.ScrollToLine(0);
         var neededBy = _review.NeededBy(slug).Select(a => a.Name).ToArray();
         _neededBy.Text = _review.IsUpdate || neededBy.Length == 0 ? "" : $"Needed to enable {string.Join(", ", neededBy)}.";

@@ -82,6 +82,9 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private const string ReloadFailedNotice = "The editor has not finished loading the rebuilt C# code. Restart the editor to continue.";
     // Rendering runs after async operations and on theme changes; keep their result until the next update operation.
     private string? _operationNotice;
+    // The notice of work that ended while the manager was closed: Escape and the window's close button hide it also
+    // while its work goes on, so the next Open shows how it ended instead of dropping it.
+    private bool _keepNotice;
 
     /// <summary>False once an assembly reload dropped the C# state of this still existing editor node.</summary>
     public bool IsInitialized => _global is not null;
@@ -173,13 +176,15 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _attentionButton.Icon = EditorIcons.Retry;
         GetNode<Button>("%SettingsButton").Icon = EditorIcons.Settings;
         _settings.RefreshTheme();
+        TextColors.Use(EditorWindows.Theme);
         // Render the existing model rather than refreshing it: a theme change must preserve a staged update.
         if (_model is not null) Render();
     }
 
     public void Open()
     {
-        _operationNotice = null;
+        if (!_keepNotice) _operationNotice = null;
+        _keepNotice = false;
         Refresh();
         PopupCenteredClamped(Size, 0.9f);
         _tree.GrabFocus();
@@ -726,12 +731,12 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     }
 
     /// <summary>
-    /// A plugin's update site or a setting changed: versions loaded from an old site are dropped, and the list is read
-    /// again so updates found there are no longer offered and the status line shows the next scheduled check.
+    /// A plugin's update site or a setting changed: versions loaded from a source no longer used are dropped, and the
+    /// list is read again so updates found there are no longer offered and the status line shows the next scheduled check.
     /// </summary>
-    private void SettingsChanged()
+    private void SettingsChanged(bool sourcesChanged)
     {
-        _updates.ClearVersions();
+        if (sourcesChanged) _updates.ClearVersions();
         if (!IsShown || _working) return;
         Refresh();
     }
@@ -761,6 +766,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         finally { _working = false; }
         if (!IsShown) return;
         _operationNotice = outcome.Notice;
+        _keepNotice = !Visible;
         if (outcome.IsError) GD.PushError(outcome.Notice);
         Refresh();
     }
@@ -800,6 +806,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         else
         {
             _operationNotice = outcome.Notice;
+            _keepNotice = !Visible;
             if (outcome.IsError) GD.PushError(outcome.Notice);
         }
         if (outcome.Refresh) Refresh(); else Render();

@@ -227,6 +227,35 @@ public class UpdateFlowTests : IDisposable
     }
 
     [TestCase]
+    public async Task AStagedBatchThatCannotBeDeletedStillEndsTheInstallation()
+    {
+        if (OperatingSystem.IsWindows()) return; // the locked folder is made with Unix permissions
+        _host.Packages["a"] = [];
+        _host.ApplyFails = true;
+        _host.OnStaged = directory =>
+        {
+            // e.g. a file an antivirus scanner holds open on Windows
+            var locked = Directory.CreateDirectory(Path.Combine(directory, "locked"));
+            File.WriteAllText(Path.Combine(locked.FullName, "file"), "");
+            if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(locked.FullName, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        };
+        var flow = Flow();
+        try
+        {
+            var failed = await flow.InstallAsync(new([Candidate("a")]), View(), CancellationToken.None);
+
+            Assertions.AssertObject(failed.Step).IsEqual(InstallStep.Failed);
+            Assertions.AssertString(failed.Notice).IsEqual("Update failed: no space left");
+            Assertions.AssertObject(flow.Staged).IsNull();
+        }
+        finally
+        {
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(Path.Combine(_host.StagingDirectory, "locked"), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
+    [TestCase]
     public async Task AManagerClosedWhileStagingInstallsNothing()
     {
         _host.Packages["a"] = [];
@@ -387,6 +416,7 @@ public class UpdateFlowTests : IDisposable
         public int Stagings { get; private set; }
         public bool AllowDowngrade { get; private set; }
         public string StagingDirectory { get; private set; } = "";
+        public Action<string>? OnStaged { get; set; }
 
         public IReadOnlyList<UpdateCandidate> PendingUpdates => [];
         public bool IsRestartPending => false;
@@ -406,6 +436,7 @@ public class UpdateFlowTests : IDisposable
             progress?.Report(0.5); progress?.Report(0.5); progress?.Report(1.0);
             StagingDirectory = Path.Combine(_root, "stage-" + Stagings);
             Directory.CreateDirectory(StagingDirectory);
+            OnStaged?.Invoke(StagingDirectory);
             Assertions.AssertBool(SemVer.TryParse("2.0.0", out var version)).IsTrue();
             var packages = candidates.Where(c => Packages.ContainsKey(c.Slug))
                 .Select(c => new ValidatedPackage(c, Path.Combine(StagingDirectory, c.Slug), version, null, false, Packages[c.Slug]))

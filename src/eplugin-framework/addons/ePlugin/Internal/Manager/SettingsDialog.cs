@@ -20,10 +20,10 @@ internal sealed partial class SettingsDialog : AcceptDialog, ISerializationListe
     private Window[] _windows = [];
 
     /// <summary>
-    /// Raised after a setting or an update site changed, so the plugin list can be read again: both decide where updates
-    /// come from and when they are checked.
+    /// Raised after a setting or an update source changed, so the plugin list can be read again: both decide where
+    /// updates come from and when they are checked. True when where updates come from changed.
     /// </summary>
-    public event Action? Changed;
+    public event Action<bool>? Changed;
 
     public void Initialize(EGlobal global)
     {
@@ -54,16 +54,18 @@ internal sealed partial class SettingsDialog : AcceptDialog, ISerializationListe
     {
         base._EnterTree();
         if (_general is null) return;
-        _general.Changed += RaiseChanged;
-        _updateSources.Changed += RaiseChanged;
+        _general.Changed += GeneralChanged;
+        _updateSources.Changed += SourcesChanged;
     }
 
-    private void RaiseChanged()
+    private void GeneralChanged(string key)
     {
         // The Update sources tab shows whether the built-in list is turned off.
-        _updateSources.Render();
-        Changed?.Invoke();
+        if (GeneralSettingsTab.ChangesUpdateSources(key)) _updateSources.Render();
+        Changed?.Invoke(GeneralSettingsTab.ChangesUpdateSources(key));
     }
+
+    private void SourcesChanged() => Changed?.Invoke(true);
 
     private void QueueWindowIcons() => CallDeferred(nameof(RefreshWindowIcons));
     private void RefreshWindowIcons()
@@ -74,8 +76,8 @@ internal sealed partial class SettingsDialog : AcceptDialog, ISerializationListe
     private void ReleaseCallbacks()
     {
         _signals.Dispose();
-        if (_general is not null) _general.Changed -= RaiseChanged;
-        if (_updateSources is not null) _updateSources.Changed -= RaiseChanged;
+        if (_general is not null) _general.Changed -= GeneralChanged;
+        if (_updateSources is not null) _updateSources.Changed -= SourcesChanged;
     }
 
     // Reload serializes every script before disposing any of them, so callback targets are still valid here.

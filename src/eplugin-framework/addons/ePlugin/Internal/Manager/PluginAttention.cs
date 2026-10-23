@@ -61,7 +61,7 @@ internal sealed record AttentionItem(PluginRow Row, UpdateJournal? Journal, Upda
     {
         var text = new StringBuilder();
         text.Append(Escape(Summary)).Append('\n');
-        if (Plugin.Error is { } error) text.Append(CultureInfo.CurrentCulture, $"[color=#ff7070]{Escape(error)}[/color]\n");
+        if (Plugin.Error is { } error) text.Append(CultureInfo.CurrentCulture, $"[color={TextColors.Error}]{Escape(error)}[/color]\n");
         if (Kept is not null) text.Append(PluginManagerViewModel.KeptUpdateSection(Kept));
         else if (Journal is not null)
         {
