@@ -80,13 +80,16 @@ internal sealed class LifecycleFixture : IDisposable
 
     public bool IsEPlugin(string slug) => _ePlugins.ContainsKey(slug);
 
+    /// <summary>ePlugins whose <c>_EnablePlugin</c> and <c>_DisablePlugin</c> throw before calling the framework.</summary>
+    public HashSet<string> Silent { get; } = new(StringComparer.Ordinal);
+
     public void CreateRecipe(string slug, IEEditorPluginBuilder builder) =>
         (_ePlugins[slug] ?? throw new InvalidOperationException($"The recipe of {slug} fails."))(builder);
 
     /// <summary>Godot creates an instance and calls its <c>_EnablePlugin</c>, which calls <c>this.EnableEPlugin()</c>.</summary>
     public void OnEnabled(string slug)
     {
-        if (!IsEPlugin(slug)) return;
+        if (!IsEPlugin(slug) || Silent.Contains(slug)) return;
         var pluginBase = new EditorPlugin();
         _objects.Add(pluginBase);
         var plugin = new Mock<IEEditorPlugin>();
@@ -104,7 +107,7 @@ internal sealed class LifecycleFixture : IDisposable
     /// <summary>Godot calls <c>_DisablePlugin</c>, which calls <c>this.DisableEPlugin()</c>, and frees the instance.</summary>
     public void OnDisabled(string slug)
     {
-        if (Context(slug) is not { } context) return;
+        if (Silent.Contains(slug) || Context(slug) is not { } context) return;
         if (context.State != EEditorPluginState.Deactivated) Global.DisableEPlugin(context);
     }
 

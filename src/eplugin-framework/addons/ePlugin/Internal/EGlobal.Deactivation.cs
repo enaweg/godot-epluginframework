@@ -125,6 +125,17 @@ internal sealed partial class EGlobal
                 }
             }
 
+            // Godot runs a dependant's _DisablePlugin inside the toggle. One that never called DisableEPlugin (e.g. it threw
+            // first) is disabled but still activated, and nothing would resume this plugin: it goes on without waiting.
+            var silent = pluginsToDisable.Where(p => p.State == EEditorPluginState.Activated && !_host.IsPluginEnabled(p.Slug)).ToArray();
+            if (silent.Length > 0 && context.State == EEditorPluginState.Activated && _toCheckDisable.Contains(context))
+            {
+                var waiting = _toCheckDisable.Where(c => !silent.Contains(c)).Reverse().ToArray();
+                _toCheckDisable.Clear();
+                foreach (var plugin in waiting) _toCheckDisable.Push(plugin);
+                DisableEPlugin(context, refreshAtEnd, manualRetry);
+            }
+
             return;
         }
 

@@ -211,6 +211,45 @@ public partial class EGlobalEdgeCaseTests : IDisposable
     }
 
     [TestCase]
+    public void DisablingAPluginWhoseDependantNeverCallsBackDoesNotWaitForIt()
+    {
+        _fixture.AddEPlugin("base", b => b.AddNuget("Base.Package"));
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package").AddPluginDependency("base"));
+        _fixture.AddEPlugin("tool", b => b.AddNuget("Tool.Package").AddPluginDependency("base"));
+        _fixture.Enable("tool");
+        _fixture.Enable("app");
+        // app's _DisablePlugin throws before it calls DisableEPlugin; disabled last, nothing else would resume base
+        _fixture.Silent.Add("app");
+        var start = _fixture.Operations.Count;
+
+        _fixture.Disable("base");
+
+        Assertions.AssertObject(_fixture.State("base")).IsEqual(EEditorPluginState.Deactivated);
+        Assertions.AssertObject(_fixture.State("tool")).IsEqual(EEditorPluginState.Deactivated);
+        Assertions.AssertThat(_fixture.Operations.Skip(start).ToArray()).ContainsExactly("remove-nuget Tool.Package", "remove-nuget Base.Package", "build");
+        Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsFalse();
+        Assertions.AssertBool(Logged("warn", "app requires base, but the editor already disabled it")).IsTrue();
+    }
+
+    [TestCase]
+    public void EnablingAPluginWhoseDependencyNeverCallsBackFailsInsteadOfWaiting()
+    {
+        _fixture.AddEPlugin("base", b => b.AddNuget("Base.Package"));
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package").AddPluginDependency("base"));
+        // base's _EnablePlugin throws before it calls EnableEPlugin
+        _fixture.Silent.Add("base");
+
+        _fixture.Enable("app");
+        EGlobal.RunPosted();
+
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Error);
+        Assertions.AssertString(_fixture.Store.GetLocal("app")!.Reason).IsEqual("dependency_resolution_failed");
+        Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsFalse();
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsFalse();
+        Assertions.AssertBool(Logged("warn", "Plugin base was enabled but did not start its activation")).IsTrue();
+    }
+
+    [TestCase]
     public void AnotherPluginsRecipeThatCannotBeReadDuringADisableLeavesThatPluginAlone()
     {
         _fixture.AddEPlugin("a", b => b.AddNuget("A.Package"));

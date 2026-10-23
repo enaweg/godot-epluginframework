@@ -215,7 +215,19 @@ internal sealed partial class EGlobal
                 _host.SetPluginEnabled(slug, true);
                 if (_host.IsPluginEnabled(slug))
                 {
-                    return DependencyReadiness.Wait; // EnableEPlugin will be called by the newly enabled plugin
+                    // Godot runs the dependency's _EnablePlugin inside the toggle, which resumes this plugin once it is
+                    // activated. One that never called EnableEPlugin (e.g. it threw first) neither activated nor waits.
+                    var started = _contexts.LastOrDefault(c => c.Slug == slug && c.Plugin is not null);
+                    if (!_toCheckEnable.Contains(context) || started is not null &&
+                        (started.State == EEditorPluginState.Activated || _toCheckEnable.Contains(started)))
+                    {
+                        return DependencyReadiness.Wait; // EnableEPlugin will be called by the newly enabled plugin
+                    }
+
+                    var silent = $"Plugin {slug} was enabled but did not start its activation; its _EnablePlugin has to call this.EnableEPlugin().";
+                    context.Logger?.Warn(silent);
+                    FailAllUncheckedPluginsAndRefresh($"Plugin dependency {slug} did not activate!");
+                    return DependencyReadiness.Failed;
                 }
 
                 // Godot refused it (e.g. its script does not load), so no activation callback would resume this plugin.
