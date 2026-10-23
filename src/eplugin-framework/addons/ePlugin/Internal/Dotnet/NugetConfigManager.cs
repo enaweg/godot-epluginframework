@@ -157,6 +157,20 @@ internal static class NugetConfigManager
         }
     }
 
+    /// <summary>
+    /// Whether two recipe sources are tracked as the same nuget.config entry, however they are spelled
+    /// (<c>res://addons/x/feed</c> and <c>addons/x/feed/</c>).
+    /// </summary>
+    public static bool SameSource(string projectRoot, string? a, string? b)
+    {
+        if (a is null || b is null || a == b)
+        {
+            return a == b;
+        }
+
+        return Normalize(projectRoot, a) is { } first && Normalize(projectRoot, b) is { } second && ComputeKey(first) == ComputeKey(second);
+    }
+
     private static void SetUsedByComment(XElement add, string[] usedBy)
     {
         var text = $" {UsedByCommentPrefix}{string.Join(",", usedBy)}\" ";

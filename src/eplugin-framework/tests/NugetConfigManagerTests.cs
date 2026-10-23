@@ -263,6 +263,19 @@ public class NugetConfigManagerTests
         Assertions.AssertString(File.ReadAllText(ConfigPath)).IsEqual(inline);
     }
 
+    [TestCase]
+    public static void SourcesSpelledDifferentlyAreTheSameEntry()
+    {
+        Assertions.AssertBool(NugetConfigManager.SameSource(Root, "res://addons/a/feed", "addons/a/feed/")).IsTrue();
+        Assertions.AssertBool(NugetConfigManager.SameSource(Root, "addons/a/feed", Path.Combine(Root, "addons", "a", "feed"))).IsTrue();
+        Assertions.AssertBool(NugetConfigManager.SameSource(Root, "https://example.com/feed/", "https://example.com/feed")).IsTrue();
+        Assertions.AssertBool(NugetConfigManager.SameSource(Root, "addons/a/feed", "addons/b/feed")).IsFalse();
+        Assertions.AssertBool(NugetConfigManager.SameSource(Root, "addons/a/feed", null)).IsFalse();
+        Assertions.AssertBool(NugetConfigManager.SameSource(Root, null, null)).IsTrue();
+        // outside the project nothing is tracked, so only the same spelling is the same source
+        Assertions.AssertBool(NugetConfigManager.SameSource(Root, "user://feed", "user://feed/")).IsFalse();
+    }
+
     private static int CountOccurrences(string haystack, string needle)
     {
         var count = 0;

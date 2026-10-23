@@ -274,6 +274,28 @@ public class EGlobalLifecycleTests : IDisposable
     }
 
     [TestCase]
+    public void AnOptionalRecipeSharingThePluginsNuGetSourceLeavesItInNuGetConfig()
+    {
+        var config = Path.Combine(_fixture.Root, "nuget.config");
+        _fixture.AddPlainPlugin("extra");
+        _fixture.AddEPlugin("app", b => b
+            .AddNuget("App.Package", source: "res://addons/app/feed")
+            .AddOptionalPluginDependency("extra", null, optional => optional.AddNuget("App.Extra", source: "addons/app/feed/")));
+        _fixture.Global.InitializePluginToggles();
+        _fixture.Host.Enabled.Add("extra");
+        _fixture.Global.ObservePluginToggles();
+        _fixture.Enable("app");
+
+        _fixture.Host.Enabled.Remove("extra");
+        _fixture.Global.ObservePluginToggles();
+
+        // the main recipe still installs App.Package from it; a fresh checkout restores it through nuget.config
+        Assertions.AssertThat(File.ReadAllText(config)).Contains("value=\"./addons/app/feed\"");
+        _fixture.Disable("app");
+        Assertions.AssertBool(File.Exists(config)).IsFalse();
+    }
+
+    [TestCase]
     public void AnOptionalRecipeRepeatingThePluginsOwnPackageLeavesItWhenTheOptionalPluginIsDisabled()
     {
         _fixture.AddPlainPlugin("extra");
