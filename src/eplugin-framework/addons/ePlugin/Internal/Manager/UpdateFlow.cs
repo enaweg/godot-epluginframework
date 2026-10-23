@@ -290,12 +290,16 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
         }
     }
 
-    /// <summary>Drops the staged batch and its staging directory, unless an installation already journaled it.</summary>
+    /// <summary>
+    /// Drops the staged batch and its staging directory, unless an installation already journaled it. A directory that
+    /// cannot be deleted now, e.g. while a scanner holds a file open, is left to the start that deletes abandoned ones.
+    /// </summary>
     public void Clear()
     {
         if (_directory is not null && !File.Exists(Path.Combine(_directory, "journal.json")) && Directory.Exists(_directory))
         {
-            Directory.Delete(_directory, true);
+            try { Directory.Delete(_directory, true); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         }
 
         _directory = null;
