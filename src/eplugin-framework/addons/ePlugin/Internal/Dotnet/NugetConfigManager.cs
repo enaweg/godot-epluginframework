@@ -28,6 +28,7 @@ internal static class NugetConfigManager
 {
     private const string ManagedKeyPrefix = "ePlugin-";
     private const string UsedByCommentPrefix = "ePlugin-managed used-by=\"";
+    private static readonly string[] ConfigFileNames = ["nuget.config", "NuGet.config", "NuGet.Config"];
 
     public static bool RegisterSource(string projectRoot, string pluginSlug, string rawSource, ILogger? logger)
     {
@@ -242,9 +243,15 @@ internal static class NugetConfigManager
         return ManagedKeyPrefix + Convert.ToHexString(hash)[..12];
     }
 
+    /// <summary>
+    /// The project's existing config file, else a new <c>nuget.config</c>. NuGet reads only the first of these names it
+    /// finds in a folder, in this order; on a case-sensitive file system a new <c>nuget.config</c> next to a
+    /// <c>NuGet.Config</c> would hide the project's own sources.
+    /// </summary>
     private static string GetConfigPath(string projectRoot)
     {
-        return Path.GetFullPath(Path.Combine(projectRoot, "nuget.config"));
+        var paths = ConfigFileNames.Select(name => Path.GetFullPath(Path.Combine(projectRoot, name)));
+        return paths.FirstOrDefault(File.Exists) ?? Path.GetFullPath(Path.Combine(projectRoot, ConfigFileNames[0]));
     }
 
     private static void Save(XDocument doc, string configPath)

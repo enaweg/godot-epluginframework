@@ -231,8 +231,8 @@ instance, its `IEEditorPlugin`/metadata/slug, its logger, its `IDotnetCli`, its 
 `EEditorPluginState`, and the `AppliedOptionalDependencies` snapshot.
 
 When a recipe's NuGet entry has an external/local `source`, `NugetConfigManager`
-(`addons/ePlugin/Internal/Dotnet/NugetConfigManager.cs`) additionally mirrors that source into a root
-`nuget.config`, so a fresh checkout (without the installing machine's ad-hoc `--source` flag) can still
+(`addons/ePlugin/Internal/Dotnet/NugetConfigManager.cs`) additionally mirrors that source into the root
+`nuget.config` (or the project's existing `NuGet.config`/`NuGet.Config`, which NuGet would otherwise stop reading), so a fresh checkout (without the installing machine's ad-hoc `--source` flag) can still
 restore the package. Entries it creates are tagged with a deterministic `ePlugin-<hash>` key and a
 preceding XML comment tracking which plugin slugs currently depend on that source (multiple plugins can
 share one entry); it never touches sources it didn't create, and only deletes `nuget.config` entirely once
