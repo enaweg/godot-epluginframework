@@ -1,8 +1,8 @@
 {
- "commit": "4c1bfde2252200ef1f7e8575df3d78b1e84f9543",
- "date": "2026-10-23T08:57:06Z",
- "covered": 9907,
- "coverable": 10899,
+ "commit": "41c358e029919210bb88935f765418bc8c04711a",
+ "date": "2026-10-23T09:53:21Z",
+ "covered": 9932,
+ "coverable": 10940,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -65,8 +65,8 @@
    1
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/NugetConfigManager.cs": [
-   151,
-   154
+   153,
+   156
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/PluginsOnlyBuild.cs": [
    32,
@@ -109,8 +109,8 @@
    82
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.RecipeOperations.cs": [
-   62,
-   74
+   83,
+   96
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateApply.cs": [
    164,
@@ -137,8 +137,8 @@
    75
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.cs": [
-   952,
-   1056
+   954,
+   1073
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EPluginProgress.cs": [
    1,
