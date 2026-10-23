@@ -112,7 +112,7 @@ internal sealed partial class EGlobal
             if (config.Load(directory + "/plugin.cfg") != Error.Ok) continue;
             string Value(string key) => config.GetValue("plugin", key, "").AsString().Trim();
             var script = PluginCatalog.ResolveScript(directory, Value("script"));
-            var context = _contexts.FirstOrDefault(c => c.Slug == slug && c.Plugin is not null);
+            var context = ManagedContext(slug);
             var name = Value("name");
             plugins.Add(new PluginInfo(slug, name.Length > 0 ? name : slug,
                 PluginKinds.Classify(script, slug == framework, types, PluginKinds.HasNativeExtension(ProjectSettings.GlobalizePath(directory))), enabled.Contains(slug))

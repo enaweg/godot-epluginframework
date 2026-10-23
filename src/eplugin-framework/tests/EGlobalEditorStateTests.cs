@@ -134,7 +134,7 @@ public class EGlobalEditorStateTests : IDisposable
         var sample = Track(new SamplePlugin());
         _fixture.Host.Nodes.AddRange([_fixture.Framework, sample, Track(new EditorPlugin()), Track(new Node())]);
 
-        _fixture.Global.ReloadContexts(null, false);
+        _fixture.Global.ReloadContexts(null);
 
         var context = _fixture.Global.Contexts.Single(c => c.PluginBase == sample);
         Assertions.AssertString(context.Slug).IsEqual("sample_plugin");
@@ -162,7 +162,7 @@ public class EGlobalEditorStateTests : IDisposable
 
         // the framework's first frame initializes it
         global.Attach(_fixture.Framework, new Logging.GenericLoggerFactory(c => new RecordingLogger(_fixture.Log, c)), _fixture.Cli);
-        global.ReloadContexts(null, false);
+        global.ReloadContexts(null);
         global.ResumeWaitingPlugins();
 
         Assertions.AssertObject(context.State).IsEqual(EEditorPluginState.Activated);
@@ -172,7 +172,7 @@ public class EGlobalEditorStateTests : IDisposable
         _fixture.Operations.Clear();
         var restarted = new EGlobal(_fixture.Host) { StateStore = _fixture.Store };
         restarted.Attach(_fixture.Framework, new Logging.GenericLoggerFactory(c => new RecordingLogger(_fixture.Log, c)), _fixture.Cli);
-        restarted.ReloadContexts(null, false);
+        restarted.ReloadContexts(null);
         restarted.ResumeWaitingPlugins();
         Assertions.AssertObject(restarted.Contexts.Single(c => c.PluginBase == sample).State).IsEqual(EEditorPluginState.Activated);
         Assertions.AssertThat(_fixture.Operations).IsEmpty();
@@ -200,7 +200,7 @@ public class EGlobalEditorStateTests : IDisposable
         Assertions.AssertThat(_fixture.Operations).IsEmpty();
 
         global.Attach(_fixture.Framework, new Logging.GenericLoggerFactory(c => new RecordingLogger(_fixture.Log, c)), _fixture.Cli);
-        global.ReloadContexts(null, false);
+        global.ReloadContexts(null);
         global.ResumeWaitingPlugins();
 
         Assertions.AssertObject(contexts[0].State).IsEqual(EEditorPluginState.Activated);
@@ -217,7 +217,7 @@ public class EGlobalEditorStateTests : IDisposable
         Assertions.AssertBool(_fixture.Store.TryBeginAttempt("sample_plugin", "0.9", PersistedPluginState.Deactivated, out var id)).IsTrue();
         Assertions.AssertBool(_fixture.Store.TryComplete(id, [new SharedPluginState("sample_plugin", "0.9", PersistedPluginState.Deactivated)])).IsTrue();
 
-        _fixture.Global.ReloadContexts(null, false);
+        _fixture.Global.ReloadContexts(null);
 
         Assertions.AssertObject(_fixture.Global.Contexts.Single(c => c.PluginBase == sample).State).IsEqual(EEditorPluginState.Activated);
         Assertions.AssertBool(_fixture.Log.Any(l => l.StartsWith("warn:", StringComparison.Ordinal) &&
@@ -231,7 +231,7 @@ public class EGlobalEditorStateTests : IDisposable
         _fixture.Host.Nodes.Add(sample);
         FailAttempt("sample_plugin");
 
-        _fixture.Global.ReloadContexts(null, false);
+        _fixture.Global.ReloadContexts(null);
 
         Assertions.AssertObject(_fixture.Global.Contexts.Single(c => c.PluginBase == sample).State).IsEqual(EEditorPluginState.Error);
         Assertions.AssertBool(_fixture.Log.Any(l => l.StartsWith("error:", StringComparison.Ordinal) &&

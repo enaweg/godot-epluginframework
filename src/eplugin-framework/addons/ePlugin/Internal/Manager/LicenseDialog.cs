@@ -155,7 +155,7 @@ internal sealed partial class LicenseDialog : AcceptDialog, ISerializationListen
                 _ => "Not decided yet."
             });
             if (decision == LicenseDecision.Skipped)
-                _list.SetItemCustomFgColor(index, theme?.GetColor("font_disabled_color", "Button") ?? new Color(0.5f, 0.5f, 0.5f));
+                _list.SetItemCustomFgColor(index, EditorIcons.DisabledColor);
             if (entry.Slug == _selected) _list.Select(index);
         }
 

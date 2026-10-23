@@ -128,7 +128,7 @@ internal sealed partial class EGlobal
     /// </summary>
     private EEditorPluginRecipe? RecipeOf(string slug)
     {
-        var context = _contexts.FirstOrDefault(c => c.Slug == slug && c.Plugin is not null);
+        var context = ManagedContext(slug);
         if (context is null)
         {
             return ReadRecipeOfDisabledPlugin(slug);
