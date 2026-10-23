@@ -85,7 +85,7 @@ internal sealed partial class EGlobal
             return true;
         }
 
-        var context = _contexts.FirstOrDefault(c => c.Slug == slug && c.Plugin is not null);
+        var context = ManagedContext(slug);
         return context?.State == EEditorPluginState.Activated || context is null && !IsManagedPlugin(slug);
     }
 

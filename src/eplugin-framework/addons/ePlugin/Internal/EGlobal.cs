@@ -315,6 +315,9 @@ internal sealed partial class EGlobal
 
     private IReadOnlySet<string> GetEnabledPluginSlugs() => _host.EnabledPluginSlugs();
 
+    /// <summary>The context of an ePlugin's editor instance with this slug; null for a plain plugin or one not enabled.</summary>
+    private PluginContext? ManagedContext(string slug) => _contexts.FirstOrDefault(c => c.Slug == slug && c.Plugin is not null);
+
     public PluginContext GetOrCreateContext(EditorPlugin pluginBase)
     {
         var context = _contexts.FirstOrDefault(c => c.PluginBase == pluginBase);

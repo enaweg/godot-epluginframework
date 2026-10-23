@@ -232,7 +232,7 @@ internal sealed partial class EGlobal
             }
         }
 
-        var managed = _contexts.FirstOrDefault(c => c.Slug == slug && c.Plugin is not null);
+        var managed = ManagedContext(slug);
         // a plain plugin has a context only while its editor instance is known, e.g. not when enabled in this session
         var plain = managed is null ? _contexts.FirstOrDefault(c => c.Slug == slug) : null;
         if (dependency.Version is not null)

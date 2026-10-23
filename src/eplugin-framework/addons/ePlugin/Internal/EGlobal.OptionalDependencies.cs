@@ -43,7 +43,7 @@ internal sealed partial class EGlobal
             }
 
             if (requireReady && optional.Slug != assumeEnabledSlug &&
-                _contexts.FirstOrDefault(c => c.Slug == optional.Slug && c.Plugin is not null)
+                ManagedContext(optional.Slug)
                     is { State: EEditorPluginState.Error })
             {
                 context.Logger?.Warn(

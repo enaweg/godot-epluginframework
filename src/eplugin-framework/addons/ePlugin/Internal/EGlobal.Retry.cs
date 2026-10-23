@@ -94,7 +94,7 @@ internal sealed partial class EGlobal
                 if (retriedUpdates.Add(attempt.AttemptId)) RetryUpdate(updateJournal);
                 continue;
             }
-            var context = _contexts.FirstOrDefault(c => c.Slug == attempt.Slug && c.Plugin is not null);
+            var context = ManagedContext(attempt.Slug);
             var expectedState = attempt.TargetState == PersistedPluginState.Activated
                 ? EEditorPluginState.Activated
                 : EEditorPluginState.Deactivated;
@@ -130,7 +130,7 @@ internal sealed partial class EGlobal
                 try
                 {
                     _host.SetPluginEnabled(attempt.Slug, true);
-                    context = _contexts.FirstOrDefault(c => c.Slug == attempt.Slug && c.Plugin is not null);
+                    context = ManagedContext(attempt.Slug);
                 }
                 catch (Exception ex)
                 {
@@ -199,7 +199,7 @@ internal sealed partial class EGlobal
 
     private IEnumerable<string> GetHardDependencySlugs(string slug)
     {
-        var context = _contexts.FirstOrDefault(c => c.Slug == slug && c.Plugin is not null);
+        var context = ManagedContext(slug);
         if (context is null)
         {
             return [];
