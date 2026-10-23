@@ -6,7 +6,8 @@ namespace Enaweg.Plugin;
 /// NuGet packages, and project references from editor tooling.
 /// </summary>
 /// <remarks>
-/// All operations target the resolved solution and the main <c>.csproj</c> with the same filename. Project paths may be
+/// All operations target the resolved solution and the Godot project's <c>.csproj</c>: the one named after the project's
+/// assembly, else the only one in the project directory, else the one named after the solution. Project paths may be
 /// relative to the Godot project root, <c>res://</c> paths or absolute paths. Arguments are passed to the process one
 /// per element and must not be quoted, also when they contain spaces.
 /// This interface is only available in editor builds.

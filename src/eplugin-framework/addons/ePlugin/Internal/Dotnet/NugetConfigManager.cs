@@ -37,8 +37,8 @@ internal static class NugetConfigManager
             var normalized = Normalize(projectRoot, rawSource);
             if (normalized is null)
             {
-                logger?.Log(
-                    $"NuGet source '{rawSource}' is outside the project and cannot be tracked in nuget.config.");
+                logger?.Warn(
+                    $"NuGet source '{rawSource}' is outside the project and cannot be tracked in nuget.config; other checkouts of the project cannot restore its packages.");
                 return true;
             }
 
