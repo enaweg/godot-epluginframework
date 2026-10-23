@@ -84,7 +84,7 @@ Note: gdUnit4 editor tests are not currently possible in Godot (upstream
 [gdUnit4#911](https://github.com/MikeSchulze/gdUnit4/issues/911)), so tests exercise framework internals
 directly. `EGlobal` reaches the editor only through `IEditorHost` (`Internal/EditorHost.cs`); the lifecycle tests use
 `tests/LifecycleFixture.cs`, whose `FakeEditorHost` runs a plugin's enable/disable callback inside the toggle like
-Godot, with plugins in a temporary addons folder, a `RecordingCli` and real state files. Update transactions go through
+Godot (and throws when a plugin is disabled inside its own enable callback, which would free it there: `Post` that), with plugins in a temporary addons folder, a `RecordingCli` and real state files. Update transactions go through
 `EGlobal.UpdateHost` (`GodotUpdateHost` in the editor), which tests replace with a fake, and `EGlobal.UseInstance`
 lets tests drive the public `EnableEPlugin`/`DisableEPlugin` extensions against a fixture. Tests are compiled into the
 project assembly, so they use `internal` members; don't reach private ones through reflection.
@@ -231,8 +231,8 @@ instance, its `IEEditorPlugin`/metadata/slug, its logger, its `IDotnetCli`, its 
 `EEditorPluginState`, and the `AppliedOptionalDependencies` snapshot.
 
 When a recipe's NuGet entry has an external/local `source`, `NugetConfigManager`
-(`addons/ePlugin/Internal/Dotnet/NugetConfigManager.cs`) additionally mirrors that source into a root
-`nuget.config`, so a fresh checkout (without the installing machine's ad-hoc `--source` flag) can still
+(`addons/ePlugin/Internal/Dotnet/NugetConfigManager.cs`) additionally mirrors that source into the root
+`nuget.config` (or the project's existing `NuGet.config`/`NuGet.Config`, which NuGet would otherwise stop reading), so a fresh checkout (without the installing machine's ad-hoc `--source` flag) can still
 restore the package. Entries it creates are tagged with a deterministic `ePlugin-<hash>` key and a
 preceding XML comment tracking which plugin slugs currently depend on that source (multiple plugins can
 share one entry); it never touches sources it didn't create, and only deletes `nuget.config` entirely once

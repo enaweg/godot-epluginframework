@@ -108,8 +108,11 @@ public class EGlobalLifecycleTests : IDisposable
         _fixture.Enable("app");
 
         Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Error);
+        // disabled on the next frame, not inside its own _EnablePlugin, and nothing is built
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsTrue();
+        EGlobal.RunPosted();
         Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsFalse();
-        Assertions.AssertBool(_fixture.Operations.Any(o => o.StartsWith("add-", StringComparison.Ordinal))).IsFalse();
+        Assertions.AssertThat(_fixture.Operations).IsEmpty();
         Assertions.AssertString(_fixture.Store.GetLocal("app")!.Reason).IsEqual("dependency_resolution_failed");
         Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsFalse();
     }
@@ -145,6 +148,7 @@ public class EGlobalLifecycleTests : IDisposable
         _fixture.AddEPlugin("app", b => b.AddPluginDependency("missing"));
 
         _fixture.Enable("app");
+        EGlobal.RunPosted();
 
         Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Error);
         Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsFalse();
@@ -159,6 +163,7 @@ public class EGlobalLifecycleTests : IDisposable
         _fixture.Host.Broken.Add("base");
 
         _fixture.Enable("app");
+        EGlobal.RunPosted();
 
         Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Error);
         Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsFalse();
@@ -231,6 +236,87 @@ public class EGlobalLifecycleTests : IDisposable
         var start = _fixture.Operations.Count;
         _fixture.Enable("app");
         Assertions.AssertThat(OperationsSince(start)).ContainsExactly("add-nuget App.Package", "add-nuget App.Extra", "build");
+    }
+
+    [TestCase]
+    public void APackageOrProjectTwoPluginsDeclareStaysUntilTheLastOfThemIsDisabled()
+    {
+        _fixture.AddEPlugin("a", b => b.AddNuget("Shared.Package").AddNuget("A.Package").AddProject("res://lib/Shared.csproj", addReference: false));
+        _fixture.AddEPlugin("b", b => b.AddNuget("shared.package").AddProject("lib/Shared.csproj"));
+        _fixture.Enable("a");
+        _fixture.Enable("b");
+
+        var start = _fixture.Operations.Count;
+        _fixture.Disable("a");
+
+        Assertions.AssertObject(_fixture.State("a")).IsEqual(EEditorPluginState.Deactivated);
+        Assertions.AssertThat(OperationsSince(start)).ContainsExactly("remove-nuget A.Package", "build");
+
+        start = _fixture.Operations.Count;
+        _fixture.Disable("b");
+
+        Assertions.AssertThat(OperationsSince(start)).ContainsExactly(
+            "remove-reference lib/Shared.csproj", "remove-project lib/Shared.csproj", "remove-nuget shared.package", "build");
+    }
+
+    [TestCase]
+    public void AProjectReferenceOnlyTheDisabledPluginAddedIsRemovedFromASharedProject()
+    {
+        _fixture.AddEPlugin("a", b => b.AddProject("lib/Shared.csproj"));
+        _fixture.AddEPlugin("b", b => b.AddProject("lib/Shared.csproj", addReference: false));
+        _fixture.Enable("a");
+        _fixture.Enable("b");
+
+        var start = _fixture.Operations.Count;
+        _fixture.Disable("a");
+
+        Assertions.AssertThat(OperationsSince(start)).ContainsExactly("remove-reference lib/Shared.csproj", "build");
+    }
+
+    [TestCase]
+    public void AnOptionalRecipeRepeatingThePluginsOwnPackageLeavesItWhenTheOptionalPluginIsDisabled()
+    {
+        _fixture.AddPlainPlugin("extra");
+        _fixture.AddEPlugin("app", b => b
+            .AddNuget("App.Package")
+            .AddOptionalPluginDependency("extra", null, optional => optional.AddNuget("App.Package").AddNuget("App.Extra")));
+        _fixture.Global.InitializePluginToggles();
+        _fixture.Host.Enabled.Add("extra");
+        _fixture.Global.ObservePluginToggles();
+        _fixture.Enable("app");
+
+        var start = _fixture.Operations.Count;
+        _fixture.Host.Enabled.Remove("extra");
+        _fixture.Global.ObservePluginToggles();
+
+        Assertions.AssertThat(OperationsSince(start)).ContainsExactly("remove-nuget App.Extra", "build");
+
+        // disabling the plugin itself removes the package once
+        start = _fixture.Operations.Count;
+        _fixture.Disable("app");
+        Assertions.AssertThat(OperationsSince(start)).ContainsExactly("remove-nuget App.Package", "build");
+    }
+
+    [TestCase]
+    public void DisablingAPluginWithAnOptionalRecipeForItsOwnDependantDisablesBoth()
+    {
+        _fixture.AddEPlugin("core", b => b
+            .AddNuget("Core.Package")
+            .AddOptionalPluginDependency("extension", null, optional => optional.AddNuget("Core.Extension")));
+        _fixture.AddEPlugin("extension", b => b.AddNuget("Extension.Package").AddPluginDependency("core"));
+        _fixture.Enable("core");
+        _fixture.Enable("extension");
+        Assertions.AssertThat(_fixture.Operations).Contains("add-nuget Core.Extension");
+
+        var start = _fixture.Operations.Count;
+        _fixture.Disable("core");
+
+        Assertions.AssertObject(_fixture.State("core")).IsEqual(EEditorPluginState.Deactivated);
+        Assertions.AssertObject(_fixture.State("extension")).IsEqual(EEditorPluginState.Deactivated);
+        Assertions.AssertThat(OperationsSince(start)).ContainsExactly(
+            "remove-nuget Extension.Package", "remove-nuget Core.Extension", "remove-nuget Core.Package", "build");
+        Assertions.AssertObject(_fixture.Store.GetLocal("core")).IsNull();
+        Assertions.AssertObject(_fixture.Store.GetShared("extension")!.State).IsEqual(PersistedPluginState.Deactivated);
     }
 
     [TestCase]
@@ -354,6 +440,7 @@ public class EGlobalLifecycleTests : IDisposable
 
         _fixture.Enable("a");
         _fixture.Enable("self");
+        EGlobal.RunPosted();
 
         Assertions.AssertObject(_fixture.State("a")).IsEqual(EEditorPluginState.Error);
         Assertions.AssertObject(_fixture.State("self")).IsEqual(EEditorPluginState.Error);

@@ -147,6 +147,24 @@ public partial class EGlobalEdgeCaseTests : IDisposable
     }
 
     [TestCase]
+    public void APluginDisabledWhileTheFrameworkIsNotRunningIsLeftInstalled()
+    {
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package").AddAutoload("AppService", "res://addons/app/service.tscn"));
+        _fixture.Enable("app");
+        var start = _fixture.Operations.Count;
+        // e.g. the framework was disabled, or its Initialize failed and waits for its retry
+        var global = new EGlobal(_fixture.Host);
+
+        global.DisableEPlugin(_fixture.Context("app")!);
+
+        Assertions.AssertThat(_fixture.Operations.Skip(start).ToArray()).IsEmpty();
+        Assertions.AssertBool(_fixture.Host.Autoloads.ContainsKey("AppService")).IsTrue();
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Activated);
+        Assertions.AssertObject(_fixture.Store.GetShared("app")!.State).IsEqual(PersistedPluginState.Activated);
+        Assertions.AssertBool(Logged("warn", "app was disabled while the ePlugin framework is not running")).IsTrue();
+    }
+
+    [TestCase]
     public void EnablingAPluginThatABlockedPluginWouldUseOptionallyFails()
     {
         _fixture.AddEPlugin("extra", b => b.AddNuget("Extra.Package"));

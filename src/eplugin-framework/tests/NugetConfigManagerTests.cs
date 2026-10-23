@@ -202,6 +202,25 @@ public class NugetConfigManagerTests
         }
     }
 
+    [TestCase]
+    public static void AProjectsNuGetConfigUnderAnotherCasingIsEditedInsteadOfHidden()
+    {
+        var own = Path.Combine(Root, "NuGet.Config");
+        File.WriteAllText(own, "<configuration><packageSources><clear /><add key=\"team\" value=\"https://feed.example.com/v3/index.json\" /></packageSources></configuration>");
+
+        NugetConfigManager.RegisterSource(Root, "plugin_a", "addons/a/.nuget", new NullLogger());
+
+        Assertions.AssertThat(Directory.GetFiles(Root).Select(Path.GetFileName).ToArray()).ContainsExactly("NuGet.Config");
+        var content = File.ReadAllText(own);
+        Assertions.AssertThat(content).Contains("key=\"team\"");
+        Assertions.AssertThat(content).Contains("value=\"./addons/a/.nuget\"");
+
+        NugetConfigManager.UnregisterSource(Root, "plugin_a", "addons/a/.nuget", new NullLogger());
+
+        Assertions.AssertThat(Directory.GetFiles(Root).Select(Path.GetFileName).ToArray()).ContainsExactly("NuGet.Config");
+        Assertions.AssertThat(File.ReadAllText(own)).NotContains("addons/a");
+    }
+
     private static int CountOccurrences(string haystack, string needle)
     {
         var count = 0;

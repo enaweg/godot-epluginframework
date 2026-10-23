@@ -78,7 +78,9 @@ public interface IEEditorPluginRecipeBuilder
     /// </param>
     /// <param name="source">
     /// Optional NuGet feed URL or local path. <c>res://</c>-relative paths are globalized
-    /// automatically. When <see langword="null"/>, the configured feeds are used.
+    /// automatically. When <see langword="null"/>, the configured feeds are used. An http(s) feed or one inside the
+    /// project is recorded in the project's <c>nuget.config</c>; one elsewhere (<c>user://</c>, an absolute path
+    /// outside the project) is not, so other checkouts cannot restore the package.
     /// </param>
     /// <returns>The builder itself.</returns>
     IEEditorPluginRecipeBuilder AddNuget(string nugetName, string? version = null, string? source = null);

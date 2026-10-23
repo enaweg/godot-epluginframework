@@ -117,6 +117,8 @@ internal sealed class LifecycleFixture : IDisposable
 
     public void Dispose()
     {
+        // work a test left posted must not run in the next one
+        EGlobal.RunPosted();
         EGlobal.ForgetPluginToggles();
         foreach (var obj in _objects.Where(GodotObject.IsInstanceValid)) obj.Free();
         if (Directory.Exists(Root)) Directory.Delete(Root, true);
@@ -137,6 +139,9 @@ internal sealed class FakeEditorHost(LifecycleFixture fixture) : IEditorHost
 
     public int Scans { get; private set; }
 
+    /// <summary>The plugins whose <c>_EnablePlugin</c> is running.</summary>
+    private readonly HashSet<string> _enabling = new(StringComparer.Ordinal);
+
     public bool IsPluginEnabled(string slug) => Enabled.Contains(slug);
 
     public void SetPluginEnabled(string slug, bool enabled)
@@ -144,10 +149,15 @@ internal sealed class FakeEditorHost(LifecycleFixture fixture) : IEditorHost
         // Godot cannot enable a plugin without plugin.cfg or with a script that does not load
         if (Enabled.Contains(slug) == enabled ||
             enabled && (Broken.Contains(slug) || !File.Exists(Path.Combine(fixture.Addon(slug), "plugin.cfg")))) return;
+        // Godot would free the plugin while its own callback still runs
+        if (!enabled && _enabling.Contains(slug))
+            throw new InvalidOperationException($"{slug} is disabled inside its own _EnablePlugin.");
         if (enabled)
         {
             Enabled.Add(slug);
-            fixture.OnEnabled(slug);
+            _enabling.Add(slug);
+            try { fixture.OnEnabled(slug); }
+            finally { _enabling.Remove(slug); }
         }
         else
         {

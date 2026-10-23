@@ -187,19 +187,35 @@ internal sealed partial class EGlobal
         _enabledWithFramework.Clear();
         if (_toCheckEnable.Count == 0) return;
 
-        // Take the waiting plugins off the stack first: EnableEPlugin pushes a plugin back while one of its
-        // dependencies is still being enabled, which would break enumerating the stack, and draining it until
-        // empty would never end for a dependency that cannot be enabled.
-        var waitingPlugins = _toCheckEnable.ToArray();
-        _toCheckEnable.Clear();
-        foreach (var pluginContext in waitingPlugins)
-        {
-            EnableEPlugin(pluginContext, false);
-        }
+        ResumeWaitingInRounds();
 
         if (FinishTransition())
         {
             RefreshEditor(rebuild: false);
+        }
+    }
+
+    /// <summary>
+    /// Activates the plugins waiting on <see cref="_toCheckEnable"/>, in rounds: each takes them off the stack first,
+    /// because one whose dependency is still not activated pushes itself back, and popping until empty would never end.
+    /// A later round resumes the plugins whose dependencies an earlier one activated; a round that resumes none of them
+    /// leaves them waiting for their dependencies' activation callbacks.
+    /// </summary>
+    private void ResumeWaitingInRounds()
+    {
+        while (_toCheckEnable.Count > 0)
+        {
+            var waiting = _toCheckEnable.ToArray();
+            _toCheckEnable.Clear();
+            foreach (var nextPlugin in waiting)
+            {
+                EnableEPlugin(nextPlugin, false);
+            }
+
+            if (_toCheckEnable.ToHashSet().SetEquals(waiting) && waiting.All(c => c.State == EEditorPluginState.Created))
+            {
+                break;
+            }
         }
     }
 
@@ -886,23 +902,8 @@ internal sealed partial class EGlobal
 
         if (refreshAtEnd)
         {
-            // Trigger install for waiting plugins, in rounds: each takes them off the stack first, because one whose
-            // dependency is still not activated pushes itself back, and popping until empty would never end. A round
-            // that resumes none of them leaves them waiting for their dependencies' activation callbacks.
-            while (_toCheckEnable.Count > 0)
-            {
-                var waiting = _toCheckEnable.ToArray();
-                _toCheckEnable.Clear();
-                foreach (var nextPlugin in waiting)
-                {
-                    EnableEPlugin(nextPlugin, false);
-                }
-
-                if (_toCheckEnable.ToHashSet().SetEquals(waiting) && waiting.All(c => c.State == EEditorPluginState.Created))
-                {
-                    break;
-                }
-            }
+            // trigger install for waiting plugins
+            ResumeWaitingInRounds();
 
             if (FinishTransition())
             {
@@ -1054,18 +1055,28 @@ internal sealed partial class EGlobal
 
     private void FailAllUncheckedPluginsAndRefresh(string reason)
     {
-        // disabling a plugin runs its DisableEPlugin, which leaves a plugin that is still waiting alone
-        foreach (var plugin in _toCheckEnable.ToArray())
+        var failed = _toCheckEnable.ToArray();
+        foreach (var plugin in failed)
         {
             plugin.State = EEditorPluginState.Error;
             plugin.ErrorDetail ??= new InvalidOperationException(reason);
-            _host.SetPluginEnabled(plugin.Slug, false);
         }
 
         _toCheckEnable.Clear();
 
         FailTransition("dependency_resolution_failed");
-        RefreshEditor();
+        // Godot may still be running the _EnablePlugin of each of them: the plugin that failed and those waiting for it
+        // as their dependency. Disabling one right away would free it inside its own callback, so they are disabled on
+        // the next frame. In error, the DisableEPlugin that runs changes nothing.
+        Post(() =>
+        {
+            foreach (var plugin in failed.Where(p => _host.IsPluginEnabled(p.Slug)))
+            {
+                _host.SetPluginEnabled(plugin.Slug, false);
+            }
+        });
+        // nothing of the failed activation is built: it is retried as a whole
+        RefreshEditor(rebuild: false);
     }
 
     /// <summary>
@@ -1146,7 +1157,7 @@ internal sealed partial class EGlobal
     {
         foreach (var other in _contexts.ToArray())
         {
-            if (other.Slug == enabledSlug || other.Plugin is null)
+            if (other.Slug == enabledSlug || other.Plugin is null || IsBeingDeactivated(other))
             {
                 continue;
             }
@@ -1195,6 +1206,10 @@ internal sealed partial class EGlobal
         }
     }
 
+    /// <summary>Whether the current transition disables the plugin, now or once its dependants are disabled.</summary>
+    private bool IsBeingDeactivated(PluginContext context) =>
+        _transition?.Participants.GetValueOrDefault(context) == PersistedPluginState.Deactivated || _toCheckDisable.Contains(context);
+
     /// <summary>
     /// Reverses the nested recipes that other installed plugins got because the plugin
     /// <paramref name="disabledSlug"/> was available. Without this their code would keep referencing a
@@ -1204,7 +1219,9 @@ internal sealed partial class EGlobal
     {
         foreach (var other in _contexts.ToArray())
         {
-            if (other.Slug == disabledSlug || other.Plugin is null)
+            // a plugin this transition disables reverses its whole snapshot itself, e.g. one that a dependant of it
+            // declares an optional dependency of
+            if (other.Slug == disabledSlug || other.Plugin is null || IsBeingDeactivated(other))
             {
                 continue;
             }
@@ -1312,6 +1329,18 @@ internal sealed partial class EGlobal
     {
         if (context.Plugin is null)
         {
+            return;
+        }
+
+        if (!IsValid())
+        {
+            // Without the framework there is no dotnet CLI or state file to uninstall with, and Godot frees the plugin
+            // right after this callback, so its uninstall cannot wait for the framework either. A partial uninstall that
+            // records nothing would leave the project in a state no retry knows about.
+            var warning = $"{context.Slug} was disabled while the ePlugin framework is not running, so its recipe stays installed. " +
+                          "Enable the framework, then enable and disable the plugin again to remove it.";
+            if (context.Logger is { } logger) logger.Warn(warning);
+            else GD.PushWarning(warning);
             return;
         }
 
@@ -1447,11 +1476,14 @@ internal sealed partial class EGlobal
     {
         // without a snapshot (e.g. the context was rebuilt after an assembly reload) fall back to resolving
         // the optional dependencies against the current editor state.
-        var applied = context.AppliedOptionalDependencies ?? ResolveOptionalRecipes(context, recipe);
+        // the snapshot shrinks as its recipes are reversed, so the ones still installed keep what they share with others.
+        var applied = (context.AppliedOptionalDependencies ?? ResolveOptionalRecipes(context, recipe)).ToList();
+        context.AppliedOptionalDependencies = applied;
 
         for (var i = applied.Count - 1; i >= 0; i--)
         {
             ReverseRecipe(context, applied[i].Recipe);
+            applied.RemoveAt(i);
         }
 
         ReverseRecipe(context, recipe);
@@ -1460,10 +1492,11 @@ internal sealed partial class EGlobal
 
     private void ReverseRecipe(PluginContext context, EEditorPluginRecipe recipe)
     {
+        var remaining = RemainingRecipes(context, recipe);
         foreach (var autoload in recipe.Autoloads) ReverseAutoload(context, autoload);
         foreach (var directory in recipe.Directories) ShowHideHelper.HideDirectory(context, directory, _host);
-        foreach (var project in recipe.Projects) ReverseProject(context, project);
-        foreach (var nuget in recipe.Nugets) ReverseNuget(context, nuget);
+        foreach (var project in recipe.Projects) ReverseProject(context, project, remaining);
+        foreach (var nuget in recipe.Nugets) ReverseNuget(context, nuget, remaining);
     }
 
     private void RefreshEditor(bool rebuild = true)
@@ -1539,9 +1572,10 @@ internal sealed partial class EGlobal
 
                 var context = GetOrCreateContext(pluginBase);
 
-                context.State = changeTriggered || _enabledWithFramework.Contains(context)
+                context.State = changeTriggered || _enabledWithFramework.Contains(context) || _toCheckEnable.Contains(context)
                     ?
-                    // was a change to plugins, so this is a new plugin need to bootstrap.
+                    // was a change to plugins, or the plugin was enabled while the framework was not initialized and
+                    // waits for its activation, so this is a new plugin need to bootstrap.
                     EEditorPluginState.Created
                     :
                     // initial start or assembly reload, nothing need to be done as installation already happened
