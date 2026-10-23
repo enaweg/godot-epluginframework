@@ -176,6 +176,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _attentionButton.Icon = EditorIcons.Retry;
         GetNode<Button>("%SettingsButton").Icon = EditorIcons.Settings;
         _settings.RefreshTheme();
+        TextColors.Use(EditorWindows.Theme);
         // Render the existing model rather than refreshing it: a theme change must preserve a staged update.
         if (_model is not null) Render();
     }

@@ -6,6 +6,7 @@ using Enaweg.Plugin.Internal;
 using Enaweg.Plugin.Internal.Manager;
 using Enaweg.Plugin.Internal.Update;
 using GdUnit4;
+using Godot;
 
 namespace Enaweg.Plugin.Tests;
 
@@ -442,5 +443,17 @@ public class PluginManagerViewModelTests
     private static PluginInfo Plugin(string slug, PluginKind kind, string? updateUrl = null, bool enabled = true) =>
         new(slug, slug, kind, enabled) { Version = "1.0.0", UpdateUrl = updateUrl };
     private static UpdateCandidate Candidate(string slug) => new(slug, slug, "1.0.0", "2.0.0", "https://example.org/releases", null, null, new ZipPackageRef("https://example.org/plugin.zip", slug));
+
+    [TestCase]
+    [RequireGodotRuntime]
+    public static void StatusWordsTakeTheEditorThemesColorsSoTheyAreReadableOnALightTheme()
+    {
+        var light = new Theme();
+        light.SetColor("warning_color", "Editor", new Color(0.6f, 0.4f, 0f));
+        Assertions.AssertString(TextColors.Of(light, "warning_color", "#ffd070")).IsEqual("#996600");
+        // a theme without the color, and no editor
+        Assertions.AssertString(TextColors.Of(light, "error_color", "#ff7070")).IsEqual("#ff7070");
+        Assertions.AssertString(TextColors.Of(null, "warning_color", "#ffd070")).IsEqual("#ffd070");
+    }
 }
 #endif
