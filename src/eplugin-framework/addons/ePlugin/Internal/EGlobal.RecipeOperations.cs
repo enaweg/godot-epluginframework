@@ -25,10 +25,16 @@ internal sealed partial class EGlobal
             !NugetConfigManager.UnregisterSource(_host.ProjectRoot, context.Slug, previous.Source, context.Logger))
             throw new InvalidOperationException($"Unregistering previous source for {nuget.Name} failed.");
     }
-    private void ReverseNuget(PluginContext context, EEditorPluginRecipe.Nuget nuget)
+    /// <param name="remaining">The recipes that stay installed (<see cref="RemainingRecipes"/>); a package one of them declares is kept.</param>
+    private void ReverseNuget(PluginContext context, EEditorPluginRecipe.Nuget nuget, IReadOnlyList<EEditorPluginRecipe>? remaining = null)
     {
         var shared = _recipeUpdateJournal?.Recipes.Any(r => r.Key != context.Slug &&
             (r.Value.Target ?? r.Value.Applied).Nugets.Any(n => n.Name == nuget.Name)) == true;
+        if (remaining?.Any(r => r.Nugets.Any(n => string.Equals(n.Name, nuget.Name, StringComparison.OrdinalIgnoreCase))) == true)
+        {
+            context.Logger?.Log($"Keeping NuGet {nuget.Name}, another installed recipe still uses it.");
+            shared = true;
+        }
         if (!shared && (context.Cli is not ICheckedDotnetCli cli || !cli.TryRemoveNugetFromProject(nuget.Name)))
             throw new InvalidOperationException($"Removing NuGet {nuget.Name} failed.");
         var keepsSource = _recipeUpdateJournal?.Recipes.GetValueOrDefault(context.Slug)?.Target?.Nugets.Any(n => n.Source == nuget.Source) == true;
@@ -41,11 +47,40 @@ internal sealed partial class EGlobal
             throw new InvalidOperationException($"Adding project {project.Path} to the solution failed.");
         if (project.Reference && !cli.TryAddProjectReference(project.Path)) throw new InvalidOperationException($"Adding project reference {project.Path} failed.");
     }
-    private static void ReverseProject(PluginContext context, EEditorPluginRecipe.Project project)
+    /// <param name="remaining">The recipes that stay installed (<see cref="RemainingRecipes"/>); the solution entry or reference one of them declares is kept.</param>
+    private void ReverseProject(PluginContext context, EEditorPluginRecipe.Project project, IReadOnlyList<EEditorPluginRecipe>? remaining = null)
     {
         if (context.Cli is not ICheckedDotnetCli cli) throw new InvalidOperationException("Checked dotnet CLI is unavailable.");
-        if (project.Reference && !cli.TryRemoveProjectReference(project.Path)) throw new InvalidOperationException($"Removing project reference {project.Path} failed.");
-        if (!cli.TryRemoveProjectFromSolution(project.Path)) throw new InvalidOperationException($"Removing project {project.Path} from the solution failed.");
+        var path = ProjectPath(project.Path);
+        var kept = remaining?.SelectMany(r => r.Projects).Where(p => ProjectPath(p.Path) == path).ToArray() ?? [];
+        if (kept.Length > 0) context.Logger?.Log($"Keeping project {project.Path}, another installed recipe still uses it.");
+        if (project.Reference && !kept.Any(p => p.Reference) && !cli.TryRemoveProjectReference(project.Path))
+            throw new InvalidOperationException($"Removing project reference {project.Path} failed.");
+        if (kept.Length == 0 && !cli.TryRemoveProjectFromSolution(project.Path)) throw new InvalidOperationException($"Removing project {project.Path} from the solution failed.");
+    }
+
+    /// <summary>A recipe's project path made absolute, like <see cref="DotnetCliBase.ProjectFile"/>, so recipes naming it differently compare equal.</summary>
+    private string ProjectPath(string path) =>
+        System.IO.Path.GetFullPath(System.IO.Path.Combine(_host.ProjectRoot, path.StartsWith("res://", StringComparison.Ordinal) ? path["res://".Length..] : path));
+
+    /// <summary>
+    /// The recipes that stay installed while <paramref name="reversed"/>, one of <paramref name="context"/>'s recipes, is
+    /// reversed: the recipes and applied optional recipes of every other activated plugin, and the context's own main
+    /// recipe and applied optional recipes besides <paramref name="reversed"/>. Two plugins may declare the same NuGet
+    /// package or project, and removing it with one of them would break the other's code.
+    /// </summary>
+    private List<EEditorPluginRecipe> RemainingRecipes(PluginContext context, EEditorPluginRecipe reversed)
+    {
+        var remaining = new List<EEditorPluginRecipe>();
+        foreach (var other in _contexts.Where(c => c.Plugin is not null && (c == context || c.State == EEditorPluginState.Activated)).ToArray())
+        {
+            if (other != context && !TryEnsureRecipe(other)) continue;
+            var recipe = other.Builder.PluginRecipe;
+            remaining.Add(recipe);
+            remaining.AddRange((other.AppliedOptionalDependencies ?? (other == context ? [] : ResolveOptionalRecipes(other, recipe))).Select(o => o.Recipe));
+        }
+        remaining.RemoveAll(r => ReferenceEquals(r, reversed));
+        return remaining;
     }
     private void ApplyAutoload(PluginContext context, EEditorPluginRecipe.Autoload autoload)
     {

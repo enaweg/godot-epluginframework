@@ -1447,11 +1447,14 @@ internal sealed partial class EGlobal
     {
         // without a snapshot (e.g. the context was rebuilt after an assembly reload) fall back to resolving
         // the optional dependencies against the current editor state.
-        var applied = context.AppliedOptionalDependencies ?? ResolveOptionalRecipes(context, recipe);
+        // the snapshot shrinks as its recipes are reversed, so the ones still installed keep what they share with others.
+        var applied = (context.AppliedOptionalDependencies ?? ResolveOptionalRecipes(context, recipe)).ToList();
+        context.AppliedOptionalDependencies = applied;
 
         for (var i = applied.Count - 1; i >= 0; i--)
         {
             ReverseRecipe(context, applied[i].Recipe);
+            applied.RemoveAt(i);
         }
 
         ReverseRecipe(context, recipe);
@@ -1460,10 +1463,11 @@ internal sealed partial class EGlobal
 
     private void ReverseRecipe(PluginContext context, EEditorPluginRecipe recipe)
     {
+        var remaining = RemainingRecipes(context, recipe);
         foreach (var autoload in recipe.Autoloads) ReverseAutoload(context, autoload);
         foreach (var directory in recipe.Directories) ShowHideHelper.HideDirectory(context, directory, _host);
-        foreach (var project in recipe.Projects) ReverseProject(context, project);
-        foreach (var nuget in recipe.Nugets) ReverseNuget(context, nuget);
+        foreach (var project in recipe.Projects) ReverseProject(context, project, remaining);
+        foreach (var nuget in recipe.Nugets) ReverseNuget(context, nuget, remaining);
     }
 
     private void RefreshEditor(bool rebuild = true)

@@ -234,6 +234,65 @@ public class EGlobalLifecycleTests : IDisposable
     }
 
     [TestCase]
+    public void APackageOrProjectTwoPluginsDeclareStaysUntilTheLastOfThemIsDisabled()
+    {
+        _fixture.AddEPlugin("a", b => b.AddNuget("Shared.Package").AddNuget("A.Package").AddProject("res://lib/Shared.csproj", addReference: false));
+        _fixture.AddEPlugin("b", b => b.AddNuget("shared.package").AddProject("lib/Shared.csproj"));
+        _fixture.Enable("a");
+        _fixture.Enable("b");
+
+        var start = _fixture.Operations.Count;
+        _fixture.Disable("a");
+
+        Assertions.AssertObject(_fixture.State("a")).IsEqual(EEditorPluginState.Deactivated);
+        Assertions.AssertThat(OperationsSince(start)).ContainsExactly("remove-nuget A.Package", "build");
+
+        start = _fixture.Operations.Count;
+        _fixture.Disable("b");
+
+        Assertions.AssertThat(OperationsSince(start)).ContainsExactly(
+            "remove-reference lib/Shared.csproj", "remove-project lib/Shared.csproj", "remove-nuget shared.package", "build");
+    }
+
+    [TestCase]
+    public void AProjectReferenceOnlyTheDisabledPluginAddedIsRemovedFromASharedProject()
+    {
+        _fixture.AddEPlugin("a", b => b.AddProject("lib/Shared.csproj"));
+        _fixture.AddEPlugin("b", b => b.AddProject("lib/Shared.csproj", addReference: false));
+        _fixture.Enable("a");
+        _fixture.Enable("b");
+
+        var start = _fixture.Operations.Count;
+        _fixture.Disable("a");
+
+        Assertions.AssertThat(OperationsSince(start)).ContainsExactly("remove-reference lib/Shared.csproj", "build");
+    }
+
+    [TestCase]
+    public void AnOptionalRecipeRepeatingThePluginsOwnPackageLeavesItWhenTheOptionalPluginIsDisabled()
+    {
+        _fixture.AddPlainPlugin("extra");
+        _fixture.AddEPlugin("app", b => b
+            .AddNuget("App.Package")
+            .AddOptionalPluginDependency("extra", null, optional => optional.AddNuget("App.Package").AddNuget("App.Extra")));
+        _fixture.Global.InitializePluginToggles();
+        _fixture.Host.Enabled.Add("extra");
+        _fixture.Global.ObservePluginToggles();
+        _fixture.Enable("app");
+
+        var start = _fixture.Operations.Count;
+        _fixture.Host.Enabled.Remove("extra");
+        _fixture.Global.ObservePluginToggles();
+
+        Assertions.AssertThat(OperationsSince(start)).ContainsExactly("remove-nuget App.Extra", "build");
+
+        // disabling the plugin itself removes the package once
+        start = _fixture.Operations.Count;
+        _fixture.Disable("app");
+        Assertions.AssertThat(OperationsSince(start)).ContainsExactly("remove-nuget App.Package", "build");
+    }
+
+    [TestCase]
     public void APlainPluginEnabledInProjectSettingsWaitsForItsLicense()
     {
         _fixture.AddPlainPlugin("tool", extraConfig: "license_required=true");

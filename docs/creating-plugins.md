@@ -59,7 +59,7 @@ public partial class SamplePlugin : EditorPlugin, IEEditorPlugin
 
 Declarations are checked when the recipe is created: an empty name or path, an invalid NuGet package id or project path, a malformed plugin slug or version constraint, and declarations that contradict each other (one package with two versions, a plugin that is both a required and an optional dependency) throw an `ArgumentException`. The activation then fails with that message, shown in the ePlugin Manager. Declaring the same thing twice counts once, except an optional dependency, whose resources must be declared in one call.
 
-Deactivation reverses the recipe. Removing a NuGet package, project reference, or solution entry that is already gone, for example because it was removed by hand, is reported as a warning and counts as done.
+Deactivation reverses the recipe. Removing a NuGet package, project reference, or solution entry that is already gone, for example because it was removed by hand, is reported as a warning and counts as done. A NuGet package, project reference, or solution entry that another installed recipe also declares, of another enabled plugin or another of the plugin's own optional recipes, stays until the last recipe declaring it is reversed.
 
 Optional dependencies are re-evaluated when either plugin is enabled or disabled, also when the optional plugin is a GDScript plugin toggled in **Project Settings > Plugins**, so activation order does not matter. Disabling the optional plugin removes the nested recipe while leaving the declaring plugin active. Nested recipes receive `IEEditorPluginRecipeBuilder`, which supports resources but cannot declare dependencies of its own.
 
