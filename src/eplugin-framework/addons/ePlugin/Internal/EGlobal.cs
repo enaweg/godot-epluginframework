@@ -1412,6 +1412,14 @@ internal sealed partial class EGlobal
             pluginsToDisable.Add(plugin);
         }
 
+        // A dependant the editor already disabled runs no DisableEPlugin that would resume this plugin, e.g. because its
+        // _DisablePlugin threw before calling it; waiting for it would keep the transition open forever.
+        foreach (var plugin in pluginsToDisable.Where(p => !_host.IsPluginEnabled(p.Slug)))
+        {
+            context.Logger?.Warn($"{plugin.Slug} requires {context.Slug}, but the editor already disabled it; its recipe stays installed.");
+        }
+
+        pluginsToDisable.RemoveAll(p => !_host.IsPluginEnabled(p.Slug));
         if (pluginsToDisable.Count > 0)
         {
             _toCheckDisable.Push(context);

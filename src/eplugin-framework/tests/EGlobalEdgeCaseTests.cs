@@ -193,6 +193,24 @@ public partial class EGlobalEdgeCaseTests : IDisposable
     }
 
     [TestCase]
+    public void DisablingAPluginWhoseDependantTheEditorAlreadyDisabledDoesNotWaitForIt()
+    {
+        _fixture.AddEPlugin("base", b => b.AddNuget("Base.Package"));
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package").AddPluginDependency("base"));
+        _fixture.Enable("app");
+        // e.g. app's _DisablePlugin threw before it called DisableEPlugin
+        _fixture.Host.Enabled.Remove("app");
+        var start = _fixture.Operations.Count;
+
+        _fixture.Disable("base");
+
+        Assertions.AssertObject(_fixture.State("base")).IsEqual(EEditorPluginState.Deactivated);
+        Assertions.AssertThat(_fixture.Operations.Skip(start).ToArray()).ContainsExactly("remove-nuget Base.Package", "build");
+        Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsFalse();
+        Assertions.AssertBool(Logged("warn", "app requires base, but the editor already disabled it")).IsTrue();
+    }
+
+    [TestCase]
     public void EnablingAPluginThatABlockedPluginWouldUseOptionallyFails()
     {
         _fixture.AddEPlugin("extra", b => b.AddNuget("Extra.Package"));
