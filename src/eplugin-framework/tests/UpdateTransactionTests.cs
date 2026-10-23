@@ -578,6 +578,25 @@ public class UpdateTransactionTests
         Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/other/plugin.cfg")).Contains("2.0.0")).IsTrue();
     }
     [TestCase]
+    public void RollbackUsesTheNewProjectBackupWhenReplacingItWasInterrupted()
+    {
+        var package = Package(true);
+        var other = Other(package.Directory);
+        _host.ManagedSlugs.Add("plugin");
+        _host.OnReconcile = journal =>
+        {
+            if (journal.Plugins.Any(p => p.Slug == "other")) File.WriteAllText(Path.Combine(_root, "Game.csproj"), "project with other");
+        };
+        _applier.ApplyGroups([[package.Package], [other]], package.Directory, NewDirectory);
+        // The editor stopped between moving the old backup aside and moving the complete new one into its place.
+        var backup = Path.Combine(package.Directory, "backup-project");
+        Directory.Move(backup, backup + ".new");
+        Directory.CreateDirectory(backup + ".old");
+        File.WriteAllText(Path.Combine(backup + ".old", "Game.csproj"), "project before other");
+        Assertions.AssertObject(_applier.Rollback(UpdateJournal.Load(package.Directory), "test")).IsEqual(UpdateOutcome.RolledBack);
+        Assertions.AssertString(File.ReadAllText(Path.Combine(_root, "Game.csproj"))).IsEqual("project with other");
+    }
+    [TestCase]
     public void JournalsAreReadInTheOrderTheirGroupsWereApplied()
     {
         var root = Path.Combine(_root, ".godot/eplugin/updates");

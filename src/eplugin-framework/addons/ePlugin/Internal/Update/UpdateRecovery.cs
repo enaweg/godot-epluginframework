@@ -76,9 +76,10 @@ internal static class UpdateRecovery
                         (!File.Exists(Path.Combine(installed, "plugin.cfg")) || !HasVersion(Path.Combine(installed, "plugin.cfg"), plugin.OldVersion)))
                         throw new IOException("Missing backup for " + plugin.Slug);
                 }
-                foreach (var file in journal.ProjectFiles)
+                var (projectBackup, projectFiles) = ProjectBackup.Find(folder, journal.ProjectFiles);
+                foreach (var file in projectFiles)
                 {
-                    if (file.Contains('/') || file.Contains('\\') || !File.Exists(Inside(Path.Combine(folder, "backup-project"), file)))
+                    if (file.Contains('/') || file.Contains('\\') || !File.Exists(Inside(projectBackup, file)))
                         throw new IOException("Missing or invalid project backup: " + file);
                 }
                 recoveringAttempt = journal.AttemptId;
@@ -102,8 +103,8 @@ internal static class UpdateRecovery
                     foreach (var dir in applied.Where(d => !recipe.Value.Old.Directories.Contains(d)).OrderByDescending(d => d.Length)) Visibility(addon, recipe.Key, dir, false);
                     foreach (var dir in recipe.Value.Old.Directories.OrderBy(d => d.Length)) Visibility(addon, recipe.Key, dir, true);
                 }
-                foreach (var file in journal.ProjectFiles) File.Copy(Inside(Path.Combine(folder, "backup-project"), file), Inside(projectRoot, file), true);
-                if (!journal.ProjectFiles.Any(f => f.Equals("nuget.config", StringComparison.OrdinalIgnoreCase)) && File.Exists(Path.Combine(projectRoot, "nuget.config"))) File.Delete(Path.Combine(projectRoot, "nuget.config"));
+                foreach (var file in projectFiles) File.Copy(Inside(projectBackup, file), Inside(projectRoot, file), true);
+                if (!projectFiles.Any(f => f.Equals("nuget.config", StringComparison.OrdinalIgnoreCase)) && File.Exists(Path.Combine(projectRoot, "nuget.config"))) File.Delete(Path.Combine(projectRoot, "nuget.config"));
                 restoreSettings();
                 if (!rebuild()) throw new IOException("Restored project failed to build.");
                 if (store.LocalAttempts.Any(a => a.AttemptId == journal.AttemptId) && !store.TryAbandonAttempt(journal.AttemptId)) throw new IOException("Cannot clear restored update marker.");
@@ -182,6 +183,29 @@ internal static class UpdateRecovery
             File.SetAttributes(from, show ? FileAttributes.Normal : FileAttributes.Hidden);
             Directory.Move(from, to);
         }
+    }
+}
+
+/// <summary>
+/// The copy of the project files (<c>.csproj</c>, <c>.sln</c>, <c>nuget.config</c>, <c>project.godot</c>) a journal restores
+/// on rollback. Replacing it writes the new copy to <c>backup-project.new</c>, moves the old one to <c>.old</c> and the new
+/// one into place, and only then saves the journal. Used by both the applier and early recovery.
+/// </summary>
+internal static class ProjectBackup
+{
+    public const string Folder = "backup-project";
+
+    /// <summary>
+    /// The folder to restore from and its files. When a replacement stopped between its two moves, the new copy is
+    /// complete (the old one is moved aside only after it) and is used with its own files, because the journal still lists
+    /// the old copy's; without the new copy, the old one is.
+    /// </summary>
+    public static (string Directory, IReadOnlyList<string> Files) Find(string journalDirectory, IReadOnlyList<string> recorded)
+    {
+        var backup = Path.Combine(journalDirectory, Folder);
+        if (Directory.Exists(backup) || !Directory.Exists(backup + ".old")) return (backup, recorded);
+        if (!Directory.Exists(backup + ".new")) return (backup + ".old", recorded);
+        return (backup + ".new", Directory.GetFiles(backup + ".new").Select(f => Path.GetFileName(f)).ToArray());
     }
 }
 #endif

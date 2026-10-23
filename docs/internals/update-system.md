@@ -225,7 +225,9 @@ applied; resuming reloads each journal because an earlier group may have changed
 
 When a journal commits or rolls back, `RebasePending` refreshes the `backup-project` of every journal that has not
 reconciled yet and, on commit, its recipe baselines for plugins it does not update, so a later rollback keeps the earlier
-group's changes. Reconcile leaves the recipes of plugins in another active journal or rolled back since the assembly
+group's changes. A replaced `backup-project` is copied to `backup-project.new`, the old one moved to `.old` and the new
+one into place before the journal is saved; when a crash leaves neither in place, rollback and early recovery restore
+the new copy with its own files (`ProjectBackup.Find`). Reconcile leaves the recipes of plugins in another active journal or rolled back since the assembly
 was loaded alone (`UntouchedRecipes`).
 
 ## Plugin state attempts
