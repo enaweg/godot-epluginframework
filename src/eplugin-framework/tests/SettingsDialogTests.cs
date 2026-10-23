@@ -107,6 +107,21 @@ public class SettingsDialogTests
     }
 
     [TestCase]
+    public static void OnlyTheBuiltInListSettingChangesWhereUpdatesComeFrom()
+    {
+        UpdateSettings.Register(); LicenseSettings.Register(); WelcomeSettings.Register(); LoggingSettings.Register();
+        var dialog = GD.Load<PackedScene>(ScenePath).Instantiate<SettingsDialog>();
+        try
+        {
+            // the others only change when or how updates are checked and installed: loaded versions stay valid
+            var sources = GeneralSettingsTab.SettingControls(dialog.GetNode("%SettingsTabs/General"))
+                .Select(GeneralSettingsTab.SettingOf).Where(GeneralSettingsTab.ChangesUpdateSources).ToArray();
+            Assertions.AssertThat(sources).ContainsExactly(KnownPlugins.SettingKey);
+        }
+        finally { dialog.Free(); }
+    }
+
+    [TestCase]
     public static void TheAboutTabLinksOnlyWebAddresses()
     {
         var dialog = GD.Load<PackedScene>(ScenePath).Instantiate<SettingsDialog>();

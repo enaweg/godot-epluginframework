@@ -23,8 +23,14 @@ internal sealed partial class GeneralSettingsTab : VBoxContainer, ISerialization
     private Label _autoAcceptWarning = null!;
     private Label _status = null!;
 
-    /// <summary>Raised after a setting was changed here.</summary>
-    public event Action? Changed;
+    /// <summary>Raised after a setting was changed here, with its key.</summary>
+    public event Action<string>? Changed;
+
+    /// <summary>
+    /// Whether a setting decides where updates come from, so versions loaded before it changed may be from a source no
+    /// longer used. The others change no update source; loading versions again would only spend the sites' rate limits.
+    /// </summary>
+    internal static bool ChangesUpdateSources(string key) => key == Update.KnownPlugins.SettingKey;
 
     public void Initialize()
     {
@@ -104,7 +110,7 @@ internal sealed partial class GeneralSettingsTab : VBoxContainer, ISerialization
         var error = ProjectSettings.Save();
         _status.Text = error == Error.Ok ? "" : $"Cannot save {key} to project.godot: {error}.";
         _status.Visible = error != Error.Ok;
-        Changed?.Invoke();
+        Changed?.Invoke(key);
     }
 
     // Reload serializes every script before disposing any of them, so callback targets are still valid here.

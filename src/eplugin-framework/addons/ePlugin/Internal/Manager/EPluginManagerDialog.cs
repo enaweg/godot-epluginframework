@@ -726,12 +726,12 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     }
 
     /// <summary>
-    /// A plugin's update site or a setting changed: versions loaded from an old site are dropped, and the list is read
-    /// again so updates found there are no longer offered and the status line shows the next scheduled check.
+    /// A plugin's update site or a setting changed: versions loaded from a source no longer used are dropped, and the
+    /// list is read again so updates found there are no longer offered and the status line shows the next scheduled check.
     /// </summary>
-    private void SettingsChanged()
+    private void SettingsChanged(bool sourcesChanged)
     {
-        _updates.ClearVersions();
+        if (sourcesChanged) _updates.ClearVersions();
         if (!IsShown || _working) return;
         Refresh();
     }

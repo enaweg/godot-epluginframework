@@ -34,7 +34,7 @@ public class UpdateSourcesTabTests : IDisposable
         _dialog = GD.Load<PackedScene>("res://addons/ePlugin/Internal/Manager/SettingsDialog.tscn").Instantiate<SettingsDialog>();
         _dialog.Initialize(_fixture.Global);
         _changes = 0;
-        _dialog.Changed += () => _changes++;
+        _dialog.Changed += sourcesChanged => { if (sourcesChanged) _changes++; };
         // in the tree, so the tab follows the local index and its windows can open
         ((SceneTree)Engine.GetMainLoop()).Root.AddChild(_dialog);
         Tab.Open();
