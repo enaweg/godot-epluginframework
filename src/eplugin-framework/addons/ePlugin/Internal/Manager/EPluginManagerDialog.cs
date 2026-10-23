@@ -82,6 +82,9 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private const string ReloadFailedNotice = "The editor has not finished loading the rebuilt C# code. Restart the editor to continue.";
     // Rendering runs after async operations and on theme changes; keep their result until the next update operation.
     private string? _operationNotice;
+    // The notice of work that ended while the manager was closed: Escape and the window's close button hide it also
+    // while its work goes on, so the next Open shows how it ended instead of dropping it.
+    private bool _keepNotice;
 
     /// <summary>False once an assembly reload dropped the C# state of this still existing editor node.</summary>
     public bool IsInitialized => _global is not null;
@@ -179,7 +182,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
 
     public void Open()
     {
-        _operationNotice = null;
+        if (!_keepNotice) _operationNotice = null;
+        _keepNotice = false;
         Refresh();
         PopupCenteredClamped(Size, 0.9f);
         _tree.GrabFocus();
@@ -761,6 +765,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         finally { _working = false; }
         if (!IsShown) return;
         _operationNotice = outcome.Notice;
+        _keepNotice = !Visible;
         if (outcome.IsError) GD.PushError(outcome.Notice);
         Refresh();
     }
@@ -800,6 +805,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         else
         {
             _operationNotice = outcome.Notice;
+            _keepNotice = !Visible;
             if (outcome.IsError) GD.PushError(outcome.Notice);
         }
         if (outcome.Refresh) Refresh(); else Render();
