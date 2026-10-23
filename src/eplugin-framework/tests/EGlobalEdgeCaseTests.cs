@@ -165,6 +165,75 @@ public partial class EGlobalEdgeCaseTests : IDisposable
     }
 
     [TestCase]
+    public void APluginCanStillBeToggledAfterAPullChangedTheStateFile()
+    {
+        _fixture.AddEPlugin("a", b => b.AddNuget("A.Package"));
+        _fixture.AddEPlugin("b", b => b.AddNuget("B.Package"));
+        _fixture.Enable("a");
+        // a git pull brings a teammate's plugin state while the editor runs
+        var path = Path.Combine(_fixture.Root, "addons", "eplugin-state.json");
+        var copy = Path.Combine(_fixture.Root, "pulled.json");
+        File.Copy(path, copy);
+        var teammate = new PluginStateStore(copy, null);
+        Assertions.AssertBool(teammate.Load()).IsTrue();
+        Assertions.AssertBool(teammate.TryBeginAttempt("other", "3.0", PersistedPluginState.Activated, out var id)).IsTrue();
+        Assertions.AssertBool(teammate.TryComplete(id, [new SharedPluginState("other", "3.0", PersistedPluginState.Activated)])).IsTrue();
+        File.Copy(copy, path, true);
+
+        _fixture.Enable("b");
+        _fixture.Disable("a");
+
+        Assertions.AssertObject(_fixture.State("b")).IsEqual(EEditorPluginState.Activated);
+        Assertions.AssertObject(_fixture.State("a")).IsEqual(EEditorPluginState.Deactivated);
+        var reloaded = new PluginStateStore(path, null);
+        Assertions.AssertBool(reloaded.Load()).IsTrue();
+        Assertions.AssertObject(reloaded.GetShared("other")!.State).IsEqual(PersistedPluginState.Activated);
+        Assertions.AssertObject(reloaded.GetShared("b")!.State).IsEqual(PersistedPluginState.Activated);
+        Assertions.AssertObject(reloaded.GetShared("a")!.State).IsEqual(PersistedPluginState.Deactivated);
+    }
+
+    [TestCase]
+    public void DisablingAPluginWhoseDependantTheEditorAlreadyDisabledDoesNotWaitForIt()
+    {
+        _fixture.AddEPlugin("base", b => b.AddNuget("Base.Package"));
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package").AddPluginDependency("base"));
+        _fixture.Enable("app");
+        // e.g. app's _DisablePlugin threw before it called DisableEPlugin
+        _fixture.Host.Enabled.Remove("app");
+        var start = _fixture.Operations.Count;
+
+        _fixture.Disable("base");
+
+        Assertions.AssertObject(_fixture.State("base")).IsEqual(EEditorPluginState.Deactivated);
+        Assertions.AssertThat(_fixture.Operations.Skip(start).ToArray()).ContainsExactly("remove-nuget Base.Package", "build");
+        Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsFalse();
+        Assertions.AssertBool(Logged("warn", "app requires base, but the editor already disabled it")).IsTrue();
+    }
+
+    [TestCase]
+    public void AnotherPluginsRecipeThatCannotBeReadDuringADisableLeavesThatPluginAlone()
+    {
+        _fixture.AddEPlugin("a", b => b.AddNuget("A.Package"));
+        _fixture.AddEPlugin("b", b => b.AddNuget("B.Package"));
+        _fixture.Enable("a");
+        _fixture.Enable("b");
+        // b's recipe was not read since an assembly reload, and its CreateRecipe throws now
+        var other = _fixture.Context("b")!;
+        other.Builder = EEditorPluginBuilder.Create();
+        other.IsRecipeCreated = false;
+        _fixture.SetRecipe("b", null);
+
+        _fixture.Disable("a");
+
+        // whether b requires a is unknown, so a's deactivation fails and can be retried; b keeps working
+        Assertions.AssertObject(other.State).IsEqual(EEditorPluginState.Activated);
+        Assertions.AssertObject(_fixture.State("a")).IsEqual(EEditorPluginState.Error);
+        Assertions.AssertString(_fixture.Store.GetLocal("a")!.Reason).IsEqual("dependent_recipe_creation_failed");
+        Assertions.AssertObject(_fixture.Store.GetLocal("b")).IsNull();
+        Assertions.AssertBool(Logged("warn", "Cannot read the recipe of b")).IsTrue();
+    }
+
+    [TestCase]
     public void EnablingAPluginThatABlockedPluginWouldUseOptionallyFails()
     {
         _fixture.AddEPlugin("extra", b => b.AddNuget("Extra.Package"));

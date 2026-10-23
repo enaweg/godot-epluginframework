@@ -138,7 +138,8 @@ public class PlainPluginObserverTests
         _store.TryCreateBaseline([]);
         var observer = new PlainPluginObserver(_store, () => _enabled, _ => _version, _ => false, _ => false, new RecordingLogger(log, "observer"));
         observer.Refresh();
-        File.AppendAllText(_path, " ");
+        // an unresolved merge conflict
+        File.WriteAllText(_path, "<<<<<<< HEAD\n");
         var edited = File.ReadAllText(_path);
 
         _enabled.Add("plain");

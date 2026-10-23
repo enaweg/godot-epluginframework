@@ -136,7 +136,8 @@ assembly name, the addons folder and plugin directories, the user's editor confi
 ePlugin and the recipe of a disabled one, autoloads, filesystem scans and whether one runs, pausing imports while
 unfocused, restarting the editor, whether dialogs can show, loading/unloading GDExtensions and whether one is loaded);
 keep new lifecycle code behind it so it stays testable. Recipes are created through `TryEnsureRecipe`, which puts the
-plugin in error and discards a half-built recipe when `CreateRecipe` throws. `FindDependencyCycle` fails an activation
+plugin in error and discards a half-built recipe when `CreateRecipe` throws. Scans that only read other plugins' recipes pass `scan: true`, which logs
+the failure but leaves that plugin's state alone, since no attempt of its own could resolve that error. `FindDependencyCycle` fails an activation
 whose hard dependencies lead back to the plugin (otherwise it waits for itself forever). Godot frees a plugin's instance
 on disable, so `AddContext` replaces a deactivated or freed context of the same slug. A transition has one participant
 per slug: when a manual retry re-enables a plugin whose failed activation disabled it, the new instance's
@@ -414,7 +415,8 @@ of the shared `eplugin-state.json` (`PluginStateStore.TryRecordLicenses`), omitt
 disallows unmapped members, and a failed self-update rolls back to it, so never write a field 0.9.0 does not know
 without raising `schemaVersion` (`PluginStateStoreTests.FilesOf090AreReadAndWrittenBackInAFormItCanRead` lists them).
 Later readers skip unknown fields and write them back (`JsonExtensionData`); a missing `plugins`/`attempts` list or
-another `schemaVersion` still makes the store read-only. Only an update's acknowledgement sets `lastCompletedAttemptId` (recovery and rollback compare
+another `schemaVersion` still makes the store read-only. A shared file that changed on disk since it was read (a git pull) is read again before a write
+(`PluginStateStore.Rebase`), which refuses only when the same entries changed there too. Only an update's acknowledgement sets `lastCompletedAttemptId` (recovery and rollback compare
 it with the journal); lifecycle completions keep it and skip writing the shared file when no entry changed, because
 the file is committed and shared by the team.
 `EGlobal.Licenses.cs` gates `EnableEPlugin` before `JoinTransition` (skipped for manual retries and update reconciles)
