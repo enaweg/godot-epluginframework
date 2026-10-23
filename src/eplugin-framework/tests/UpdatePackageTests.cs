@@ -106,6 +106,24 @@ public class UpdatePackageTests
     }
 
     [TestCase]
+    public void AStagedPluginCfgThatCannotBeParsedIsReportedInsteadOfThrowing()
+    {
+        var installed = Path.Combine(_root, "installed");
+        var stage = Path.Combine(_root, "plugin");
+        Directory.CreateDirectory(installed); Directory.CreateDirectory(stage);
+        File.WriteAllText(Path.Combine(installed, "plugin.cfg"), "[plugin]\nname=\"Plugin");
+        File.WriteAllText(Path.Combine(stage, "plugin.gd"), "extends EditorPlugin");
+        var candidate = new UpdateCandidate("plugin", "Plugin", "1.0.0", "2.0.0", "https://example.org/releases", null, null, new ZipPackageRef("https://example.org/plugin.zip", "plugin"));
+        var target = new PluginUpdateTarget("plugin", "Plugin", "1.0.0", candidate.SourceUrl, installed);
+        foreach (var config in new[] { "[config]\nname=\"Plugin\"", "[plugin]\nname=\"Plugin" })
+        {
+            File.WriteAllText(Path.Combine(stage, "plugin.cfg"), config);
+            var validated = new AddonPackageValidator().Validate(new(target, candidate, stage));
+            Assertions.AssertBool(validated.Findings.Any(f => f.Code == "R2" && f.Severity == FindingSeverity.Error)).IsTrue();
+        }
+    }
+
+    [TestCase]
     public void LinkedPluginFoldersAreNotUpdated()
     {
         // A developer links addons/plugin to a working copy: replacing the link would drop it for the downloaded copy.

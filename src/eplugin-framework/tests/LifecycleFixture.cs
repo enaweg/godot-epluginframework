@@ -80,13 +80,16 @@ internal sealed class LifecycleFixture : IDisposable
 
     public bool IsEPlugin(string slug) => _ePlugins.ContainsKey(slug);
 
+    /// <summary>ePlugins whose <c>_EnablePlugin</c> and <c>_DisablePlugin</c> throw before calling the framework.</summary>
+    public HashSet<string> Silent { get; } = new(StringComparer.Ordinal);
+
     public void CreateRecipe(string slug, IEEditorPluginBuilder builder) =>
         (_ePlugins[slug] ?? throw new InvalidOperationException($"The recipe of {slug} fails."))(builder);
 
     /// <summary>Godot creates an instance and calls its <c>_EnablePlugin</c>, which calls <c>this.EnableEPlugin()</c>.</summary>
     public void OnEnabled(string slug)
     {
-        if (!IsEPlugin(slug)) return;
+        if (!IsEPlugin(slug) || Silent.Contains(slug)) return;
         var pluginBase = new EditorPlugin();
         _objects.Add(pluginBase);
         var plugin = new Mock<IEEditorPlugin>();
@@ -104,7 +107,7 @@ internal sealed class LifecycleFixture : IDisposable
     /// <summary>Godot calls <c>_DisablePlugin</c>, which calls <c>this.DisableEPlugin()</c>, and frees the instance.</summary>
     public void OnDisabled(string slug)
     {
-        if (Context(slug) is not { } context) return;
+        if (Silent.Contains(slug) || Context(slug) is not { } context) return;
         if (context.State != EEditorPluginState.Deactivated) Global.DisableEPlugin(context);
     }
 
@@ -219,9 +222,13 @@ internal sealed class FakeEditorHost(LifecycleFixture fixture) : IEditorHost
 
     public string? GetAutoload(string name) => Autoloads.GetValueOrDefault(name);
 
-    public void AddAutoload(EditorPlugin plugin, string name, string path) => Autoloads[name] = path;
+    public void AddAutoload(EditorPlugin plugin, string name, string path) => Autoloads[Valid(plugin, name)] = path;
 
-    public void RemoveAutoload(EditorPlugin plugin, string name) => Autoloads.Remove(name);
+    public void RemoveAutoload(EditorPlugin plugin, string name) => Autoloads.Remove(Valid(plugin, name));
+
+    /// <summary>Godot frees a plugin's instance when it is disabled; calling one that was freed throws.</summary>
+    private static string Valid(EditorPlugin plugin, string name) => GodotObject.IsInstanceValid(plugin) ? name
+        : throw new ObjectDisposedException(nameof(EditorPlugin), $"Changing autoload {name} through a freed plugin.");
 
     /// <summary>The <c>.gdextension</c> files Godot has loaded, as file system paths with '/'.</summary>
     public HashSet<string> Extensions { get; } = new(StringComparer.OrdinalIgnoreCase);

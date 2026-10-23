@@ -125,6 +125,17 @@ internal sealed partial class EGlobal
                 }
             }
 
+            // Godot runs a dependant's _DisablePlugin inside the toggle. One that never called DisableEPlugin (e.g. it threw
+            // first) is disabled but still activated, and nothing would resume this plugin: it goes on without waiting.
+            var silent = pluginsToDisable.Where(p => p.State == EEditorPluginState.Activated && !_host.IsPluginEnabled(p.Slug)).ToArray();
+            if (silent.Length > 0 && context.State == EEditorPluginState.Activated && _toCheckDisable.Contains(context))
+            {
+                var waiting = _toCheckDisable.Where(c => !silent.Contains(c)).Reverse().ToArray();
+                _toCheckDisable.Clear();
+                foreach (var plugin in waiting) _toCheckDisable.Push(plugin);
+                DisableEPlugin(context, refreshAtEnd, manualRetry);
+            }
+
             return;
         }
 
@@ -188,10 +199,11 @@ internal sealed partial class EGlobal
     private void ReverseRecipe(PluginContext context, EEditorPluginRecipe recipe)
     {
         var remaining = RemainingRecipes(context, recipe);
+        var ownRemaining = InstalledRecipes(context).Where(r => !ReferenceEquals(r, recipe)).ToArray();
         foreach (var autoload in recipe.Autoloads) ReverseAutoload(context, autoload);
         foreach (var directory in recipe.Directories) ShowHideHelper.HideDirectory(context, directory, _host);
         foreach (var project in recipe.Projects) ReverseProject(context, project, remaining);
-        foreach (var nuget in recipe.Nugets) ReverseNuget(context, nuget, remaining);
+        foreach (var nuget in recipe.Nugets) ReverseNuget(context, nuget, remaining, ownRemaining);
     }
 }
 #endif

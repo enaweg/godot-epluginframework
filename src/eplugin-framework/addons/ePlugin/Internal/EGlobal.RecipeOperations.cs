@@ -20,13 +20,18 @@ internal sealed partial class EGlobal
             throw new InvalidOperationException($"Adding NuGet {nuget.Name} to the project failed.");
         if (nuget.Source is not null && !NugetConfigManager.RegisterSource(_host.ProjectRoot, context.Slug, nuget.Source, context.Logger))
             throw new InvalidOperationException($"Registering NuGet source for {nuget.Name} failed.");
-        if (previous?.Source is not null && previous.Source != nuget.Source &&
-            _recipeUpdateJournal?.Recipes[context.Slug].Target?.Nugets.Any(n => n.Source == previous.Source) != true &&
+        if (previous?.Source is not null && !SameSource(previous.Source, nuget.Source) &&
+            _recipeUpdateJournal?.Recipes[context.Slug].Target?.Nugets.Any(n => SameSource(n.Source, previous.Source)) != true &&
             !NugetConfigManager.UnregisterSource(_host.ProjectRoot, context.Slug, previous.Source, context.Logger))
             throw new InvalidOperationException($"Unregistering previous source for {nuget.Name} failed.");
     }
     /// <param name="remaining">The recipes that stay installed (<see cref="RemainingRecipes"/>); a package one of them declares is kept.</param>
-    private void ReverseNuget(PluginContext context, EEditorPluginRecipe.Nuget nuget, IReadOnlyList<EEditorPluginRecipe>? remaining = null)
+    /// <param name="ownRemaining">
+    /// The context's own recipes among <paramref name="remaining"/>. nuget.config records which plugins use a source by
+    /// slug only, so a source one of them declares is kept; other plugins' recipes keep it under their own slug.
+    /// </param>
+    private void ReverseNuget(PluginContext context, EEditorPluginRecipe.Nuget nuget, IReadOnlyList<EEditorPluginRecipe>? remaining = null,
+        IReadOnlyList<EEditorPluginRecipe>? ownRemaining = null)
     {
         var shared = _recipeUpdateJournal?.Recipes.Any(r => r.Key != context.Slug &&
             (r.Value.Target ?? r.Value.Applied).Nugets.Any(n => n.Name == nuget.Name)) == true;
@@ -37,10 +42,16 @@ internal sealed partial class EGlobal
         }
         if (!shared && (context.Cli is not ICheckedDotnetCli cli || !cli.TryRemoveNugetFromProject(nuget.Name)))
             throw new InvalidOperationException($"Removing NuGet {nuget.Name} failed.");
-        var keepsSource = _recipeUpdateJournal?.Recipes.GetValueOrDefault(context.Slug)?.Target?.Nugets.Any(n => n.Source == nuget.Source) == true;
+        var keepsSource = _recipeUpdateJournal?.Recipes.GetValueOrDefault(context.Slug)?.Target?.Nugets.Any(n => SameSource(n.Source, nuget.Source)) == true;
+        if (nuget.Source is not null && !keepsSource && ownRemaining?.Any(r => r.Nugets.Any(n => SameSource(n.Source, nuget.Source))) == true)
+        {
+            context.Logger?.Log($"Keeping NuGet source {nuget.Source}, another installed recipe of {context.Slug} still uses it.");
+            keepsSource = true;
+        }
         if (nuget.Source is not null && !keepsSource && !NugetConfigManager.UnregisterSource(_host.ProjectRoot, context.Slug, nuget.Source, context.Logger))
             throw new InvalidOperationException($"Unregistering NuGet source for {nuget.Name} failed.");
     }
+    private bool SameSource(string? a, string? b) => NugetConfigManager.SameSource(_host.ProjectRoot, a, b);
     private static void ApplyProject(PluginContext context, EEditorPluginRecipe.Project project)
     {
         if (context.Cli is not ICheckedDotnetCli cli || !cli.TryAddProjectToSolution(project.Path, project.FolderName))
@@ -75,23 +86,38 @@ internal sealed partial class EGlobal
         foreach (var other in _contexts.Where(c => c.Plugin is not null && (c == context || c.State == EEditorPluginState.Activated)).ToArray())
         {
             if (other != context && !TryEnsureRecipe(other, scan: true)) continue;
-            var recipe = other.Builder.PluginRecipe;
-            remaining.Add(recipe);
-            remaining.AddRange((other.AppliedOptionalDependencies ?? (other == context ? [] : ResolveOptionalRecipes(other, recipe))).Select(o => o.Recipe));
+            remaining.AddRange(other == context ? InstalledRecipes(context) : InstalledRecipes(other, resolveOptional: true));
         }
         remaining.RemoveAll(r => ReferenceEquals(r, reversed));
         return remaining;
     }
+
+    /// <summary>
+    /// The context's main recipe and its applied optional recipes. Without a snapshot (lost to an assembly reload) the
+    /// optional ones are resolved again when <paramref name="resolveOptional"/>, else left out.
+    /// </summary>
+    private IEnumerable<EEditorPluginRecipe> InstalledRecipes(PluginContext context, bool resolveOptional = false)
+    {
+        var recipe = context.Builder.PluginRecipe;
+        var optional = context.AppliedOptionalDependencies ?? (resolveOptional ? ResolveOptionalRecipes(context, recipe) : []);
+        return optional.Select(o => o.Recipe).Prepend(recipe);
+    }
     private void ApplyAutoload(PluginContext context, EEditorPluginRecipe.Autoload autoload)
     {
-        if (_host.GetAutoload(autoload.Name) != autoload.Path) _host.AddAutoload(context.PluginBase, autoload.Name, autoload.Path);
+        if (_host.GetAutoload(autoload.Name) != autoload.Path) _host.AddAutoload(AutoloadPlugin(context), autoload.Name, autoload.Path);
         if (_host.GetAutoload(autoload.Name) is null) throw new InvalidOperationException($"Adding autoload {autoload.Name} failed.");
     }
     private void ReverseAutoload(PluginContext context, EEditorPluginRecipe.Autoload autoload)
     {
-        if (_host.GetAutoload(autoload.Name) is not null) _host.RemoveAutoload(context.PluginBase, autoload.Name);
+        if (_host.GetAutoload(autoload.Name) is not null) _host.RemoveAutoload(AutoloadPlugin(context), autoload.Name);
         if (_host.GetAutoload(autoload.Name) is not null) throw new InvalidOperationException($"Removing autoload {autoload.Name} failed.");
     }
+    /// <summary>
+    /// The editor plugin an autoload is changed through. Godot frees a plugin's instance when it is disabled, also one
+    /// whose failed attempt is then retried as a deactivation; any plugin changes the project's autoloads the same way.
+    /// </summary>
+    private EditorPlugin AutoloadPlugin(PluginContext context) =>
+        GodotObject.IsInstanceValid(context.PluginBase) || _ePluginContext is null ? context.PluginBase : _ePluginContext;
     private void TrackRecipeOperation(PluginContext context, RecipeOperation operation, Action execute)
     {
         var journal = _recipeUpdateJournal;

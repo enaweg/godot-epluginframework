@@ -110,7 +110,9 @@ internal sealed partial class UpdateReviewDialog : ConfirmationDialog, ISerializ
     private void Finish(bool install)
     {
         if (_done) return;
-        _done = true; Hide(); _finished(install); EditorWindows.Release(this);
+        _done = true; Hide();
+        try { _finished(install); }
+        finally { EditorWindows.Release(this); }
     }
 
     private void QueueWindowIcon() => CallDeferred(nameof(RefreshWindowIcon));

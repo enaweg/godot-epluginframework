@@ -46,6 +46,9 @@ return 0;
 
 static void Smoke(string[] command)
 {
+    // How long a check waits for a helper to end once its lifetime passed without messages. A busy CI runner has
+    // taken more than 10 s to end a helper with a 3 s lifetime, so the checks wait well beyond the lifetime.
+    const int lifetimeWaitSeconds = 30;
     var label = Text("Activating sample plugin");
     {
         var process = StartHelper(command);
@@ -81,7 +84,7 @@ static void Smoke(string[] command)
         File.WriteAllText(commandFile, "");
         {
             var process = Start(command, ["--command-file", commandFile, "--max-lifetime-seconds", "2"]);
-            Check(Exits(process, 10), "helper outlived its lifetime without commands");
+            Check(Exits(process, lifetimeWaitSeconds), "helper outlived its lifetime without commands");
         }
     }
 
@@ -128,7 +131,7 @@ static void Smoke(string[] command)
     // The window has no close button, so the helper must end itself when the host never closes it.
     {
         var process = StartHelper(command, ["--max-lifetime-seconds", "2"]);
-        Check(Exits(process, 10), "helper outlived its lifetime");
+        Check(Exits(process, lifetimeWaitSeconds), "helper outlived its lifetime");
     }
 
     // Each HEARTBEAT restarts the lifetime, so a long chain of plugin installs keeps the window; without more
@@ -142,7 +145,7 @@ static void Smoke(string[] command)
             Send(process, "HEARTBEAT\n");
         }
         Check(!process.HasExited, "helper exited despite heartbeats");
-        Check(Exits(process, 10), "helper did not end after the heartbeats stopped");
+        Check(Exits(process, lifetimeWaitSeconds), "helper did not end after the heartbeats stopped");
     }
 
     // The host never waits for READY: commands are queued before the helper has started, and a helper closed
@@ -199,8 +202,14 @@ static void Send(Process process, string commands)
 /// Whether the helper exits with 0 within the timeout; it is killed when it does not exit.
 static bool Exits(Process process, int seconds)
 {
+    // Says which of the two failed, so a failed check tells a slow exit from a crash.
     if (process.WaitForExit(TimeSpan.FromSeconds(seconds)))
+    {
+        if (process.ExitCode != 0)
+            Console.Error.WriteLine($"The helper exited with code {process.ExitCode}.");
         return process.ExitCode == 0;
+    }
+    Console.Error.WriteLine($"The helper was still running after {seconds} s.");
     process.Kill(true);
     return false;
 }

@@ -68,17 +68,23 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
         var result = new UpdateCheckResult(updates.OrderBy(x => x.Slug, StringComparer.Ordinal).ToArray(),
             failures.OrderBy(x => x.Slug, StringComparer.Ordinal).ToArray(), clock.UtcNow,
             fallbacks.OrderBy(x => x.Slug, StringComparer.Ordinal).ToArray());
-        if (targets.Count == 0 || failures.Count < targets.Count)
+        // A plugin whose site failed this time keeps what earlier checks found for it, also when every site failed.
+        var failed = failures.Select(f => f.Slug).ToHashSet(StringComparer.Ordinal);
+        var failedTargets = targets.Where(t => failed.Contains(t.Slug)).ToArray();
+        IReadOnlyList<UpdateCandidate> kept = [];
+        await WithStore(() =>
         {
-            var results = result.Updates.Concat(latest.OrderBy(x => x.Slug, StringComparer.Ordinal)).ToList();
-            await WithStore(() =>
+            if (targets.Count == 0 || failures.Count < targets.Count)
             {
                 store.State.LastCheckUtc = result.CheckedAtUtc;
-                store.State.Results = results;
+                store.State.Results = [.. result.Updates, .. latest.OrderBy(x => x.Slug, StringComparer.Ordinal),
+                    .. store.State.Results.Where(c => failed.Contains(c.Slug))];
                 store.Save();
-            }, ct).ConfigureAwait(false);
-        }
-        return result;
+            }
+            kept = UpdateScheduler.CurrentCached(store.State, failedTargets);
+        }, ct).ConfigureAwait(false);
+        return kept.Count == 0 ? result
+            : result with { Updates = result.Updates.Concat(kept).OrderBy(x => x.Slug, StringComparer.Ordinal).ToArray() };
     }
 
     /// <summary>

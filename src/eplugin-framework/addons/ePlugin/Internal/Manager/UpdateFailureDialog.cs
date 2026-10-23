@@ -63,7 +63,10 @@ internal sealed partial class UpdateFailureDialog : AcceptDialog, ISerialization
     private void Choose(bool keep)
     {
         if (_decided) return;
-        _decided = true; Hide(); _decide(keep); EditorWindows.Release(this);
+        _decided = true; Hide();
+        // released also when the decision throws: a dialog left valid keeps others from opening
+        try { _decide(keep); }
+        finally { EditorWindows.Release(this); }
     }
     private void HandleCustomAction(StringName action)
     {

@@ -274,6 +274,28 @@ public class EGlobalLifecycleTests : IDisposable
     }
 
     [TestCase]
+    public void AnOptionalRecipeSharingThePluginsNuGetSourceLeavesItInNuGetConfig()
+    {
+        var config = Path.Combine(_fixture.Root, "nuget.config");
+        _fixture.AddPlainPlugin("extra");
+        _fixture.AddEPlugin("app", b => b
+            .AddNuget("App.Package", source: "res://addons/app/feed")
+            .AddOptionalPluginDependency("extra", null, optional => optional.AddNuget("App.Extra", source: "addons/app/feed/")));
+        _fixture.Global.InitializePluginToggles();
+        _fixture.Host.Enabled.Add("extra");
+        _fixture.Global.ObservePluginToggles();
+        _fixture.Enable("app");
+
+        _fixture.Host.Enabled.Remove("extra");
+        _fixture.Global.ObservePluginToggles();
+
+        // the main recipe still installs App.Package from it; a fresh checkout restores it through nuget.config
+        Assertions.AssertThat(File.ReadAllText(config)).Contains("value=\"./addons/app/feed\"");
+        _fixture.Disable("app");
+        Assertions.AssertBool(File.Exists(config)).IsFalse();
+    }
+
+    [TestCase]
     public void AnOptionalRecipeRepeatingThePluginsOwnPackageLeavesItWhenTheOptionalPluginIsDisabled()
     {
         _fixture.AddPlainPlugin("extra");
@@ -651,6 +673,27 @@ public class EGlobalLifecycleTests : IDisposable
         Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Deactivated);
         Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsFalse();
         Assertions.AssertThat(_fixture.Operations).Contains("remove-nuget App.Package");
+        Assertions.AssertObject(_fixture.Store.GetLocal("app")).IsNull();
+        Assertions.AssertObject(_fixture.Store.GetShared("app")!.State).IsEqual(PersistedPluginState.Deactivated);
+    }
+
+    [TestCase]
+    public void DisablingAFailedPluginWhoseInstanceTheEditorFreedRemovesItsAutoload()
+    {
+        _fixture.AddEPlugin("app", b => b.AddAutoload("AppService", "res://addons/app/service.tscn"));
+        _fixture.Cli.BuildFails = true;
+        _fixture.Enable("app");
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Error);
+        Assertions.AssertBool(_fixture.Host.Autoloads.ContainsKey("AppService")).IsTrue();
+        // unchecked in Project Settings: a plugin in error uninstalls nothing, and Godot frees its instance
+        var instance = _fixture.Context("app")!.PluginBase;
+        _fixture.Disable("app");
+        instance.Free();
+        _fixture.Cli.BuildFails = false;
+
+        Assertions.AssertBool(_fixture.Global.DisableFailedPlugin("app")).IsTrue();
+
+        Assertions.AssertBool(_fixture.Host.Autoloads.ContainsKey("AppService")).IsFalse();
         Assertions.AssertObject(_fixture.Store.GetLocal("app")).IsNull();
         Assertions.AssertObject(_fixture.Store.GetShared("app")!.State).IsEqual(PersistedPluginState.Deactivated);
     }
