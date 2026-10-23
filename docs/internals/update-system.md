@@ -80,7 +80,8 @@ tags.
 ## Checks
 
 Checks use installed metadata and a local cache that is refreshed every `eplugin/updates/check_interval_hours` (default
-20), never the shared working-version index. A release announced as newer whose `plugin.cfg` is not (an author forgot to
+20), never the shared working-version index. Checks and version lists run off the editor thread, but `UpdateService`
+reads and writes the cache (`UpdateStateStore`) only through `OnEditorThread`, where `UpdateApplier` changes it too. A release announced as newer whose `plugin.cfg` is not (an author forgot to
 raise it) is an R6 review warning rather than a refusal; once it is installed, `UpdateService.WithoutInstalled` hides it
 using the revision and version that `Commit` records in `UpdateCache.Revisions`. Checks do not skip a plugin blocked by
 an unfinished attempt; the manager and the validator refuse its update (R17).

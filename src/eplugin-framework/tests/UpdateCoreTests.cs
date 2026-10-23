@@ -176,6 +176,24 @@ public class UpdateCoreTests
     }
 
     [TestCase]
+    public static async Task ChecksChangeTheCacheOnlyWhereItsOtherWritersRun()
+    {
+        // Checks and version lists run on a thread-pool thread, while installing an update changes the cache on the editor
+        // thread: the cache is read and written only through the work handed to the editor thread.
+        var store = new MemoryStore();
+        var queued = new List<Action>();
+        var service = new UpdateService(new Factory(), new SystemClock(), store, (action, _) => { queued.Add(action); return Task.CompletedTask; });
+        await service.CheckAsync([Target("healthy")], new(), CancellationToken.None);
+        await service.ListVersionsAsync(Target("listed", "1.5.0") with { UpdateUrl = "https://example.org/listed/releases" }, new(), CancellationToken.None);
+        Assertions.AssertObject(store.State.LastCheckUtc).IsNull();
+        Assertions.AssertInt(store.State.Results.Count).IsEqual(0);
+        Assertions.AssertInt(queued.Count).IsEqual(2);
+        foreach (var action in queued) action();
+        Assertions.AssertObject(store.State.LastCheckUtc).IsNotNull();
+        Assertions.AssertArray(store.State.Results.Select(c => c.Slug).ToArray()).ContainsExactly("healthy", "listed");
+    }
+
+    [TestCase]
     public static void UpdatesMoveToTheNextBetterVersionOfTheSameKind()
     {
         static bool IsUpdate(string installed, string version) =>

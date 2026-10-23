@@ -8,7 +8,12 @@ using System.Threading.Tasks;
 
 namespace Enaweg.Plugin.Internal.Update;
 
-internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, IUpdateStateStore store)
+/// <param name="storeThread">
+/// Runs every read and write of <paramref name="store"/> on the thread its other writers use: checks and version lists run
+/// on a thread-pool thread, while installing an update changes the cache on the editor thread. Inline when null.
+/// </param>
+internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, IUpdateStateStore store,
+    Func<Action, CancellationToken, Task>? storeThread = null)
 {
     /// <summary>
     /// Whether <paramref name="version"/> is offered as an update of <paramref name="installed"/>: the next better version
@@ -65,9 +70,13 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
             fallbacks.OrderBy(x => x.Slug, StringComparer.Ordinal).ToArray());
         if (targets.Count == 0 || failures.Count < targets.Count)
         {
-            store.State.LastCheckUtc = result.CheckedAtUtc;
-            store.State.Results = result.Updates.Concat(latest.OrderBy(x => x.Slug, StringComparer.Ordinal)).ToList();
-            store.Save();
+            var results = result.Updates.Concat(latest.OrderBy(x => x.Slug, StringComparer.Ordinal)).ToList();
+            await WithStore(() =>
+            {
+                store.State.LastCheckUtc = result.CheckedAtUtc;
+                store.State.Results = results;
+                store.Save();
+            }, ct).ConfigureAwait(false);
         }
         return result;
     }
@@ -112,8 +121,15 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
             (source, site, token) => source is IVersionListSource list ? list.ListAsync(site, options, token)
                 : throw new NotSupportedException("This update source cannot list versions."), ct).ConfigureAwait(false);
         var versions = MergeVersions([], listed);
-        RecordListedUpdate(target, url, versions);
+        await WithStore(() => RecordListedUpdate(target, url, versions), ct).ConfigureAwait(false);
         return versions;
+    }
+
+    private Task WithStore(Action action, CancellationToken ct)
+    {
+        if (storeThread is not null) return storeThread(action, ct);
+        action();
+        return Task.CompletedTask;
     }
 
     /// <summary>

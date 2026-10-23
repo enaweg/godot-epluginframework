@@ -34,7 +34,8 @@ internal sealed partial class EGlobal
     {
         _updateCache ??= new UpdateStateStore(Path.Combine(UpdateProjectRoot, ".godot/eplugin/update-state.json"));
         _updateCache.Load();
-        _updateService = new UpdateService(new UpdateSourceFactory(), new SystemClock(), _updateCache);
+        // The update applier changes the cache on the editor thread, so checks write their results there too.
+        _updateService = new UpdateService(new UpdateSourceFactory(), new SystemClock(), _updateCache, OnEditorThread);
         InitializeUpdateSites();
         InitializeLocalSources();
         _remoteUpdates = UpdateScheduler.CurrentCached(_updateCache.State, CollectUpdateTargets());
