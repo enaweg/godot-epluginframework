@@ -1,8 +1,8 @@
 {
- "commit": "a712cc373a8e556c56b9fb82b9098c7f73869378",
- "date": "2026-10-23T13:09:09Z",
- "covered": 10012,
- "coverable": 11026,
+ "commit": "8b454591a60e4bcd96f6986ae5dd7f67b7703582",
+ "date": "2026-10-23T13:09:36Z",
+ "covered": 10029,
+ "coverable": 11056,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -25,8 +25,8 @@
    15
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/ActivationProgress.cs": [
-   245,
-   297
+   246,
+   298
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/AssemblyReload.cs": [
    24,
@@ -97,8 +97,8 @@
    237
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.LocalSources.cs": [
-   45,
-   57
+   46,
+   58
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.PlainPlugins.cs": [
    130,
@@ -217,8 +217,8 @@
    117
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.cs": [
-   515,
-   631
+   518,
+   635
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EditorIcons.cs": [
    52,
@@ -229,12 +229,12 @@
    12
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EditorWindows.cs": [
-   41,
-   64
+   42,
+   65
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/GeneralSettingsTab.cs": [
-   55,
-   74
+   56,
+   75
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/LicenseDialog.cs": [
    148,
@@ -261,16 +261,20 @@
    280
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/SettingsDialog.cs": [
-   42,
-   49
+   39,
+   50
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Manager/TextColors.cs": [
+   11,
+   11
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateFailureDialog.cs": [
    51,
    60
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateFlow.cs": [
-   153,
-   153
+   154,
+   154
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateReview.cs": [
    68,
@@ -282,7 +286,7 @@
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateSourcesTab.cs": [
    266,
-   282
+   286
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/WelcomeDialog.cs": [
    52,
@@ -309,8 +313,8 @@
    18
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/ProgressSession.cs": [
-   157,
-   196
+   158,
+   201
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/ProjectSettingsDialog.cs": [
    5,
