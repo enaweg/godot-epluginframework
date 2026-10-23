@@ -1,8 +1,8 @@
 {
- "commit": "23cfbaa726db94d80ca577232ac4b7cbc23e53dc",
- "date": "2026-10-23T16:39:21Z",
- "covered": 10018,
- "coverable": 11045,
+ "commit": "768878cef2a16294a7dcea11455c2e8d37d73eae",
+ "date": "2026-10-23T19:24:48Z",
+ "covered": 10130,
+ "coverable": 11168,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -65,8 +65,8 @@
    1
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/NugetConfigManager.cs": [
-   153,
-   156
+   224,
+   232
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/PluginsOnlyBuild.cs": [
    32,
@@ -89,12 +89,12 @@
    35
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Activation.cs": [
-   270,
-   296
+   278,
+   304
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Deactivation.cs": [
-   111,
-   118
+   120,
+   127
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.ExtensionAddons.cs": [
    19,
@@ -121,8 +121,8 @@
    82
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.RecipeOperations.cs": [
-   83,
-   96
+   93,
+   106
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Retry.cs": [
    130,
@@ -158,7 +158,7 @@
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.cs": [
    261,
-   301
+   302
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EPluginProgress.cs": [
    1,
@@ -237,8 +237,8 @@
    117
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.Operations.cs": [
-   98,
-   125
+   99,
+   131
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.Updates.cs": [
    20,
@@ -269,8 +269,8 @@
    75
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/LicenseDialog.cs": [
-   148,
-   161
+   150,
+   163
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/ManagerReopenMarker.cs": [
    16,
@@ -301,8 +301,8 @@
    11
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateFailureDialog.cs": [
-   51,
-   60
+   53,
+   62
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateFlow.cs": [
    154,
@@ -313,16 +313,16 @@
    68
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateReviewDialog.cs": [
-   69,
-   93
+   71,
+   95
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateSourcesTab.cs": [
    260,
    280
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/WelcomeDialog.cs": [
-   52,
-   61
+   54,
+   63
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PlainPluginObserver.cs": [
    67,
@@ -461,8 +461,8 @@
    149
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateService.cs": [
-   105,
-   109
+   110,
+   114
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateSettings.cs": [
    18,
