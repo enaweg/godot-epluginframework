@@ -106,6 +106,37 @@ public class UpdatePackageTests
     }
 
     [TestCase]
+    public void LinkedPluginFoldersAreNotUpdated()
+    {
+        // A developer links addons/plugin to a working copy: replacing the link would drop it for the downloaded copy.
+        var checkout = Path.Combine(_root, "checkout");
+        var installed = Path.Combine(_root, "installed");
+        var stage = Path.Combine(_root, "plugin");
+        Directory.CreateDirectory(checkout); Directory.CreateDirectory(stage);
+        Directory.CreateSymbolicLink(installed, checkout);
+        File.WriteAllText(Path.Combine(checkout, "plugin.cfg"), Config("1.0.0"));
+        File.WriteAllText(Path.Combine(checkout, "plugin.gd"), "extends EditorPlugin");
+        File.WriteAllText(Path.Combine(stage, "plugin.cfg"), Config("2.0.0"));
+        File.WriteAllText(Path.Combine(stage, "plugin.gd"), "extends EditorPlugin");
+        var candidate = new UpdateCandidate("plugin", "Plugin", "1.0.0", "2.0.0", "https://example.org/releases", null, null, new ZipPackageRef("https://example.org/plugin.zip", "plugin"));
+        var target = new PluginUpdateTarget("plugin", "Plugin", "1.0.0", candidate.SourceUrl, installed);
+        foreach (var kind in new[] { PluginKind.GDScript, PluginKind.CSharp, PluginKind.EPlugin, PluginKind.Framework })
+        {
+            var validated = new AddonPackageValidator().Validate(new(target with { Kind = kind }, candidate, stage));
+            Assertions.AssertBool(validated.IsValid).IsFalse();
+            Assertions.AssertInt(validated.Findings.Count(f => f.Code == "R20" && f.Severity == FindingSeverity.Error)).IsEqual(1);
+        }
+        try
+        {
+            AddonFolderSwap.Instance.Install(installed, stage, Path.Combine(_root, "backup", "plugin"), Path.Combine(_root, "discarded"));
+            throw new InvalidOperationException("A linked plugin folder was swapped.");
+        }
+        catch (IOException ex) { Assertions.AssertString(ex.Message).Contains("is a link"); }
+        Assertions.AssertBool((File.GetAttributes(installed) & FileAttributes.ReparsePoint) != 0).IsTrue();
+        Assertions.AssertBool(Directory.Exists(stage)).IsTrue();
+    }
+
+    [TestCase]
     public void ReleaseAnnouncedAsNewerButNotRaisedInsideNeedsReview()
     {
         var installed = Path.Combine(_root, "installed");

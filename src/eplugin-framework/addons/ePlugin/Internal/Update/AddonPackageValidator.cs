@@ -111,6 +111,9 @@ internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules 
             else
                 Add("R9", FindingSeverity.Warning, "Update source changed: " + (newUrl ?? "removed"), !string.IsNullOrWhiteSpace(newUrl) && oldHost != newHost);
         }
+        // A plugin folder linked to a working copy would be replaced by the downloaded copy, the link and all.
+        if (Directory.Exists(installed.Directory) && (File.GetAttributes(installed.Directory) & FileAttributes.ReparsePoint) != 0)
+            Add("R20", FindingSeverity.Error, "The plugin folder is a link; update the plugin where it points to.");
         var installedFiles = Directory.Exists(installed.Directory) ? PackageFiles.Files(installed.Directory).ToArray() : [];
         // What differs between plugin kinds, e.g. the native libraries of a GDExtension plugin.
         var kind = PluginKinds.ForPackage(installed, script, files, installedFiles);

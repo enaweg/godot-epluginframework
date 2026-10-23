@@ -9,8 +9,8 @@ namespace Enaweg.Plugin.Internal.Kinds;
 /// <summary>
 /// The validation every kind that ships a GDExtension shares (<see cref="GDExtensionPluginWorkflow"/> and
 /// <see cref="EPluginWorkflow"/>): an update can replace only native libraries inside the plugin folder, the package must
-/// contain the library the editor here loads and suit its Godot version, it should not drop a platform the installed
-/// version supports, and a linked folder cannot be swapped file by file.
+/// contain the library the editor here loads and suit its Godot version, and it should not drop a platform the installed
+/// version supports.
 /// </summary>
 internal static class GDExtensionRules
 {
@@ -18,8 +18,6 @@ internal static class GDExtensionRules
     {
         var context = validation.Context;
         var slug = context.Installed.Slug;
-        if (Directory.Exists(context.Installed.Directory) && (File.GetAttributes(context.Installed.Directory) & FileAttributes.ReparsePoint) != 0)
-            yield return new("R20", FindingSeverity.Error, "The plugin folder is a link; update the plugin where it points to.");
         var installed = GDExtensionConfig.ReadAll(context.Installed.Directory);
         foreach (var (file, config) in GDExtensionConfig.ReadAll(context.StagingDir))
         {

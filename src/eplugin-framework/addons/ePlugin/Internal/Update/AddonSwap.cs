@@ -36,6 +36,7 @@ internal sealed class AddonFolderSwap : IAddonSwap
 
     public int Install(string installed, string staging, string backup, string discard)
     {
+        AddonFiles.RefuseLink(installed);
         Directory.CreateDirectory(Path.GetDirectoryName(backup)!);
         AddonFiles.MoveDirectory(installed, backup);
         AddonFiles.MoveDirectory(staging, installed);

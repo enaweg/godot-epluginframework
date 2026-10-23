@@ -136,6 +136,7 @@ An update with an error cannot be selected or installed. These are refused:
 - a version that is not newer than the installed one, unless the release announced a newer version (see the warning above). The **Version** selector can downgrade, except ePlugin Framework, and reinstall the installed version.
 - a GDExtension whose libraries are outside the plugin folder or missing for the editor's platform, or that the editor's Godot version cannot load (see [GDExtension plugins](gdextension-plugins.md#publish-a-release)), a forbidden file, or a package over the size limits (see [Publish an updatable release](#publish-an-updatable-release))
 - a version rejected by a hard dependency constraint of another enabled plugin
+- a plugin folder that is a link (a symlink or junction to another checkout); update the plugin where it points to
 - a plugin whose update is changed or blocked: its `update_url` changed since the check, it is no longer enabled, or an earlier attempt still waits for a decision under **Needs attention**
 
 Some of these can only be found once the package is downloaded, for example a release whose plugin script is missing. Such a package is shown as refused in the **Review updates** dialog and left out of the batch; the other selected updates are still installed, and the manager lists the skipped package after them. Only when every package of the batch is refused is nothing installed.
