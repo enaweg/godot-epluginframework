@@ -65,5 +65,12 @@ internal readonly record struct SemVer(int Major, int Minor, int Patch, string? 
     }
 
     public override string ToString() => Text ?? Key;
+
+    /// <summary>
+    /// Whether two written versions are the same version ("v1.2", "1.2.0"); text that is no version must be equal. Godot
+    /// reads an unquoted <c>version=1.2.0</c> in plugin.cfg as 1.2, the updater's own reader as written.
+    /// </summary>
+    public static bool Same(string? left, string? right) =>
+        TryParse(left, out var l) && TryParse(right, out var r) ? l.CompareTo(r) == 0 : left == right;
 }
 #endif

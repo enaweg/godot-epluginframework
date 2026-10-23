@@ -17,6 +17,13 @@ internal sealed class UpdateCache
     public List<UpdateCandidate> Results { get; set; } = [];
     public Dictionary<string, AppliedRevision> Revisions { get; set; } = [];
     public Dictionary<string, List<FailedUpdate>> FailedUpdates { get; set; } = [];
+
+    /// <summary>
+    /// The last failure of the candidate's version. A failure records the plugin.cfg version ("1.2.0"), a candidate the
+    /// announced one ("v1.2.0").
+    /// </summary>
+    public FailedUpdate? LastFailure(UpdateCandidate candidate) =>
+        FailedUpdates.GetValueOrDefault(candidate.Slug)?.LastOrDefault(f => SemVer.Same(f.Version, candidate.NewVersion));
 }
 internal interface IUpdateStateStore
 {

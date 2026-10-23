@@ -102,6 +102,20 @@ public class EGlobalUpdateApplyTests : IDisposable
     }
 
     [TestCase]
+    public async Task AnUnquotedVersionIsComparedByItsValue()
+    {
+        // Godot reads version=1.0.0 without quotes as 1.0, the updater's own reader as written.
+        PluginWithNewerPackage("tool");
+        File.WriteAllText(Path.Combine(_fixture.Addon("tool"), "plugin.cfg"), "[plugin]\nname=\"tool\"\nversion=1.0.0\nscript=\"plugin.gd\"\n");
+        await Index();
+
+        var results = await Install();
+
+        Assertions.AssertObject(results.Single().Outcome).IsEqual(UpdateOutcome.Completed);
+        Assertions.AssertString(Installed("tool")).Contains("version=\"2.0.0\"");
+    }
+
+    [TestCase]
     public async Task ALocalPackageIsStagedInstalledAndNoLongerOffered()
     {
         PluginWithNewerPackage("tool");

@@ -407,7 +407,7 @@ internal sealed partial class EGlobal
             if (PluginKinds.Workflow(plugin) is GDExtensionAddonWorkflow)
                 return global.IsExtensionAddon(plugin.Slug) || File.Exists(Path.Combine(ProjectSettings.GlobalizePath(global._host.PluginDirectory(plugin.Slug)), "plugin.cfg"));
             var metadata = EditorPluginExtensions.ReadMetadata($"{global._host.PluginDirectory(plugin.Slug)}/plugin.cfg");
-            return (plugin.Slug != "ePlugin" || global.IsValid()) && IsEnabled(plugin.Slug) && metadata?.Version == plugin.NewVersion &&
+            return (plugin.Slug != "ePlugin" || global.IsValid()) && IsEnabled(plugin.Slug) && SemVer.Same(metadata?.Version, plugin.NewVersion) &&
                 global._contexts.FirstOrDefault(c => c.Slug == plugin.Slug)?.State != EEditorPluginState.Error;
         }
         public void Log(string message) => global._ePluginContext?.Logger.Log(message);

@@ -182,7 +182,7 @@ internal sealed partial class EGlobal
         foreach (var update in result.Updates)
         {
             _ePluginContext?.Logger.Log($"  {update.Slug} {update.InstalledVersion} -> {update.NewVersion}  {update.ReleaseUrl ?? update.Origin}");
-            if (_updateCache?.State.FailedUpdates.GetValueOrDefault(update.Slug)?.Any(f => f.Version == update.NewVersion) == true)
+            if (_updateCache?.State.LastFailure(update) is not null)
                 _ePluginContext?.Logger.Warn($"  {update.Slug} {update.NewVersion} failed previously; repair the cause before retrying.");
         }
         _ePluginContext?.Logger.Log("Open the ePlugin Manager (Project > Tools > ePlugin Manager... or the ePlugin toolbar button) to install them.");

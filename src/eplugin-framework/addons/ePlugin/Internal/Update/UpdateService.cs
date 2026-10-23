@@ -100,7 +100,7 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
     /// </summary>
     public static IReadOnlyList<UpdateCandidate> WithoutInstalled(IEnumerable<UpdateCandidate> candidates, IReadOnlyDictionary<string, AppliedRevision>? revisions) =>
         candidates.Where(c => !(c.ResolvedRevision is { } revision && revisions?.GetValueOrDefault(c.Slug) is { } applied &&
-                                applied.Source == c.Origin && applied.Revision == revision && applied.Version == c.InstalledVersion)).ToArray();
+                                applied.Source == c.Origin && applied.Revision == revision && SemVer.Same(applied.Version, c.InstalledVersion))).ToArray();
 
     /// <summary>The highest version per plugin; a local package wins over a download of the same version.</summary>
     public static IReadOnlyList<UpdateCandidate> Merge(IEnumerable<UpdateCandidate> remote, IEnumerable<UpdateCandidate> local) =>

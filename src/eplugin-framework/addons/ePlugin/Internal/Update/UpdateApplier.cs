@@ -191,7 +191,8 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             var slug = package.Candidate.Slug;
             if (!host.IsEnabled(slug)) throw new InvalidOperationException($"Plugin {slug} is no longer enabled.");
             var old = InstalledVersion(slug, package.Kind);
-            if (old != package.Candidate.InstalledVersion) throw new InvalidOperationException($"Plugin {slug} changed since the update check; check again.");
+            // The check read the version through Godot, which reads an unquoted 1.2.0 as 1.2.
+            if (!SemVer.Same(old, package.Candidate.InstalledVersion)) throw new InvalidOperationException($"Plugin {slug} changed since the update check; check again.");
             var next = PackageVersion(package);
             var managed = host.IsManaged(slug);
             journal.Plugins.Add(new() { Slug = slug, OldVersion = old!, NewVersion = next, IsEPlugin = managed,

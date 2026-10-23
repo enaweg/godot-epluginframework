@@ -194,6 +194,19 @@ public class UpdateCoreTests
     }
 
     [TestCase]
+    public static void VersionsOfFailuresAndInstalledReleasesAreComparedByValue()
+    {
+        // A failure records the plugin.cfg version, a release announces its tag's; Godot reads an unquoted 1.2.0 as 1.2.
+        var cache = new UpdateCache();
+        cache.FailedUpdates["plugin"] = [new("1.2.0", "failed", DateTimeOffset.UtcNow)];
+        Assertions.AssertObject(cache.LastFailure(Candidate("plugin", "v1.2.0"))).IsNotNull();
+        Assertions.AssertObject(cache.LastFailure(Candidate("plugin", "v1.2.1"))).IsNull();
+        var installed = Candidate("plugin", "v1.3.0") with { InstalledVersion = "1.2", ResolvedRevision = "abc", SourceUrl = "https://example.org/plugin" };
+        var revisions = new Dictionary<string, AppliedRevision> { ["plugin"] = new("https://example.org/plugin", "abc", DateTimeOffset.UtcNow, "1.2.0") };
+        Assertions.AssertThat(UpdateService.WithoutInstalled([installed], revisions)).IsEmpty();
+    }
+
+    [TestCase]
     public static void UpdatesMoveToTheNextBetterVersionOfTheSameKind()
     {
         static bool IsUpdate(string installed, string version) =>
