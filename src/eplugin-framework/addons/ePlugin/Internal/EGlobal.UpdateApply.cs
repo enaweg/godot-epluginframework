@@ -197,6 +197,15 @@ internal sealed partial class EGlobal
         // Cache is needed by recovery before the first scheduled check.
         _updateCache ??= new UpdateStateStore(Path.Combine(UpdateProjectRoot, ".godot/eplugin/update-state.json"));
         _updateCache.Load();
+        // A batch is staged within minutes, so a folder this old without a journal is no longer in use.
+        foreach (var folder in _updateJournals.AbandonedStaging(DateTime.UtcNow - TimeSpan.FromHours(6)))
+        {
+            try { AddonFiles.DeleteTree(folder); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _ePluginContext?.Logger.Warn($"Cannot delete the abandoned update download {folder} yet; it is tried again at the next start: {ex.Message}");
+            }
+        }
         // Groups of one batch restart the editor once, after the last of them.
         using var restarts = DeferRestarts();
         foreach (var listed in _updateJournals.Read())

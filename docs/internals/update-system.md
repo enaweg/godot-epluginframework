@@ -156,7 +156,9 @@ its activated shared entry is not reported as a disabled plugin.
 
 Every apply requires dialog confirmation. Stage and validate the whole batch before touching addons: `PackageFetcher`
 leaves a package that cannot be fetched or is refused out of the batch, as a `RefusedPackage`, and fails only when all are
-refused. A plugin folder that is a link (to a working copy) is refused for every kind (R20), and both swaps refuse it
+refused. The manager deletes a staged batch it does not install (`UpdateFlow.Clear`); since an assembly reload or a
+crash forgets it, `ResumeUpdates` deletes folders without a journal last written more than six hours ago
+(`UpdateJournals.AbandonedStaging`). A plugin folder that is a link (to a working copy) is refused for every kind (R20), and both swaps refuse it
 too (`AddonFiles.RefuseLink`), since moving it would replace the link with the downloaded copy. `IUpdateHost.Preflight` refuses to start while a scene is running, an untitled scene is open (detectable only
 from Godot 4.5) or an ePlugin of the batch is not `Activated`. Then save and close all open scenes
 (`IUpdateHost.CloseScenes`; `close_scene` exists only from Godot 4.5) before the swap.
