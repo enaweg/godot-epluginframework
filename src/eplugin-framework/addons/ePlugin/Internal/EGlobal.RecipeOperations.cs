@@ -74,7 +74,7 @@ internal sealed partial class EGlobal
         var remaining = new List<EEditorPluginRecipe>();
         foreach (var other in _contexts.Where(c => c.Plugin is not null && (c == context || c.State == EEditorPluginState.Activated)).ToArray())
         {
-            if (other != context && !TryEnsureRecipe(other)) continue;
+            if (other != context && !TryEnsureRecipe(other, scan: true)) continue;
             var recipe = other.Builder.PluginRecipe;
             remaining.Add(recipe);
             remaining.AddRange((other.AppliedOptionalDependencies ?? (other == context ? [] : ResolveOptionalRecipes(other, recipe))).Select(o => o.Recipe));

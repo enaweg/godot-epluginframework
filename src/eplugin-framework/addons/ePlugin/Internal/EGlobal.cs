@@ -1272,7 +1272,7 @@ internal sealed partial class EGlobal
             return null;
         }
 
-        if (!TryEnsureRecipe(context))
+        if (!TryEnsureRecipe(context, scan: true))
         {
             return null;
         }
@@ -1397,7 +1397,7 @@ internal sealed partial class EGlobal
                 continue;
             }
 
-            if (!TryEnsureRecipe(plugin))
+            if (!TryEnsureRecipe(plugin, scan: true))
             {
                 FailTransition("dependent_recipe_creation_failed");
                 return;
@@ -1646,7 +1646,11 @@ internal sealed partial class EGlobal
     /// Creates the plugin's recipe on its context, once. When <see cref="IEEditorPlugin.CreateRecipe"/> throws, the plugin
     /// is in error with the exception as its detail, and its recipe stays uncreated and empty for a retry.
     /// </summary>
-    private static bool TryEnsureRecipe(PluginContext context)
+    /// <param name="scan">
+    /// The recipe is only read while another plugin changes: a failure is logged, but leaves the plugin as it is, since
+    /// no attempt of its own would let a retry or disable resolve its error.
+    /// </param>
+    private static bool TryEnsureRecipe(PluginContext context, bool scan = false)
     {
         if (context.IsRecipeCreated)
         {
@@ -1662,6 +1666,12 @@ internal sealed partial class EGlobal
         catch (Exception ex)
         {
             context.Builder = EEditorPluginBuilder.Create();
+            if (scan)
+            {
+                context.Logger?.Warn($"Cannot read the recipe of {context.Slug}: {ex.Message}");
+                return false;
+            }
+
             context.State = EEditorPluginState.Error;
             context.ErrorDetail = ex;
             context.Logger?.Error($"Creating the recipe of {context.Slug} failed: {ex.Message}");

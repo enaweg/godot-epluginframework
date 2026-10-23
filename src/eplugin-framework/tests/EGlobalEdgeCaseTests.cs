@@ -211,6 +211,29 @@ public partial class EGlobalEdgeCaseTests : IDisposable
     }
 
     [TestCase]
+    public void AnotherPluginsRecipeThatCannotBeReadDuringADisableLeavesThatPluginAlone()
+    {
+        _fixture.AddEPlugin("a", b => b.AddNuget("A.Package"));
+        _fixture.AddEPlugin("b", b => b.AddNuget("B.Package"));
+        _fixture.Enable("a");
+        _fixture.Enable("b");
+        // b's recipe was not read since an assembly reload, and its CreateRecipe throws now
+        var other = _fixture.Context("b")!;
+        other.Builder = EEditorPluginBuilder.Create();
+        other.IsRecipeCreated = false;
+        _fixture.SetRecipe("b", null);
+
+        _fixture.Disable("a");
+
+        // whether b requires a is unknown, so a's deactivation fails and can be retried; b keeps working
+        Assertions.AssertObject(other.State).IsEqual(EEditorPluginState.Activated);
+        Assertions.AssertObject(_fixture.State("a")).IsEqual(EEditorPluginState.Error);
+        Assertions.AssertString(_fixture.Store.GetLocal("a")!.Reason).IsEqual("dependent_recipe_creation_failed");
+        Assertions.AssertObject(_fixture.Store.GetLocal("b")).IsNull();
+        Assertions.AssertBool(Logged("warn", "Cannot read the recipe of b")).IsTrue();
+    }
+
+    [TestCase]
     public void EnablingAPluginThatABlockedPluginWouldUseOptionallyFails()
     {
         _fixture.AddEPlugin("extra", b => b.AddNuget("Extra.Package"));

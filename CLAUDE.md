@@ -136,7 +136,8 @@ assembly name, the addons folder and plugin directories, the user's editor confi
 ePlugin and the recipe of a disabled one, autoloads, filesystem scans and whether one runs, pausing imports while
 unfocused, restarting the editor, whether dialogs can show, loading/unloading GDExtensions and whether one is loaded);
 keep new lifecycle code behind it so it stays testable. Recipes are created through `TryEnsureRecipe`, which puts the
-plugin in error and discards a half-built recipe when `CreateRecipe` throws. `FindDependencyCycle` fails an activation
+plugin in error and discards a half-built recipe when `CreateRecipe` throws. Scans that only read other plugins' recipes pass `scan: true`, which logs
+the failure but leaves that plugin's state alone, since no attempt of its own could resolve that error. `FindDependencyCycle` fails an activation
 whose hard dependencies lead back to the plugin (otherwise it waits for itself forever). Godot frees a plugin's instance
 on disable, so `AddContext` replaces a deactivated or freed context of the same slug. A transition has one participant
 per slug: when a manual retry re-enables a plugin whose failed activation disabled it, the new instance's
