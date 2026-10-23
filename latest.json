@@ -1,8 +1,8 @@
 {
- "commit": "f5a44302f2d0196f6e9337915860c35ba84584ff",
- "date": "2026-10-23T11:19:39Z",
- "covered": 9955,
- "coverable": 10967,
+ "commit": "a712cc373a8e556c56b9fb82b9098c7f73869378",
+ "date": "2026-10-23T13:09:09Z",
+ "covered": 10012,
+ "coverable": 11026,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -137,8 +137,8 @@
    75
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.cs": [
-   954,
-   1073
+   966,
+   1082
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EPluginProgress.cs": [
    1,
@@ -297,8 +297,8 @@
    14
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PluginStateStore.cs": [
-   394,
-   399
+   439,
+   449
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PluginToggles.cs": [
    13,
