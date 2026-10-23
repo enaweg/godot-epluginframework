@@ -134,8 +134,8 @@ Weekly scans begin once the workflow reaches the default branch.
 
 The workflows use `pull_request` without service secrets or privileged fork-code
 execution. They have no path filters, so documentation-only PRs also finish
-the checks. CI-Analysis-Jobs and CI-CodeQL pin their actions by commit and the
-lint image by digest; the other workflows reference actions by version tag.
+the checks. Every workflow pins its actions by commit, with the version as a
+comment, and CI-Analysis-Jobs pins the lint image by digest.
 Dependabot updates Actions and the three directories with NuGet dependencies
 (`src/eplugin-framework`, `src/activation-progress.Tests`, `tools/ci-reports.Tests`)
 weekly.
