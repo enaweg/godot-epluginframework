@@ -117,18 +117,22 @@ internal sealed class UpdateSourceFactory(UpdateHttp? http = null, IGitRunner? g
         {
             var segments = uri.AbsolutePath.Trim('/').Split('/');
             if (uri.Host == "github.com" && segments.Length >= 3 && segments[2] == "releases")
-                return new GitHubReleaseSource(transport, segments[0], segments[1].Replace(".git", ""), segments.Length > 3 && segments[3] == "tag");
+                return new GitHubReleaseSource(transport, segments[0], WithoutGit(segments[1]), segments.Length > 3 && segments[3] == "tag");
             var index = Array.IndexOf(segments, "-");
             if (index > 0 && segments.Length > index + 1 && segments[index + 1] == "releases")
                 return new GitLabReleaseSource(transport, uri.Authority, string.Join("/", segments[..index]), segments.Length > index + 2);
             // The same path as GitHub's on any other host: Forgejo and Gitea, e.g. Codeberg.
             if (uri.Host != "github.com" && index < 0 && segments.Length >= 3 && segments[2] == "releases" &&
                 segments[..2].All(s => s.Length > 0) && (segments.Length == 3 || segments.Length >= 5 && segments[3] == "tag"))
-                return new ForgejoReleaseSource(transport, uri.Authority, segments[0], segments[1].Replace(".git", ""), segments.Length > 3);
+                return new ForgejoReleaseSource(transport, uri.Authority, segments[0], WithoutGit(segments[1]), segments.Length > 3);
         }
         if (GitUrl.TryParse(url, out var parsed) && (parsed!.Repository.EndsWith(".git", StringComparison.Ordinal) || url.Contains("?path=")))
             return new GitSource(transport, git ?? new GitRunner(), parsed!);
         return new UnsupportedUpdateSource(url);
     }
+
+    /// <summary>A repository name without a trailing ".git"; "foo.github-tools" keeps its own.</summary>
+    private static string WithoutGit(string repository) =>
+        repository.EndsWith(".git", StringComparison.Ordinal) ? repository[..^4] : repository;
 }
 #endif

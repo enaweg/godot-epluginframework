@@ -46,6 +46,20 @@ public class UpdateSourceTests
     }
 
     [TestCase]
+    public static async Task ReleasePagesKeepGitInsideRepositoryNames()
+    {
+        // Only a trailing ".git" is no part of the name.
+        var requested = new List<string>();
+        using var client = new HttpClient(new Handler(request => { requested.Add(request.RequestUri!.AbsoluteUri); return Json("[]"); }));
+        var factory = new UpdateSourceFactory(new(client));
+        foreach (var url in new[] { "https://github.com/owner/foo.github-tools/releases", "https://github.com/owner/foo.github-tools.git/releases",
+                     "https://codeberg.org/owner/foo.github-tools/releases", "https://codeberg.org/owner/foo.github-tools.git/releases" })
+            await factory.Create(url).CheckAsync(Target(), new(), CancellationToken.None);
+        Assertions.AssertInt(requested.Count).IsEqual(4);
+        foreach (var request in requested) Assertions.AssertString(request).Contains("/owner/foo.github-tools/releases");
+    }
+
+    [TestCase]
     public static async Task GitLabSupportsSubgroupsAndSourceArchives()
     {
         string? requested = null;
