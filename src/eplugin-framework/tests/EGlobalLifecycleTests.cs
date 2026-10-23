@@ -678,6 +678,27 @@ public class EGlobalLifecycleTests : IDisposable
     }
 
     [TestCase]
+    public void DisablingAFailedPluginWhoseInstanceTheEditorFreedRemovesItsAutoload()
+    {
+        _fixture.AddEPlugin("app", b => b.AddAutoload("AppService", "res://addons/app/service.tscn"));
+        _fixture.Cli.BuildFails = true;
+        _fixture.Enable("app");
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Error);
+        Assertions.AssertBool(_fixture.Host.Autoloads.ContainsKey("AppService")).IsTrue();
+        // unchecked in Project Settings: a plugin in error uninstalls nothing, and Godot frees its instance
+        var instance = _fixture.Context("app")!.PluginBase;
+        _fixture.Disable("app");
+        instance.Free();
+        _fixture.Cli.BuildFails = false;
+
+        Assertions.AssertBool(_fixture.Global.DisableFailedPlugin("app")).IsTrue();
+
+        Assertions.AssertBool(_fixture.Host.Autoloads.ContainsKey("AppService")).IsFalse();
+        Assertions.AssertObject(_fixture.Store.GetLocal("app")).IsNull();
+        Assertions.AssertObject(_fixture.Store.GetShared("app")!.State).IsEqual(PersistedPluginState.Deactivated);
+    }
+
+    [TestCase]
     public void DisablingAPluginWithoutVersionDropsItsAttemptAndAFailedUpdateIsNotDisabled()
     {
         _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"), version: "");

@@ -104,14 +104,20 @@ internal sealed partial class EGlobal
     }
     private void ApplyAutoload(PluginContext context, EEditorPluginRecipe.Autoload autoload)
     {
-        if (_host.GetAutoload(autoload.Name) != autoload.Path) _host.AddAutoload(context.PluginBase, autoload.Name, autoload.Path);
+        if (_host.GetAutoload(autoload.Name) != autoload.Path) _host.AddAutoload(AutoloadPlugin(context), autoload.Name, autoload.Path);
         if (_host.GetAutoload(autoload.Name) is null) throw new InvalidOperationException($"Adding autoload {autoload.Name} failed.");
     }
     private void ReverseAutoload(PluginContext context, EEditorPluginRecipe.Autoload autoload)
     {
-        if (_host.GetAutoload(autoload.Name) is not null) _host.RemoveAutoload(context.PluginBase, autoload.Name);
+        if (_host.GetAutoload(autoload.Name) is not null) _host.RemoveAutoload(AutoloadPlugin(context), autoload.Name);
         if (_host.GetAutoload(autoload.Name) is not null) throw new InvalidOperationException($"Removing autoload {autoload.Name} failed.");
     }
+    /// <summary>
+    /// The editor plugin an autoload is changed through. Godot frees a plugin's instance when it is disabled, also one
+    /// whose failed attempt is then retried as a deactivation; any plugin changes the project's autoloads the same way.
+    /// </summary>
+    private EditorPlugin AutoloadPlugin(PluginContext context) =>
+        GodotObject.IsInstanceValid(context.PluginBase) || _ePluginContext is null ? context.PluginBase : _ePluginContext;
     private void TrackRecipeOperation(PluginContext context, RecipeOperation operation, Action execute)
     {
         var journal = _recipeUpdateJournal;
