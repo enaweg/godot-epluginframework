@@ -120,6 +120,24 @@ public class UpdateCoreTests
     }
 
     [TestCase]
+    public static async Task APluginWhoseSiteFailsKeepsTheUpdateAnEarlierCheckFound()
+    {
+        var store = new MemoryStore();
+        store.State.Results.Add(Candidate("broken", "2.0.0"));
+        var service = new UpdateService(new Factory(), new SystemClock(), store);
+
+        var mixed = await service.CheckAsync([Target("broken"), Target("healthy")], new(), CancellationToken.None);
+        Assertions.AssertThat(mixed.Updates.Select(u => u.Slug).ToArray()).ContainsExactly("broken", "healthy");
+        Assertions.AssertThat(store.State.Results.Select(u => u.Slug).ToArray()).ContainsExactlyInAnyOrder("broken", "healthy");
+
+        var offline = await service.CheckAsync([Target("broken")], new(), CancellationToken.None);
+        Assertions.AssertThat(offline.Updates.Select(u => u.Slug).ToArray()).ContainsExactly("broken");
+        // once the update is installed, the kept entry is no update any more
+        var installed = await service.CheckAsync([Target("broken", "2.0.0"), Target("healthy")], new(), CancellationToken.None);
+        Assertions.AssertThat(installed.Updates.Select(u => u.Slug).ToArray()).ContainsExactly("healthy");
+    }
+
+    [TestCase]
     public static async Task TimeoutAndCancellationAreDistinct()
     {
         var store = new MemoryStore();
