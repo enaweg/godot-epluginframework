@@ -187,19 +187,35 @@ internal sealed partial class EGlobal
         _enabledWithFramework.Clear();
         if (_toCheckEnable.Count == 0) return;
 
-        // Take the waiting plugins off the stack first: EnableEPlugin pushes a plugin back while one of its
-        // dependencies is still being enabled, which would break enumerating the stack, and draining it until
-        // empty would never end for a dependency that cannot be enabled.
-        var waitingPlugins = _toCheckEnable.ToArray();
-        _toCheckEnable.Clear();
-        foreach (var pluginContext in waitingPlugins)
-        {
-            EnableEPlugin(pluginContext, false);
-        }
+        ResumeWaitingInRounds();
 
         if (FinishTransition())
         {
             RefreshEditor(rebuild: false);
+        }
+    }
+
+    /// <summary>
+    /// Activates the plugins waiting on <see cref="_toCheckEnable"/>, in rounds: each takes them off the stack first,
+    /// because one whose dependency is still not activated pushes itself back, and popping until empty would never end.
+    /// A later round resumes the plugins whose dependencies an earlier one activated; a round that resumes none of them
+    /// leaves them waiting for their dependencies' activation callbacks.
+    /// </summary>
+    private void ResumeWaitingInRounds()
+    {
+        while (_toCheckEnable.Count > 0)
+        {
+            var waiting = _toCheckEnable.ToArray();
+            _toCheckEnable.Clear();
+            foreach (var nextPlugin in waiting)
+            {
+                EnableEPlugin(nextPlugin, false);
+            }
+
+            if (_toCheckEnable.ToHashSet().SetEquals(waiting) && waiting.All(c => c.State == EEditorPluginState.Created))
+            {
+                break;
+            }
         }
     }
 
@@ -886,23 +902,8 @@ internal sealed partial class EGlobal
 
         if (refreshAtEnd)
         {
-            // Trigger install for waiting plugins, in rounds: each takes them off the stack first, because one whose
-            // dependency is still not activated pushes itself back, and popping until empty would never end. A round
-            // that resumes none of them leaves them waiting for their dependencies' activation callbacks.
-            while (_toCheckEnable.Count > 0)
-            {
-                var waiting = _toCheckEnable.ToArray();
-                _toCheckEnable.Clear();
-                foreach (var nextPlugin in waiting)
-                {
-                    EnableEPlugin(nextPlugin, false);
-                }
-
-                if (_toCheckEnable.ToHashSet().SetEquals(waiting) && waiting.All(c => c.State == EEditorPluginState.Created))
-                {
-                    break;
-                }
-            }
+            // trigger install for waiting plugins
+            ResumeWaitingInRounds();
 
             if (FinishTransition())
             {
@@ -1549,9 +1550,10 @@ internal sealed partial class EGlobal
 
                 var context = GetOrCreateContext(pluginBase);
 
-                context.State = changeTriggered || _enabledWithFramework.Contains(context)
+                context.State = changeTriggered || _enabledWithFramework.Contains(context) || _toCheckEnable.Contains(context)
                     ?
-                    // was a change to plugins, so this is a new plugin need to bootstrap.
+                    // was a change to plugins, or the plugin was enabled while the framework was not initialized and
+                    // waits for its activation, so this is a new plugin need to bootstrap.
                     EEditorPluginState.Created
                     :
                     // initial start or assembly reload, nothing need to be done as installation already happened

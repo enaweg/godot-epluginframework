@@ -179,6 +179,37 @@ public class EGlobalEditorStateTests : IDisposable
     }
 
     [TestCase]
+    public void PluginsEnabledWhileTheFrameworkStartsAreInstalledInDependencyOrderOnceItIsReady()
+    {
+        // the framework is enabled, but not initialized yet, e.g. waiting to retry an Initialize that failed
+        var global = new EGlobal(_fixture.Host) { StateStore = _fixture.Store };
+        _fixture.AddEPlugin("sample_plugin", null);
+        _fixture.AddEPlugin("sample_dependant_plugin", null);
+        var sample = Track(new SamplePlugin());
+        var dependant = Track(new SampleDependantPlugin());
+        _fixture.Host.Nodes.AddRange([_fixture.Framework, sample, dependant]);
+        var contexts = new List<PluginContext>();
+        foreach (var (slug, plugin) in new (string, EditorPlugin)[] { ("sample_plugin", sample), ("sample_dependant_plugin", dependant) })
+        {
+            _fixture.Host.Enabled.Add(slug);
+            var context = new PluginContext((IEEditorPlugin)plugin, plugin, new RecordingLogger(_fixture.Log, slug)) { Slug = slug, Cli = _fixture.Cli };
+            global.AddContext(context);
+            global.EnableEPlugin(context);
+            contexts.Add(context);
+        }
+        Assertions.AssertThat(_fixture.Operations).IsEmpty();
+
+        global.Attach(_fixture.Framework, new Logging.GenericLoggerFactory(c => new RecordingLogger(_fixture.Log, c)), _fixture.Cli);
+        global.ReloadContexts(null, false);
+        global.ResumeWaitingPlugins();
+
+        Assertions.AssertObject(contexts[0].State).IsEqual(EEditorPluginState.Activated);
+        Assertions.AssertObject(contexts[1].State).IsEqual(EEditorPluginState.Activated);
+        Assertions.AssertThat(_fixture.Operations).ContainsExactly("add-nuget ZLogger", "build");
+        Assertions.AssertBool(global.IsChangingPlugins).IsFalse();
+    }
+
+    [TestCase]
     public void AReloadComparesThePluginsWithTheirRecordedState()
     {
         var sample = Track(new SamplePlugin());
