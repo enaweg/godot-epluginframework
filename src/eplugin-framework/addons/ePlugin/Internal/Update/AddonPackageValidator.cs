@@ -49,7 +49,7 @@ internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules 
                 metadata = PluginIni.Parse(File.ReadAllText(Path.Combine(stage, "plugin.cfg")));
                 if (metadata.Count == 0) throw new InvalidDataException("Missing [plugin] section.");
             }
-            catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or UnauthorizedAccessException)
+            catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
             { Add("R2", FindingSeverity.Error, "Cannot parse staged plugin.cfg: " + ex.Message); }
             foreach (var key in new[] { "name", "version", "script" })
                 if (string.IsNullOrWhiteSpace(metadata.GetValueOrDefault(key))) Add("R3", FindingSeverity.Error, $"plugin.cfg has no {key}.");
@@ -146,7 +146,8 @@ internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules 
             if (Path.GetExtension(script) != Path.GetExtension(oldMetadata.GetValueOrDefault("script")))
                 Add("R13", FindingSeverity.Warning, "Plugin entry-point language changed.");
         }
-        catch (IOException) { }
+        // an installed plugin.cfg that cannot be read only skips this comparison
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException) { }
         if (validNew && SemVer.TryParse(installed.InstalledVersion, out var installedVersion) && version.Major != installedVersion.Major)
             Add("R14", FindingSeverity.Warning, "Major version change: your project code may need changes.");
         if (installed.IsBlocked || installed.StoreReadOnly) Add("R17", FindingSeverity.Error, "Resolve the plugin's problem under Needs attention in the ePlugin Manager first.");
