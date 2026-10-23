@@ -85,9 +85,10 @@ jobs:
       - name: Create artifact
         shell: bash
         run: |
-          mkdir -p out
-          cd src/eplugin-framework
-          zip -r "../../out/ePlugin-v${VERSION}.zip" addons/ePlugin
+          # The same packaging as releases, so a file its filter drops or its archive check refuses shows up before a
+          # tag is pushed.
+          "$RUNNER_TEMP/dotnet-tools/dotnet" run tools/package_release.cs -- out \
+            --name "ePlugin-v${VERSION}.zip" --helper src/eplugin-framework/addons/ePlugin/progress
 
       - name: Upload artifact
         id: upload
