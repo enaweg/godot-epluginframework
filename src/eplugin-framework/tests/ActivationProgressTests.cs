@@ -558,6 +558,31 @@ public class ActivationProgressTests
     }
 
     [TestCase]
+    public static void SettingsDialogIsHiddenByAnEditorThreadOperationThatJoinsOneFromAnotherThread()
+    {
+        var hidden = 0;
+        ActivationProgress.HideSettingsDialog = () =>
+        {
+            hidden++;
+            return null;
+        };
+        ActivationProgress.IsEditorThread = () => false;
+        using (ActivationProgress.Begin("Indexing..."))
+        {
+            ActivationProgress.IsEditorThread = () => true;
+            using (ActivationProgress.Begin("Activating A..."))
+            {
+            }
+
+            using (ActivationProgress.Begin("Activating B..."))
+            {
+            }
+        }
+
+        Assertions.AssertInt(hidden).IsEqual(1);
+    }
+
+    [TestCase]
     public void FailingSettingsDialogDoesNotAffectOperation()
     {
         ActivationProgress.HideSettingsDialog = () => throw new InvalidOperationException("Editor UI unavailable.");

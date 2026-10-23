@@ -205,11 +205,13 @@ internal static class ActivationProgress
     private static void HideSettingsOnce()
     {
         if (_settingsDialogRequested) return;
-        _settingsDialogRequested = true;
         try
         {
-            // Project Settings is editor UI; an operation started on another thread leaves it alone.
-            if (IsEditorThread()) _settingsDialog = HideSettingsDialog();
+            // Project Settings is editor UI; an operation started on another thread leaves it alone, and a later one on
+            // the editor thread in the same lifetime still hides it.
+            if (!IsEditorThread()) return;
+            _settingsDialogRequested = true;
+            _settingsDialog = HideSettingsDialog();
         }
         catch (Exception)
         {
