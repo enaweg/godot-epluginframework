@@ -142,7 +142,13 @@ internal sealed partial class EPluginManagerDialog
         _status.Text = $"Review the license to enable {name}.";
         LicenseDialog.Create(review, decided =>
         {
-            _global.RecordLicenses(decided);
+            try { _global.RecordLicenses(decided); }
+            catch (Exception ex)
+            {
+                GD.PushError($"Cannot record the license decisions for {slug}: {ex.Message}");
+                CompletePluginOperation();
+                return;
+            }
             if (decided.Approved.Any()) { CallDeferred(MethodName.SetPluginEnabled, slug, name, true); return; }
             _pluginOperation.Complete(false);
             _working = false;

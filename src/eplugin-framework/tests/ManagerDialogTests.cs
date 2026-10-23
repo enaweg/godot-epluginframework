@@ -69,6 +69,19 @@ public class ManagerDialogTests
     }
 
     [TestCase]
+    public static void ADecisionThatThrowsStillReleasesTheDialog()
+    {
+        // left valid, the hidden dialog would keep welcome pages from opening for the rest of the session
+        var dialog = UpdateFailureDialog.Create(FailedJournal(), _ => throw new InvalidOperationException("Rollback failed."));
+        try
+        {
+            dialog.EmitSignal(AcceptDialog.SignalName.Canceled);
+            Assertions.AssertBool(dialog.IsQueuedForDeletion()).IsTrue();
+        }
+        finally { Free(dialog); }
+    }
+
+    [TestCase]
     public static void TheBuildFailureDialogShowsTheErrorsOfTheBuildLog()
     {
         var directory = Path.Combine(Path.GetTempPath(), "eplugin-failure-" + Guid.NewGuid().ToString("N"));
