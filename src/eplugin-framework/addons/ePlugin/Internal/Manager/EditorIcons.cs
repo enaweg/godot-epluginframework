@@ -58,6 +58,9 @@ internal static class EditorIcons
     public static Color WarningColor => ThemeColor(EditorWindows.Theme, Accents[1].Name, Accents[1].Fallback);
     /// <summary>The editor's color for errors.</summary>
     public static Color ErrorColor => ThemeColor(EditorWindows.Theme, Accents[2].Name, Accents[2].Fallback);
+    /// <summary>The editor's color for disabled text, e.g. a plugin that is not enabled.</summary>
+    public static Color DisabledColor => EditorWindows.Theme is { } theme && theme.HasColor("font_disabled_color", "Button")
+        ? theme.GetColor("font_disabled_color", "Button") : new Color(0.5f, 0.5f, 0.5f);
 
     /// <summary>
     /// The ePlugin icon of the toolbar button: its puzzle piece is green while updates can be installed and red while an

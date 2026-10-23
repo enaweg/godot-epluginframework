@@ -241,10 +241,10 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             if (updateState is not null && _updateIcon is not null)
             {
                 item.AddButton(NameColumn, _updateIcon, 0, false, updateState);
-                item.SetButtonColor(NameColumn, 0, row.Update is { } state ? (state.HasError ? ErrorColor() : UpdateColor()) : DisabledColor());
+                item.SetButtonColor(NameColumn, 0, row.Update is { } state ? (state.HasError ? EditorIcons.ErrorColor : EditorIcons.SuccessColor) : EditorIcons.DisabledColor);
             }
-            if (!plugin.Enabled) item.SetCustomColor(NameColumn, DisabledColor());
-            if (row.NeedsAttention) item.SetCustomColor(NameColumn, ErrorColor());
+            if (!plugin.Enabled) item.SetCustomColor(NameColumn, EditorIcons.DisabledColor);
+            if (row.NeedsAttention) item.SetCustomColor(NameColumn, EditorIcons.ErrorColor);
             if (row.Update is { } update)
             {
                 // An available update is selected for the batch right where its version change is shown.
@@ -252,7 +252,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
                 item.SetEditable(VersionColumn, !update.HasError && editable);
                 item.SetChecked(VersionColumn, update.Selected);
                 item.SetText(VersionColumn, $"{PluginManagerViewModel.VersionText(plugin)} → {update.Candidate.NewVersion}");
-                if (update.HasError) item.SetCustomColor(VersionColumn, ErrorColor());
+                if (update.HasError) item.SetCustomColor(VersionColumn, EditorIcons.ErrorColor);
                 item.SetTooltipText(VersionColumn, update.HasError ? "This update cannot be installed, see details." : "Check to include this update in Update.");
             }
             else
@@ -427,16 +427,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         Refresh();
     }
 
-    private static Color ThemeColor(string name, string type, Color fallback)
-    {
-        var theme = EditorWindows.Theme;
-        return theme is not null && theme.HasColor(name, type) ? theme.GetColor(name, type) : fallback;
-    }
-    private static Color UpdateColor() => EditorIcons.SuccessColor;
     private static Texture2D? VersionIcon(bool downgrade, bool reinstall) =>
         reinstall ? EditorIcons.Reinstall : downgrade ? EditorIcons.Downgrade : EditorIcons.Upgrade;
-    private static Color ErrorColor() => EditorIcons.ErrorColor;
-    private static Color DisabledColor() => ThemeColor("font_disabled_color", "Button", new Color(0.5f, 0.5f, 0.5f));
 
     public override void _Process(double delta)
     {

@@ -101,12 +101,12 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
             var plugin = plugins.GetValueOrDefault(site.Slug);
             item.SetText(PluginColumn, plugin?.Name ?? site.Slug);
             item.SetTooltipText(PluginColumn, plugin is null ? $"{site.Slug} is not in res://addons." : $"{plugin.Name} (res://addons/{site.Slug})");
-            if (plugin is null) item.SetCustomColor(PluginColumn, DisabledColor());
+            if (plugin is null) item.SetCustomColor(PluginColumn, EditorIcons.DisabledColor);
             item.SetText(SourceColumn, site.Url);
             var fallback = plugin?.UpdateUrl is { } url ? $"When it does not work, plugin.cfg's update_url is used: {url}" : "plugin.cfg sets no update_url.";
             var supported = UpdateSourceFactory.IsSupported(site.Url);
             item.SetTooltipText(SourceColumn, supported ? $"{site.Url}\n{fallback}" : $"{site.Url}\nThis is not a supported update site, so the plugin.cfg update_url is used.");
-            if (!supported) item.SetCustomColor(SourceColumn, ErrorColor());
+            if (!supported) item.SetCustomColor(SourceColumn, EditorIcons.ErrorColor);
             if (site.Slug == selectedSlug) item.Select(PluginColumn);
         }
         RenderLocalDirectories(root, plugins, selectedDirectory);
@@ -139,7 +139,7 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
             item.SetTooltipText(PluginColumn, state is { Exists: false }
                 ? "This directory was not found when it was indexed. It stays in the list and is indexed again when it reappears."
                 : "Offers its packages as updates and versions of any plugin.");
-            if (state is { Exists: false }) item.SetCustomColor(PluginColumn, DisabledColor());
+            if (state is { Exists: false }) item.SetCustomColor(PluginColumn, EditorIcons.DisabledColor);
             foreach (var package in index.Packages.Where(p => IsInside(directory, p.ZipPath)).OrderBy(p => p.Slug, StringComparer.OrdinalIgnoreCase))
             {
                 var child = _tree.CreateItem(item);
@@ -151,7 +151,7 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
                 for (var column = 0; column < _tree.Columns; column++)
                 {
                     child.SetSelectable(column, false);
-                    if (plugin is null) child.SetCustomColor(column, DisabledColor());
+                    if (plugin is null) child.SetCustomColor(column, EditorIcons.DisabledColor);
                 }
             }
             item.Collapsed = _collapsedDirectories.Contains(directory);
@@ -199,7 +199,7 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
             for (var column = 0; column < _tree.Columns; column++)
             {
                 item.SetSelectable(column, false);
-                if (!enabled || plugin is null) item.SetCustomColor(column, DisabledColor());
+                if (!enabled || plugin is null) item.SetCustomColor(column, EditorIcons.DisabledColor);
             }
         }
     }
@@ -305,7 +305,7 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
         if (error is not null)
         {
             _hint.Text = error;
-            _hint.AddThemeColorOverride("font_color", ErrorColor());
+            _hint.AddThemeColorOverride("font_color", EditorIcons.ErrorColor);
             return;
         }
         _hint.RemoveThemeColorOverride("font_color");
@@ -339,14 +339,6 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
         }
         Render();
     }
-
-    private static Color ThemeColor(string name, string type, Color fallback)
-    {
-        var theme = EditorWindows.Theme;
-        return theme is not null && theme.HasColor(name, type) ? theme.GetColor(name, type) : fallback;
-    }
-    private static Color ErrorColor() => ThemeColor("error_color", "Editor", new Color(1f, 0.47f, 0.42f));
-    private static Color DisabledColor() => ThemeColor("font_disabled_color", "Button", new Color(0.5f, 0.5f, 0.5f));
 
     public override void _EnterTree()
     {
