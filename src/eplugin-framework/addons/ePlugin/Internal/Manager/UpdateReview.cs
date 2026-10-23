@@ -14,7 +14,7 @@ internal sealed class UpdateReviewEntry
     public UpdateReviewEntry(ValidatedPackage package)
     {
         Package = package; Candidate = package.Candidate; NewVersion = package.NewVersion.ToString(); Findings = package.Findings;
-        // A changed update host is never trusted without the user's explicit choice.
+        // Another repository is never trusted without the user's explicit choice.
         Install = !NeedsTrust;
     }
 
@@ -31,7 +31,10 @@ internal sealed class UpdateReviewEntry
     /// <summary>Why the package cannot be installed; null for a package that can.</summary>
     public string? RefusedReason { get; }
     public bool CanInstall => RefusedReason is null;
-    /// <summary>The package moves the plugin's updates to another host, which only the user can trust.</summary>
+    /// <summary>
+    /// The package comes from, or moves the plugin's updates to, another repository than the plugin's update site, which
+    /// only the user can trust.
+    /// </summary>
     public bool NeedsTrust => Findings.Any(f => f.RequiresTrust);
     public bool Install { get; set; }
     /// <summary>The text next to the entry's check box.</summary>
@@ -40,7 +43,7 @@ internal sealed class UpdateReviewEntry
 
 /// <summary>
 /// The packages of a staged batch the user decides about before anything is installed: those with warnings, those that
-/// move to another update host, and the refused ones. The others are installed without being listed.
+/// come from or move to another repository, and the refused ones. The others are installed without being listed.
 /// </summary>
 internal sealed class UpdateReview
 {
@@ -86,7 +89,7 @@ internal sealed class UpdateReview
                 ? "The chosen version needs your decision before it is installed."
                 : "These updates need your decision before they are installed. Uncheck an update to leave it out.";
             if (Entries.Any(e => e.NeedsTrust))
-                text += " An update that moves to another update host is installed only if you check it.";
+                text += " An update that comes from or moves to another repository is installed only if you check it.";
             if (Unlisted > 0)
                 text += $" {Unlisted} other update{(Unlisted == 1 ? " has" : "s have")} no warnings and {(Unlisted == 1 ? "is" : "are")} installed too.";
             return text;
@@ -107,10 +110,13 @@ internal sealed class UpdateReview
         if (entry.Findings.Count > 0) text.Append('\n');
         foreach (var finding in entry.Findings)
             text.Append(CultureInfo.CurrentCulture, $"[color={Color(finding.Severity)}]{finding.Severity}:[/color] {Escape(finding.Message)}\n");
-        if (entry.NeedsTrust)
-            text.Append(CultureInfo.CurrentCulture, $"\n[b]The plugin's updates move to {Link(entry.Package?.NewUpdateUrl ?? "another host")}.[/b] ")
-                .Append("Later updates are downloaded from there. Check this update only if you trust that source, for example because ")
-                .Append("the plugin's author announced the move.\n");
+        if (!entry.NeedsTrust) return text.ToString().TrimEnd();
+        if (entry.Findings.Any(f => f.Code == "R9" && f.RequiresTrust))
+            text.Append(CultureInfo.CurrentCulture, $"\n[b]The plugin's updates move to {Link(entry.Package?.NewUpdateUrl ?? "another repository")}.[/b] ")
+                .Append("Later updates are downloaded from there. ");
+        else
+            text.Append(CultureInfo.CurrentCulture, $"\n[b]This update comes from {Link(candidate.SourceUrl ?? "another repository")}, not from the plugin's update site.[/b] ");
+        text.Append("Check this update only if you trust that source, for example because the plugin's author announced the move.\n");
         return text.ToString().TrimEnd();
     }
 

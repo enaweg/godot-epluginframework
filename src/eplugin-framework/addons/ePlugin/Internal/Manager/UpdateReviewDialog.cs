@@ -6,7 +6,7 @@ using Godot;
 namespace Enaweg.Plugin.Internal.Manager;
 
 /// <summary>
-/// Lists the staged updates that need a decision before anything is installed (warnings, a changed update host, a
+/// Lists the staged updates that need a decision before anything is installed (warnings, another repository, a
 /// refusal), each with its findings and a check box that keeps it in the batch. The layout lives in
 /// UpdateReviewDialog.tscn.
 /// </summary>
@@ -58,7 +58,7 @@ internal sealed partial class UpdateReviewDialog : ConfirmationDialog, ISerializ
         _signals.Connect(this, AcceptDialog.SignalName.Canceled, Callable.From(() => Finish(false)));
         _signals.Connect(this, Window.SignalName.CloseRequested, Callable.From(() => Finish(false)));
         Render();
-        // A changed host is the decision that matters most, so it is shown first.
+        // Another repository is the decision that matters most, so it is shown first.
         Display((_review.Entries.FirstOrDefault(e => e.NeedsTrust) ?? _review.Entries[0]).Slug);
     }
 

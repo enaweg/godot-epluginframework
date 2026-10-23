@@ -35,7 +35,11 @@ Project update sites (`UpdateSiteSettings`, the committed `res://addons/eplugin-
 `plugin.cfg` value (the validator's R9 compares new packages against it) and `OverrideUrl` holds the project's site;
 `UpdateUrls` lists the override first. `UpdateService.FirstWorkingSiteAsync` tries them in order, so an unsupported or
 failing site falls back to `plugin.cfg` (reported in `UpdateCheckResult.Fallbacks`), and a candidate from either URL
-belongs to the plugin (`CurrentCached`, `source_changed`). `CollectUpdateTargets` and `CollectPlugins` reload the file.
+belongs to the plugin (`CurrentCached`, `source_changed`). Trust compares repositories (`UpdateSourceFactory.Repository`:
+host and path, so another owner on the same host differs, and a release page, tag page or git URL of one repository is
+the same): R9 when the package's `update_url` names another repository than the installed one, R25 when the candidate's
+`SourceUrl` is neither the project's site nor the `plugin.cfg` repository, i.e. the built-in site of a plugin that has its
+own. Both set `RequiresTrust`, which leaves the review entry unchecked. `CollectUpdateTargets` and `CollectPlugins` reload the file.
 Like `LocalSourceSettings`, it is never overwritten when it is unreadable or was written by a newer version, and it is
 deleted with its last entry.
 

@@ -73,6 +73,11 @@ public class DecisionDialogTests
         Assertions.AssertString(text).StartsWith("1.0.0 → 2.0.0\n[b]Update site:[/b] [url=https://example.org/releases]");
         Assertions.AssertString(text).Contains("[color=#ffd070]Warning:[/color] Update source changed: [lb]new]");
         Assertions.AssertString(text).Contains("move to [url=https://example.com/moved/releases]https://example.com/moved/releases[/url]");
+        // an update from another repository than the plugin's update site, e.g. through the built-in list
+        var other = UpdateReview.For([Package("other", new Finding("R25", FindingSeverity.Warning, "The update comes from elsewhere", RequiresTrust: true))], [])!;
+        Assertions.AssertBool(other.Entries[0].Install).IsFalse();
+        Assertions.AssertString(UpdateReview.Describe(other.Entries[0]))
+            .Contains("This update comes from [url=https://example.org/releases]https://example.org/releases[/url], not from the plugin's update site.");
 
         var refused = UpdateReview.Describe(UpdateReview.For([], [new RefusedPackage(Candidate("broken"), "contains a GDExtension")])!.Entries[0]);
         Assertions.AssertString(refused).Contains("[color=#ff7070]Refused:[/color] contains a GDExtension");

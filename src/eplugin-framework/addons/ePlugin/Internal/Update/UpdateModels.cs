@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Enaweg.Plugin.Internal.Kinds;
@@ -77,6 +78,37 @@ internal sealed class UpdateSourceFactory(UpdateHttp? http = null, IGitRunner? g
     /// <summary>Whether <paramref name="url"/> is an update site the updater can read; nothing is contacted.</summary>
     public static bool IsSupported(string? url) =>
         !string.IsNullOrWhiteSpace(url) && new UpdateSourceFactory().Create(url.Trim()) is not UnsupportedUpdateSource;
+
+    /// <summary>
+    /// The repository an update site reads, as its host and path without ".git", in lower case, so a release page, a tag
+    /// page and a git URL of one repository are the same; the URL itself when it names no repository, null for none.
+    /// </summary>
+    public static string? Repository(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return null;
+        var text = url.Trim();
+        if (Uri.TryCreate(text, UriKind.Absolute, out var uri) && uri.Scheme == "https")
+        {
+            // Release pages of GitHub, Forgejo and Gitea (owner/repo/releases) and GitLab (group/project/-/releases).
+            var segments = uri.AbsolutePath.Trim('/').Split('/');
+            var index = Array.IndexOf(segments, "-");
+            if (index > 0 && segments.Length > index + 1 && segments[index + 1] == "releases") return Key(uri.Host, segments[..index]);
+            if (index < 0 && segments.Length >= 3 && segments[2] == "releases") return Key(uri.Host, segments[..2]);
+        }
+        if (GitUrl.TryParse(text, out var git))
+        {
+            var scp = Regex.Match(git!.Repository, "^git@([^:]+):(.+)$");
+            if (scp.Success) return Key(scp.Groups[1].Value, scp.Groups[2].Value.Split('/'));
+            if (Uri.TryCreate(git.Repository, UriKind.Absolute, out var remote)) return Key(remote.Host, remote.AbsolutePath.Trim('/').Split('/'));
+        }
+        return text;
+
+        static string Key(string host, string[] path)
+        {
+            var key = (host + "/" + string.Join('/', path)).ToLowerInvariant();
+            return key.EndsWith(".git", StringComparison.Ordinal) ? key[..^4] : key;
+        }
+    }
 
     public IUpdateSource Create(string url)
     {
