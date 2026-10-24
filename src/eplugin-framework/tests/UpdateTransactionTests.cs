@@ -646,6 +646,8 @@ public class UpdateTransactionTests
         Assertions.AssertString(_store.GetShared("plugin")!.Version).IsEqual("2.0.0");
         Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/plugin/plugin.cfg")).Contains("2.0.0")).IsTrue();
         Assertions.AssertInt(_store.LocalAttempts.Count).IsEqual(0);
+        // the journal is committed and removed despite the failure, so it does not block later updates
+        Assertions.AssertBool(Directory.Exists(package.Directory)).IsFalse();
     }
     [TestCase]
     public void CleanupFailureAfterARollbackDoesNotMarkItAsRollingBackAgain()

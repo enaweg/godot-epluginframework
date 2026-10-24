@@ -242,7 +242,13 @@ internal sealed partial class EGlobal
                 DeleteJournal(journal);
                 return;
             case UpdatePhase.Verified:
-                if (attempts.Length == 0) { _ePluginContext?.Logger.Error($"Update marker is missing: {journal.Directory}; repair manually."); return; }
+                if (attempts.Length == 0)
+                {
+                    // the acknowledgement removed the marker, but the journal was not saved as committed
+                    if (Applier().IsAcknowledged(journal)) { result = Applier().FinishCommit(journal); break; }
+                    _ePluginContext?.Logger.Error($"Update marker is missing: {journal.Directory}; repair manually.");
+                    return;
+                }
                 result = Applier().Commit(journal);
                 break;
             case UpdatePhase.InterimBuilt:
