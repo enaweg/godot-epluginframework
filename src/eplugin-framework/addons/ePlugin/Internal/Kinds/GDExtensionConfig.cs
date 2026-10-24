@@ -253,22 +253,43 @@ internal sealed partial record GDExtensionConfig(bool Reloadable, IReadOnlyList<
     }
 
     /// <summary>
-    /// Whether the editor running here would load the library of <paramref name="feature"/>: its operating system, an
-    /// architecture tag that is missing or the editor process's, and no release-only tag. Godot loads the library of
-    /// its own architecture, which differs from the machine's when it runs emulated (an x86_64 editor on Windows on ARM).
+    /// The library the editor running here loads, or null when none of <paramref name="libraries"/> is for it. Like Godot:
+    /// every tag of an entry has to be a feature of this editor, and of those entries the one with the most tags is
+    /// loaded, the first of equals. Godot does not fall back to another entry when that one's file is missing.
     /// </summary>
-    public static bool MatchesThisEditor(string feature)
+    public static GDExtensionLibrary? LibraryForThisEditor(IEnumerable<GDExtensionLibrary> libraries)
     {
-        var tags = feature.Split('.');
+        GDExtensionLibrary? best = null;
+        var bestTags = 0;
+        foreach (var library in libraries)
+        {
+            var tags = library.Feature.Split('.').Select(t => t.Trim()).ToArray();
+            if (tags.Length > bestTags && tags.All(IsEditorFeature)) (best, bestTags) = (library, tags.Length);
+        }
+        return best;
+    }
+
+    /// <summary>
+    /// Whether Godot's editor running here has the feature <paramref name="tag"/>: its operating system, the editor
+    /// process's architecture (which differs from the machine's when it runs emulated, an x86_64 editor on Windows on
+    /// ARM), and the tags of a debug editor build. Export templates (template, template_debug, template_release, release)
+    /// do not run in the editor, and neither do custom features, which an editor does not have unless a project sets them.
+    /// </summary>
+    private static bool IsEditorFeature(string tag)
+    {
         var os = OperatingSystem.IsWindows() ? "windows" : OperatingSystem.IsMacOS() ? "macos" : OperatingSystem.IsLinux() ? "linux" : null;
-        if (os is null || !tags.Contains(os, StringComparer.Ordinal)) return false;
-        if (tags.Any(t => t is "release" or "template_release")) return false;
+        if (os is not null && tag == os || os == "linux" && tag == "linuxbsd") return true;
+        if (tag is "pc" or "editor" or "debug" or "threads") return true;
+        // Godot's real_t is double in a double-precision build, and so is GodotSharp's
+        var precision = typeof(Godot.Vector2).GetField(nameof(Godot.Vector2.X))?.FieldType == typeof(double) ? "double" : "single";
+        if (tag == precision) return true;
         var architecture = RuntimeInformation.ProcessArchitecture switch
         {
             Architecture.X64 => "x86_64", Architecture.X86 => "x86_32", Architecture.Arm64 => "arm64", Architecture.Arm => "arm32", _ => ""
         };
-        var named = tags.Where(t => Architectures.Contains(t, StringComparer.Ordinal)).ToArray();
-        return named.Length == 0 || named.Contains(architecture, StringComparer.Ordinal) || (os == "macos" && named.Contains("universal", StringComparer.Ordinal));
+        if (tag == architecture || tag == (Environment.Is64BitProcess ? "64" : "32")) return true;
+        if (tag == "x86" && architecture.StartsWith("x86", StringComparison.Ordinal) || tag == "arm" && architecture.StartsWith("arm", StringComparison.Ordinal)) return true;
+        return os == "macos" && tag == "universal";
     }
 }
 #endif

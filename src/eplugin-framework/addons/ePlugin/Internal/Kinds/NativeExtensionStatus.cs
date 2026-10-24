@@ -18,7 +18,7 @@ namespace Enaweg.Plugin.Internal.Kinds;
 internal sealed record NativeExtensionStatus(string File, GDExtensionConfig? Config, bool Loaded, bool LibraryPresent)
 {
     /// <summary>The extension names a library for the platform of this editor.</summary>
-    public bool ForThisPlatform => Config?.Libraries.Any(l => GDExtensionConfig.MatchesThisEditor(l.Feature)) == true;
+    public bool ForThisPlatform => Config is not null && GDExtensionConfig.LibraryForThisEditor(Config.Libraries) is not null;
 
     /// <summary>The platforms it ships libraries for, such as "linux.x86_64" or "macos".</summary>
     public IReadOnlyList<string> Platforms => Config?.Libraries.Select(l => GDExtensionConfig.PlatformName(l.Feature)).OfType<string>()
@@ -50,8 +50,8 @@ internal sealed record NativeExtensionStatus(string File, GDExtensionConfig? Con
         return configs
             .Where(e => !e.Key.Split('/').Any(part => part.StartsWith('.')))
             .Select(e => new NativeExtensionStatus(e.Key, e.Value, isLoaded(Path.Combine(directory, e.Key)),
-                e.Value?.Libraries.Where(l => GDExtensionConfig.MatchesThisEditor(l.Feature))
-                    .Any(l => Exists(projectRoot, directory, e.Key, l.Path)) == true))
+                e.Value is not null && GDExtensionConfig.LibraryForThisEditor(e.Value.Libraries) is { } library &&
+                Exists(projectRoot, directory, e.Key, library.Path)))
             .OrderBy(e => e.File, StringComparer.Ordinal).ToArray();
     }
 
