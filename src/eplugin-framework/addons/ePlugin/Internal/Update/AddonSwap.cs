@@ -45,7 +45,7 @@ internal sealed class AddonFolderSwap : IAddonSwap
 
     public int Restore(string installed, string backup, string discard)
     {
-        if (Directory.Exists(installed)) Directory.Delete(installed, true);
+        AddonFiles.DeleteTree(installed);
         AddonFiles.MoveDirectory(backup, installed);
         return 0;
     }
@@ -71,14 +71,14 @@ internal sealed class AddonFileSwap : IAddonSwap
     {
         AddonFiles.RefuseLink(installed);
         var partial = backup + ".partial";
-        if (Directory.Exists(partial)) Directory.Delete(partial, true);
+        AddonFiles.DeleteTree(partial);
         if (Directory.Exists(backup)) throw new IOException("A backup of the plugin already exists: " + backup);
         AddonFiles.CopyTree(installed, partial);
         Directory.CreateDirectory(Path.GetDirectoryName(backup)!);
         AddonFiles.MoveDirectory(partial, backup);
         var discarded = AddonFiles.RemoveContents(installed, discard);
         AddonFiles.MoveContents(staging, installed);
-        if (Directory.Exists(staging)) Directory.Delete(staging, true);
+        AddonFiles.DeleteTree(staging);
         return discarded;
     }
 
@@ -127,6 +127,21 @@ internal static class AddonFiles
         Directory.Delete(directory, true);
     }
 
+    /// <summary>Copies a file over another, also over a read-only one (see <see cref="DeleteTree"/>).</summary>
+    public static void Overwrite(string from, string to)
+    {
+        if (File.Exists(to)) File.SetAttributes(to, File.GetAttributes(to) & ~FileAttributes.ReadOnly);
+        File.Copy(from, to, true);
+    }
+
+    /// <summary>Deletes a file when it exists, also a read-only one (see <see cref="DeleteTree"/>).</summary>
+    public static void DeleteFile(string file)
+    {
+        if (!File.Exists(file)) return;
+        File.SetAttributes(file, FileAttributes.Normal);
+        File.Delete(file);
+    }
+
     public static void RefuseLink(string directory)
     {
         if (Directory.Exists(directory) && (File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
@@ -156,7 +171,7 @@ internal static class AddonFiles
         {
             var to = Path.Combine(target, Path.GetRelativePath(source, file));
             Directory.CreateDirectory(Path.GetDirectoryName(to)!);
-            File.Copy(file, to, true);
+            Overwrite(file, to);
             File.SetLastWriteTimeUtc(to, File.GetLastWriteTimeUtc(file));
         }
         // Empty folders belong to the plugin, too (e.g. a hidden managed directory).

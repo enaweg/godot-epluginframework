@@ -345,6 +345,28 @@ public class EGlobalUpdateRecipeTests : IDisposable
     }
 
     [TestCase]
+    public void ANewDependencyWhoseLicenseWasNotAcceptedIsNotEnabled()
+    {
+        _fixture.AddPlainPlugin("extra", extraConfig: "license_required=true");
+        File.WriteAllText(Path.Combine(_fixture.Addon("extra"), "LICENSE"), "Terms");
+        _fixture.AddEPlugin("app", _ => { });
+        _fixture.Enable("app");
+        var journal = BeginUpdate("app");
+        ReloadRecipe("app", b => b.AddPluginDependency("extra", ">=1.0"));
+        _fixture.Operations.Clear();
+
+        // an update cannot stop for the license dialog
+        InvalidOperationException? error = null;
+        try { _fixture.Global.ReconcileUpdateRecipes(journal, false); }
+        catch (InvalidOperationException ex) { error = ex; }
+
+        Assertions.AssertString(error?.Message).Contains("license of extra");
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("extra")).IsFalse();
+        Assertions.AssertBool(journal.AdditionalVersions.ContainsKey("extra")).IsFalse();
+        Assertions.AssertThat(_fixture.Operations).IsEmpty();
+    }
+
+    [TestCase]
     public void AnIncompatibleNewDependencyIsNotEnabledAndCanBeRolledBack()
     {
         _fixture.AddPlainPlugin("extra", "0.5.0");

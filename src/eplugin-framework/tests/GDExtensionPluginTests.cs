@@ -313,6 +313,48 @@ public class GDExtensionPluginTests
         return new AddonPackageValidator().Validate(new(new(slug, slug, "", null, installed, Kind: PluginKind.GDExtensionAddon), candidate, stage));
     }
 
+    // the operating system and architecture tags of the editor running the tests
+    private static string Os => OperatingSystem.IsWindows() ? "windows" : OperatingSystem.IsMacOS() ? "macos" : "linux";
+    private static string Architecture =>
+        System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture == System.Runtime.InteropServices.Architecture.Arm64 ? "arm64" : "x86_64";
+
+    [TestCase]
+    public static void ChoosesTheLibraryGodotLoadsInThisEditor()
+    {
+        string? Chosen(string libraries) =>
+            GDExtensionConfig.LibraryForThisEditor(GDExtensionConfig.Parse("[libraries]\n" + libraries).Libraries)?.Path;
+
+        // export template builds are not loaded by the editor
+        Assertions.AssertString(Chosen($"{Os}.template_debug.{Architecture} = \"t.so\"\n{Os}.editor.{Architecture} = \"e.so\"\n{Os}.template_release.{Architecture} = \"r.so\"")).IsEqual("e.so");
+        Assertions.AssertString(Chosen($"{Os}.template_debug = \"t.so\"\n{Os}.release = \"r.so\"\n{Os}.template = \"t2.so\"")).IsNull();
+        // of the entries for this editor, the one with the most tags; the first of equals
+        Assertions.AssertString(Chosen($"{Os}.{Architecture} = \"a.so\"\n{Os}.editor.{Architecture} = \"e.so\"")).IsEqual("e.so");
+        Assertions.AssertString(Chosen($"{Os}.debug.{Architecture} = \"d.so\"\n{Os}.editor.{Architecture} = \"e.so\"")).IsEqual("d.so");
+        // a single-precision editor does not load a double-precision library
+        Assertions.AssertString(Chosen($"{Os}.editor.double = \"double.so\"\n{Os}.editor = \"single.so\"")).IsEqual("single.so");
+        Assertions.AssertString(Chosen("web = \"a.wasm\"\nandroid.arm64 = \"a.so\"")).IsNull();
+        // an entry without an operating system tag is for every one
+        Assertions.AssertString(Chosen($"{Architecture} = \"any.so\"")).IsEqual("any.so");
+    }
+
+    [TestCase]
+    public void ValidationChecksTheLibraryGodotChoosesNotAnyMatchingOne()
+    {
+        var package = Validate(stage => File.WriteAllText(Path.Combine(stage, "native.gdextension"), $"""
+            [configuration]
+            entry_symbol = "native_init"
+            compatibility_minimum = "4.4"
+            reloadable = true
+
+            [libraries]
+            {Os}.{Architecture} = "bin/libnative.so"
+            {Os}.editor.{Architecture} = "bin/libnative.editor.so"
+            """));
+
+        Assertions.AssertString(package.Findings.Single(f => f.Code == "R19").Message).Contains("bin/libnative.editor.so");
+        Assertions.AssertObject(package.Findings.Single(f => f.Code == "R19").Severity).IsEqual(FindingSeverity.Error);
+    }
+
     [TestCase]
     public static void ResolvesLibrariesOnlyInsideThePluginFolder()
     {

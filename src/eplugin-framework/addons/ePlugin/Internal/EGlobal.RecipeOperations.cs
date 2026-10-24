@@ -152,6 +152,10 @@ internal sealed partial class EGlobal
         if (dependency.Version is not null && !MatchesVersion(metadata.Version, dependency.Version, _ePluginContext?.Logger))
             throw new InvalidOperationException($"Dependency {dependency.Slug} {metadata.Version} does not match {dependency.Version}.");
         if (_host.IsPluginEnabled(dependency.Slug)) return;
+        // An update cannot stop for the license dialog, and the new recipe that requires the plugin is only known once it is compiled.
+        if (CollectActivationLicenses(dependency.Slug) is { Count: > 0 } licenses && !AcceptAutomatically(licenses))
+            throw new InvalidOperationException($"The new version requires {dependency.Slug}, and the license of {string.Join(", ", licenses.Select(l => l.Name))} has to be accepted first. " +
+                                                $"Enable {dependency.Slug} in the ePlugin Manager, then install the update again.");
         RegisterUpdateParticipant(dependency.Slug, metadata.Version);
         _host.SetPluginEnabled(dependency.Slug, true);
         var context = ManagedContext(dependency.Slug);

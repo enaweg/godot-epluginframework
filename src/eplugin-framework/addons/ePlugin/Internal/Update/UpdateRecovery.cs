@@ -89,7 +89,7 @@ internal static class UpdateRecovery
                     var backup = Inside(Path.Combine(folder, "backup"), plugin.Slug);
                     if (!Directory.Exists(backup)) continue;
                     var installed = Inside(Path.Combine(projectRoot, "addons"), plugin.Slug);
-                    if (Directory.Exists(installed)) Directory.Delete(installed, true);
+                    AddonFiles.DeleteTree(installed);
                     // Copy, rather than consume, backups so interrupted early recovery is repeatable.
                     Copy(backup, installed);
                 }
@@ -103,8 +103,8 @@ internal static class UpdateRecovery
                     foreach (var dir in applied.Where(d => !recipe.Value.Old.Directories.Contains(d)).OrderByDescending(d => d.Length)) Visibility(addon, recipe.Key, dir, false);
                     foreach (var dir in recipe.Value.Old.Directories.OrderBy(d => d.Length)) Visibility(addon, recipe.Key, dir, true);
                 }
-                foreach (var file in projectFiles) File.Copy(Inside(projectBackup, file), Inside(projectRoot, file), true);
-                if (!projectFiles.Any(f => f.Equals("nuget.config", StringComparison.OrdinalIgnoreCase)) && File.Exists(Path.Combine(projectRoot, "nuget.config"))) File.Delete(Path.Combine(projectRoot, "nuget.config"));
+                foreach (var file in projectFiles) AddonFiles.Overwrite(Inside(projectBackup, file), Inside(projectRoot, file));
+                if (!projectFiles.Any(f => f.Equals("nuget.config", StringComparison.OrdinalIgnoreCase))) AddonFiles.DeleteFile(Path.Combine(projectRoot, "nuget.config"));
                 restoreSettings();
                 if (!rebuild()) throw new IOException("Restored project failed to build.");
                 if (store.LocalAttempts.Any(a => a.AttemptId == journal.AttemptId) && !store.TryAbandonAttempt(journal.AttemptId)) throw new IOException("Cannot clear restored update marker.");
@@ -165,7 +165,7 @@ internal static class UpdateRecovery
         {
             if ((File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0) continue;
             var to = Path.Combine(target, Path.GetFileName(entry));
-            if (Directory.Exists(entry)) Copy(entry, to); else File.Copy(entry, to, true);
+            if (Directory.Exists(entry)) Copy(entry, to); else AddonFiles.Overwrite(entry, to);
         }
     }
     private static bool HasVersion(string path, string version) => File.ReadLines(path).Any(line => line.Trim() == "version=\"" + version + "\"" || line.Trim() == "version = \"" + version + "\"");

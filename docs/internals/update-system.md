@@ -125,7 +125,7 @@ version: the same files, all `reloadable` in both, and nothing discarded reload 
 restarts the editor. `NativeSession` names the editor process the flags refer to: after a rollback, an editor that
 neither reloaded nor restarted since the swap still runs the restored libraries and needs nothing; otherwise the restored
 extension is reloaded in place or the editor restarts. `GDExtensionRules` refuses libraries outside the plugin folder
-(R18, a warning for icons), a missing library for the editor's platform (R19) and an extension outside the editor's Godot version limits (R22, `GDExtensionConfig.CompatibilityProblem`, which follows
+(R18, a warning for icons), a missing library for the editor's platform (R19, the one entry Godot chooses: `GDExtensionConfig.LibraryForThisEditor`, whose tags all are editor features and which has the most of them; Godot does not fall back to another) and an extension outside the editor's Godot version limits (R22, `GDExtensionConfig.CompatibilityProblem`, which follows
 Godot's own check), and warns about platforms or release libraries the installed version had and the new one drops
 (R23, `DroppedPlatforms`), for every kind with a GDExtension; R21 says whether the update reloads or restarts. An
 ePlugin with a GDExtension needs no reload logic: its update always builds and restarts, which loads the new libraries,
@@ -159,7 +159,9 @@ leaves a package that cannot be fetched or is refused out of the batch, as a `Re
 refused. The manager deletes a staged batch it does not install (`UpdateFlow.Clear`); since an assembly reload or a
 crash forgets it, `ResumeUpdates` deletes folders without a journal last written more than six hours ago
 (`UpdateJournals.AbandonedStaging`). A plugin folder that is a link (to a working copy) is refused for every kind (R20), and both swaps refuse it
-too (`AddonFiles.RefuseLink`), since moving it would replace the link with the downloaded copy. `IUpdateHost.Preflight` refuses to start while a scene is running, an untitled scene is open (detectable only
+too (`AddonFiles.RefuseLink`), since moving it would replace the link with the downloaded copy. Version control systems such as Perforce sync files
+read-only, which Windows refuses to delete or overwrite: plugin, project, backup and staging files are deleted and
+overwritten only through `AddonFiles.DeleteTree`, `DeleteFile` and `Overwrite`, which clear that attribute first. `IUpdateHost.Preflight` refuses to start while a scene is running, an untitled scene is open (detectable only
 from Godot 4.5) or an ePlugin of the batch is not `Activated`. Then save and close all open scenes
 (`IUpdateHost.CloseScenes`; `close_scene` exists only from Godot 4.5) before the swap.
 

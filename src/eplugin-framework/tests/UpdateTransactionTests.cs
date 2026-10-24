@@ -33,7 +33,7 @@ public class UpdateTransactionTests
         _host = new(_store);
         _applier = new(_root, _store, _host, new MemoryStore());
     }
-    [AfterTest] public void Cleanup() { Directory.Delete(_root, true); }
+    [AfterTest] public void Cleanup() { AddonFiles.DeleteTree(_root); }
     private (ValidatedPackage Package, string Directory) Package(bool csharp = false)
     {
         var directory = Path.Combine(_root, ".godot/eplugin/updates/test-id");
@@ -84,6 +84,23 @@ public class UpdateTransactionTests
         Assertions.AssertBool(_store.IsWelcomeShown("plugin")).IsFalse();
         Assertions.AssertInt(_store.LocalAttempts.Count).IsEqual(0);
         Assertions.AssertInt(_host.Toggles).IsEqual(0);
+    }
+    [TestCase]
+    public void ARollbackRestoresReadOnlyProjectAndPluginFiles()
+    {
+        // version control systems such as Perforce sync files read-only
+        File.SetAttributes(Path.Combine(_root, "Game.csproj"), FileAttributes.ReadOnly);
+        File.SetAttributes(Path.Combine(_root, "addons/plugin/old.txt"), FileAttributes.ReadOnly);
+        _host.Managed = true;
+        _host.Builds.Enqueue(new(1, ["compile error"]));
+        _host.Builds.Enqueue(new(0, []));
+        var package = Package(true);
+
+        Assertions.AssertObject(_applier.Apply([package.Package], package.Directory)).IsEqual(UpdateOutcome.RolledBack);
+
+        Assertions.AssertString(File.ReadAllText(Path.Combine(_root, "Game.csproj"))).IsEqual("old project");
+        Assertions.AssertBool(File.Exists(Path.Combine(_root, "addons/plugin/old.txt"))).IsTrue();
+        Assertions.AssertInt(_store.LocalAttempts.Count).IsEqual(0);
     }
     [TestCase]
     public void BuildFailureAsksOnlyForAnUpdateFromTheDetailsAndHeadlessOrSelfUpdatesRollBack()

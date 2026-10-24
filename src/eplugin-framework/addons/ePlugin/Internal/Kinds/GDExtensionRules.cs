@@ -34,11 +34,11 @@ internal static class GDExtensionRules
                     yield return new("R18", FindingSeverity.Warning, $"{file} uses the icon {icon.Path} of {icon.Feature} from outside the plugin folder; an update does not replace it.");
             if (config.CompatibilityProblem() is { } problem)
                 yield return new("R22", FindingSeverity.Error, $"This editor cannot load {file}: {problem}.");
-            var forThisEditor = config.Libraries.Where(l => GDExtensionConfig.MatchesThisEditor(l.Feature)).ToArray();
-            if (forThisEditor.Length == 0)
+            var forThisEditor = GDExtensionConfig.LibraryForThisEditor(config.Libraries);
+            if (forThisEditor is null)
                 yield return new("R19", FindingSeverity.Warning, $"{file} has no library for this editor's platform; Godot will not load the extension.");
-            else if (!forThisEditor.Any(l => GDExtensionConfig.InsidePlugin(slug, file, l.Path) is { } path && Exists(context.StagingDir, path)))
-                yield return new("R19", FindingSeverity.Error, $"The library of {file} for this platform is missing from the package: {forThisEditor[0].Path}.");
+            else if (!(GDExtensionConfig.InsidePlugin(slug, file, forThisEditor.Path) is { } path && Exists(context.StagingDir, path)))
+                yield return new("R19", FindingSeverity.Error, $"The library of {file} for this platform is missing from the package: {forThisEditor.Path}.");
             // Other team members, or the exported game, may run on a platform this editor does not check.
             if (installed.GetValueOrDefault(file) is { } before)
                 foreach (var platform in GDExtensionConfig.DroppedPlatforms(before, config))
