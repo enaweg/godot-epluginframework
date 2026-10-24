@@ -28,7 +28,7 @@ internal sealed record ValidatedPackage(UpdateCandidate Candidate, string Stagin
 {
     public bool IsValid => Findings.All(f => f.Severity != FindingSeverity.Error);
 }
-internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules = null)
+internal sealed partial class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules = null)
 {
     public ValidatedPackage Validate(ValidationContext context)
     {
@@ -172,8 +172,8 @@ internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules 
     }
 
     // GDScript that Godot 4 refuses to parse: a bare tool line and export and onready without the '@' of an annotation.
-    private static readonly Regex Godot3Script = new(@"^(?:tool[ \t]*\r?$|[ \t]*(?:export(?:\([^)\r\n]*\))?|onready)[ \t]+var\b)",
-        RegexOptions.Multiline | RegexOptions.CultureInvariant);
+    [GeneratedRegex(@"^(?:tool[ \t]*\r?$|[ \t]*(?:export(?:\([^)\r\n]*\))?|onready)[ \t]+var\b)", RegexOptions.Multiline | RegexOptions.CultureInvariant)]
+    private static partial Regex Godot3Script();
 
     /// <summary>
     /// Why the staged package is made for Godot 3, or null: a GDNative library, which Godot 4 replaced by GDExtension, or
@@ -190,7 +190,7 @@ internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules 
             string text;
             try { text = File.ReadAllText(file); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { continue; }
-            if (Godot3Script.Match(text) is { Success: true } match)
+            if (Godot3Script().Match(text) is { Success: true } match)
                 return $"{relative} has the line \"{match.Value.Trim()}\", which Godot 4 writes with an annotation (@)";
         }
         return null;
