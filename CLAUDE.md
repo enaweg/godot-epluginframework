@@ -390,7 +390,8 @@ GTK on .NET 8).
 Editors of the OS user using the same `ProgressSession.Protocol` share one helper: it is published as
 `<token>.helper` in Godot's editor data directory (`eplugin/progress`), next to `<token>.commands`. Editors connect to
 the oldest running compatible helper whose command file they can open; missing or inaccessible command files are
-skipped. Raise `Protocol` whenever the command protocol or transport coordination changes. Protocol 4 requires every
+skipped. Raise `Protocol` whenever the command protocol or transport coordination changes. A restart handoff written for another protocol (the version before a self-update) is ended in its
+helper with that protocol's mutex (`ProgressSession.TryResume`), otherwise it keeps the old window open for the 5 minute hold. Protocol 4 requires every
 writer to acquire the helper's named mutex (`Global\eplugin-progress-<token>`: without the prefix .NET scopes it to the
 terminal session on Linux and macOS; with a 100 ms wait limit), seek to the end,
 and write a complete command without buffering before releasing it. `FileMode.Append` on a persistent stream alone

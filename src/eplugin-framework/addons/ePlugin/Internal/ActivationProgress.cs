@@ -59,7 +59,11 @@ internal static class ActivationProgress
 
     /// <summary>Connects to or starts a helper, or returns null when none can run. Tests replace it with a fake.</summary>
     internal static Func<IProgressHelper?> Launch { get; set; } = LaunchDefault;
-    internal static Func<(IProgressHelper Helper, string User)?> Resume { get; set; } = ResumeDefault;
+    /// <summary>
+    /// The user a restart handed over, and its helper; without one when its window was closed in a helper of another
+    /// protocol, which a self-update leaves behind.
+    /// </summary>
+    internal static Func<(IProgressHelper? Helper, string User)?> Resume { get; set; } = ResumeDefault;
     internal static Func<IDisposable?> HideSettingsDialog { get; set; } = ProjectSettingsDialog.TryHide;
     internal static Func<bool> IsEditorThread { get; set; } = () => OS.GetThreadCallerId() == OS.GetMainThreadId();
 
@@ -69,7 +73,7 @@ internal static class ActivationProgress
 
     internal static IProgressHelper? LaunchDefault() => ProcessProgressHelper.TryStart(HelperPath);
 
-    internal static (IProgressHelper Helper, string User)? ResumeDefault() =>
+    internal static (IProgressHelper? Helper, string User)? ResumeDefault() =>
         ProcessProgressHelper.SharedDirectory() is { } directory &&
         ProgressSession.TryResume(ProjectSettings.GlobalizePath(HandoffPath), directory) is (var session, var user)
             ? (session, user)
@@ -101,12 +105,14 @@ internal static class ActivationProgress
         {
             _restartPending = false;
             if (_helper is not null || Users.Count > 0) return false;
-            (IProgressHelper Helper, string User)? resumed;
+            (IProgressHelper? Helper, string User)? resumed;
             try { resumed = Resume(); }
             catch (Exception) { resumed = null; }
             if (resumed is not (var helper, var user)) return false;
-            _helper = helper;
             _resumed = new User(user);
+            // The next Begin starts a helper of this protocol for it.
+            if (helper is null) return true;
+            _helper = helper;
             // Ends the hold: from now on the window closes when this user stops sending.
             Send(_resumed, "HEARTBEAT");
             if (_helper is not null) return true;

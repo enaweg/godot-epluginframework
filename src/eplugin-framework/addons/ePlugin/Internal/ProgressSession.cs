@@ -196,9 +196,11 @@ internal sealed class ProgressSession : IProgressHelper
 
     /// <summary>
     /// Called once when the editor starts: continues the user whose window the editor before its restart handed over.
-    /// The handoff is read only once.
+    /// The handoff is read only once. A handoff to a helper of another protocol, written by the framework version before
+    /// a self-update, is ended there, otherwise that helper would keep its window open for the whole hold; the user
+    /// then continues without a session, in a helper of this protocol.
     /// </summary>
-    public static (ProgressSession Session, string User)? TryResume(string handoff, string directory)
+    public static (ProgressSession? Session, string User)? TryResume(string handoff, string directory)
     {
         try
         {
@@ -207,15 +209,43 @@ internal sealed class ProgressSession : IProgressHelper
             string[] fields;
             try { fields = File.ReadAllLines(handoff); }
             finally { File.Delete(handoff); }
-            if (fields.Length != 5 || fields[0] != Protocol.ToString(CultureInfo.InvariantCulture) ||
+            if (fields.Length != 5 || !int.TryParse(fields[0], NumberStyles.None, CultureInfo.InvariantCulture, out var protocol) ||
                 !Guid.TryParseExact(fields[1], "N", out _) || !ProcessIdentity.TryParse(fields[2], fields[3], out var helper) ||
                 !Guid.TryParseExact(fields[4], "N", out _) || !IsRunning(helper)) return null;
+            if (protocol != Protocol) return End(directory, fields[1], protocol, fields[4]) ? (null, fields[4]) : null;
             return Connect(directory, fields[1], helper, handoff) is { } session ? (session, fields[4]) : null;
         }
         catch (Exception)
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Ends a held user in a helper of another protocol, with that protocol's writer mutex. Every protocol since users
+    /// and handoffs exist (3) ends a user with <c>USER END</c>; protocol 3 named its mutex without the <c>Global\</c>
+    /// prefix. Returns whether the command was written.
+    /// </summary>
+    private static bool End(string directory, string token, int protocol, string user)
+    {
+        if (protocol < 3) return false;
+        using var mutex = new Mutex(false, protocol == 3 ? "eplugin-progress-" + token : MutexName(token));
+        try
+        {
+            if (!mutex.WaitOne(TimeSpan.FromMilliseconds(100))) return false;
+        }
+        catch (AbandonedMutexException)
+        {
+            // The writer exited while holding it; this thread now owns it.
+        }
+
+        try
+        {
+            using var commands = OpenCommands(PathOf(directory, token, Commands));
+            commands.Write(Encoding.ASCII.GetBytes(user + " END\n"));
+            return true;
+        }
+        finally { mutex.ReleaseMutex(); }
     }
 
     /// <summary>
