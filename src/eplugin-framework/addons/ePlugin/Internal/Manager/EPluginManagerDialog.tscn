@@ -29,10 +29,12 @@ theme_override_constants/separation = 8
 layout_mode = 2
 
 [node name="Note" type="Label" parent="Content/Header"]
+custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Selected addons will be replaced. Open scenes are saved first.
 Files and project references are backed up and restored if installation fails."
+autowrap_mode = 3
 
 [node name="AttentionButton" type="Button" parent="Content/Header"]
 unique_name_in_owner = true
@@ -41,6 +43,14 @@ layout_mode = 2
 size_flags_vertical = 4
 tooltip_text = "Show the plugins whose activation, deactivation or update failed or was interrupted, or that run with a problem, and decide what to do about each."
 text = "1 plugin needs attention"
+
+[node name="InstallZipButton" type="Button" parent="Content/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+tooltip_text = "Install from ZIP
+Install a plugin from a ZIP file, such as one downloaded from the Godot Asset Library. A ZIP file of a plugin that is installed already installs its version over it, like an update."
+flat = true
 
 [node name="CheckButton" type="Button" parent="Content/Header"]
 unique_name_in_owner = true
@@ -219,3 +229,32 @@ unique_name_in_owner = true
 
 [node name="AttentionDialog" parent="." instance=ExtResource("4_attention")]
 unique_name_in_owner = true
+
+[node name="InstallZipDialog" type="FileDialog" parent="."]
+unique_name_in_owner = true
+title = "Install a plugin from a ZIP file"
+initial_position = 2
+size = Vector2i(720, 480)
+ok_button_text = "Open"
+mode_overrides_title = false
+file_mode = 0
+access = 2
+filters = PackedStringArray("*.zip ; ZIP files")
+
+[node name="InstallConfirm" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+title = "Install plugin from ZIP file"
+initial_position = 2
+size = Vector2i(600, 320)
+ok_button_text = "Install"
+
+[node name="InstallText" type="RichTextLabel" parent="InstallConfirm"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(560, 200)
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 592.0
+offset_bottom = 271.0
+bbcode_enabled = true
+context_menu_enabled = true
+selection_enabled = true

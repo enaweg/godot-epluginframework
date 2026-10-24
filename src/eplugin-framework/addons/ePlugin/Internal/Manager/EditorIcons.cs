@@ -24,6 +24,7 @@ internal static class EditorIcons
     public const string UpgradePath = "res://addons/ePlugin/icons/upgrade.svg";
     public const string ReinstallPath = "res://addons/ePlugin/icons/reinstall.svg";
     public const string DowngradePath = "res://addons/ePlugin/icons/downgrade.svg";
+    public const string InstallPath = "res://addons/ePlugin/icons/install.svg";
 
     // The common icon color of the editor's icons and what a light editor theme turns it into.
     private const string IconColor = "#e0e0e0", LightThemeIconColor = "#5a5a5a";
@@ -51,6 +52,7 @@ internal static class EditorIcons
     public static Texture2D? Upgrade => Get(UpgradePath);
     public static Texture2D? Reinstall => Get(ReinstallPath);
     public static Texture2D? Downgrade => Get(DowngradePath);
+    public static Texture2D? Install => Get(InstallPath);
 
     /// <summary>The editor's color for something that went well, e.g. an available update.</summary>
     public static Color SuccessColor => ThemeColor(EditorWindows.Theme, Accents[0].Name, Accents[0].Fallback);
