@@ -97,7 +97,7 @@ The framework shows a plugin's welcome page once per project after the plugin is
 
 ## Plugin helpers and startup initializers
 
-The `EditorPlugin` extensions `GetPluginSlug()`, `GetPluginDirectory()`, `ReadMetadata()`, and `Cli()` help recipes locate plugin files, read metadata, and access the .NET CLI abstraction. The [added-code sample](../src/eplugin-framework/addons/sample_addedcode_plugin) and the [optional-dependency sample](../src/eplugin-framework/addons/sample_optional_plugin) use `GetPluginDirectory()` for their managed directories.
+The `EditorPlugin` extensions `GetPluginSlug()`, `GetPluginDirectory()`, `ReadMetadata()`, and `Cli()` help recipes locate plugin files, read metadata, and access the .NET CLI abstraction. The plugin's directory is the one with its `plugin.cfg`, also when `plugin.cfg` names a script in a subfolder (`script="src/MyPlugin.cs"`). The [added-code sample](../src/eplugin-framework/addons/sample_addedcode_plugin) and the [optional-dependency sample](../src/eplugin-framework/addons/sample_optional_plugin) use `GetPluginDirectory()` for their managed directories.
 
 Code in a managed directory can implement `IInitialize`. Register it with `EPlugin.RegisterInitializer` to receive its `Initialize(IEPlugin)` callback once the framework is ready, after every startup and C# assembly reload; one registered while the framework is already running is called right away. A module initializer is a convenient place to register it, because it runs whenever the assembly is loaded:
 
