@@ -335,6 +335,45 @@ string? Newest(IEnumerable<string?> tags) => tags
     .Select(t => (Tag: t, Match: versionTag.Match(t ?? "")))
     .Where(t => t.Match.Success)
     .OrderByDescending(t => t.Match, Comparer<Match>.Create(CompareVersions)).Select(t => t.Tag).FirstOrDefault();
+// The version a release names, like the updater's ReleaseAssets.TryVersion: its tag, else the version its title names
+// ("4.x - v2.1.2" of the tag 4.x-v2.1.2), else the one the words of its tag name ("v1.1.6" of v1.1.6_godot_4.6); an
+// unsuccessful match without one.
+Match ReleaseVersion(string? tag, string? title)
+{
+    var match = versionTag.Match(tag ?? "");
+    return match.Success ? match : NamedVersion(title) ?? NamedVersion(tag) ?? match;
+}
+// The version a text names as one of its words (split at spaces and '_'), the first from the start, like the updater's
+// ReleaseAssets.TryNamedVersion: one right after the word Godot is the engine's ("for Godot 4.4+"), and any other number
+// after the version makes the text name none ("Release candidate 1.0.0 - 7").
+Match? NamedVersion(string? text)
+{
+    var words = (text ?? "").Split([' ', '_'], StringSplitOptions.RemoveEmptyEntries);
+    for (var i = 0; i < words.Length; i++)
+    {
+        if (i > 0 && IsGodot(words[i - 1]) || versionTag.Match(words[i]) is not { Success: true } named) continue;
+        for (var j = i + 1; j < words.Length; j++)
+            if (words[j].Any(char.IsAsciiDigit) && !IsGodot(words[j - 1])) return null;
+        return named;
+    }
+    return null;
+
+    static bool IsGodot(string word) => new string(word.Where(char.IsAsciiLetter).ToArray()).Equals("godot", StringComparison.OrdinalIgnoreCase);
+}
+// The releases of the newest version, in the host's order (newest first), like the updater's ReleaseAssets.Newest: several
+// are builds for different Godot versions, whose packages the updater tries in that order. Each asset names its release.
+(string Tag, ReleaseAsset[] Assets)[] NewestReleases(IEnumerable<(string? Tag, string? Title, IEnumerable<ReleaseAsset> Assets)> releases)
+{
+    var versioned = releases.Where(r => r.Tag is not null).Select(r => (r.Tag, r.Assets, Version: ReleaseVersion(r.Tag, r.Title)))
+        .Where(r => r.Version.Success).ToArray();
+    if (versioned.Length == 0) return [];
+    var newest = versioned.MaxBy(r => r.Version, Comparer<Match>.Create(CompareVersions)).Version;
+    return versioned.Where(r => CompareVersions(r.Version, newest) == 0)
+        .Select(r => (r.Tag!, Zips(r.Assets).Select(a => a with { Tag = r.Tag }).ToArray())).ToArray();
+}
+// A string property, or null when it is missing or not a string.
+static string? Text(JsonElement element, string property) =>
+    element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 static long Number(Group group) => group.Success && long.TryParse(group.Value, out var value) ? value : 0;
 // Orders two versionTag matches like the updater's SemVer.CompareTo: by their numbers, then a prerelease before the same
 // numbers without one, and prereleases by their dot-separated parts (numbers before text).
@@ -399,14 +438,13 @@ async Task<Addon?> OtherAddon(string repository, string? pluginSlug, bool extra)
             {
                 var published = list.EnumerateArray()
                     .Where(r => !(r.TryGetProperty("upcoming_release", out var upcoming) && upcoming.ValueKind == JsonValueKind.True)).ToArray();
-                release = Newest(published.Select(r => r.TryGetProperty("tag_name", out var tagName) ? tagName.GetString() : null));
-                // The release's links; the updater falls back to the source archive, which the repository stands for.
-                assets = Zips(published.Where(r => r.TryGetProperty("tag_name", out var tagName) && tagName.GetString() == release)
-                    .SelectMany(r => r.TryGetProperty("assets", out var all) && all.TryGetProperty("links", out var links) &&
-                                     links.ValueKind == JsonValueKind.Array ? links.EnumerateArray() : Enumerable.Empty<JsonElement>())
-                    .Select(l => new ReleaseAsset(l.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "",
-                        (l.TryGetProperty("direct_asset_url", out var direct) ? direct.GetString() : null) ??
-                        (l.TryGetProperty("url", out var link) ? link.GetString() : null) ?? "")));
+                // The releases' links; the updater falls back to the source archive, which the repository stands for.
+                var newest = NewestReleases(published.Select(r => (Text(r, "tag_name"), Text(r, "name"),
+                    (r.TryGetProperty("assets", out var all) && all.TryGetProperty("links", out var links) &&
+                     links.ValueKind == JsonValueKind.Array ? links.EnumerateArray() : Enumerable.Empty<JsonElement>())
+                    .Select(l => new ReleaseAsset(Text(l, "name") ?? "", Text(l, "direct_asset_url") ?? Text(l, "url") ?? "")))));
+                release = newest.Length == 0 ? null : newest[0].Tag;
+                assets = newest.SelectMany(r => r.Assets).ToArray();
             }
         }
         else if (new Uri(web).AbsolutePath.Trim('/').Split('/') is [{ Length: > 0 } owner, { Length: > 0 } path])
@@ -425,12 +463,11 @@ async Task<Addon?> OtherAddon(string repository, string? pluginSlug, bool extra)
                 {
                     var published = list.EnumerateArray()
                         .Where(r => !(r.TryGetProperty("draft", out var draft) && draft.ValueKind == JsonValueKind.True)).ToArray();
-                    release = Newest(published.Select(r => r.TryGetProperty("tag_name", out var tagName) ? tagName.GetString() : null));
-                    assets = Zips(published.Where(r => r.TryGetProperty("tag_name", out var tagName) && tagName.GetString() == release)
-                        .SelectMany(r => r.TryGetProperty("assets", out var all) && all.ValueKind == JsonValueKind.Array
-                            ? all.EnumerateArray() : Enumerable.Empty<JsonElement>())
-                        .Select(a => new ReleaseAsset(a.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "",
-                            a.TryGetProperty("browser_download_url", out var download) ? download.GetString() ?? "" : "")));
+                    var newest = NewestReleases(published.Select(r => (Text(r, "tag_name"), Text(r, "name"),
+                        (r.TryGetProperty("assets", out var all) && all.ValueKind == JsonValueKind.Array ? all.EnumerateArray() : Enumerable.Empty<JsonElement>())
+                        .Select(a => new ReleaseAsset(Text(a, "name") ?? "", Text(a, "browser_download_url") ?? "")))));
+                    release = newest.Length == 0 ? null : newest[0].Tag;
+                    assets = newest.SelectMany(r => r.Assets).ToArray();
                 }
             }
         }
@@ -614,7 +651,7 @@ async Task<Addon[]> GitHubAddons()
             fields.Append("defaultBranchRef { target { ... on Commit { committedDate } } } ");
             // As many releases as the updater's check reads, and the newest tags for repositories without a release.
             // Each release's assets, so generate_known_plugins.cs can read the ZIP the updater downloads.
-            fields.Append("releases(first: 30, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { tagName isDraft ");
+            fields.Append("releases(first: 30, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { tagName name isDraft ");
             fields.Append("releaseAssets(first: 20) { nodes { name downloadUrl } } } } ");
             fields.Append("refs(refPrefix: \"refs/tags/\", first: 100, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) { nodes { name } } } ");
         }
@@ -657,9 +694,10 @@ async Task<Addon[]> GitHubAddons()
             }
             // A published release (whose ZIP the updater downloads), prereleases included, wins; otherwise the repository's version tags,
             // which the updater installs from git through the tag page URL. Without either there is nothing to update to.
-            var release = Newest(Nodes(repo, "releases")
-                .Where(r => !r.GetProperty("isDraft").GetBoolean())
-                .Select(r => r.GetProperty("tagName").GetString()));
+            var newest = NewestReleases(Nodes(repo, "releases").Where(r => !r.GetProperty("isDraft").GetBoolean())
+                .Select(r => (Text(r, "tagName"), Text(r, "name"), Nodes(r, "releaseAssets")
+                    .Select(a => new ReleaseAsset(Text(a, "name") ?? "", Text(a, "downloadUrl") ?? "")))));
+            var release = newest.Length == 0 ? null : newest[0].Tag;
             var tag = release is null ? Newest(Nodes(repo, "refs").Select(r => r.GetProperty("name").GetString())) : null;
             if (release is null && tag is null)
             {
@@ -669,9 +707,7 @@ async Task<Addon[]> GitHubAddons()
             }
             var homepage = repo.TryGetProperty("homepageUrl", out var hp) && hp.ValueKind == JsonValueKind.String
                 ? hp.GetString() : null;
-            var assets = release is null ? null : Zips(Nodes(repo, "releases").Where(r => r.GetProperty("tagName").GetString() == release)
-                .SelectMany(r => Nodes(r, "releaseAssets"))
-                .Select(a => new ReleaseAsset(a.GetProperty("name").GetString() ?? "", a.GetProperty("downloadUrl").GetString() ?? "")));
+            var assets = release is null ? null : newest.SelectMany(r => r.Assets).ToArray();
             results.Add(new Addon(batch[i].Name, stars, Utc(committed),
                 release is not null ? url + "/releases" : url + "/tags", release is not null ? "releases" : "tags", (release ?? tag)!,
                 string.IsNullOrWhiteSpace(homepage) ? url : homepage, url + "#readme", url, url + ".git", extra, batch[i].PluginSlug, assets));
@@ -765,15 +801,19 @@ static void Statistics(int added, (string Repository, int Stars, string Kind, st
 /// <param name="UpdateUrl">The releases page, or the tag page (a .git URL off GitHub, GitLab and Forgejo) without a
 /// release.</param>
 /// <param name="UpdateSource">"releases" or "tags": where <paramref name="LatestVersion"/> was found.</param>
-/// <param name="LatestVersion">The tag name of the newest release or version tag, prereleases included.</param>
+/// <param name="LatestVersion">The tag name of the newest release or version tag, prereleases included; a release whose tag
+/// is no version names it in its title ("4.x - v2.1.2"), and of several releases of that version the newest.</param>
 /// <param name="RepositoryUrl">The repository's web page, or its git URL when it has none.</param>
 /// <param name="GitUrl">The URL to clone the repository from.</param>
 /// <param name="Extra">Listed in extra_addons.txt, so it skips the star and activity filters and the maximum.</param>
 /// <param name="Slug">The add-on's folder in res://addons as extra_addons.txt gives it; null to let the generator find it.</param>
-/// <param name="ReleaseAssets">The ZIP assets of the latest release; null without a release.</param>
+/// <param name="ReleaseAssets">The ZIP assets of the releases of the latest version, newest release first; null without a
+/// release.</param>
 /// <param name="Searched">Found by GitLab's or Codeberg's search rather than in a curated ranking, so it may be a game or
 /// project that bundles other add-ons; the generator then requires a plugin folder named like the repository.</param>
 record Addon(string Name, int Stars, string? LastCommitAt, string UpdateUrl, string UpdateSource, string LatestVersion,
     string WebsiteUrl, string DocumentationUrl, string RepositoryUrl, string GitUrl, bool Extra, string? Slug = null,
     ReleaseAsset[]? ReleaseAssets = null, bool Searched = false);
-record ReleaseAsset(string Name, string Url);
+/// <param name="Tag">The tag of the asset's release: several releases of the newest version are builds for different Godot
+/// versions.</param>
+record ReleaseAsset(string Name, string Url, string? Tag = null);

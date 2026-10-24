@@ -76,7 +76,7 @@ await Parallel.ForEachAsync(addons, new ParallelOptions { MaxDegreeOfParallelism
     // has gdextension/limboai.gdextension in its repository and addons/limboai/ in its release ZIP.
     var hint = addon.Slug ?? existing.GetValueOrDefault(addon.Repository) ??
         (tree.Plugins.Length == 1 && NamesSlug(tree, tree.Plugins[0]) ? Name(tree.Plugins[0]) : null);
-    if (SelectAsset(addon.ReleaseAssets ?? [], hint) is { } asset) zips[addon] = await ReadZip(asset, hint, ct);
+    if (await ChooseZip(addon, hint, ct) is { } zip) zips[addon] = zip;
     Console.Error.Write($"\rRead {Interlocked.Increment(ref done)}/{addons.Length} repositories");
 });
 Console.Error.WriteLine();
@@ -142,10 +142,9 @@ foreach (var addon in addons)
         }
         // The updater chooses the ZIP by this slug, which may be one no hint led to before, so the list does not keep
         // changing between runs.
-        if (zip is null && SelectAsset(addon.ReleaseAssets ?? [], slug) is { } asset &&
-            await ReadZip(asset, slug, CancellationToken.None) is { Error: { } refusal, Refuses: true })
+        if (zip is null && await ChooseZip(addon, slug, CancellationToken.None) is { Error: { } refusal, Refuses: true } chosenZip)
         {
-            leftOut.Add((addon, "release ZIP refused by the updater", $"the release ZIP {asset.Name} {refusal}"));
+            leftOut.Add((addon, "release ZIP refused by the updater", $"the release ZIP {chosenZip.Asset} {refusal}"));
             continue;
         }
     }
@@ -304,19 +303,59 @@ async Task<Package> ReadZip(ReleaseAsset asset, string? slug, CancellationToken 
             if (named.Length == 0) return new(asset.Name, null, paths, "has no plugin.cfg and no GDExtension folder" + (slug is null ? "" : $" named {slug}") + "; the updater refuses it", true);
             var shallowest = named.Where(f => Depth(f) == named.Min(Depth)).ToArray();
             if (shallowest.Length > 1) return new(asset.Name, null, paths, "holds several GDExtensions (" + string.Join(", ", shallowest) + "); the updater refuses it", true);
-            return new(asset.Name, shallowest[0], paths, null, false);
+            return Accepted(shallowest[0]);
         }
         var depth = folders.Min(Depth);
         var roots = folders.Where(f => Depth(f) == depth).ToArray();
         if (roots.Length > 1 || folders.Any(f => !f.StartsWith(roots[0], StringComparison.Ordinal)))
             return new(asset.Name, null, paths, "holds several plugins (" + string.Join(", ", folders) + "); the updater refuses it", true);
-        return new(asset.Name, roots[0], paths, null, false);
+        return Accepted(roots[0]);
+
+        // The validator's R27 refuses a package made for Godot 3 too.
+        Package Accepted(string root) => Godot3Evidence(file, root) is { } godot3
+            ? new(asset.Name, null, paths, $"is made for Godot 3 ({godot3}); the updater refuses it", true)
+            : new(asset.Name, root, paths, null, false);
     }
     catch (Exception ex) when (ex is HttpRequestException or IOException or TaskCanceledException)
     {
         return new(asset.Name, null, [], "cannot be downloaded: " + ex.Message, false);
     }
     finally { try { File.Delete(file); } catch (IOException) { } }
+}
+
+// Why the updater refuses the plugin root of a ZIP as made for Godot 3 (AddonPackageValidator.Godot3Evidence, R27), or null:
+// a GDNative library, or GDScript that Godot 4 refuses to parse (a bare tool line, export and onready without '@').
+static string? Godot3Evidence(string file, string root)
+{
+    using var archive = ZipFile.OpenRead(file);
+    foreach (var entry in archive.Entries)
+    {
+        var path = entry.FullName.Replace('\\', '/');
+        if (!path.StartsWith(root, StringComparison.Ordinal)) continue;
+        var extension = Path.GetExtension(path).ToLowerInvariant();
+        if (extension is ".gdnlib" or ".gdns") return $"{path} is a GDNative library";
+        if (extension != ".gd" || entry.Length > 4 * 1024 * 1024) continue;
+        using var reader = new StreamReader(entry.Open());
+        if (Regex.Match(reader.ReadToEnd(), @"^(?:tool[ \t]*\r?$|[ \t]*(?:export(?:\([^)\r\n]*\))?|onready)[ \t]+var\b)",
+                RegexOptions.Multiline | RegexOptions.CultureInvariant) is { Success: true } match)
+            return $"{path} has the line \"{match.Value.Trim()}\"";
+    }
+    return null;
+}
+
+// The release ZIP the updater installs as the slug: of the releases of the newest version, in order, the first whose ZIP it
+// accepts (PackageFetcher tries them in turn), else the first one's. Null when no release has a ZIP for the slug.
+async Task<Package?> ChooseZip(Addon addon, string? slug, CancellationToken ct)
+{
+    Package? first = null;
+    foreach (var release in (addon.ReleaseAssets ?? []).GroupBy(a => a.Tag))
+    {
+        if (SelectAsset(release.ToArray(), slug) is not { } asset) continue;
+        var package = await ReadZip(asset, slug, ct);
+        if (!package.Refuses) return package;
+        first ??= package;
+    }
+    return first;
 }
 
 // The slug a ZIP's plugin root names: its folder, unless the plugin is at the ZIP's root or in a source archive's
@@ -493,7 +532,8 @@ record Addon(string Name, int Stars, string? UpdateUrl, string? UpdateSource, st
     public string Repository => RepositoryUrl ?? GithubUrl ?? "";
     public string CloneUrl => GitUrl ?? Repository + ".git";
 }
-record ReleaseAsset(string Name, string Url);
+/// <param name="Tag">The tag of the asset's release; null in JSON written before releases of one version were listed.</param>
+record ReleaseAsset(string Name, string Url, string? Tag = null);
 /// <param name="Godot4">The add-on's name says Godot 3, but the repository shows a Godot 4 project or GDExtension.</param>
 record Tree(string[] Plugins, string[] Files, string? Error, bool Godot4 = false);
 /// <param name="Root">The plugin root in the ZIP; null when it has none the updater accepts.</param>

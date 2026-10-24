@@ -248,6 +248,128 @@ public class UpdateSourceTests
     }
 
     [TestCase]
+    public static async Task ReleasesNameTheirVersionInTheTitleAndReleasesOfOneVersionAreAlternatives()
+    {
+        // GodotTouchInputManager: tag 4.x-v2.1.2 for Godot 4, published after v2.1.2 for Godot 3
+        using var github = new HttpClient(new Handler(_ => Json("""
+            [{"tag_name":"4.x-v2.1.2","name":"4.x - v2.1.2","draft":false,"assets":[{"name":"GDTIM-4.x-v2_1_2.zip","browser_download_url":"https://example.org/4.zip"}]},
+             {"tag_name":"v2.1.2","name":"3.x - v2.1.2","draft":false,"assets":[{"name":"GDTIM-3.x-v2_1_2.zip","browser_download_url":"https://example.org/3.zip"}]},
+             {"tag_name":"tap-rework","name":"v1.1.0 - Tap rework","draft":false,"assets":[]},
+             {"tag_name":"nightly","name":"Nightly build","draft":false,"assets":[]}]
+            """)));
+        var source = new GitHubReleaseSource(new(github), "owner", "repo");
+
+        var candidate = (await source.CheckAsync(Target(), new(), CancellationToken.None))!;
+        Assertions.AssertString(candidate.NewVersion).IsEqual("v2.1.2");
+        Assertions.AssertString(candidate.ResolvedRevision!).IsEqual("4.x-v2.1.2");
+        var package = (ZipPackageRef)candidate.Package;
+        Assertions.AssertString(package.Url).IsEqual("https://example.org/4.zip");
+        Assertions.AssertArray(package.Alternatives!.ToArray()).ContainsExactly("https://example.org/3.zip");
+
+        var listed = await source.ListAsync(Target(), new(), CancellationToken.None);
+        Assertions.AssertArray(listed.Select(c => c.NewVersion).ToArray()).ContainsExactly("v2.1.2", "v1.1.0");
+        Assertions.AssertString(((ZipPackageRef)listed[1].Package).Url).IsEqual("https://github.com/owner/repo/archive/refs/tags/tap-rework.zip");
+        Assertions.AssertObject(((ZipPackageRef)listed[1].Package).Alternatives).IsNull();
+        // a tag that is a version keeps its pre-release; the title is read from its last word
+        Assertions.AssertString(Version("""{"tag_name":"v2.0.0-beta","name":"4.x - v9.0.0"}""")).IsEqual("v2.0.0-beta");
+        Assertions.AssertString(Version("""{"tag_name":"x","name":"Godot 4.2 - 1.3.0"}""")).IsEqual("1.3.0");
+        Assertions.AssertString(Version("""{"tag_name":"tap-rework","name":"v1.1.0 - Tap rework"}""")).IsEqual("v1.1.0");
+        // the first version from the start; one right after the word Godot is the engine's
+        Assertions.AssertString(Version("""{"tag_name":"untested","name":"GodotRx 1.0.1 for Godot 4.2"}""")).IsEqual("1.0.1");
+        Assertions.AssertString(Version("""{"tag_name":"2.0.2.4_4","name":"QuestSystem v2.0.2 for Godot 4.4+"}""")).IsEqual("v2.0.2");
+        Assertions.AssertObject(Version("""{"tag_name":"v0.6.0.gd4","name":"v0.6.0.gd4 (Godot 4.2-4.3) | Intersection prefabs"}""")).IsNull();
+        // words of the tag, split at '_', when the title names none
+        Assertions.AssertString(Version("""{"tag_name":"v1.1.6_godot_4.6","name":"Latest"}""")).IsEqual("v1.1.6");
+        Assertions.AssertObject(Version("""{"tag_name":"latest","name":"Latest build"}""")).IsNull();
+        // a number after the version: a release candidate's number, or the Godot version a build is for
+        Assertions.AssertObject(Version("""{"tag_name":"1.0.0rc7","name":"Release candidate 1.0.0 - 7"}""")).IsNull();
+        Assertions.AssertObject(Version("""{"tag_name":"gdscript-4.4-v1","name":"Thumbstick Plugin v1.2.1 [GD Script - 4.4]"}""")).IsNull();
+
+        static string? Version(string release) =>
+            ReleaseAssets.TryVersion(System.Text.Json.JsonDocument.Parse(release).RootElement, out var version) ? version.ToString() : null;
+    }
+
+    [TestCase]
+    public static async Task StagingInstallsTheFirstReleaseOfAVersionThatValidationAccepts()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "fetch-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var installed = Path.Combine(root, "installed");
+            Directory.CreateDirectory(installed);
+            File.WriteAllText(Path.Combine(installed, "plugin.cfg"), "[plugin]\nname=\"Plugin\"\nversion=\"1.0.0\"\nscript=\"plugin.gd\"\n");
+            var archives = new Dictionary<string, byte[]>
+            {
+                ["https://example.org/3.zip"] = PluginZip("tool\nextends EditorPlugin\nexport var speed = 1\n"),
+                ["https://example.org/4.zip"] = PluginZip("@tool\nextends EditorPlugin\n@export var speed = 1\n"),
+            };
+            var requested = new List<string>();
+            using var client = new HttpClient(new Handler(request =>
+            {
+                requested.Add(request.RequestUri!.ToString());
+                return new(HttpStatusCode.OK) { Content = new ByteArrayContent(archives[request.RequestUri!.ToString()]) };
+            }));
+            var candidate = new UpdateCandidate("plugin", "Plugin", "1.0.0", "2.0.0", "https://example.org/releases", null, null,
+                new ZipPackageRef("https://example.org/3.zip", "plugin", ["https://example.org/4.zip"]));
+            var targets = new[] { new PluginUpdateTarget("plugin", "Plugin", "1.0.0", null, installed) };
+            var fetcher = new PackageFetcher(new UpdateHttp(client), new FakeGit());
+
+            var batch = await fetcher.FetchAsync([candidate], targets, Path.Combine(root, "transaction"), null, CancellationToken.None);
+
+            Assertions.AssertThat(requested).ContainsExactly("https://example.org/3.zip", "https://example.org/4.zip");
+            var staged = batch.Packages.Single();
+            Assertions.AssertString(File.ReadAllText(Path.Combine(staged.StagingDir, "plugin.gd"))).StartsWith("@tool");
+            Assertions.AssertString(staged.Findings.Single(f => f.Code == "R28").Message).EndsWith("https://example.org/4.zip");
+
+            // every package refused: the announced one's reason
+            var refused = candidate with { Package = new ZipPackageRef("https://example.org/3.zip", "plugin", ["https://example.org/3.zip?again"]) };
+            archives["https://example.org/3.zip?again"] = archives["https://example.org/3.zip"];
+            string? reason = null;
+            try { await fetcher.FetchAsync([refused], targets, Path.Combine(root, "transaction"), null, CancellationToken.None); }
+            catch (InvalidDataException ex) { reason = ex.Message; }
+            Assertions.AssertString(reason).Contains("plugin.gd has the line \"tool\"");
+        }
+        finally { Directory.Delete(root, true); }
+
+        static byte[] PluginZip(string script)
+        {
+            using var stream = new MemoryStream();
+            using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, true))
+                foreach (var (name, text) in new[] { ("addons/plugin/plugin.cfg", "[plugin]\nname=\"Plugin\"\nversion=\"2.0.0\"\nscript=\"plugin.gd\"\n"), ("addons/plugin/plugin.gd", script) })
+                {
+                    using var writer = new StreamWriter(zip.CreateEntry(name).Open());
+                    writer.Write(text);
+                }
+            return stream.ToArray();
+        }
+    }
+
+    [TestCase]
+    public static void PackagesInGodot3ScriptOrWithGDNativeAreMadeForGodot3()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "godot3-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string? Evidence(string name, string text)
+            {
+                var file = Path.Combine(root, name);
+                File.WriteAllText(file, text);
+                try { return AddonPackageValidator.Godot3Evidence(root, [file]); }
+                finally { File.Delete(file); }
+            }
+            Assertions.AssertString(Evidence("a.gd", "extends Node\r\nonready var label = $Label\r\n")).Contains("\"onready var\"");
+            Assertions.AssertString(Evidence("a.gd", "export(int, 1, 10) var speed = 1\n")).Contains("\"export(int, 1, 10) var\"");
+            Assertions.AssertString(Evidence("a.gd", "tool\r\nextends EditorPlugin\n")).Contains("\"tool\"");
+            Assertions.AssertString(Evidence("native.gdnlib", "[entry]\n")).IsEqual("native.gdnlib is a GDNative library");
+            // Godot 4, and words that only look like Godot 3
+            Assertions.AssertObject(Evidence("a.gd", "@tool\nextends Node\n@export var speed := 1\n@onready var label = $Label\n# export var old\nvar tool = 1\n")).IsNull();
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [TestCase]
     public static async Task PinnedGitSourcesListTheCommitTheyPointToNow()
     {
         using var client = new HttpClient(new Handler(_ => Json("[plugin]\nversion=\"1.0.0\"\n")));
