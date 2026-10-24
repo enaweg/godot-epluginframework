@@ -223,8 +223,9 @@ against `PluginToggles` (pure, tested; not to be confused with `PlainPluginObser
 states in the shared state file at startup, before retries and updates, and when the manager lists plugins). The
 known set lives in Engine metadata, so a toggle between a build and its reload is not lost; disabling the framework removes it. A newly enabled plain plugin passes the license gate first
 (otherwise it is disabled again inside a progress scope, which reopens Project Settings, and the review is
-queued), then `ReevaluateOptionalDependencies`. A disabled one disables the activated ePlugins that require it (their
-optional snapshot is filled first, since the editor no longer has the plugin) and runs `UninstallOptionalDependenciesOn`,
+queued), then `ReevaluateOptionalDependencies`. A disabled one disables the activated ePlugins that require it (the
+optional snapshot of every plugin with an optional dependency on it is filled first, since the editor no longer has the
+plugin, also for plugins disabled further down the chain) and runs `UninstallOptionalDependenciesOn`,
 all in one transition: `_transitionHold` keeps `FinishTransition` from building in between. Toggles the framework makes
 itself go through `NotePluginToggle`;
 nothing reacts while a reload is pending or an update is active. A hard dependency on a plain plugin is enabled

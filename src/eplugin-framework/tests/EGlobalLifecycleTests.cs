@@ -207,6 +207,31 @@ public class EGlobalLifecycleTests : IDisposable
     }
 
     [TestCase]
+    public void DisablingAPlainDependencyRemovesTheOptionalRecipesOfIndirectDependants()
+    {
+        _fixture.AddPlainPlugin("tool");
+        _fixture.AddEPlugin("lib", b => b.AddNuget("Lib.Package").AddPluginDependency("tool"));
+        _fixture.AddEPlugin("app", b => b
+            .AddNuget("App.Package")
+            .AddPluginDependency("lib")
+            .AddOptionalPluginDependency("tool", null, optional => optional.AddNuget("App.Tool")));
+        _fixture.Enable("app");
+        _fixture.Global.InitializePluginToggles();
+        Assertions.AssertThat(_fixture.Operations).Contains("add-nuget App.Tool");
+        // an assembly reload after the build lost the snapshots of what was applied
+        foreach (var context in _fixture.Global.Contexts) context.AppliedOptionalDependencies = null;
+        var start = _fixture.Operations.Count;
+
+        _fixture.Host.Enabled.Remove("tool");
+        _fixture.Global.ObservePluginToggles();
+
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Deactivated);
+        Assertions.AssertObject(_fixture.State("lib")).IsEqual(EEditorPluginState.Deactivated);
+        Assertions.AssertThat(OperationsSince(start)).ContainsExactly(
+            "remove-nuget App.Tool", "remove-nuget App.Package", "remove-nuget Lib.Package", "build");
+    }
+
+    [TestCase]
     public void OptionalRecipesFollowTheOptionalPluginInEitherOrder()
     {
         _fixture.AddPlainPlugin("extra", "2.0");

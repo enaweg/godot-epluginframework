@@ -182,13 +182,11 @@ internal sealed partial class EGlobal
         _transitionHold++;
         try
         {
-            foreach (var dependant in dependants)
+            // An uninstall resolves its optional recipes against the editor, where this plugin is gone already. That is also
+            // the uninstall of a plugin disabled further down, because it requires a dependant.
+            foreach (var plugin in PluginsWithOptionalDependencyOn(slug).Where(p => p.AppliedOptionalDependencies is null).ToArray())
             {
-                // Its uninstall resolves its optional recipes against the editor, where this plugin is gone already.
-                if (dependant.AppliedOptionalDependencies is null && GetInstalledOptionalRecipeOrNull(dependant, slug) is { } recipe)
-                {
-                    dependant.AppliedOptionalDependencies = ResolveOptionalRecipes(dependant, recipe, assumeEnabledSlug: slug);
-                }
+                plugin.AppliedOptionalDependencies = ResolveOptionalRecipes(plugin, plugin.Builder.PluginRecipe, assumeEnabledSlug: slug);
             }
 
             foreach (var dependant in dependants.Where(d => _host.IsPluginEnabled(d.Slug)))
