@@ -1,8 +1,8 @@
 {
- "commit": "768878cef2a16294a7dcea11455c2e8d37d73eae",
- "date": "2026-10-23T19:24:48Z",
- "covered": 10130,
- "coverable": 11168,
+ "commit": "960c63a4ae43b1ea17d1c8e4a892f2668db13a84",
+ "date": "2026-10-24T07:34:19Z",
+ "covered": 10154,
+ "coverable": 11192,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -121,8 +121,8 @@
    82
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.RecipeOperations.cs": [
-   93,
-   106
+   96,
+   109
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Retry.cs": [
    130,
@@ -181,8 +181,8 @@
    7
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Kinds/GDExtensionConfig.cs": [
-   153,
-   154
+   165,
+   166
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Kinds/GDExtensionPluginWorkflow.cs": [
    78,
@@ -365,8 +365,8 @@
    114
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/AddonSwap.cs": [
-   105,
-   116
+   114,
+   125
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/BuildDiagnostics.cs": [
    52,
