@@ -38,8 +38,9 @@ public static class EditorPluginExtensions
     /// </summary>
     /// <param name="plugin">The editor plugin to inspect.</param>
     /// <returns>
-    /// The directory portion of the script path (e.g. <c>res://addons/my-plugin</c> for a script
-    /// at <c>res://addons/my-plugin/MyPlugin.cs</c>).
+    /// The directory with the <c>plugin.cfg</c> that holds the script (e.g. <c>res://addons/my-plugin</c> for a script
+    /// at <c>res://addons/my-plugin/MyPlugin.cs</c> or <c>res://addons/my-plugin/src/MyPlugin.cs</c>), else the
+    /// script's own directory.
     /// </returns>
     public static string? GetPluginDirectory(this EditorPlugin plugin)
     {
@@ -54,7 +55,7 @@ public static class EditorPluginExtensions
             var script = (Script)scriptVar;
             if (script is not null)
             {
-                return script.GetPath().GetBaseDir();
+                return PluginDirectoryOf(script.GetPath(), directory => FileAccess.FileExists($"{directory}/plugin.cfg"));
             }
 
             return null;
@@ -65,6 +66,25 @@ public static class EditorPluginExtensions
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The directory below <c>res://addons</c> closest to <paramref name="scriptPath"/> that has a <c>plugin.cfg</c>,
+    /// since <c>plugin.cfg</c> may name a script in a subfolder; else the script's own directory.
+    /// </summary>
+    internal static string PluginDirectoryOf(string scriptPath, Func<string, bool> hasConfig)
+    {
+        const string addons = "res://addons/";
+        var scriptDirectory = scriptPath.GetBaseDir();
+        for (var directory = scriptDirectory; directory.StartsWith(addons, StringComparison.Ordinal) && directory.Length > addons.Length; directory = directory.GetBaseDir())
+        {
+            if (hasConfig(directory))
+            {
+                return directory;
+            }
+        }
+
+        return scriptDirectory;
     }
 
     /// <summary>

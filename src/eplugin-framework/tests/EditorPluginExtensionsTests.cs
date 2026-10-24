@@ -45,6 +45,20 @@ public class EditorPluginExtensionsTests
     }
 
     [TestCase]
+    public static void AScriptInASubfolderBelongsToThePluginWhosePluginCfgHoldsIt()
+    {
+        var configs = new[] { "res://addons/foo", "res://addons/bar/nested" };
+        bool HasConfig(string directory) => Array.IndexOf(configs, directory) >= 0;
+
+        Assertions.AssertString(EditorPluginExtensions.PluginDirectoryOf("res://addons/foo/Plugin.cs", HasConfig)).IsEqual("res://addons/foo");
+        Assertions.AssertString(EditorPluginExtensions.PluginDirectoryOf("res://addons/foo/src/editor/Plugin.cs", HasConfig)).IsEqual("res://addons/foo");
+        Assertions.AssertString(EditorPluginExtensions.PluginDirectoryOf("res://addons/bar/nested/src/Plugin.cs", HasConfig)).IsEqual("res://addons/bar/nested");
+        // without a plugin.cfg, and outside res://addons, it is the script's directory as before
+        Assertions.AssertString(EditorPluginExtensions.PluginDirectoryOf("res://addons/baz/src/Plugin.cs", HasConfig)).IsEqual("res://addons/baz/src");
+        Assertions.AssertString(EditorPluginExtensions.PluginDirectoryOf("res://tools/Plugin.cs", _ => true)).IsEqual("res://tools");
+    }
+
+    [TestCase]
     public static void MetadataReadsEveryKeyAndLeavesOptionalOnesNull()
     {
         var directory = Path.Combine(Path.GetTempPath(), "eplugin-metadata-" + Guid.NewGuid().ToString("N"));
