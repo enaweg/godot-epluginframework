@@ -1,8 +1,8 @@
 {
- "commit": "6d754dc1d1887e3640564f9f2f7ff5c73496b042",
- "date": "2026-10-24T07:59:02Z",
- "covered": 10191,
- "coverable": 11224,
+ "commit": "2599d31b34aa4f703be9457758cf798d628ede1a",
+ "date": "2026-10-24T09:08:05Z",
+ "covered": 10205,
+ "coverable": 11241,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -25,8 +25,8 @@
    15
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/ActivationProgress.cs": [
-   247,
-   299
+   248,
+   300
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/AssemblyReload.cs": [
    24,
@@ -345,8 +345,8 @@
    18
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/ProgressSession.cs": [
-   158,
-   201
+   171,
+   217
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/ProjectSettingsDialog.cs": [
    5,
