@@ -597,6 +597,24 @@ public class EGlobalLifecycleTests : IDisposable
     }
 
     [TestCase]
+    public void ACycleFurtherDownTheDependenciesFailsTheWholeActivation()
+    {
+        // app is not part of the cycle, but would wait for it forever
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package").AddPluginDependency("b"));
+        _fixture.AddEPlugin("b", b => b.AddNuget("B.Package").AddPluginDependency("c"));
+        _fixture.AddEPlugin("c", b => b.AddNuget("C.Package").AddPluginDependency("b"));
+
+        _fixture.Enable("app");
+        EGlobal.RunPosted();
+
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Error);
+        Assertions.AssertBool(_fixture.Host.Enabled.Overlaps(["app", "b", "c"])).IsFalse();
+        Assertions.AssertBool(_fixture.Operations.Any(o => o.StartsWith("add-", StringComparison.Ordinal))).IsFalse();
+        Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsFalse();
+        Assertions.AssertBool(_fixture.Log.Any(l => l.Contains("cycle: b -> c -> b"))).IsTrue();
+    }
+
+    [TestCase]
     public void ADependencyEnabledAgainInTheSameSessionIsNotMistakenForItsOldInstance()
     {
         _fixture.AddEPlugin("base", b => b.AddNuget("Base.Package"));
@@ -838,7 +856,7 @@ public class EGlobalLifecycleTests : IDisposable
         // unchecked in Project Settings: a plugin in error uninstalls nothing, and Godot frees its instance
         var instance = _fixture.Context("app")!.PluginBase;
         _fixture.Disable("app");
-        instance.Free();
+        Assertions.AssertBool(GodotObject.IsInstanceValid(instance)).IsFalse();
         _fixture.Cli.BuildFails = false;
 
         Assertions.AssertBool(_fixture.Global.DisableFailedPlugin("app")).IsTrue();
