@@ -162,6 +162,38 @@ public class PluginStateStoreTests
         Assertions.AssertBool(reloaded.IsWelcomeShown("sample_plugin")).IsTrue();
     }
 
+    [TestCase]
+    public void LicensesAndWelcomePagesPulledBeforeAFailedWriteAreKept()
+    {
+        // a write fails because the folder is read-only, which Windows does not enforce for new files
+        if (OperatingSystem.IsWindows()) return;
+        var (store, path) = NewStore();
+        Assertions.AssertBool(store.TryCreateBaseline([])).IsTrue();
+        var directory = Path.GetDirectoryName(path)!;
+        void Failing(Action write)
+        {
+            File.SetUnixFileMode(directory, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+            try { write(); }
+            finally { File.SetUnixFileMode(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute); }
+        }
+
+        Pull(path, other => Assertions.AssertBool(other.TryRecordLicenses([new AcceptedLicense("pulled", "LICENSE", "1.0", DateTimeOffset.UnixEpoch, false)])).IsTrue());
+        Failing(() => Assertions.AssertBool(store.TryRecordLicenses([new AcceptedLicense("local", "LICENSE", "1.0", DateTimeOffset.UnixEpoch, false)])).IsFalse());
+        Pull(path, other => Assertions.AssertBool(other.TryRecordWelcomes([new ShownWelcome("pulled", "1.0", DateTimeOffset.UnixEpoch)])).IsTrue());
+        Failing(() => Assertions.AssertBool(store.TryRecordWelcomes([new ShownWelcome("local", "1.0", DateTimeOffset.UnixEpoch)])).IsFalse());
+
+        // they still count for this session, and the next write saves them with what was pulled
+        Assertions.AssertBool(store.IsLicenseAccepted("local", "LICENSE")).IsTrue();
+        Assertions.AssertBool(store.IsWelcomeShown("local")).IsTrue();
+        Complete(store, "sample_plugin", "1.0", PersistedPluginState.Activated);
+        var reloaded = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(reloaded.Load()).IsTrue();
+        Assertions.AssertBool(reloaded.IsLicenseAccepted("pulled", "LICENSE")).IsTrue();
+        Assertions.AssertBool(reloaded.IsLicenseAccepted("local", "LICENSE")).IsTrue();
+        Assertions.AssertBool(reloaded.IsWelcomeShown("pulled")).IsTrue();
+        Assertions.AssertBool(reloaded.IsWelcomeShown("local")).IsTrue();
+    }
+
     /// <summary>Changes the shared file like a git pull of a teammate's change: through another store on a copy of it.</summary>
     private void Pull(string path, Action<PluginStateStore> change)
     {

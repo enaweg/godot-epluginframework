@@ -75,6 +75,10 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
     private Dictionary<string, LocalPluginAttempt> _local = new(StringComparer.Ordinal);
     private Dictionary<string, AcceptedLicense> _licenses = new(StringComparer.Ordinal);
     private Dictionary<string, ShownWelcome> _welcomes = new(StringComparer.Ordinal);
+    // Licenses and welcome pages recorded while they could not be saved. They count for this session, also after the file
+    // is read again (a git pull), unless it holds a newer entry, and the next write that succeeds saves them.
+    private readonly Dictionary<string, AcceptedLicense> _unsavedLicenses = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ShownWelcome> _unsavedWelcomes = new(StringComparer.Ordinal);
     private byte[]? _sharedBytes;
     private Guid? _lastCompletedAttemptId;
     // Fields a newer framework version wrote, by document and by entry slug, kept when the files are written again.
@@ -105,8 +109,9 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
     /// </summary>
     public bool TryRecordLicenses(IEnumerable<AcceptedLicense> accepted)
     {
+        var valid = accepted.Where(ValidLicense).ToArray();
         var next = new Dictionary<string, AcceptedLicense>(_licenses, StringComparer.Ordinal);
-        foreach (var license in accepted.Where(ValidLicense))
+        foreach (var license in valid)
         {
             next[license.Slug] = license;
         }
@@ -117,7 +122,9 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
             return true;
         }
 
-        _licenses = next;
+        // a failed write may have read the file again first, so they are added to what the store holds now
+        foreach (var license in valid) _unsavedLicenses[license.Slug] = license;
+        _licenses = WithUnsaved(_licenses, _unsavedLicenses, l => l.AcceptedUtc);
         return false;
     }
 
@@ -127,8 +134,9 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
     /// </summary>
     public bool TryRecordWelcomes(IEnumerable<ShownWelcome> shown)
     {
+        var valid = shown.Where(w => ValidSlug(w.Slug)).ToArray();
         var next = new Dictionary<string, ShownWelcome>(_welcomes, StringComparer.Ordinal);
-        foreach (var welcome in shown.Where(w => ValidSlug(w.Slug)))
+        foreach (var welcome in valid)
         {
             next[welcome.Slug] = welcome;
         }
@@ -138,8 +146,24 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
             return true;
         }
 
-        _welcomes = next;
+        foreach (var welcome in valid) _unsavedWelcomes[welcome.Slug] = welcome;
+        _welcomes = WithUnsaved(_welcomes, _unsavedWelcomes, w => w.ShownUtc);
         return false;
+    }
+
+    /// <summary>
+    /// <paramref name="entries"/> with the <paramref name="unsaved"/> ones, except where it holds a newer entry of the same
+    /// plugin, which <paramref name="unsaved"/> then no longer keeps.
+    /// </summary>
+    private static Dictionary<string, T> WithUnsaved<T>(Dictionary<string, T> entries, Dictionary<string, T> unsaved, Func<T, DateTimeOffset> time)
+    {
+        var result = new Dictionary<string, T>(entries, StringComparer.Ordinal);
+        foreach (var (slug, entry) in unsaved.ToArray())
+        {
+            if (result.TryGetValue(slug, out var saved) && !Equals(saved, entry) && time(saved) >= time(entry)) unsaved.Remove(slug);
+            else result[slug] = entry;
+        }
+        return result;
     }
 
     public bool Load()
@@ -203,6 +227,8 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
             StringComparer.Ordinal);
         _welcomes = (shared.Welcomes ?? []).ToDictionary(x => x.Slug!, x =>
             new ShownWelcome(x.Slug!, x.Version ?? "", x.ShownUtc ?? default), StringComparer.Ordinal);
+        _licenses = WithUnsaved(_licenses, _unsavedLicenses, l => l.AcceptedUtc);
+        _welcomes = WithUnsaved(_welcomes, _unsavedWelcomes, w => w.ShownUtc);
         _lastCompletedAttemptId = shared.LastCompletedAttemptId;
         _sharedExtras = new Extras
         {
@@ -425,7 +451,8 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
             }
 
             if (onlyWhenChanged && SameEntries(states, _shared) && SameEntries(licenses, _licenses) &&
-                SameEntries(welcomes, _welcomes) && completedAttemptId == _lastCompletedAttemptId)
+                SameEntries(welcomes, _welcomes) && completedAttemptId == _lastCompletedAttemptId &&
+                _unsavedLicenses.Count == 0 && _unsavedWelcomes.Count == 0)
             {
                 return true;
             }
@@ -462,6 +489,8 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
             _welcomes = welcomes;
             _sharedBytes = bytes;
             _lastCompletedAttemptId = completedAttemptId;
+            _unsavedLicenses.Clear();
+            _unsavedWelcomes.Clear();
             return true;
         }
         catch (Exception ex)
