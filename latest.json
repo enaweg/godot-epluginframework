@@ -1,8 +1,8 @@
 {
- "commit": "78eacfd3e8001654bcd67ab813d2e99f280e1aa0",
- "date": "2026-10-24T11:42:22Z",
- "covered": 10561,
- "coverable": 11651,
+ "commit": "adf103bf179501f0ce72cd49ced89d71a2ff09b5",
+ "date": "2026-10-24T11:44:20Z",
+ "covered": 10574,
+ "coverable": 11664,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -37,8 +37,8 @@
    18
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/BuildOutputGuard.cs": [
-   49,
-   50
+   52,
+   53
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetCli10.cs": [
    78,
@@ -253,8 +253,8 @@
    102
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.Zip.cs": [
-   67,
-   80
+   73,
+   86
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.cs": [
    328,
@@ -333,8 +333,8 @@
    63
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/ZipInstall.cs": [
-   41,
-   42
+   44,
+   45
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PlainPluginObserver.cs": [
    67,
@@ -377,8 +377,8 @@
    48
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/AddonInstaller.cs": [
-   60,
-   70
+   61,
+   71
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/AddonPackageValidator.cs": [
    120,

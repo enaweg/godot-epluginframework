@@ -4,18 +4,19 @@ Line coverage of `src/eplugin-framework/addons/ePlugin` on `main`, recorded by t
 
 ![Line coverage](badge.svg)
 
-**90.64%** (10561 of 11651 lines) at [78eacfd](https://github.com/enaweg/godot-epluginframework/commit/78eacfd3e8001654bcd67ab813d2e99f280e1aa0), 2026-10-24.
+**90.66%** (10574 of 11664 lines) at [adf103b](https://github.com/enaweg/godot-epluginframework/commit/adf103bf179501f0ce72cd49ced89d71a2ff09b5), 2026-10-24.
 
 ```mermaid
 xychart-beta
     title "Line coverage on main (last 30 pushes)"
-    x-axis ["0a5933c", "8a13efd", "7836444", "88a5d44", "5443f13", "7ec5675", "7903b4c", "e48be7e", "610a9e3", "8c6304d", "1ad0ad5", "1178656", "4c1bfde", "41c358e", "f5a4430", "a712cc3", "8b45459", "673dacb", "23cfbaa", "768878c", "960c63a", "f5a499d", "6d754dc", "2599d31", "459ef8e", "945210c", "c518b82", "b778fa2", "6d8a617", "78eacfd"]
+    x-axis ["8a13efd", "7836444", "88a5d44", "5443f13", "7ec5675", "7903b4c", "e48be7e", "610a9e3", "8c6304d", "1ad0ad5", "1178656", "4c1bfde", "41c358e", "f5a4430", "a712cc3", "8b45459", "673dacb", "23cfbaa", "768878c", "960c63a", "f5a499d", "6d754dc", "2599d31", "459ef8e", "945210c", "c518b82", "b778fa2", "6d8a617", "78eacfd", "adf103b"]
     y-axis "Line coverage (%)" 76 --> 93
-    line [80.42, 80.44, 80.44, 80.42, 80.32, 79.77, 79.79, 78.48, 78.48, 90.80, 90.80, 90.90, 90.90, 90.79, 90.77, 90.80, 90.71, 90.71, 90.70, 90.71, 90.73, 90.74, 90.80, 90.78, 90.70, 90.70, 90.66, 90.67, 90.65, 90.64]
+    line [80.44, 80.44, 80.42, 80.32, 79.77, 79.79, 78.48, 78.48, 90.80, 90.80, 90.90, 90.90, 90.79, 90.77, 90.80, 90.71, 90.71, 90.70, 90.71, 90.73, 90.74, 90.80, 90.78, 90.70, 90.70, 90.66, 90.67, 90.65, 90.64, 90.66]
 ```
 
 | Date | Commit | Line coverage | Change |
 |:--|:--|--:|--:|
+| 2026-10-24 | [adf103b](https://github.com/enaweg/godot-epluginframework/commit/adf103bf179501f0ce72cd49ced89d71a2ff09b5) | 90.66% | +0.02 pp |
 | 2026-10-24 | [78eacfd](https://github.com/enaweg/godot-epluginframework/commit/78eacfd3e8001654bcd67ab813d2e99f280e1aa0) | 90.64% | -0.01 pp |
 | 2026-10-24 | [6d8a617](https://github.com/enaweg/godot-epluginframework/commit/6d8a61774cf869b8adb817da34b5d71b38235383) | 90.65% | -0.02 pp |
 | 2026-10-24 | [b778fa2](https://github.com/enaweg/godot-epluginframework/commit/b778fa2146c4db3ef67a3bd9785348588e4c8a5c) | 90.67% | +0.01 pp |
@@ -45,11 +46,10 @@ xychart-beta
 | 2026-10-22 | [88a5d44](https://github.com/enaweg/godot-epluginframework/commit/88a5d445577c347ec6852e5d56d073bca25576b2) | 80.42% | -0.02 pp |
 | 2026-10-22 | [7836444](https://github.com/enaweg/godot-epluginframework/commit/78364449dc352a9adc592128ba6ee7d03f276e01) | 80.44% | +0.00 pp |
 | 2026-10-21 | [8a13efd](https://github.com/enaweg/godot-epluginframework/commit/8a13efd56794128395dab9ad90d5be74515b8486) | 80.44% | +0.02 pp |
-| 2026-10-21 | [0a5933c](https://github.com/enaweg/godot-epluginframework/commit/0a5933c360c6362386702df4974013e4548bf0d3) | 80.42% | -0.10 pp |
 
 All measurements: [history.csv](history.csv).
 
-<details><summary>Files at 78eacfd (129)</summary>
+<details><summary>Files at adf103b (129)</summary>
 
 | File | Line coverage | Covered lines |
 |:--|--:|--:|
@@ -75,12 +75,12 @@ All measurements: [history.csv](history.csv).
 | `Internal/EGlobal.AddonInstall.cs` | 82.4% | 28 of 34 |
 | `Internal/ActivationProgress.cs` | 82.7% | 248 of 300 |
 | `Internal/PluginTypes.cs` | 83.3% | 15 of 18 |
-| `Internal/Manager/EPluginManagerDialog.Zip.cs` | 83.8% | 67 of 80 |
 | `Internal/Manager/AttentionDialog.cs` | 84.6% | 99 of 117 |
+| `Internal/Manager/EPluginManagerDialog.Zip.cs` | 84.9% | 73 of 86 |
 | `Internal/Manager/UpdateFailureDialog.cs` | 85.5% | 53 of 62 |
 | `Internal/AssemblyReload.cs` | 85.7% | 24 of 28 |
 | `Internal/Manager/WelcomeDialog.cs` | 85.7% | 54 of 63 |
-| `Internal/Update/AddonInstaller.cs` | 85.7% | 60 of 70 |
+| `Internal/Update/AddonInstaller.cs` | 85.9% | 61 of 71 |
 | `Internal/EGlobal.cs` | 86.4% | 261 of 302 |
 | `EditorPluginExtensions.cs` | 87.3% | 62 of 71 |
 | `Internal/Welcomes/PluginWelcome.cs` | 87.9% | 29 of 33 |
@@ -122,11 +122,11 @@ All measurements: [history.csv](history.csv).
 | `Internal/Update/LocalPackageIndex.cs` | 97.4% | 74 of 76 |
 | `Internal/PluginStateStore.cs` | 97.5% | 465 of 477 |
 | `Internal/Manager/PluginAttention.cs` | 97.5% | 79 of 81 |
-| `Internal/Manager/ZipInstall.cs` | 97.6% | 41 of 42 |
 | `Internal/ShowHideHelper.cs` | 97.6% | 82 of 84 |
 | `Internal/Update/UpdateStateStore.cs` | 97.7% | 43 of 44 |
-| `Internal/Dotnet/BuildOutputGuard.cs` | 98.0% | 49 of 50 |
+| `Internal/Manager/ZipInstall.cs` | 97.8% | 44 of 45 |
 | `Internal/Update/RecipeReconciler.cs` | 98.0% | 50 of 51 |
+| `Internal/Dotnet/BuildOutputGuard.cs` | 98.1% | 52 of 53 |
 | `Internal/Update/GitSource.cs` | 98.1% | 210 of 214 |
 | `Internal/Manager/PluginManagerViewModel.cs` | 98.2% | 276 of 281 |
 | `Internal/EGlobal.UpdateRecipes.cs` | 98.4% | 184 of 187 |
