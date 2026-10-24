@@ -193,7 +193,8 @@ opposite order. Recipe application always goes through `PluginContext.Cli` (an `
 `dotnet` calls elsewhere.
 
 Optional dependencies are resolved by `EGlobal.ResolveOptionalRecipes` at install time: a nested recipe is
-applied only when its plugin is already enabled and satisfies any version constraint. It never enables a
+applied only when its plugin is already enabled (an ePlugin also activated, not one still waiting for its own
+dependency inside its `_EnablePlugin`) and satisfies any version constraint. It never enables a
 plugin and never fails the activation. What was applied is snapshotted in
 `PluginContext.AppliedOptionalDependencies` so uninstall reverses exactly that (falling back to re-resolving
 when the snapshot was lost to an assembly reload).
@@ -222,8 +223,9 @@ against `PluginToggles` (pure, tested; not to be confused with `PlainPluginObser
 states in the shared state file at startup, before retries and updates, and when the manager lists plugins). The
 known set lives in Engine metadata, so a toggle between a build and its reload is not lost; disabling the framework removes it. A newly enabled plain plugin passes the license gate first
 (otherwise it is disabled again inside a progress scope, which reopens Project Settings, and the review is
-queued), then `ReevaluateOptionalDependencies`. A disabled one disables the activated ePlugins that require it (their
-optional snapshot is filled first, since the editor no longer has the plugin) and runs `UninstallOptionalDependenciesOn`,
+queued), then `ReevaluateOptionalDependencies`. A disabled one disables the activated ePlugins that require it (the
+optional snapshot of every plugin with an optional dependency on it is filled first, since the editor no longer has the
+plugin, also for plugins disabled further down the chain) and runs `UninstallOptionalDependenciesOn`,
 all in one transition: `_transitionHold` keeps `FinishTransition` from building in between. Toggles the framework makes
 itself go through `NotePluginToggle`;
 nothing reacts while a reload is pending or an update is active. A hard dependency on a plain plugin is enabled
@@ -382,7 +384,9 @@ operations need Godot APIs. While users are active a
 `System.Threading.Timer` sends a heartbeat for each every 5 s, also while the main thread is blocked; the assembly's
 `Unloading` hook stops it (a running timer would keep the collectible assembly loaded). The helper (`src/activation-progress`,
 protocol in its `Commands`) shows the newest text of the active users, closes the window after 15 s without a message
-from any of them (a user's `HOLD` extends that once, used for restarts) and exits 15 minutes after the last message.
+from any of them (a user's `HOLD` extends that once, used for restarts) and exits 15 minutes after the last message. It exits only on its UI thread, once the closed window is hidden
+(`Commands.Quit`): exiting from another thread while the native UI loop calls into managed code crashed it (SIGSEGV with
+GTK on .NET 8).
 Editors of the OS user using the same `ProgressSession.Protocol` share one helper: it is published as
 `<token>.helper` in Godot's editor data directory (`eplugin/progress`), next to `<token>.commands`. Editors connect to
 the oldest running compatible helper whose command file they can open; missing or inaccessible command files are

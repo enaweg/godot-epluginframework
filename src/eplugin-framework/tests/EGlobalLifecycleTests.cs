@@ -207,6 +207,31 @@ public class EGlobalLifecycleTests : IDisposable
     }
 
     [TestCase]
+    public void DisablingAPlainDependencyRemovesTheOptionalRecipesOfIndirectDependants()
+    {
+        _fixture.AddPlainPlugin("tool");
+        _fixture.AddEPlugin("lib", b => b.AddNuget("Lib.Package").AddPluginDependency("tool"));
+        _fixture.AddEPlugin("app", b => b
+            .AddNuget("App.Package")
+            .AddPluginDependency("lib")
+            .AddOptionalPluginDependency("tool", null, optional => optional.AddNuget("App.Tool")));
+        _fixture.Enable("app");
+        _fixture.Global.InitializePluginToggles();
+        Assertions.AssertThat(_fixture.Operations).Contains("add-nuget App.Tool");
+        // an assembly reload after the build lost the snapshots of what was applied
+        foreach (var context in _fixture.Global.Contexts) context.AppliedOptionalDependencies = null;
+        var start = _fixture.Operations.Count;
+
+        _fixture.Host.Enabled.Remove("tool");
+        _fixture.Global.ObservePluginToggles();
+
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Deactivated);
+        Assertions.AssertObject(_fixture.State("lib")).IsEqual(EEditorPluginState.Deactivated);
+        Assertions.AssertThat(OperationsSince(start)).ContainsExactly(
+            "remove-nuget App.Tool", "remove-nuget App.Package", "remove-nuget Lib.Package", "build");
+    }
+
+    [TestCase]
     public void OptionalRecipesFollowTheOptionalPluginInEitherOrder()
     {
         _fixture.AddPlainPlugin("extra", "2.0");
@@ -257,6 +282,38 @@ public class EGlobalLifecycleTests : IDisposable
 
         Assertions.AssertThat(OperationsSince(start)).ContainsExactly(
             "remove-reference lib/Shared.csproj", "remove-project lib/Shared.csproj", "remove-nuget shared.package", "build");
+    }
+
+    [TestCase]
+    public void AnAutoloadTwoPluginsDeclareStaysUntilTheLastOfThemIsDisabled()
+    {
+        _fixture.AddEPlugin("a", b => b.AddAutoload("EventBus", "res://addons/shared/bus.gd"));
+        _fixture.AddEPlugin("b", b => b.AddAutoload("EventBus", "res://addons/shared/bus.gd"));
+        _fixture.Enable("a");
+        _fixture.Enable("b");
+
+        _fixture.Disable("b");
+
+        Assertions.AssertObject(_fixture.State("b")).IsEqual(EEditorPluginState.Deactivated);
+        Assertions.AssertString(_fixture.Host.GetAutoload("EventBus")).IsEqual("res://addons/shared/bus.gd");
+
+        _fixture.Disable("a");
+
+        Assertions.AssertObject(_fixture.Host.GetAutoload("EventBus")).IsNull();
+    }
+
+    [TestCase]
+    public void AnAutoloadAnotherPluginDeclaresWithADifferentPathFailsTheActivation()
+    {
+        _fixture.AddEPlugin("a", b => b.AddAutoload("EventBus", "res://addons/a/bus.gd"));
+        _fixture.AddEPlugin("b", b => b.AddAutoload("EventBus", "res://addons/b/bus.gd"));
+        _fixture.Enable("a");
+
+        _fixture.Enable("b");
+
+        Assertions.AssertObject(_fixture.State("b")).IsEqual(EEditorPluginState.Error);
+        Assertions.AssertString(_fixture.Host.GetAutoload("EventBus")).IsEqual("res://addons/a/bus.gd");
+        Assertions.AssertObject(_fixture.State("a")).IsEqual(EEditorPluginState.Activated);
     }
 
     [TestCase]
@@ -339,6 +396,44 @@ public class EGlobalLifecycleTests : IDisposable
             "remove-nuget Extension.Package", "remove-nuget Core.Extension", "remove-nuget Core.Package", "build");
         Assertions.AssertObject(_fixture.Store.GetLocal("core")).IsNull();
         Assertions.AssertObject(_fixture.Store.GetShared("extension")!.State).IsEqual(PersistedPluginState.Deactivated);
+    }
+
+    [TestCase]
+    public void AnOptionalPluginThatWaitsForItsOwnDependencyGetsItsNestedRecipeOnceItIsActivated()
+    {
+        _fixture.AddEPlugin("base", b => b.AddNuget("Base.Package"));
+        _fixture.AddEPlugin("extension", b => b.AddNuget("Extension.Package").AddPluginDependency("base"));
+        _fixture.AddEPlugin("app", b => b
+            .AddOptionalPluginDependency("base", null, optional => optional.AddNuget("App.Base"))
+            .AddOptionalPluginDependency("extension", null, optional => optional.AddNuget("App.Extension")));
+        _fixture.Enable("app");
+        // an assembly reload after the build lost the snapshot of what was applied
+        _fixture.Context("app")!.AppliedOptionalDependencies = null;
+        var start = _fixture.Operations.Count;
+
+        // the extension is enabled, and still waits for base while base activates
+        _fixture.Enable("extension");
+
+        Assertions.AssertObject(_fixture.State("extension")).IsEqual(EEditorPluginState.Activated);
+        Assertions.AssertThat(OperationsSince(start)).ContainsExactly(
+            "add-nuget Base.Package", "add-nuget App.Base", "add-nuget Extension.Package", "add-nuget App.Extension", "build");
+    }
+
+    [TestCase]
+    public void AnOptionalPluginWhoseActivationFailsLeavesNoNestedRecipe()
+    {
+        _fixture.AddEPlugin("base", b => b.AddNuget("Base.Package"));
+        _fixture.AddEPlugin("extension", b => b.AddNuget("Extension.Package").AddPluginDependency("base"));
+        _fixture.AddEPlugin("app", b => b
+            .AddOptionalPluginDependency("base", null, optional => optional.AddNuget("App.Base"))
+            .AddOptionalPluginDependency("extension", null, optional => optional.AddNuget("App.Extension")));
+        _fixture.Enable("app");
+        _fixture.Cli.FailingPackages.Add("Extension.Package");
+
+        _fixture.Enable("extension");
+
+        Assertions.AssertObject(_fixture.State("extension")).IsEqual(EEditorPluginState.Error);
+        Assertions.AssertThat(_fixture.Operations).NotContains("add-nuget App.Extension");
     }
 
     [TestCase]
@@ -563,6 +658,33 @@ public class EGlobalLifecycleTests : IDisposable
         _fixture.Global.RetryFailedPlugins();
 
         Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Deactivated);
+        Assertions.AssertThat(OperationsSince(start)).ContainsExactly("remove-nuget App.Package", "build");
+        Assertions.AssertObject(_fixture.Store.GetShared("app")!.State).IsEqual(PersistedPluginState.Deactivated);
+        Assertions.AssertObject(_fixture.Store.GetLocal("app")).IsNull();
+    }
+
+    [TestCase]
+    public void ADeactivationOfAPluginThatLostItsVersionIsRetriedAsADeactivation()
+    {
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"));
+        _fixture.Enable("app");
+        // e.g. its author edited plugin.cfg; an assembly reload reads it again
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"), version: "");
+        _fixture.Context("app")!.RefreshMetadata(EditorPluginExtensions.ReadMetadata(Path.Combine(_fixture.Addon("app"), "plugin.cfg")));
+
+        _fixture.Disable("app");
+
+        Assertions.AssertString(_fixture.Store.GetLocal("app")!.Reason).IsEqual("invalid_plugin_version");
+        Assertions.AssertObject(_fixture.Store.GetLocal("app")!.TargetState).IsEqual(PersistedPluginState.Deactivated);
+        // its recipe is still installed, so giving up on it cannot just drop the attempt
+        Assertions.AssertBool(_fixture.Global.DisableFailedPlugin("app")).IsTrue();
+        Assertions.AssertObject(_fixture.Store.GetLocal("app")).IsNotNull();
+
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"), version: "1.1.0");
+        var start = _fixture.Operations.Count;
+        _fixture.Global.RetryFailedPlugins();
+
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsFalse();
         Assertions.AssertThat(OperationsSince(start)).ContainsExactly("remove-nuget App.Package", "build");
         Assertions.AssertObject(_fixture.Store.GetShared("app")!.State).IsEqual(PersistedPluginState.Deactivated);
         Assertions.AssertObject(_fixture.Store.GetLocal("app")).IsNull();

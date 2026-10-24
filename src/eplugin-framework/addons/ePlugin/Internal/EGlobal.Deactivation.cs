@@ -200,7 +200,7 @@ internal sealed partial class EGlobal
     {
         var remaining = RemainingRecipes(context, recipe);
         var ownRemaining = InstalledRecipes(context).Where(r => !ReferenceEquals(r, recipe)).ToArray();
-        foreach (var autoload in recipe.Autoloads) ReverseAutoload(context, autoload);
+        foreach (var autoload in recipe.Autoloads) ReverseAutoload(context, autoload, remaining);
         foreach (var directory in recipe.Directories) ShowHideHelper.HideDirectory(context, directory, _host);
         foreach (var project in recipe.Projects) ReverseProject(context, project, remaining);
         foreach (var nuget in recipe.Nugets) ReverseNuget(context, nuget, remaining, ownRemaining);

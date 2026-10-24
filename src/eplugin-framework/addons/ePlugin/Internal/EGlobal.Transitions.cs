@@ -66,7 +66,7 @@ internal sealed partial class EGlobal
         {
             context.Logger?.Error(
                 $"Plugin {context.Slug} has no version in plugin.cfg. Add one and use manual retry.");
-            _stateStore.TryRecordInvalid(context.Slug, version, "invalid_plugin_version", manualRetry);
+            _stateStore.TryRecordInvalid(context.Slug, version, "invalid_plugin_version", manualRetry, target);
             context.State = EEditorPluginState.Error;
             FailTransition("invalid_plugin_version");
             return false;

@@ -42,9 +42,10 @@ internal sealed partial class EGlobal
             return false;
         }
 
-        if (attempt.Reason == "invalid_plugin_version")
+        if (attempt.Reason == "invalid_plugin_version" && attempt.TargetState == PersistedPluginState.Activated)
         {
             // The version is checked before anything is installed, and a plugin without one cannot complete a transition.
+            // A failed deactivation left its recipe installed: it is retried as one, which needs the version repaired.
             if (!_stateStore.TryAbandonAttempt(attempt.AttemptId)) return false;
             if (_contexts.FirstOrDefault(c => c.Slug == slug) is { } invalid) invalid.State = EEditorPluginState.Deactivated;
             if (_host.IsPluginEnabled(slug)) _host.SetPluginEnabled(slug, false);

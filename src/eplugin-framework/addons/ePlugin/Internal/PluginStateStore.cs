@@ -354,9 +354,11 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
     }
 
     /// <summary>A manual retry replaces the blocked attempt, so the record reflects why the retry failed.</summary>
-    public bool TryRecordInvalid(string slug, string? installedVersion, string reason, bool manualRetry = false)
+    /// <param name="target">What the failed transition aimed for, which a retry continues.</param>
+    public bool TryRecordInvalid(string slug, string? installedVersion, string reason, bool manualRetry = false,
+        PersistedPluginState target = PersistedPluginState.Activated)
     {
-        if (!TryBeginAttempt(slug, installedVersion, PersistedPluginState.Activated, out var attemptId, manualRetry))
+        if (!TryBeginAttempt(slug, installedVersion, target, out var attemptId, manualRetry))
         {
             return false;
         }

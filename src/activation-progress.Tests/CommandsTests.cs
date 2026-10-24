@@ -121,11 +121,16 @@ public class CommandsTests
         var commands = Create();
         Send(commands, "a " + Text("Working..."), "a END");
 
+        var closed = _window.Closed;
         _now += (long)Lifetime.TotalMilliseconds - 1;
         commands.Update();
-        Assert.Equal(0, _exits);
+        Assert.Equal(closed, _window.Closed);
         _now += 1;
         commands.Update();
+        Assert.Equal(closed + 1, _window.Closed);
+        // it exits on the UI thread, once the window is hidden, not on the thread that noticed the lifetime passed
+        Assert.Equal(0, _exits);
+        commands.Hidden();
         Assert.Equal(1, _exits);
     }
 
@@ -155,8 +160,10 @@ public class CommandsTests
             commands.Update();
             _now += 1_000;
             commands.Update();
-            Assert.Equal(1, _exits);
             Assert.False(File.Exists(commandFile));
+            Assert.Equal(0, _exits);
+            commands.Hidden();
+            Assert.Equal(1, _exits);
         }
         finally
         {
@@ -169,6 +176,7 @@ public class CommandsTests
         public string? Text { get; private set; }
         public bool IsOpen { get; private set; }
         public int Opened { get; private set; }
+        public int Closed { get; private set; }
 
         public void Run(string title, string text, int showDelayMilliseconds, Action ready, Action hidden) => ready();
         public void SetText(string text) => Text = text;
@@ -179,6 +187,10 @@ public class CommandsTests
             Opened++;
         }
 
-        public void Close() => IsOpen = false;
+        public void Close()
+        {
+            IsOpen = false;
+            Closed++;
+        }
     }
 }

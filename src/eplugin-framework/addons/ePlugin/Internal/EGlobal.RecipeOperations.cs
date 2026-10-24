@@ -102,13 +102,23 @@ internal sealed partial class EGlobal
         var optional = context.AppliedOptionalDependencies ?? (resolveOptional ? ResolveOptionalRecipes(context, recipe) : []);
         return optional.Select(o => o.Recipe).Prepend(recipe);
     }
-    private void ApplyAutoload(PluginContext context, EEditorPluginRecipe.Autoload autoload)
+    /// <param name="remaining">The other installed recipes (<see cref="RemainingRecipes"/>); one of them declaring the autoload's name with another path refuses it.</param>
+    private void ApplyAutoload(PluginContext context, EEditorPluginRecipe.Autoload autoload, IReadOnlyList<EEditorPluginRecipe>? remaining = null)
     {
+        if (remaining?.SelectMany(r => r.Autoloads).FirstOrDefault(a => a.Name == autoload.Name && a.Path != autoload.Path) is { } other)
+            throw new InvalidOperationException($"Autoload {autoload.Name} is already installed with {other.Path} by another recipe.");
         if (_host.GetAutoload(autoload.Name) != autoload.Path) _host.AddAutoload(AutoloadPlugin(context), autoload.Name, autoload.Path);
         if (_host.GetAutoload(autoload.Name) is null) throw new InvalidOperationException($"Adding autoload {autoload.Name} failed.");
     }
-    private void ReverseAutoload(PluginContext context, EEditorPluginRecipe.Autoload autoload)
+    /// <param name="remaining">The recipes that stay installed (<see cref="RemainingRecipes"/>); an autoload one of them declares is kept.</param>
+    private void ReverseAutoload(PluginContext context, EEditorPluginRecipe.Autoload autoload, IReadOnlyList<EEditorPluginRecipe>? remaining = null)
     {
+        if (remaining?.SelectMany(r => r.Autoloads).FirstOrDefault(a => a.Name == autoload.Name) is { } kept)
+        {
+            context.Logger?.Log($"Keeping autoload {autoload.Name}, another installed recipe still uses it.");
+            ApplyAutoload(context, kept);
+            return;
+        }
         if (_host.GetAutoload(autoload.Name) is not null) _host.RemoveAutoload(AutoloadPlugin(context), autoload.Name);
         if (_host.GetAutoload(autoload.Name) is not null) throw new InvalidOperationException($"Removing autoload {autoload.Name} failed.");
     }
