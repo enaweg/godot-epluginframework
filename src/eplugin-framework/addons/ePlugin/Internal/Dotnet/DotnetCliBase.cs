@@ -132,10 +132,12 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
     /// <summary>
     /// A NuGet source as the CLI takes it: URLs unchanged, <c>user://</c> made absolute, and local paths like
     /// <see cref="ProjectFile"/>, relative to the project as <c>nuget.config</c> records them (<see cref="NugetConfigManager"/>).
+    /// Local paths have no trailing separator: quoted for the command line, a path ending in a backslash would escape its
+    /// closing quote on Windows.
     /// </summary>
     internal string NugetSource(string source) =>
-        source.StartsWith("user://", System.StringComparison.Ordinal) ? ProjectSettings.GlobalizePath(source)
-        : source.StartsWith("res://", System.StringComparison.Ordinal) || !source.Contains("://", System.StringComparison.Ordinal) ? ProjectFile(source)
+        source.StartsWith("user://", System.StringComparison.Ordinal) ? Path.TrimEndingDirectorySeparator(ProjectSettings.GlobalizePath(source))
+        : source.StartsWith("res://", System.StringComparison.Ordinal) || !source.Contains("://", System.StringComparison.Ordinal) ? Path.TrimEndingDirectorySeparator(ProjectFile(source))
         : source;
 
     public abstract void RebuildSolution();

@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
 using Enaweg.Plugin.Internal.Update;
@@ -74,7 +75,7 @@ internal static class NugetConfigManager
             if (existingAdd is null)
             {
                 AddLines(packageSources,
-                    new XComment($" {UsedByCommentPrefix}{pluginSlug}\" "),
+                    new XComment(UsedByComment([pluginSlug])),
                     new XElement("add", new XAttribute("key", key), new XAttribute("value", normalized)));
             }
             else
@@ -135,12 +136,13 @@ internal static class NugetConfigManager
                 SetUsedByComment(add, usedBy);
             }
 
-            if (packageSources is { HasElements: false })
+            // only when nothing else is left, comments included, e.g. a source the team commented out
+            if (packageSources is not null && packageSources.Nodes().All(IsWhitespace))
             {
                 RemoveLine(packageSources);
             }
 
-            if (root.Nodes().All(IsWhitespace))
+            if (root.Nodes().All(IsWhitespace) && file.Document.Nodes().All(n => n == root || n is XText))
             {
                 File.Delete(configPath);
                 logger?.Log("Removed nuget.config (no managed NuGet sources remain).");
@@ -171,9 +173,42 @@ internal static class NugetConfigManager
         return Normalize(projectRoot, a) is { } first && Normalize(projectRoot, b) is { } second && ComputeKey(first) == ComputeKey(second);
     }
 
+    private static string UsedByComment(string[] usedBy) => $" {UsedByCommentPrefix}{string.Join(",", usedBy.Select(EncodeSlug))}\" ";
+
+    /// <summary>
+    /// A slug as the used-by comment holds it: the list is separated by commas, and an XML comment cannot contain
+    /// <c>--</c> (the writer would turn it into <c>- -</c>), so those characters are percent-encoded.
+    /// </summary>
+    internal static string EncodeSlug(string slug)
+    {
+        var encoded = new StringBuilder(slug.Length);
+        for (var i = 0; i < slug.Length; i++)
+        {
+            encoded.Append(slug[i] switch
+            {
+                '%' => "%25",
+                ',' => "%2C",
+                '"' => "%22",
+                '-' when i > 0 && slug[i - 1] == '-' => "%2D",
+                var c => c.ToString(),
+            });
+        }
+
+        return encoded.ToString();
+    }
+
+    internal static string DecodeSlug(string text) =>
+        Regex.Replace(text, "%(25|2C|22|2D)", match => match.Groups[1].Value switch
+        {
+            "25" => "%",
+            "2C" => ",",
+            "22" => "\"",
+            _ => "-",
+        });
+
     private static void SetUsedByComment(XElement add, string[] usedBy)
     {
-        var text = $" {UsedByCommentPrefix}{string.Join(",", usedBy)}\" ";
+        var text = UsedByComment(usedBy);
         if (CommentBefore(add) is { } comment)
         {
             comment.Value = text;
@@ -203,7 +238,7 @@ internal static class NugetConfigManager
         }
 
         var inner = text.Substring(UsedByCommentPrefix.Length, text.Length - UsedByCommentPrefix.Length - 1);
-        return inner.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return inner.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(DecodeSlug).ToArray();
     }
 
     /// <summary>
@@ -273,8 +308,26 @@ internal static class NugetConfigManager
     /// </summary>
     private static string GetConfigPath(string projectRoot)
     {
-        var paths = ConfigFileNames.Select(name => Path.GetFullPath(Path.Combine(projectRoot, name)));
-        return paths.FirstOrDefault(File.Exists) ?? Path.GetFullPath(Path.Combine(projectRoot, ConfigFileNames[0]));
+        var onDisk = Directory.Exists(projectRoot) ? Directory.EnumerateFiles(projectRoot).Select(Path.GetFileName).OfType<string>().ToArray() : [];
+        return Path.GetFullPath(Path.Combine(projectRoot, ConfigFileName(onDisk, name => File.Exists(Path.Combine(projectRoot, name)))));
+    }
+
+    /// <summary>
+    /// The name of the config file among the files <paramref name="onDisk"/>, spelled as on disk: the file is replaced
+    /// by a rename, which on a case-insensitive file system would otherwise change the case of its name.
+    /// </summary>
+    internal static string ConfigFileName(string[] onDisk, Func<string, bool> exists)
+    {
+        var name = ConfigFileNames.FirstOrDefault(n => onDisk.Contains(n, StringComparer.Ordinal));
+        if (name is not null)
+        {
+            return name;
+        }
+
+        // another spelling is only the config file where the file system ignores case
+        return exists(ConfigFileNames[0])
+            ? onDisk.FirstOrDefault(n => n.Equals(ConfigFileNames[0], StringComparison.OrdinalIgnoreCase)) ?? ConfigFileNames[0]
+            : ConfigFileNames[0];
     }
 
     /// <summary>A config file as read, with what <see cref="Save"/> needs to write it back unchanged apart from the edited nodes.</summary>

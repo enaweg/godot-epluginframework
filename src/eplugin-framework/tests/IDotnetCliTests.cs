@@ -68,7 +68,7 @@ public class IDotnetCliTests
             Assertions.AssertString(new DotnetCli9(new NullLogger(), false, root, null, runner).GodotProjectPath).IsEqual(Path.Combine(root, "MyGame.csproj"));
 
             // the CLI's project, not the editor's or its working directory
-            foreach (var source in new[] { "res://feed", "feed", "./feed" })
+            foreach (var source in new[] { "res://feed", "feed", "./feed", "res://feed/", "feed/" })
                 Assertions.AssertString(cli.NugetSource(source)).IsEqual(Path.Combine(root, "feed"));
             Assertions.AssertString(cli.NugetSource("https://example.org/v3/index.json")).IsEqual("https://example.org/v3/index.json");
             Assertions.AssertString(cli.NugetSource(Path.Combine(root, "other"))).IsEqual(Path.Combine(root, "other"));
