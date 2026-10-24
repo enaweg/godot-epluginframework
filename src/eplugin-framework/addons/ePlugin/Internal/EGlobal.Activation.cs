@@ -398,7 +398,8 @@ internal sealed partial class EGlobal
             foreach (var nuget in recipe.Nugets) TrackRecipeOperation(context, new(RecipeOperationKind.AddNuget, Nuget: nuget), () => ApplyNuget(context, nuget));
             foreach (var project in recipe.Projects) TrackRecipeOperation(context, new(RecipeOperationKind.AddProject, Project: project), () => ApplyProject(context, project));
             foreach (var directory in recipe.Directories) TrackRecipeOperation(context, new(RecipeOperationKind.ShowDirectory, Directory: directory), () => ShowHideHelper.ShowDirectory(context, directory, _host));
-            foreach (var autoload in recipe.Autoloads) TrackRecipeOperation(context, new(RecipeOperationKind.AddAutoload, Autoload: autoload), () => ApplyAutoload(context, autoload));
+            var others = recipe.Autoloads.Count > 0 ? RemainingRecipes(context, recipe) : [];
+            foreach (var autoload in recipe.Autoloads) TrackRecipeOperation(context, new(RecipeOperationKind.AddAutoload, Autoload: autoload), () => ApplyAutoload(context, autoload, others));
         }
         catch (Exception ex)
         {

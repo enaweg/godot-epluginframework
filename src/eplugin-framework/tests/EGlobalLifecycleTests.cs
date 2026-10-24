@@ -285,6 +285,38 @@ public class EGlobalLifecycleTests : IDisposable
     }
 
     [TestCase]
+    public void AnAutoloadTwoPluginsDeclareStaysUntilTheLastOfThemIsDisabled()
+    {
+        _fixture.AddEPlugin("a", b => b.AddAutoload("EventBus", "res://addons/shared/bus.gd"));
+        _fixture.AddEPlugin("b", b => b.AddAutoload("EventBus", "res://addons/shared/bus.gd"));
+        _fixture.Enable("a");
+        _fixture.Enable("b");
+
+        _fixture.Disable("b");
+
+        Assertions.AssertObject(_fixture.State("b")).IsEqual(EEditorPluginState.Deactivated);
+        Assertions.AssertString(_fixture.Host.GetAutoload("EventBus")).IsEqual("res://addons/shared/bus.gd");
+
+        _fixture.Disable("a");
+
+        Assertions.AssertObject(_fixture.Host.GetAutoload("EventBus")).IsNull();
+    }
+
+    [TestCase]
+    public void AnAutoloadAnotherPluginDeclaresWithADifferentPathFailsTheActivation()
+    {
+        _fixture.AddEPlugin("a", b => b.AddAutoload("EventBus", "res://addons/a/bus.gd"));
+        _fixture.AddEPlugin("b", b => b.AddAutoload("EventBus", "res://addons/b/bus.gd"));
+        _fixture.Enable("a");
+
+        _fixture.Enable("b");
+
+        Assertions.AssertObject(_fixture.State("b")).IsEqual(EEditorPluginState.Error);
+        Assertions.AssertString(_fixture.Host.GetAutoload("EventBus")).IsEqual("res://addons/a/bus.gd");
+        Assertions.AssertObject(_fixture.State("a")).IsEqual(EEditorPluginState.Activated);
+    }
+
+    [TestCase]
     public void AProjectReferenceOnlyTheDisabledPluginAddedIsRemovedFromASharedProject()
     {
         _fixture.AddEPlugin("a", b => b.AddProject("lib/Shared.csproj"));
