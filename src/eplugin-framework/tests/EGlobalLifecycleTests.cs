@@ -890,6 +890,33 @@ public class EGlobalLifecycleTests : IDisposable
     }
 
     [TestCase]
+    public void AcceptingTheLicensesOfSeveralPluginsBuildsTheProjectOnce()
+    {
+        foreach (var slug in new[] { "a", "b" })
+        {
+            _fixture.AddEPlugin(slug, b => b.AddNuget($"{slug.ToUpperInvariant()}.Package"), extraConfig: "license_required=true");
+            File.WriteAllText(Path.Combine(_fixture.Addon(slug), "LICENSE"), "Terms");
+        }
+        _fixture.Host.Dialogs = true;
+        _fixture.Enable("a");
+        _fixture.Enable("b");
+        EGlobal.RunPosted();
+        var review = _fixture.Global.PendingLicenseReview!;
+        Assertions.AssertThat(review.Entries.Select(e => e.Slug).ToArray()).ContainsExactlyInAnyOrder("a", "b");
+
+        review.Accept("a");
+        review.Accept("b");
+        _fixture.Global.CompleteLicenseReview(review);
+        EGlobal.RunPosted();
+
+        Assertions.AssertObject(_fixture.State("a")).IsEqual(EEditorPluginState.Activated);
+        Assertions.AssertObject(_fixture.State("b")).IsEqual(EEditorPluginState.Activated);
+        Assertions.AssertThat(_fixture.Operations).ContainsExactly("add-nuget A.Package", "add-nuget B.Package", "build");
+        Assertions.AssertObject(_fixture.Store.GetShared("b")!.State).IsEqual(PersistedPluginState.Activated);
+        Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsFalse();
+    }
+
+    [TestCase]
     public void ARequiredLicenseCannotBeAcceptedWithoutDialogs()
     {
         _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"), extraConfig: "license_required=true");
