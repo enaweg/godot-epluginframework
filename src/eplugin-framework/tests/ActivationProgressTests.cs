@@ -80,6 +80,20 @@ public class ActivationProgressTests
     }
 
     [TestCase]
+    public void PublicScopesTakeANullTextAsEmpty()
+    {
+        // e.g. a plugin compiled without nullable checks
+        using (var scope = EPlugin.Progress.Begin(null!))
+        {
+            scope.Report(null!);
+        }
+
+        var helper = _launched.Single();
+        Assertions.AssertThat(helper.Of(helper.Users[0])).ContainsExactly("TEXT ", "TEXT ", "END");
+        Assertions.AssertBool(_timer!.Disposed).IsTrue();
+    }
+
+    [TestCase]
     public async Task PublicConcurrentOperationsKeepTheirOwnUsersAndHeartbeats()
     {
         var check = new TaskCompletionSource();
@@ -344,6 +358,30 @@ public class ActivationProgressTests
 
         var user = _launched[0].Users[0];
         Assertions.AssertThat(_launched[1].Of(user)).ContainsExactly("TEXT Activating A...", "HEARTBEAT", "END");
+    }
+
+    [TestCase]
+    public void AHelperThatAnotherThreadFoundDeadIsReplacedByTheEditorThread()
+    {
+        // another thread only connects to a running helper; starting one is left to the editor thread
+        var editorThread = true;
+        ActivationProgress.IsEditorThread = () => editorThread;
+        var launch = ActivationProgress.Launch;
+        ActivationProgress.Launch = () => editorThread ? launch() : null;
+        using (ActivationProgress.Begin("Activating A..."))
+        {
+            _launched[0].Age = TimeSpan.FromMinutes(20);
+            _launched[0].Dead = true;
+            // the heartbeat timer notices first, while the editor thread is blocked in a build
+            editorThread = false;
+            _tick!();
+            editorThread = true;
+            ActivationProgress.SetText("Building...");
+            Assertions.AssertInt(_launched.Count).IsEqual(2);
+        }
+
+        var user = _launched[0].Users[0];
+        Assertions.AssertThat(_launched[1].Of(user)).Contains("TEXT Building...", "END");
     }
 
     [TestCase]

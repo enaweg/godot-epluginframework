@@ -56,7 +56,7 @@ Progress feedback is best effort. A helper launch failure, failed command, inacc
 
 When connecting, the framework tries the oldest running compatible helper whose command file it can open. Missing or inaccessible command files are skipped, and records of exited helpers are discarded.
 
-If a connection fails after its helper has run for at least 30 seconds, the framework can replace it immediately and resend the active users' text. A helper that fails earlier is retried only after all current progress users finish and another operation starts. Recovery makes at most two connection/send attempts per command. If the replacement also fails, retries stop until all current users finish and another operation starts.
+If a connection fails after its helper has run for at least 30 seconds, the framework can replace it immediately and resend the active users' text. When a worker thread (a heartbeat or a progress report) notices the failure, it only connects to another running helper; launching the replacement is left to the next command from the editor thread. A helper that fails earlier is retried only after all current progress users finish and another operation starts. Recovery makes at most two connection/send attempts per command. If the replacement also fails, retries stop until all current users finish and another operation starts.
 
 During a C# assembly reload, the old assembly stops its heartbeat timer. Users left behind stop keeping the window open after the normal timeout. A restart hold can keep a user active longer. The helper itself has a bounded idle lifetime, so an abandoned editor does not leave it running indefinitely.
 
@@ -75,7 +75,7 @@ await ImportAsync(progress, cancellationToken);
 progress.Report("Finishing...");
 ```
 
-`Report` updates the step text synchronously and is safe to call from any thread. It does not post through Godot's synchronization context, so feedback can update while the editor thread is blocked. It accepts text; format a percentage into that text when your operation can measure one. The animated bar remains indeterminate.
+`Report` updates the step text synchronously and is safe to call from any thread. It does not post through Godot's synchronization context, so feedback can update while the editor thread is blocked. It accepts text (`null` counts as empty, for callers without nullable checks); format a percentage into that text when your operation can measure one. The animated bar remains indeterminate.
 
 `Begin` always returns a non-null scope, including when the native helper is unavailable. Dispose it with `using` so it ends on success, exceptions, or cancellation. Disposal is idempotent, and reports after disposal are ignored, even if a surrounding scope is still active. The operation owns its cancellation token and result; the progress service does not cancel work or restart the editor.
 

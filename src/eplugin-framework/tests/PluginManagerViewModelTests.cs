@@ -71,6 +71,22 @@ public class PluginManagerViewModelTests
     }
 
     [TestCase]
+    public static void AnUpdateUncheckedByAnErrorIsCheckedOnceTheErrorIsGone()
+    {
+        var candidates = new[] { Candidate("disabled"), Candidate("blocked") };
+        PluginUpdateTarget Target(UpdateCandidate c, bool blocked = false) => new(c.Slug, c.PluginName, c.InstalledVersion, c.SourceUrl, "/unused", IsBlocked: blocked);
+        // disabled in the manager, and blocked by a failed activation
+        var before = new PluginManagerViewModel([], candidates, [Target(candidates[1], blocked: true)], null, _ => []);
+        Assertions.AssertInt(before.Selected.Count).IsEqual(0);
+
+        // enabled again, and retried successfully
+        var after = new PluginManagerViewModel([], candidates, candidates.Select(c => Target(c)).ToArray(), null, _ => []);
+        after.KeepUnselected(before);
+
+        Assertions.AssertThat(after.Selected.Select(c => c.Slug).ToArray()).ContainsExactly("disabled", "blocked");
+    }
+
+    [TestCase]
     public static void MissingTargetCannotBeAppliedAndFrameworkAnnouncesRestart()
     {
         var model = new PluginManagerViewModel([], [Candidate("missing"), Candidate("ePlugin")],

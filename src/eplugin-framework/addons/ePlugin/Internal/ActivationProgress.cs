@@ -266,6 +266,8 @@ internal static class ActivationProgress
         _mayStart = false;
         try { _helper = Launch(); }
         catch (Exception) { _helper = null; }
+        // Another thread only connects to a running helper: starting one is still left to the editor thread.
+        if (_helper is null && !IsEditorThread()) _mayStart = true;
         try
         {
             foreach (var user in Users)
@@ -282,11 +284,12 @@ internal static class ActivationProgress
         }
     }
 
-    private static void Text(User? user, string text)
+    private static void Text(User? user, string? text)
     {
         if (user is null || user.Ended) return;
-        user.Text = text;
-        Send(user, Encode(text));
+        // A plugin compiled without nullable checks may pass null; failing would leak the user that Begin registered.
+        user.Text = text ?? "";
+        Send(user, Encode(user.Text));
     }
 
     private static string Encode(string text) => "TEXT " + Convert.ToBase64String(Encoding.UTF8.GetBytes(text));
@@ -300,7 +303,7 @@ internal static class ActivationProgress
             Connect();
             if (_helper is null)
             {
-                if (!_mayStart) return;
+                if (!_mayStart || !IsEditorThread()) return;
                 continue;
             }
             try

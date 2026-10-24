@@ -422,7 +422,9 @@ disallows unmapped members, and a failed self-update rolls back to it, so never 
 without raising `schemaVersion` (`PluginStateStoreTests.FilesOf090AreReadAndWrittenBackInAFormItCanRead` lists them).
 Later readers skip unknown fields and write them back (`JsonExtensionData`); a missing `plugins`/`attempts` list or
 another `schemaVersion` still makes the store read-only. A shared file that changed on disk since it was read (a git pull) is read again before a write
-(`PluginStateStore.Rebase`), which refuses only when the same entries changed there too. Only an update's acknowledgement sets `lastCompletedAttemptId` (recovery and rollback compare
+(`PluginStateStore.Rebase`), which refuses only when the same entries changed there too. Licenses and welcome pages
+recorded while the file could not be written stay recorded for the session, also when it is read again, and the next
+write that succeeds saves them. Only an update's acknowledgement sets `lastCompletedAttemptId` (recovery and rollback compare
 it with the journal); lifecycle completions keep it and skip writing the shared file when no entry changed, because
 the file is committed and shared by the team.
 `EGlobal.Licenses.cs` gates `EnableEPlugin` before `JoinTransition` (skipped for manual retries and update reconciles)
