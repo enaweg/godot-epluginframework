@@ -664,6 +664,33 @@ public class EGlobalLifecycleTests : IDisposable
     }
 
     [TestCase]
+    public void ADeactivationOfAPluginThatLostItsVersionIsRetriedAsADeactivation()
+    {
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"));
+        _fixture.Enable("app");
+        // e.g. its author edited plugin.cfg; an assembly reload reads it again
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"), version: "");
+        _fixture.Context("app")!.RefreshMetadata(EditorPluginExtensions.ReadMetadata(Path.Combine(_fixture.Addon("app"), "plugin.cfg")));
+
+        _fixture.Disable("app");
+
+        Assertions.AssertString(_fixture.Store.GetLocal("app")!.Reason).IsEqual("invalid_plugin_version");
+        Assertions.AssertObject(_fixture.Store.GetLocal("app")!.TargetState).IsEqual(PersistedPluginState.Deactivated);
+        // its recipe is still installed, so giving up on it cannot just drop the attempt
+        Assertions.AssertBool(_fixture.Global.DisableFailedPlugin("app")).IsTrue();
+        Assertions.AssertObject(_fixture.Store.GetLocal("app")).IsNotNull();
+
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"), version: "1.1.0");
+        var start = _fixture.Operations.Count;
+        _fixture.Global.RetryFailedPlugins();
+
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsFalse();
+        Assertions.AssertThat(OperationsSince(start)).ContainsExactly("remove-nuget App.Package", "build");
+        Assertions.AssertObject(_fixture.Store.GetShared("app")!.State).IsEqual(PersistedPluginState.Deactivated);
+        Assertions.AssertObject(_fixture.Store.GetLocal("app")).IsNull();
+    }
+
+    [TestCase]
     public void RetryingADeactivationDisablesAPluginTheEditorStillHasEnabled()
     {
         // e.g. the deactivation failed and the editor restarted with the plugin still enabled
