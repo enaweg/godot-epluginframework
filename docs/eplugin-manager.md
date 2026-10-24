@@ -16,9 +16,10 @@ Select a plugin to see its description, status, author, documentation and source
 
 ## Actions
 
-The buttons at the top right of the manager are icons: **Check for updates** and **Settings**. Hover over one to see its name and what it does. While plugins need attention, a button before them says how many and opens the [Needs attention](#needs-attention) dialog.
+The buttons at the top right of the manager are icons: **Install from ZIP**, **Check for updates** and **Settings**. Hover over one to see its name and what it does. While plugins need attention, a button before them says how many and opens the [Needs attention](#needs-attention) dialog.
 
 - **On** enables or disables the selected plugin. Enabling an ePlugin installs its recipe and required dependencies. Plugins that ask for their [license](plugin-licenses.md) to be accepted show it first. Once installed, a plugin shows its [welcome page](plugin-welcome.md) if it has one and it was not shown for the project yet. Disabling a plugin also disables plugins that require it. The manager refreshes the list after toggles. Disabling ePlugin Framework itself requires confirmation because it closes the manager.
+- **Install from ZIP** installs a plugin from a ZIP file, like **Import** in the editor's Asset Library tab. See [Install a plugin from a ZIP file](#install-a-plugin-from-a-zip-file).
 - **Check for updates** checks immediately regardless of the scheduled interval and indexes local directories again.
 - **Settings** opens ePlugin's settings, in three tabs (see [Settings](#settings)).
 - **Update** installs the checked updates after validation and confirmation. See [Updating plugins](updating-plugins.md). Independent plugins are installed one after another, so a plugin that fails is rolled back without the others; a build failure is rolled back without asking, unless the [update settings](updating-plugins.md#update-settings) keep the update (see **Kept update** below). The manager stays open and reports the installed versions, and the plugins that were rolled back or skipped with their reason, when the update finishes; an update that restarts the editor reopens it afterwards.
@@ -36,6 +37,18 @@ Godot editors using compatible versions of ePlugin share one progress window, al
 Progress feedback is best effort. If the helper is unavailable or stops responding, plugin work continues and the manager still reports the outcome. Editors using incompatible versions of the progress helper use separate windows. See [Progress dialog](progress-dialog.md) for usage, timing, restart handoff, and failure handling.
 
 ![The ePlugin Framework progress window while Sample Dependant Plugin is activated](images/activation-progress.png)
+
+## Install a plugin from a ZIP file
+
+**Install from ZIP** opens a file dialog for a ZIP file, such as one downloaded from the Godot Asset Library or a plugin's release page. ePlugin installs only plugins its [updater](updating-plugins.md) can update later, so it reads the ZIP file like a package in a [local directory](updating-plugins.md#local-directories):
+
+- A plugin is the folder of the ZIP file's shallowest `plugin.cfg`, which must be named like the plugin's folder in `res://addons`, for example `addons/my_plugin/` or `my_plugin/` (also inside a wrapper folder such as `my_plugin-main/`). Its `plugin.cfg` needs a version the updater can compare, such as `1.2.0`. Deeper `plugin.cfg` files are sub-plugins and are installed with it.
+- A [GDExtension without plugin.cfg](gdextension-plugins.md#gdextensions-without-plugincfg) is the `addons/<name>/` folder that holds its `.gdextension` files. Its version stays unknown until an update installs a release of it.
+- A ZIP file with several plugins or GDExtensions, a `plugin.cfg` at its root, or neither is refused, and so is any file the updater would refuse (unsafe paths, links, size limits, a `project.godot`, `.csproj` or `nuget.config`, a GDExtension the editor cannot load). Files outside the plugin's folder, such as a README or a demo project next to `addons/`, are not installed.
+
+When no plugin of that name is installed, ePlugin extracts and validates the ZIP file, then shows what it installs: the name, version, type, target folder, the files left out, and any warnings. **Install** moves the plugin to `res://addons/<name>` and lists it. A folder of that name that is not a plugin, such as a script library, is never replaced. The plugin is installed disabled; enable it with **On**, which shows its [license](plugin-licenses.md) first if it asks for one, installs an ePlugin's recipe and shows its [welcome page](plugin-welcome.md). A plugin with C# code is built right away, so the editor loads it as an ePlugin or C# plugin; if the project does not build with it, it is removed again and the status line says why (its build log stays in `.godot/eplugin/updates` until an editor start at least six hours later).
+
+When the plugin is installed already, the ZIP file installs its version over the installed one, exactly like a version chosen with **Version** in its details: it asks to update, downgrade or reinstall, and uses the same validation, backup and rollback. Like **Version**, this works only for an enabled plugin, never downgrades ePlugin Framework, and needs a `plugin.cfg` in the ZIP file, because a GDExtension without one names no version to compare.
 
 ## Needs attention
 

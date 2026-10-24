@@ -364,7 +364,10 @@ reviewing and installing) are in `UpdateFlow`, which the dialog only displays; i
 `UpdateFlowTests`. Decisions about a few plugins get a focused dialog that lists only those plugins, not the
 manager's list: `UpdateReviewDialog` (pure model `UpdateReview`) opens inside `UpdateFlow.InstallAsync` after staging
 when a package has a warning, moves to another update host (unchecked until the user trusts it) or was refused, and
-installs the checked and unlisted packages or nothing. `AttentionDialog` (pure model `AttentionItem`/`PluginAttention`,
+installs the checked and unlisted packages or nothing. **Install from ZIP** (`EPluginManagerDialog.Zip.cs`, pure
+`ZipInstall`) installs a ZIP file of a listed plugin like a version from its details and a new add-on after its
+`InstallConfirm` (`AddonArchive`, `AddonInstaller`, `EGlobal.AddonInstall.cs`; see the update system internals).
+`AttentionDialog` (pure model `AttentionItem`/`PluginAttention`,
 child of the manager scene like `SettingsDialog`) lists plugins that `NeedsAttention` with Retry (`EGlobal.RetryFailedPlugins`
 with slugs, widened by `RetryScope` to the same attempt and failed hard dependencies), Disable (`DisableFailedPlugin`, a
 manual retry as a deactivation), Roll back (a kept update), Open log and Retry all; the manager carries out the
