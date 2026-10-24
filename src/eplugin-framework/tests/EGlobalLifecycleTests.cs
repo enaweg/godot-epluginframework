@@ -232,6 +232,34 @@ public class EGlobalLifecycleTests : IDisposable
     }
 
     [TestCase]
+    public void ADependantWhoseOptionalRecipeASiblingRemovedIsStillDisabled()
+    {
+        _fixture.AddEPlugin("base", b => b.AddNuget("Base.Package"));
+        _fixture.AddEPlugin("lib", b => b.AddNuget("Lib.Package").AddPluginDependency("base"));
+        _fixture.AddEPlugin("app", b => b
+            .AddNuget("App.Package")
+            .AddPluginDependency("base")
+            .AddOptionalPluginDependency("lib", null, optional => optional.AddNuget("App.Lib")));
+        _fixture.Enable("lib");
+        _fixture.Enable("app");
+        Assertions.AssertThat(_fixture.Operations).Contains("add-nuget App.Lib");
+        var start = _fixture.Operations.Count;
+
+        // lib is disabled first; removing app's recipe for it makes app join to stay activated, then app is disabled too
+        _fixture.Disable("base");
+
+        foreach (var slug in new[] { "base", "lib", "app" })
+        {
+            Assertions.AssertObject(_fixture.State(slug)).IsEqual(EEditorPluginState.Deactivated);
+            Assertions.AssertObject(_fixture.Store.GetShared(slug)!.State).IsEqual(PersistedPluginState.Deactivated);
+            Assertions.AssertObject(_fixture.Store.GetLocal(slug)).IsNull();
+        }
+
+        Assertions.AssertThat(OperationsSince(start)).ContainsExactly(
+            "remove-nuget Lib.Package", "remove-nuget App.Lib", "remove-nuget App.Package", "remove-nuget Base.Package", "build");
+    }
+
+    [TestCase]
     public void OptionalRecipesFollowTheOptionalPluginInEitherOrder()
     {
         _fixture.AddPlainPlugin("extra", "2.0");
