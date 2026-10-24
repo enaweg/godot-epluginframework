@@ -45,6 +45,10 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private Button _installVersion = null!;
     private Label _versionHint = null!;
     private ConfirmationDialog _versionConfirm = null!;
+    private Button _installZip = null!;
+    private FileDialog _zipDialog = null!;
+    private ConfirmationDialog _installConfirm = null!;
+    private RichTextLabel _installText = null!;
     // The selected plugin's update kept with build errors, read when its details are shown.
     private UpdateJournal? _keptUpdate;
     private SettingsDialog _settings = null!;
@@ -113,6 +117,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _versionSeparator = GetNode<Control>("%VersionSeparator"); _versionRow = GetNode<Control>("%VersionRow");
         _versionSelect = GetNode<OptionButton>("%VersionSelect"); _installVersion = GetNode<Button>("%InstallVersionButton");
         _versionHint = GetNode<Label>("%VersionHint"); _versionConfirm = GetNode<ConfirmationDialog>("%VersionConfirm");
+        _installZip = GetNode<Button>("%InstallZipButton"); _zipDialog = GetNode<FileDialog>("%InstallZipDialog");
+        _installConfirm = GetNode<ConfirmationDialog>("%InstallConfirm"); _installText = GetNode<RichTextLabel>("%InstallText");
         _settings = GetNode<SettingsDialog>("%SettingsDialog"); _settings.Initialize(global);
         _attention = GetNode<AttentionDialog>("%AttentionDialog"); _attention.Initialize();
         _locationRow = GetNode<Control>("%LocationRow"); _locationLink = GetNode<LinkButton>("%LocationLink"); _openFolder = GetNode<Button>("%OpenFolderButton");
@@ -122,7 +128,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         // Column titles and sizing are not scene properties of Tree.
         _tree.SetColumnTitle(EnabledColumn, "On"); _tree.SetColumnTitle(NameColumn, "Plugin"); _tree.SetColumnTitle(VersionColumn, "Version");
         _tree.SetColumnExpand(EnabledColumn, false); _tree.SetColumnExpand(NameColumn, false); _tree.SetColumnExpand(VersionColumn, true);
-        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm }) EditorWindows.Prepare(window, _signals, this, nameof(QueueWindowIcons));
+        foreach (var window in Windows) EditorWindows.Prepare(window, _signals, this, nameof(QueueWindowIcons));
         var scale = EditorWindows.Scale;
         _tree.SetColumnCustomMinimumWidth(EnabledColumn, (int)(40 * scale));
         _tree.SetColumnCustomMinimumWidth(VersionColumn, (int)(VersionMinimumWidth * scale));
@@ -145,6 +151,10 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         {
             if (_pendingVersion is { } version) Install(new([version], true, _pendingDowngrade, _pendingReinstall));
         }));
+        _signals.Connect(_installZip, BaseButton.SignalName.Pressed, Callable.From(ChooseZip));
+        _signals.Connect(_zipDialog, FileDialog.SignalName.FileSelected, Callable.From<string>(ZipChosen));
+        _signals.Connect(_installConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(ConfirmAddon));
+        _signals.Connect(_installConfirm, AcceptDialog.SignalName.Canceled, Callable.From(CancelAddon));
         _signals.Connect(_tree, Tree.SignalName.ItemSelected, Callable.From(() => ShowDetails(SlugOf(_tree.GetSelected()))));
         _signals.Connect(_tree, Tree.SignalName.ItemActivated, Callable.From(OpenRelease));
         _signals.Connect(_tree, Tree.SignalName.ButtonClicked, Callable.From<TreeItem, long, long, long>((item, _, _, _) => item.Select(NameColumn)));
@@ -154,11 +164,12 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _signals.Connect(this, Window.SignalName.CloseRequested, Callable.From(Cancel));
     }
 
+    private Window[] Windows => [this, _versionConfirm, _disableFrameworkConfirm, _zipDialog, _installConfirm];
+
     private void QueueWindowIcons() => CallDeferred(nameof(RefreshWindowIcons));
     private void RefreshWindowIcons()
     {
-        foreach (var window in new Window[] { this, _versionConfirm, _disableFrameworkConfirm })
-            EditorWindows.ApplyIcon(window);
+        foreach (var window in Windows) EditorWindows.ApplyIcon(window);
     }
 
     private void RefreshTheme()
@@ -172,6 +183,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _detailsText.AddThemeStyleboxOverride("normal", new StyleBoxEmpty { ContentMarginLeft = inset });
         _ePluginIcon = EditorIcons.EPlugin; _logo = EditorIcons.Logo; _updateIcon = EditorIcons.UpdateIndicator;
         _check.Icon = EditorIcons.Rescan;
+        _installZip.Icon = EditorIcons.Install;
         _attentionButton.Icon = EditorIcons.Retry;
         GetNode<Button>("%SettingsButton").Icon = EditorIcons.Settings;
         _settings.RefreshTheme();
@@ -388,6 +400,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         GetCancelButton().Disabled = _swapping || _pluginOperation.IsBusy || _global.IsChangingPlugins || _reloadPending;
         GetCancelButton().Visible = _installing && !_swapping;
         _check.Disabled = busy;
+        _installZip.Disabled = busy;
         _attentionButton.Visible = _attentionItems.Count > 0;
         _attentionButton.Text = PluginAttention.ButtonText(_attentionItems.Count);
         _attentionButton.Disabled = busy;

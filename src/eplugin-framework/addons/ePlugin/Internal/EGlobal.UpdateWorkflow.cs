@@ -31,5 +31,10 @@ internal sealed partial class EGlobal : IUpdateWorkflowHost
     Task<IReadOnlyList<UpdateGroupResult>> IUpdateWorkflowHost.ApplyUpdatesAsync(IReadOnlyList<ValidatedPackage> packages,
         string directory, bool trustChangedSources, bool askOnBuildFailure) =>
         ApplyUpdatesAsync(packages, directory, trustChangedSources, askOnBuildFailure);
+
+    Task<(ValidatedPackage Package, string Directory)> IUpdateWorkflowHost.StageNewAddonAsync(AddonArchive archive, CancellationToken ct) =>
+        StageNewAddonAsync(archive, ct);
+
+    AddonInstallResult IUpdateWorkflowHost.InstallNewAddon(ValidatedPackage package, string directory) => InstallNewAddon(package, directory);
 }
 #endif

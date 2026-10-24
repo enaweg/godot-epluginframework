@@ -234,6 +234,25 @@ one into place before the journal is saved; when a crash leaves neither in place
 the new copy with its own files (`ProjectBackup.Find`). Reconcile leaves the recipes of plugins in another active journal or rolled back since the assembly
 was loaded alone (`UntouchedRecipes`).
 
+## Installing new add-ons
+
+**Install from ZIP** in the ePlugin Manager (`EPluginManagerDialog.Zip.cs`, pure `ZipInstall`) reads the chosen file with
+`AddonArchive.Read`, which applies the rules staging uses with `requireSlugFolder` (the root folder of the shallowest
+`plugin.cfg` names the slug, as for local packages; a GDExtension without `plugin.cfg` is the `addons/<slug>/` folder of
+its `.gdextension` files) and refuses what the updater could not update later, such as a `plugin.cfg` without a
+comparable version. A ZIP file of a listed plugin becomes a `VersionOption` with a `LocalZipPackageRef` and goes through
+`UpdateFlow.InstallAsync` like a version chosen in the details, so the transaction above applies unchanged.
+
+A new add-on has no transaction: nothing in the project refers to it and it stays disabled, so there is no recipe,
+backup, journal or plugin state attempt. `EGlobal.StageNewAddonAsync` extracts it into a transaction folder's staging and
+validates it with `ValidationContext.NewInstall`: R6 only checks that the version is comparable, R7 to R9, R21 and R24
+compare with an installed version and are left out, and R26 refuses an existing `res://addons/<slug>`. After the user confirmed it, `AddonInstaller.Install`
+(`EGlobal.InstallNewAddon`) checks the folder again, moves the staged folder into place in one step, builds through
+`ICheckedDotnetCli.TryBuild` when the package has C# code, and scans the file system. A failed build moves the folder
+back; `BuildKeepingOutput` kept the editor's assembly, so nothing reloads. The build log stays in the staging folder,
+which `UpdateJournals.AbandonedStaging` deletes later. A successful build is loaded by the editor's assembly reload,
+which the manager waits for like after an activation.
+
 ## Plugin state attempts
 
 A group owns one `PluginStateStore` attempt. Write its local marker before side effects; acknowledge all versions once

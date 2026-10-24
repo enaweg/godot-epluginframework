@@ -14,8 +14,12 @@ internal sealed record Finding(string Code, FindingSeverity Severity, string Mes
 /// The user explicitly chose the installed version again, e.g. to get new commits of a pinned git branch or to repair
 /// changed addon files.
 /// </param>
+/// <param name="NewInstall">
+/// The package installs an add-on that is not in the project yet, chosen as a ZIP file in the ePlugin Manager:
+/// <paramref name="Installed"/> describes the folder it goes to, with no version, and nothing is compared with it.
+/// </param>
 internal sealed record ValidationContext(PluginUpdateTarget Installed, UpdateCandidate Candidate, string StagingDir, bool AllowDowngrade = false,
-    bool AllowReinstall = false);
+    bool AllowReinstall = false, bool NewInstall = false);
 internal interface IAddonRule { IEnumerable<Finding> Check(ValidationContext context); }
 /// <param name="Kind">The kind whose workflow installs the package, see <see cref="PluginKinds.ForPackage"/>.</param>
 internal sealed record ValidatedPackage(UpdateCandidate Candidate, string StagingDir, SemVer NewVersion,
@@ -53,7 +57,7 @@ internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules 
             { Add("R2", FindingSeverity.Error, "Cannot parse staged plugin.cfg: " + ex.Message); }
             foreach (var key in new[] { "name", "version", "script" })
                 if (string.IsNullOrWhiteSpace(metadata.GetValueOrDefault(key))) Add("R3", FindingSeverity.Error, $"plugin.cfg has no {key}.");
-            if (addon) Add("R24", FindingSeverity.Info, "The new version has a plugin.cfg, so it becomes a plugin. Enable it in the ePlugin Manager after the update.");
+            if (addon && !context.NewInstall) Add("R24", FindingSeverity.Info, "The new version has a plugin.cfg, so it becomes a plugin. Enable it in the ePlugin Manager after the update.");
         }
         var script = metadata.GetValueOrDefault("script") ?? "";
         try { if (!configless && !File.Exists(PackageFiles.Inside(stage, script))) Add("R4", FindingSeverity.Error, "Plugin script is missing."); }
@@ -72,7 +76,15 @@ internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules 
         // because it cannot finish or recover the update transaction that installs it.
         var mislabeled = validNew && validOld && validAnnounced && announced.CompareTo(old) > 0 && version.CompareTo(old) <= 0 &&
                          !context.AllowReinstall && !context.AllowDowngrade && (version.CompareTo(old) == 0 || installed.Slug != "ePlugin");
-        if (addon && string.IsNullOrWhiteSpace(installed.InstalledVersion))
+        if (context.NewInstall)
+        {
+            if (configless) Add("R6", FindingSeverity.Info, "The add-on has no plugin.cfg, so its version stays unknown until an update installs a release of it.");
+            else if (!validNew) Add("R6", FindingSeverity.Error, $"Package plugin.cfg version '{packageVersion ?? "missing"}' cannot be compared.");
+            // Another add-on in the folder would be replaced without a backup.
+            if (Directory.Exists(installed.Directory) || File.Exists(installed.Directory))
+                Add("R26", FindingSeverity.Error, $"res://addons/{installed.Slug} exists already; install the ZIP file over the installed plugin instead.");
+        }
+        else if (addon && string.IsNullOrWhiteSpace(installed.InstalledVersion))
         {
             // Installed by hand: ePlugin never recorded its version, so any version may replace it.
             if (validNew) Add("R6", FindingSeverity.Info, $"The installed version is unknown, because the add-on has no plugin.cfg and ePlugin did not install it. Installing {version} replaces it.");
@@ -96,13 +108,13 @@ internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules 
             else Add("R6", FindingSeverity.Info, $"Downgrade from {installed.InstalledVersion} to {version}.");
         }
         // The R6 warning of a mislabeled release already says how the versions differ.
-        if (validNew && validAnnounced && version.CompareTo(announced) != 0 && !mislabeled)
+        if (validNew && validAnnounced && version.CompareTo(announced) != 0 && !mislabeled && !context.NewInstall)
             Add("R7", FindingSeverity.Warning, "Package version differs from the announced version.");
         // An add-on's name is its slug or the built-in list's name, never one from its files.
-        if (!addon && metadata.GetValueOrDefault("name") != installed.Name) Add("R8", FindingSeverity.Warning, "Plugin name changed.");
+        if (!addon && !context.NewInstall && metadata.GetValueOrDefault("name") != installed.Name) Add("R8", FindingSeverity.Warning, "Plugin name changed.");
         var newUrl = metadata.GetValueOrDefault("update_url");
         var ownRepository = UpdateSourceFactory.Repository(installed.UpdateUrl);
-        if (newUrl != installed.UpdateUrl)
+        if (newUrl != installed.UpdateUrl && !context.NewInstall)
         {
             // Checks keep using an update site the project sets, so the new plugin.cfg source is not trusted for anything.
             // Otherwise later updates come from the new one; another repository may belong to someone else, also on the
@@ -125,7 +137,8 @@ internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules 
         var installedFiles = Directory.Exists(installed.Directory) ? PackageFiles.Files(installed.Directory).ToArray() : [];
         // What differs between plugin kinds, e.g. the native libraries of a GDExtension plugin.
         var kind = PluginKinds.ForPackage(installed, script, files, installedFiles);
-        findings.AddRange(PluginKinds.Workflow(kind).Validate(new(context, files, installedFiles)));
+        // R21 says how an update loads new native libraries; a new add-on has no old ones to replace.
+        findings.AddRange(PluginKinds.Workflow(kind).Validate(new(context, files, installedFiles)).Where(f => !context.NewInstall || f.Code != "R21"));
         long bytes = 0;
         foreach (var file in files)
         {

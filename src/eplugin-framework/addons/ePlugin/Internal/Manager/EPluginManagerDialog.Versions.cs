@@ -112,6 +112,13 @@ internal sealed partial class EPluginManagerDialog
         var row = _selectedSlug is null ? null : _model.Find(_selectedSlug);
         var option = SelectedVersion();
         if (row is null || option?.Candidate is null || PluginManagerViewModel.VersionChangeBlocked(row, option) is not null || Busy) return;
+        ConfirmVersion(row, option);
+    }
+
+    /// <summary>Asks before installing <paramref name="option"/>, a listed version or a ZIP file chosen with Install from ZIP.</summary>
+    private void ConfirmVersion(PluginRow row, VersionOption option)
+    {
+        if (option.Candidate is null) return;
         // The listed candidate was built when the list was loaded; the installed version may have changed since.
         _pendingVersion = option.Candidate with { InstalledVersion = row.Plugin.Version };
         _pendingDowngrade = option.IsDowngrade; _pendingReinstall = option.IsReinstall;

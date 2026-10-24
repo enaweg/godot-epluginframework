@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Enaweg.Plugin.Internal.Kinds;
 using Enaweg.Plugin.Internal.Licenses;
 using Enaweg.Plugin.Internal.Update;
 
@@ -27,6 +28,11 @@ internal interface IUpdateWorkflowHost
 
     Task<IReadOnlyList<UpdateGroupResult>> ApplyUpdatesAsync(IReadOnlyList<ValidatedPackage> packages, string directory,
         bool trustChangedSources, bool askOnBuildFailure);
+
+    /// <summary>Extracts and validates the add-on of a ZIP file that is not in the project yet.</summary>
+    Task<(ValidatedPackage Package, string Directory)> StageNewAddonAsync(AddonArchive archive, CancellationToken ct);
+
+    AddonInstallResult InstallNewAddon(ValidatedPackage package, string directory);
 }
 
 /// <summary>What to install: the checked updates, or one version chosen in a plugin's details.</summary>
@@ -44,7 +50,9 @@ internal enum InstallStep
     /// <summary>Staging or installing failed before an outcome; addon files were not changed unless a journal says so.</summary>
     Failed,
     /// <summary>The manager went away meanwhile; nothing is shown.</summary>
-    Abandoned
+    Abandoned,
+    /// <summary>A new add-on was staged from a ZIP file and waits for the user to confirm its installation.</summary>
+    Staged
 }
 
 /// <param name="Notice">The status line to show; null for none.</param>
@@ -101,6 +109,9 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
 
     /// <summary>Packages of the staged batch that were refused; the others are installed without them.</summary>
     public IReadOnlyList<RefusedPackage> Refused { get; private set; } = [];
+
+    /// <summary>The new add-on staged from a ZIP file, waiting for the user's confirmation; null when there is none.</summary>
+    public ValidatedPackage? StagedAddon { get; private set; }
 
     private string? _directory;
 
@@ -291,6 +302,71 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
     }
 
     /// <summary>
+    /// Extracts and validates the add-on of a ZIP file that is not in the project yet. A package that can be installed
+    /// stays staged as <see cref="StagedAddon"/> until <see cref="InstallAddon"/> or <see cref="Clear"/>.
+    /// </summary>
+    public async Task<InstallOutcome> StageAddonAsync(AddonArchive archive, InstallView view, CancellationToken ct)
+    {
+        Clear();
+        var text = $"Extracting and validating {archive.Name}...";
+        view.Status(text);
+        try
+        {
+            (ValidatedPackage Package, string Directory) staged;
+            using (beginProgress(text)) staged = await host.StageNewAddonAsync(archive, ct);
+            _directory = staged.Directory;
+            if (!view.Alive())
+            {
+                Clear();
+                return new(InstallStep.Abandoned);
+            }
+
+            if (!staged.Package.IsValid)
+            {
+                var reasons = string.Join("; ", staged.Package.Findings.Where(f => f.Severity == FindingSeverity.Error).Select(f => f.Message));
+                Clear();
+                return new(InstallStep.Failed, $"{archive.Name} cannot be installed: {reasons}", true);
+            }
+
+            StagedAddon = staged.Package;
+            return new(InstallStep.Staged);
+        }
+        catch (OperationCanceledException)
+        {
+            Clear();
+            return new(InstallStep.Canceled, "Installation canceled. Addon files were not changed.");
+        }
+        catch (Exception ex)
+        {
+            Clear();
+            return new(InstallStep.Failed, $"{archive.Name} cannot be installed: {ex.Message}", true);
+        }
+    }
+
+    /// <summary>Installs the confirmed <see cref="StagedAddon"/>; the plugin list has to be read again afterwards.</summary>
+    public InstallOutcome InstallAddon()
+    {
+        var package = StagedAddon ?? throw new InvalidOperationException("No add-on is staged.");
+        var candidate = package.Candidate;
+        try
+        {
+            var result = host.InstallNewAddon(package, _directory!);
+            // The staging folder holds the log of the failed build; the start that deletes abandoned ones removes it.
+            if (result.BuildLog is not null) _directory = null;
+            Clear();
+            if (!result.Installed) return new(InstallStep.Failed, result.Failure, true, true);
+            var version = candidate.NewVersion.Length == 0 ? "" : " " + candidate.NewVersion;
+            return new(InstallStep.Installed, $"Installed {candidate.PluginName}{version} into res://addons/{candidate.Slug}." +
+                (package.Kind == PluginKind.GDExtensionAddon ? "" : " Enable it with its On check box."), Refresh: true);
+        }
+        catch (Exception ex)
+        {
+            Clear();
+            return new(InstallStep.Failed, $"Installing {candidate.PluginName} failed: {ex.Message}", true, true);
+        }
+    }
+
+    /// <summary>
     /// Drops the staged batch and its staging directory, unless an installation already journaled it. A directory that
     /// cannot be deleted now, e.g. while a scanner holds a file open, is left to the start that deletes abandoned ones.
     /// </summary>
@@ -304,6 +380,7 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
 
         _directory = null;
         Staged = null;
+        StagedAddon = null;
         Refused = [];
         Request = null;
     }

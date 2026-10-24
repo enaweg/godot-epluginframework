@@ -282,5 +282,96 @@ public class PluginManagerDialogTests : IDisposable
         _dialog.EmitSignal(AcceptDialog.SignalName.Canceled);
         Assertions.AssertBool(_dialog.Visible).IsFalse();
     }
+
+    /// <summary>A ZIP file of one plugin, as the Godot Asset Library has them.</summary>
+    private string Zip(string slug, string version)
+    {
+        var path = Path.Combine(_fixture.Root, $"{slug}-{version}.zip");
+        using var zip = ZipFile.Open(path, ZipArchiveMode.Create);
+        foreach (var (name, content) in new[]
+                 {
+                     ($"{slug}-main/addons/{slug}/plugin.cfg", $"[plugin]\nname=\"{slug}\"\nversion=\"{version}\"\nscript=\"plugin.gd\"\n"),
+                     ($"{slug}-main/addons/{slug}/plugin.gd", "extends EditorPlugin"),
+                     ($"{slug}-main/README.md", "read me")
+                 })
+        {
+            using var writer = new StreamWriter(zip.CreateEntry(name).Open());
+            writer.Write(content);
+        }
+        return path;
+    }
+
+    [TestCase]
+    public async Task AZipFileOfANewPluginIsInstalledDisabledOnceConfirmed()
+    {
+        _fixture.Global.InitializeUpdateJournals();
+        _dialog.Open();
+
+        await _dialog.InstallZipAsync(Zip("fresh", "1.2.0"));
+
+        var confirm = _dialog.GetNode<ConfirmationDialog>("%InstallConfirm");
+        Assertions.AssertBool(confirm.Visible).IsTrue();
+        Assertions.AssertString(_dialog.GetNode<RichTextLabel>("%InstallText").Text).StartsWith("Install [b]fresh 1.2.0[/b] into res://addons/fresh?");
+        // nothing is installed before the confirmation
+        Assertions.AssertBool(Directory.Exists(_fixture.Addon("fresh"))).IsFalse();
+
+        confirm.EmitSignal(AcceptDialog.SignalName.Confirmed);
+        await Frames();
+
+        Assertions.AssertBool(File.Exists(Path.Combine(_fixture.Addon("fresh"), "plugin.gd"))).IsTrue();
+        Assertions.AssertBool(File.Exists(Path.Combine(_fixture.Addon("fresh"), "README.md"))).IsFalse();
+        Assertions.AssertBool(Row("fresh").IsChecked(EnabledColumn)).IsFalse();
+        Assertions.AssertBool(_fixture.Host.IsPluginEnabled("fresh")).IsFalse();
+        Assertions.AssertString(Status).StartsWith("Installed fresh 1.2.0 into res://addons/fresh.");
+        Assertions.AssertString(_dialog.GetNode<Label>("%DetailsName").Text).Contains("fresh");
+        Assertions.AssertThat(_fixture.Operations).NotContains("build");
+    }
+
+    [TestCase]
+    public async Task CancelingTheConfirmationInstallsNothing()
+    {
+        _fixture.Global.InitializeUpdateJournals();
+        _dialog.Open();
+        await _dialog.InstallZipAsync(Zip("fresh", "1.2.0"));
+
+        _dialog.GetNode<ConfirmationDialog>("%InstallConfirm").EmitSignal(AcceptDialog.SignalName.Canceled);
+
+        Assertions.AssertBool(Directory.Exists(_fixture.Addon("fresh"))).IsFalse();
+        Assertions.AssertString(Status).StartsWith("Installation canceled.");
+        Assertions.AssertBool(Directory.EnumerateFileSystemEntries(Path.Combine(_fixture.Root, ".godot", "eplugin", "updates")).Any()).IsFalse();
+    }
+
+    [TestCase]
+    public async Task AZipFileOfAnInstalledPluginIsInstalledLikeAVersionOfIt()
+    {
+        _fixture.Global.InitializeUpdateJournals();
+        _dialog.Open();
+
+        await _dialog.InstallZipAsync(Zip("tool", "3.0.0"));
+
+        var confirm = _dialog.GetNode<ConfirmationDialog>("%VersionConfirm");
+        Assertions.AssertBool(confirm.Visible).IsTrue();
+        Assertions.AssertString(confirm.DialogText).StartsWith("Replace tool 2.1.0 with version 3.0.0?");
+        Assertions.AssertString(_dialog.GetNode<Label>("%DetailsName").Text).Contains("tool");
+        Assertions.AssertBool(_dialog.GetNode<ConfirmationDialog>("%InstallConfirm").Visible).IsFalse();
+    }
+
+    [TestCase]
+    public async Task AZipFileOfADisabledPluginOrWithoutAPluginIsRefused()
+    {
+        _fixture.Global.InitializeUpdateJournals();
+        _dialog.Open();
+
+        await _dialog.InstallZipAsync(Zip("other", "3.0.0"));
+        Assertions.AssertString(Status).StartsWith("Cannot install other-3.0.0.zip: other is installed in res://addons/other");
+        Assertions.AssertString(Status).Contains("Enable the plugin");
+
+        var empty = Path.Combine(_fixture.Root, "empty.zip");
+        using (var zip = ZipFile.Open(empty, ZipArchiveMode.Create))
+        using (var writer = new StreamWriter(zip.CreateEntry("readme.txt").Open())) writer.Write("nothing");
+        await _dialog.InstallZipAsync(empty);
+        Assertions.AssertString(Status).StartsWith("Cannot install empty.zip: The ZIP file contains neither a plugin.cfg nor a GDExtension");
+        Assertions.AssertBool(_dialog.GetNode<Button>("%InstallZipButton").Disabled).IsFalse();
+    }
 }
 #endif

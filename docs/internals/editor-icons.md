@@ -74,6 +74,7 @@ at least 1.5 wide in `#e0e0e0`, filled or stroked (the gear's teeth are filled, 
 | `upgrade.svg` | Update (version button, manager OK button) | Closed | Up arrow in success |
 | `reinstall.svg` | Reinstall (version button and confirmation) | Clockwise | Plus in success |
 | `downgrade.svg` | Downgrade (version button and confirmation), Roll back (Needs attention) | Closed | Down arrow in warning |
+| `install.svg` | Install from ZIP (manager toolbar) | Closed | Plus in success |
 
 Rescan and upgrade differ by the ring and the color only, so don't put them next to each other without a label.
 
