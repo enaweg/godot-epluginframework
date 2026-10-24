@@ -280,6 +280,10 @@ public class UpdateSourceTests
         Assertions.AssertObject(Version("""{"tag_name":"v0.6.0.gd4","name":"v0.6.0.gd4 (Godot 4.2-4.3) | Intersection prefabs"}""")).IsNull();
         // words of the tag, split at '_', when the title names none
         Assertions.AssertString(Version("""{"tag_name":"v1.1.6_godot_4.6","name":"Latest"}""")).IsEqual("v1.1.6");
+        // and at '-' when a word is no version, which a prerelease is
+        Assertions.AssertString(Version("""{"tag_name":"godot4-v1.4.4","name":"godot4-v1.4.4 - Touch input fix"}""")).IsEqual("v1.4.4");
+        Assertions.AssertString(Version("""{"tag_name":"v0.7.4-godot-4.2+","name":"v0.7.4-godot-4.2+"}""")).IsEqual("v0.7.4");
+        Assertions.AssertString(Version("""{"tag_name":"next","name":"Next v2.0.0-beta"}""")).IsEqual("v2.0.0-beta");
         Assertions.AssertObject(Version("""{"tag_name":"latest","name":"Latest build"}""")).IsNull();
         // a number after the version: a release candidate's number, or the Godot version a build is for
         Assertions.AssertObject(Version("""{"tag_name":"1.0.0rc7","name":"Release candidate 1.0.0 - 7"}""")).IsNull();

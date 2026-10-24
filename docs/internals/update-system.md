@@ -161,7 +161,7 @@ its activated shared entry is not reported as a disabled plugin.
 Every apply requires dialog confirmation. Stage and validate the whole batch before touching addons: `PackageFetcher`
 leaves a package that cannot be fetched or is refused out of the batch, as a `RefusedPackage`, and fails only when all are
 refused. A release source reads a release's version with `ReleaseAssets.TryVersion` (the tag, else the first word of the title,
-then of the tag, split at spaces and `_`, that is a version and not right after "Godot", unless another number follows it) and groups releases of one version (`ByVersion`); the newest release of a group is the
+then of the tag, split at spaces, `_` and `-` (only in words that are no version), that is a version and not right after "Godot", unless another number follows it) and groups releases of one version (`ByVersion`); the newest release of a group is the
 candidate and the others' ZIPs are its `ZipPackageRef.Alternatives`, which `PackageFetcher` downloads and validates in
 turn until one is accepted (R28 names it; with all refused, the announced one's reason). `AddonPackageValidator` refuses
 packages made for Godot 3 (R27, `Godot3Evidence`: GDNative files or GDScript that Godot 4 cannot parse), the usual

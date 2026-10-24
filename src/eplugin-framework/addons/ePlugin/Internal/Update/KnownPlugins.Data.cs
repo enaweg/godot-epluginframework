@@ -376,10 +376,10 @@ internal static partial class KnownPlugins
         // https://github.com/kuma-gee/godot-css-theme, latest tag v4.5.0
         new("godot-css-theme", "Godot CSS Theme", "https://github.com/kuma-gee/godot-css-theme/tags",
             "https://github.com/kuma-gee/godot-css-theme#readme", "https://godotengine.org/asset-library/asset/1038", "https://github.com/kuma-gee/godot-css-theme"),
-        // https://github.com/mrjsj/godot-duckdb, latest release v0.6.6-godot-4.4.1
+        // https://github.com/mrjsj/godot-duckdb, latest release v0.7.4-godot-4.2+
         new("godot-duckdb", "Godot-DuckDB (SQL)", "https://github.com/mrjsj/godot-duckdb/releases",
             "https://github.com/mrjsj/godot-duckdb#readme", "https://github.com/mrjsj/godot-duckdb", "https://github.com/mrjsj/godot-duckdb"),
-        // https://github.com/GodotNuts/GodotFirebase, latest release godotfirebase-v6.0.2
+        // https://github.com/GodotNuts/GodotFirebase, latest release godotfirebase-v6.0.6
         new("godot-firebase", "Godot Firebase", "https://github.com/GodotNuts/GodotFirebase/releases",
             "https://github.com/GodotNuts/GodotFirebase#readme", "https://github.com/GodotNuts/GodotFirebase", "https://github.com/GodotNuts/GodotFirebase"),
         // https://github.com/citizenll/godot-flexbox, latest release 4.1
@@ -595,6 +595,9 @@ internal static partial class KnownPlugins
         // https://github.com/phnix-dev/kenney-assets-helper, latest release 0.1.2
         new("kenney-assets-helper", "Kenney Assets Helper", "https://github.com/phnix-dev/kenney-assets-helper/releases",
             "https://github.com/phnix-dev/kenney-assets-helper#readme", "https://github.com/phnix-dev/kenney-assets-helper", "https://github.com/phnix-dev/kenney-assets-helper"),
+        // https://github.com/Darkrock-Studios/LANServerBroadcast, latest release release-1.5
+        new("LANServerBroadcast", "LANServerBroadcast", "https://github.com/Darkrock-Studios/LANServerBroadcast/releases",
+            "https://github.com/Darkrock-Studios/LANServerBroadcast#readme", "https://github.com/Darkrock-Studios/LANServerBroadcast", "https://github.com/Darkrock-Studios/LANServerBroadcast"),
         // https://github.com/MauriceButler/godot-layer-name-enums, latest release v2.3.1
         new("layerNames", "Project Layer Name Enum Generator", "https://github.com/MauriceButler/godot-layer-name-enums/releases",
             "https://github.com/MauriceButler/godot-layer-name-enums#readme", "https://github.com/MauriceButler/godot-layer-name-enums", "https://github.com/MauriceButler/godot-layer-name-enums"),
@@ -877,7 +880,7 @@ internal static partial class KnownPlugins
         // https://github.com/lucasbecker-dev/godot-smart-graphics-settings, latest release v0.1.3
         new("smart_graphics_settings", "Smart Graphics Settings", "https://github.com/lucasbecker-dev/godot-smart-graphics-settings/releases",
             "https://github.com/lucasbecker-dev/godot-smart-graphics-settings#readme", "https://github.com/lucasbecker-dev/godot-smart-graphics-settings", "https://github.com/lucasbecker-dev/godot-smart-graphics-settings"),
-        // https://github.com/SpyrexDE/SmoothScroll, latest release godot4-v1.2.8
+        // https://github.com/SpyrexDE/SmoothScroll, latest release godot4-v1.4.4
         new("SmoothScroll", "SmoothScroll", "https://github.com/SpyrexDE/SmoothScroll/releases",
             "https://github.com/SpyrexDE/SmoothScroll#readme", "https://github.com/SpyrexDE/SmoothScroll", "https://github.com/SpyrexDE/SmoothScroll"),
         // https://github.com/apples/godot-smooth-pixel-subviewport-container, latest tag v0.1.1

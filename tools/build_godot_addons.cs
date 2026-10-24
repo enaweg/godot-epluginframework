@@ -343,12 +343,14 @@ Match ReleaseVersion(string? tag, string? title)
     var match = versionTag.Match(tag ?? "");
     return match.Success ? match : NamedVersion(title) ?? NamedVersion(tag) ?? match;
 }
-// The version a text names as one of its words (split at spaces and '_'), the first from the start, like the updater's
-// ReleaseAssets.TryNamedVersion: one right after the word Godot is the engine's ("for Godot 4.4+"), and any other number
-// after the version makes the text name none ("Release candidate 1.0.0 - 7").
+// The version a text names as one of its words, the first from the start, like the updater's ReleaseAssets.TryNamedVersion:
+// words are split at spaces and '_', and one that is no version also at '-' ("godot4-v1.4.4"); one right after the word
+// Godot is the engine's ("for Godot 4.4+"), and any other number after the version makes the text name none ("Release
+// candidate 1.0.0 - 7").
 Match? NamedVersion(string? text)
 {
-    var words = (text ?? "").Split([' ', '_'], StringSplitOptions.RemoveEmptyEntries);
+    var words = (text ?? "").Split([' ', '_'], StringSplitOptions.RemoveEmptyEntries)
+        .SelectMany(w => versionTag.IsMatch(w) ? [w] : w.Split('-', StringSplitOptions.RemoveEmptyEntries)).ToArray();
     for (var i = 0; i < words.Length; i++)
     {
         if (i > 0 && IsGodot(words[i - 1]) || versionTag.Match(words[i]) is not { Success: true } named) continue;
@@ -358,7 +360,8 @@ Match? NamedVersion(string? text)
     }
     return null;
 
-    static bool IsGodot(string word) => new string(word.Where(char.IsAsciiLetter).ToArray()).Equals("godot", StringComparison.OrdinalIgnoreCase);
+    // "(Godot" too, but not "godot4", which names no engine version after it.
+    static bool IsGodot(string word) => new string(word.Where(char.IsAsciiLetterOrDigit).ToArray()).Equals("godot", StringComparison.OrdinalIgnoreCase);
 }
 // The releases of the newest version, in the host's order (newest first), like the updater's ReleaseAssets.Newest: several
 // are builds for different Godot versions, whose packages the updater tries in that order. Each asset names its release.

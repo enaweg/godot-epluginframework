@@ -68,13 +68,15 @@ internal static class ReleaseAssets
         TryNamedVersion(String(release, "tag_name"), out version);
 
     /// <summary>
-    /// The version a text names as one of its words (split at spaces and '_'), the first from the start. A version right
-    /// after the word Godot is the engine's ("for Godot 4.4+") and skipped; any other number after the version makes the
-    /// text name none, since it may be the actual version: "Release candidate 1.0.0 - 7", "v1.2.1 [GD Script - 4.4]".
+    /// The version a text names as one of its words, the first from the start. Words are split at spaces and '_', and
+    /// one that is no version also at '-' ("godot4-v1.4.4"; "v2.0.0-beta" stays a prerelease). A version right after the
+    /// word Godot is the engine's ("for Godot 4.4+") and skipped; any other number after the version makes the text name
+    /// none, since it may be the actual version: "Release candidate 1.0.0 - 7", "v1.2.1 [GD Script - 4.4]".
     /// </summary>
     internal static bool TryNamedVersion(string? text, out SemVer version)
     {
-        var words = (text ?? "").Split([' ', '_'], StringSplitOptions.RemoveEmptyEntries);
+        var words = (text ?? "").Split([' ', '_'], StringSplitOptions.RemoveEmptyEntries)
+            .SelectMany(w => SemVer.TryParse(w, out _) ? [w] : w.Split('-', StringSplitOptions.RemoveEmptyEntries)).ToArray();
         for (var i = 0; i < words.Length; i++)
         {
             if (i > 0 && IsGodot(words[i - 1]) || !SemVer.TryParse(words[i], out version)) continue;
@@ -85,7 +87,8 @@ internal static class ReleaseAssets
         version = default;
         return false;
 
-        static bool IsGodot(string word) => new string(word.Where(char.IsAsciiLetter).ToArray()).Equals("godot", StringComparison.OrdinalIgnoreCase);
+        // "(Godot" too, but not "godot4", which names no engine version after it.
+        static bool IsGodot(string word) => new string(word.Where(char.IsAsciiLetterOrDigit).ToArray()).Equals("godot", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
