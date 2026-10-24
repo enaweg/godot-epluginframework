@@ -1,8 +1,8 @@
 {
- "commit": "c518b82f4053cb7cab94e11d9f56a5b0e5a30e07",
- "date": "2026-10-24T11:39:04Z",
- "covered": 10522,
- "coverable": 11606,
+ "commit": "b778fa2146c4db3ef67a3bd9785348588e4c8a5c",
+ "date": "2026-10-24T11:39:28Z",
+ "covered": 10532,
+ "coverable": 11616,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -17,8 +17,8 @@
    274
   ],
   "src/eplugin-framework/addons/ePlugin/EditorPluginExtensions.cs": [
-   52,
-   61
+   62,
+   71
   ],
   "src/eplugin-framework/addons/ePlugin/IEEditorPluginExtensions.cs": [
    15,
