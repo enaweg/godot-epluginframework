@@ -98,16 +98,24 @@ internal static partial class CoverageReport
     {
         var changes = new Dictionary<string, HashSet<int>>(StringComparer.Ordinal);
         string? path = null;
+        // A file's header ends at its first hunk; an added line that starts with "++ " is "+++ " in a hunk.
+        var header = true;
         foreach (var raw in diff.Split('\n'))
         {
             var line = raw.TrimEnd('\r');
-            if (line.StartsWith("+++ ", StringComparison.Ordinal))
+            if (line.StartsWith("diff --git ", StringComparison.Ordinal))
+            {
+                header = true;
+                path = null;
+            }
+            else if (header && line.StartsWith("+++ ", StringComparison.Ordinal))
             {
                 var target = line[4..].Trim();
                 path = target.StartsWith("b/", StringComparison.Ordinal) ? target[2..] : null;
             }
             else if (line.StartsWith("@@", StringComparison.Ordinal) && path is not null)
             {
+                header = false;
                 var match = HunkHeader().Match(line);
                 if (!match.Success)
                     continue;

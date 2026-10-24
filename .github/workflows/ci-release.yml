@@ -35,7 +35,10 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Setup .NET
+        # Its own installation directory: the runner image's has newer SDKs, and dotnet always picks the newest one.
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
         with:
           dotnet-version: 8.0.x
 

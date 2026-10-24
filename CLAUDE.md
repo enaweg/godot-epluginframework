@@ -72,7 +72,9 @@ and the single PR comment combining them), tested with:
 dotnet test "tools/ci-reports.Tests/CiReports.Tests.csproj"
 ```
 CI installs that SDK separately (`$RUNNER_TEMP/dotnet-tools`) where the job's own SDK must stay in charge of building and
-testing, so tools that start `dotnet` themselves (coverage.cs) use the `dotnet` on `PATH`. A pull request gets one CI
+testing, so tools that start `dotnet` themselves (coverage.cs) use the `dotnet` on `PATH`. That SDK goes into its own
+folder too (`$RUNNER_TEMP/dotnet`), since `dotnet` picks the newest SDK of its folder and the runner image's has newer
+ones; `build-and-test` fails when `dotnet --version` is not its matrix SDK. A pull request gets one CI
 comment: CI-PR calls CI-PR-Build (`package`, which posts it early with the download link) and CI-Analysis-Jobs (which
 CI-Analysis calls for `main`; keep CI-Analysis free of `workflow_call`, or its README badge shows no status), and its
 `pr-comment` job replaces it with every job's result and the `pr-comment-*` report artifacts once all jobs finish

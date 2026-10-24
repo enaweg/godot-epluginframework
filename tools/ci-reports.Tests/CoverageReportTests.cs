@@ -59,7 +59,7 @@ public class CoverageReportTests : TemporaryDirectory
     public void ChangedLinesComeFromAddedHunksOnly()
     {
         var diff = string.Join("\n",
-            "diff --git a/x b/x", "--- a/x", "+++ b/x", "@@ -1,2 +1,3 @@", "@@ -9 +10 @@", "@@ -20,2 +21,0 @@",
+            "diff --git a/x b/x", "--- a/x", "+++ b/x", "@@ -1,2 +1,3 @@", "+++ added line that starts with ++", "@@ -9 +10 @@", "@@ -20,2 +21,0 @@",
             "diff --git a/y b/y", "--- a/y", "+++ /dev/null", "@@ -1 +0,0 @@");
         var changes = ChangedLines(diff);
         Assert.Equal(["x"], changes.Keys);
@@ -102,7 +102,8 @@ public class CoverageReportTests : TemporaryDirectory
     public void SummaryListsUncoveredChangedLines()
     {
         var diff = Path.Combine(Root, "pr.diff");
-        File.WriteAllText(diff, $"+++ b/{Owned}A.cs\n@@ -1 +1,4 @@\n+++ b/README.md\n@@ -1 +1 @@\n");
+        File.WriteAllText(diff, $"diff --git a/{Owned}A.cs b/{Owned}A.cs\n--- a/{Owned}A.cs\n+++ b/{Owned}A.cs\n@@ -1 +1,4 @@\n" +
+                                "diff --git a/README.md b/README.md\n--- a/README.md\n+++ b/README.md\n@@ -1 +1 @@\n");
         var text = Summarize("--diff", diff, "--repository-url", "https://github.com/o/r");
         Assert.Contains("**Changed lines:** 1 of 3 coverable lines covered (33.3%).", text);
         Assert.Contains($"[`A.cs`](https://github.com/o/r/blob/c0ffee1234/{Owned}A.cs#L2-L3) | 2-3 |", text);
