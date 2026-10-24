@@ -21,6 +21,10 @@ cogito;https://codeberg.org/Phazorknight/Cogito
 crabbyconsole;https://github.com/Bauxitedev/crabbyconsole
 # On Codeberg. Its repository also carries the dialogue_manager add-on it depends on.
 disco_tools;https://codeberg.org/Fireye/disco-tools
+# No release or version tag yet, so it is left out until it has one.
+dynamic_water_2d;https://github.com/90-008/dynamic_water_2d
+# No release or version tag yet, so it is left out until it has one.
+GD-Sync;https://github.com/GD-Sync/GD-Sync
 global_asset_manager;https://github.com/sn1ks0h/Global-Asset-Manager
 godot_advanced_logger;https://github.com/DYNMC-Motorsports/GodotAdvancedLogger
 # A GDExtension whose libraries are built by CI (only in the release ZIP). Neither the ZIP nor the repository has a
@@ -30,6 +34,8 @@ godotite;https://github.com/Arkaein/godotite
 # A GDExtension without a plugin.cfg, which ePlugin updates as a GDExtension add-on. Its libraries are built by CI (only
 # in the release ZIP).
 hap_video;https://github.com/claytercek/godot-hap-video
+# On a Forgejo host. Its repository also carries the at-icons and gdUnit4 add-ons.
+health-system;https://git.johnsoellner.me/swoopy/health-system
 imsc_script;https://github.com/ImStocker/imsc-script-godot
 # A GDExtension without a plugin.cfg, which ePlugin updates as a GDExtension add-on. Only its release ZIP has all
 # libraries (the repository lacks the macOS one).
@@ -37,11 +43,17 @@ line3d;https://github.com/ApocalypticPhosphorus/Line3D
 # Its repository also carries the px_file_sync add-on.
 pixquare_godot_importer;https://github.com/Wiggan/pixquare-godot-importer
 portalsCS;https://github.com/Phlegmlee/godot-portals-plugin-csharp
+# No release or version tag yet, so it is left out until it has one.
+resources_spreadsheet_view;https://github.com/don-tnowe/godot-resources-as-sheets-plugin
 # A GDExtension plugin whose libraries are built by CI: they are in the release ZIP but not in the repository, so its
 # update site must be the releases page (which build_godot_addons.cs takes for any GitHub repository with releases).
 rider-plugin;https://github.com/JetBrains/godot-support
 # On a Gitea host. Its plugin.cfg is at the repository root, so only its res:// paths name the folder.
 rokojori_action_library;https://community.rokojori.com/Rokojori/rokojori_action_library
+ScenesManager;https://github.com/esdg/GodotSceneManager
+# No release or version tag yet, so it is left out until it has one.
+SodaAudioManager;https://github.com/CynoctisDEV/Soda-AudioManager
 takobi_ai;https://github.com/AhmedGD1/takobi_ai
 # Its release ZIP ships a GDExtension without a plugin.cfg, which ePlugin updates as a GDExtension add-on.
 tweens_gd;https://github.com/outfox/tweens.gd
+virtual_joystick_cf;https://github.com/CfStudiosDev/Virtual-Joystick-CF
