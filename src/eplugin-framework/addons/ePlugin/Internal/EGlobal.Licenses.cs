@@ -385,17 +385,43 @@ internal sealed partial class EGlobal
         }
 
         // never inside the dialog's signal: enabling and disabling run recipes and may rebuild the assembly
-        foreach (var (activation, enable) in review.Approved.Where(a => !a.Enabled).Select(a => (a, true))
-                     .Concat(review.Canceled.Where(a => a.Enabled).Select(a => (a, false))))
+        var toggles = review.Approved.Where(a => !a.Enabled).Select(a => (a.Slug, Enable: true))
+            .Concat(review.Canceled.Where(a => a.Enabled).Select(a => (a.Slug, Enable: false))).ToArray();
+        if (toggles.Length > 0)
         {
-            Post(() =>
-            {
-                if (_host.IsPluginEnabled(activation.Slug) != enable)
-                {
-                    _host.SetPluginEnabled(activation.Slug, enable);
-                }
-            });
+            Post(() => ApplyLicenseDecisions(toggles));
         }
+    }
+
+    /// <summary>
+    /// Toggles the plugins of a license review in one transition, so the project is built once, after the last of them,
+    /// and none of them starts while that build's assembly reload is due.
+    /// </summary>
+    private void ApplyLicenseDecisions((string Slug, bool Enable)[] toggles)
+    {
+        if (AssemblyReload.IsPending)
+        {
+            Post(() => ApplyLicenseDecisions(toggles));
+            return;
+        }
+
+        _transitionHold++;
+        try
+        {
+            foreach (var (slug, enable) in toggles)
+            {
+                if (_host.IsPluginEnabled(slug) != enable)
+                {
+                    _host.SetPluginEnabled(slug, enable);
+                }
+            }
+        }
+        finally
+        {
+            _transitionHold--;
+        }
+
+        FinishPlainPluginTransition();
     }
 }
 #endif
