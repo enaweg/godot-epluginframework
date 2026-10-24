@@ -492,6 +492,18 @@ public class ActivationProgressTests
     }
 
     [TestCase]
+    public void UserHandedOverToAHelperOfAnotherProtocolContinuesInANewHelper()
+    {
+        const string user = "0123456789abcdef0123456789abcdef";
+        ActivationProgress.Resume = () => (null, user);
+        Assertions.AssertBool(ActivationProgress.ResumeAfterRestart()).IsTrue();
+        using (ActivationProgress.Begin("Finishing the plugin update...")) { }
+        Assertions.AssertInt(_launched.Count).IsEqual(1);
+        Assertions.AssertThat(_launched[0].Users).ContainsExactly(user);
+        Assertions.AssertThat(_launched[0].Of(user)).ContainsExactly("TEXT Finishing the plugin update...", "END");
+    }
+
+    [TestCase]
     public void UnavailableRestartSessionFallsBackToANewHelper()
     {
         ActivationProgress.Resume = () => throw new IOException("Session unavailable.");

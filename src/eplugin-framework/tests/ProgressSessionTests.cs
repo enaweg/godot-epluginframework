@@ -73,7 +73,7 @@ public class ProgressSessionTests
         Assertions.AssertObject(resumed).IsNotNull();
         Assertions.AssertString(resumed!.Value.User).IsEqual(User);
         Assertions.AssertBool(File.Exists(_handoff)).IsFalse();
-        resumed.Value.Session.Send(User, "END");
+        resumed.Value.Session!.Send(User, "END");
         resumed.Value.Session.Dispose();
 
         // Its lifetime counts from the last message; then it withdraws its record and removes its files.
@@ -224,10 +224,33 @@ public class ProgressSessionTests
         var resumed = ProgressSession.TryResume(_handoff, _shared);
         Assertions.AssertObject(resumed).IsNotNull();
         Assertions.AssertString(resumed!.Value.User).IsEqual(User);
-        resumed.Value.Session.Send(User, "HEARTBEAT");
+        resumed.Value.Session!.Send(User, "HEARTBEAT");
         resumed.Value.Session.Dispose();
         Assertions.AssertThat(File.ReadAllLines(commands)).ContainsExactly(User + " HEARTBEAT");
         Assertions.AssertObject(ProgressSession.TryResume(_handoff, _shared)).IsNull();
+    }
+
+    [TestCase]
+    public void UserHandedOverByAnEarlierProtocolIsEndedInItsHelper()
+    {
+        // A self-update from 0.11.0 (protocol 3) restarts into this protocol: its helper would hold the window for minutes.
+        var helper = new ProcessIdentity(1_000_001, 10);
+        var commands = Helper("earlier", helper, protocol: 3);
+        File.WriteAllLines(_handoff, ["3", Token("earlier"), .. helper.Fields, User]);
+        var resumed = ProgressSession.TryResume(_handoff, _shared);
+        Assertions.AssertObject(resumed).IsNotNull();
+        Assertions.AssertObject(resumed!.Value.Session).IsNull();
+        Assertions.AssertString(resumed.Value.User).IsEqual(User);
+        Assertions.AssertThat(File.ReadAllLines(commands)).ContainsExactly(User + " END");
+        Assertions.AssertBool(File.Exists(_handoff)).IsFalse();
+
+        // Protocols before users and handoffs are left alone, as is the handoff of a helper that exited.
+        File.WriteAllLines(_handoff, ["2", Token("earlier"), .. helper.Fields, User]);
+        Assertions.AssertObject(ProgressSession.TryResume(_handoff, _shared)).IsNull();
+        _running.Remove(helper);
+        File.WriteAllLines(_handoff, ["3", Token("earlier"), .. helper.Fields, User]);
+        Assertions.AssertObject(ProgressSession.TryResume(_handoff, _shared)).IsNull();
+        Assertions.AssertThat(File.ReadAllLines(commands)).ContainsExactly(User + " END");
     }
 
     [TestCase]
