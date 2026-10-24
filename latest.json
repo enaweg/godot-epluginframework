@@ -1,8 +1,8 @@
 {
- "commit": "2599d31b34aa4f703be9457758cf798d628ede1a",
- "date": "2026-10-24T09:08:05Z",
- "covered": 10205,
- "coverable": 11241,
+ "commit": "459ef8e50a187f598a6c8d7e950a0a5210b5e9c0",
+ "date": "2026-10-24T10:01:00Z",
+ "covered": 10508,
+ "coverable": 11585,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -92,6 +92,10 @@
    279,
    305
   ],
+  "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.AddonInstall.cs": [
+   28,
+   34
+  ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Deactivation.cs": [
    120,
    127
@@ -145,8 +149,8 @@
    19
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateWorkflow.cs": [
-   1,
-   7
+   3,
+   9
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Updates.cs": [
    92,
@@ -245,16 +249,20 @@
    57
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.Versions.cs": [
-   77,
-   98
+   81,
+   102
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.Zip.cs": [
+   67,
+   80
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.cs": [
-   316,
-   348
+   328,
+   360
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EditorIcons.cs": [
-   54,
-   57
+   55,
+   58
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EditorSignalConnections.cs": [
    12,
@@ -305,8 +313,8 @@
    62
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateFlow.cs": [
-   154,
-   154
+   187,
+   198
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateReview.cs": [
    68,
@@ -323,6 +331,10 @@
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/WelcomeDialog.cs": [
    54,
    63
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Manager/ZipInstall.cs": [
+   41,
+   42
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PlainPluginObserver.cs": [
    67,
@@ -360,9 +372,17 @@
    82,
    84
   ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/AddonArchive.cs": [
+   48,
+   48
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/AddonInstaller.cs": [
+   60,
+   70
+  ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/AddonPackageValidator.cs": [
-   113,
-   114
+   120,
+   121
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/AddonSwap.cs": [
    114,
