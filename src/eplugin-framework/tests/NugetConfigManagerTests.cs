@@ -276,6 +276,53 @@ public class NugetConfigManagerTests
         Assertions.AssertBool(NugetConfigManager.SameSource(Root, "user://feed", "user://feed/")).IsFalse();
     }
 
+    [TestCase]
+    public static void SlugsWithDoubleHyphensOrCommasAreRemovedAgain()
+    {
+        foreach (var slug in new[] { "my--tool", "a,b", "100%", "q\"uote", "-lead-" })
+            Assertions.AssertString(NugetConfigManager.DecodeSlug(NugetConfigManager.EncodeSlug(slug))).IsEqual(slug);
+        // single hyphens stay readable, and comments written before slugs were encoded are read the same
+        Assertions.AssertString(NugetConfigManager.EncodeSlug("sample-plugin")).IsEqual("sample-plugin");
+
+        NugetConfigManager.RegisterSource(Root, "my--tool", "addons/shared/feed", new NullLogger());
+        NugetConfigManager.RegisterSource(Root, "a,b", "addons/shared/feed", new NullLogger());
+        Assertions.AssertThat(File.ReadAllText(ConfigPath)).NotContains("- -");
+
+        NugetConfigManager.UnregisterSource(Root, "my--tool", "addons/shared/feed", new NullLogger());
+        Assertions.AssertThat(File.ReadAllText(ConfigPath)).Contains("used-by=\"a%2Cb\"");
+        NugetConfigManager.UnregisterSource(Root, "a,b", "addons/shared/feed", new NullLogger());
+        Assertions.AssertBool(File.Exists(ConfigPath)).IsFalse();
+    }
+
+    [TestCase]
+    public static void CommentsTheProjectKeepsSurviveTheLastManagedEntry()
+    {
+        // a feed the team commented out, and a header outside the root element
+        const string config = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Copyright -->\n<configuration>\n  <packageSources>\n    <!-- <add key=\"corp\" value=\"https://corp/feed\" /> -->\n  </packageSources>\n</configuration>\n";
+        File.WriteAllText(ConfigPath, config);
+        NugetConfigManager.RegisterSource(Root, "plugin", "addons/plugin/feed", new NullLogger());
+        NugetConfigManager.UnregisterSource(Root, "plugin", "addons/plugin/feed", new NullLogger());
+        Assertions.AssertString(File.ReadAllText(ConfigPath)).IsEqual(config);
+
+        const string header = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Copyright -->\n<configuration>\n</configuration>\n";
+        File.WriteAllText(ConfigPath, header);
+        NugetConfigManager.RegisterSource(Root, "plugin", "addons/plugin/feed", new NullLogger());
+        NugetConfigManager.UnregisterSource(Root, "plugin", "addons/plugin/feed", new NullLogger());
+        Assertions.AssertBool(File.Exists(ConfigPath)).IsTrue();
+        Assertions.AssertString(File.ReadAllText(ConfigPath)).Contains("<!-- Copyright -->");
+    }
+
+    [TestCase]
+    public static void TheConfigFileKeepsTheSpellingItHasOnDisk()
+    {
+        Assertions.AssertString(NugetConfigManager.ConfigFileName([], _ => false)).IsEqual("nuget.config");
+        Assertions.AssertString(NugetConfigManager.ConfigFileName(["NuGet.Config", "nuget.config"], _ => true)).IsEqual("nuget.config");
+        Assertions.AssertString(NugetConfigManager.ConfigFileName(["Game.csproj", "NuGet.Config"], _ => true)).IsEqual("NuGet.Config");
+        // a case-insensitive file system finds any spelling; a case-sensitive one ignores it like NuGet does
+        Assertions.AssertString(NugetConfigManager.ConfigFileName(["NUGET.CONFIG"], _ => true)).IsEqual("NUGET.CONFIG");
+        Assertions.AssertString(NugetConfigManager.ConfigFileName(["NUGET.CONFIG"], _ => false)).IsEqual("nuget.config");
+    }
+
     private static int CountOccurrences(string haystack, string needle)
     {
         var count = 0;
