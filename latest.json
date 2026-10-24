@@ -1,8 +1,8 @@
 {
- "commit": "adf103bf179501f0ce72cd49ced89d71a2ff09b5",
- "date": "2026-10-24T11:44:20Z",
- "covered": 10574,
- "coverable": 11664,
+ "commit": "d2202a557392452cb49b9b2cb0f70df51dd20dc9",
+ "date": "2026-10-24T11:45:16Z",
+ "covered": 10576,
+ "coverable": 11669,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -270,7 +270,7 @@
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EditorWindows.cs": [
    42,
-   65
+   68
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/GeneralSettingsTab.cs": [
    56,
@@ -313,8 +313,8 @@
    62
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateFlow.cs": [
-   187,
-   198
+   189,
+   200
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateReview.cs": [
    68,
