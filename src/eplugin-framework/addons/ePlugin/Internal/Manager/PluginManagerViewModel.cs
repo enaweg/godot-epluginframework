@@ -100,12 +100,14 @@ internal sealed class PluginManagerViewModel
 
     /// <summary>
     /// Leaves out the updates the user left out in <paramref name="previous"/>, the model this one replaces, so refreshing
-    /// the list does not check them again. A newer version of a left-out plugin is offered checked.
+    /// the list does not check them again. A newer version of a left-out plugin is offered checked, and so is one that was
+    /// unchecked only because of an error or an earlier failure, which the user could not have left out.
     /// </summary>
     public void KeepUnselected(PluginManagerViewModel? previous)
     {
         if (previous is null) return;
-        var unselected = previous.Updates.Where(u => !u.Selected).Select(u => (u.Candidate.Slug, u.Candidate.NewVersion)).ToHashSet();
+        var unselected = previous.Updates.Where(u => !u.Selected && !u.HasError && u.Failed is null)
+            .Select(u => (u.Candidate.Slug, u.Candidate.NewVersion)).ToHashSet();
         foreach (var update in Updates.Where(u => unselected.Contains((u.Candidate.Slug, u.Candidate.NewVersion)))) update.Selected = false;
     }
 
