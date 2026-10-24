@@ -80,6 +80,20 @@ public class ActivationProgressTests
     }
 
     [TestCase]
+    public void PublicScopesTakeANullTextAsEmpty()
+    {
+        // e.g. a plugin compiled without nullable checks
+        using (var scope = EPlugin.Progress.Begin(null!))
+        {
+            scope.Report(null!);
+        }
+
+        var helper = _launched.Single();
+        Assertions.AssertThat(helper.Of(helper.Users[0])).ContainsExactly("TEXT ", "TEXT ", "END");
+        Assertions.AssertBool(_timer!.Disposed).IsTrue();
+    }
+
+    [TestCase]
     public async Task PublicConcurrentOperationsKeepTheirOwnUsersAndHeartbeats()
     {
         var check = new TaskCompletionSource();

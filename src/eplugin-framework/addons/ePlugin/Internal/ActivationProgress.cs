@@ -284,11 +284,12 @@ internal static class ActivationProgress
         }
     }
 
-    private static void Text(User? user, string text)
+    private static void Text(User? user, string? text)
     {
         if (user is null || user.Ended) return;
-        user.Text = text;
-        Send(user, Encode(text));
+        // A plugin compiled without nullable checks may pass null; failing would leak the user that Begin registered.
+        user.Text = text ?? "";
+        Send(user, Encode(user.Text));
     }
 
     private static string Encode(string text) => "TEXT " + Convert.ToBase64String(Encoding.UTF8.GetBytes(text));

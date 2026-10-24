@@ -75,7 +75,7 @@ await ImportAsync(progress, cancellationToken);
 progress.Report("Finishing...");
 ```
 
-`Report` updates the step text synchronously and is safe to call from any thread. It does not post through Godot's synchronization context, so feedback can update while the editor thread is blocked. It accepts text; format a percentage into that text when your operation can measure one. The animated bar remains indeterminate.
+`Report` updates the step text synchronously and is safe to call from any thread. It does not post through Godot's synchronization context, so feedback can update while the editor thread is blocked. It accepts text (`null` counts as empty, for callers without nullable checks); format a percentage into that text when your operation can measure one. The animated bar remains indeterminate.
 
 `Begin` always returns a non-null scope, including when the native helper is unavailable. Dispose it with `using` so it ends on success, exceptions, or cancellation. Disposal is idempotent, and reports after disposal are ignored, even if a surrounding scope is still active. The operation owns its cancellation token and result; the progress service does not cancel work or restart the editor.
 
