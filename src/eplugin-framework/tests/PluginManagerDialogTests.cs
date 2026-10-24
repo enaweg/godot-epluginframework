@@ -328,6 +328,22 @@ public class PluginManagerDialogTests : IDisposable
     }
 
     [TestCase]
+    public async Task ARefreshWhileTheConfirmationIsOpenKeepsTheStagedPlugin()
+    {
+        _fixture.Global.InitializeUpdateJournals();
+        _dialog.Open();
+        await _dialog.InstallZipAsync(Zip("fresh", "1.2.0"));
+
+        // e.g. the local directories finished indexing
+        _dialog.Refresh();
+        _dialog.GetNode<ConfirmationDialog>("%InstallConfirm").EmitSignal(AcceptDialog.SignalName.Confirmed);
+        await Frames();
+
+        Assertions.AssertBool(File.Exists(Path.Combine(_fixture.Addon("fresh"), "plugin.gd"))).IsTrue();
+        Assertions.AssertString(Status).StartsWith("Installed fresh 1.2.0 into res://addons/fresh.");
+    }
+
+    [TestCase]
     public async Task CancelingTheConfirmationInstallsNothing()
     {
         _fixture.Global.InitializeUpdateJournals();
@@ -371,6 +387,11 @@ public class PluginManagerDialogTests : IDisposable
         using (var writer = new StreamWriter(zip.CreateEntry("readme.txt").Open())) writer.Write("nothing");
         await _dialog.InstallZipAsync(empty);
         Assertions.AssertString(Status).StartsWith("Cannot install empty.zip: The ZIP file contains neither a plugin.cfg nor a GDExtension");
+        Assertions.AssertBool(_dialog.GetNode<Button>("%InstallZipButton").Disabled).IsFalse();
+
+        // a path the file system refuses fails with another exception, which must not lock the manager either
+        await _dialog.InstallZipAsync(Path.Combine(_fixture.Root, "bad\0name.zip"));
+        Assertions.AssertString(Status).StartsWith("Cannot install");
         Assertions.AssertBool(_dialog.GetNode<Button>("%InstallZipButton").Disabled).IsFalse();
     }
 }

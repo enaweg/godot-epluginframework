@@ -26,8 +26,13 @@ internal static class ZipInstall
 {
     /// <param name="row">The listed plugin of the archive's slug; null when the project has none.</param>
     /// <param name="target">The plugin as the update system sees it; null unless it is enabled with a readable plugin.cfg.</param>
-    public static ZipChoice Choose(AddonArchive archive, PluginRow? row, PluginUpdateTarget? target)
+    /// <param name="sameExceptCase">The slug of a listed plugin that differs from the archive's only in case, if any.</param>
+    public static ZipChoice Choose(AddonArchive archive, PluginRow? row, PluginUpdateTarget? target, string? sameExceptCase = null)
     {
+        // Both folders cannot exist on Windows or macOS, so teammates there could not check the project out.
+        if (row is null && sameExceptCase is not null)
+            return new(null, $"The ZIP file installs res://addons/{archive.Slug}, which differs from the installed res://addons/{sameExceptCase} only in case. " +
+                             $"Rename its folder to {sameExceptCase} to install it over that plugin.");
         if (row is null) return new(null, null);
         var name = row.Plugin.Name;
         if (row.Plugin.Missing) return new(null, $"res://addons/{archive.Slug} is missing, but {name} has a failed attempt; resolve it under Needs attention first.");

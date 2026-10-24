@@ -6,7 +6,8 @@ internal sealed record BuildOutcome(int ExitCode, string[] Output);
 
 internal interface ICheckedDotnetCli
 {
-    BuildOutcome TryBuild();
+    /// <param name="keepNewAssembly">See <see cref="BuildOutputGuard.Run"/>.</param>
+    BuildOutcome TryBuild(bool keepNewAssembly = true);
     /// <summary>Builds the Godot project with only plugin code, see <see cref="PluginsOnlyBuild"/>.</summary>
     BuildOutcome TryBuildPluginsOnly(PluginsOnlyBuild build);
     bool TryRebuildSolution();

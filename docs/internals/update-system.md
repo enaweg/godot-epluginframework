@@ -249,7 +249,8 @@ validates it with `ValidationContext.NewInstall`: R6 only checks that the versio
 compare with an installed version and are left out, and R26 refuses an existing `res://addons/<slug>`. After the user confirmed it, `AddonInstaller.Install`
 (`EGlobal.InstallNewAddon`) checks the folder again, moves the staged folder into place in one step, builds through
 `ICheckedDotnetCli.TryBuild` when the package has C# code, and scans the file system. A failed build moves the folder
-back; `BuildKeepingOutput` kept the editor's assembly, so nothing reloads. The build log stays in the staging folder,
+back; `BuildKeepingOutput` kept the editor's assembly, also when the build compiled it before another project of the
+solution failed (`TryBuild(keepNewAssembly: false)`), so nothing reloads. A build that cannot run counts as failed. The build log stays in the staging folder,
 which `UpdateJournals.AbandonedStaging` deletes later. A successful build is loaded by the editor's assembly reload,
 which the manager waits for like after an activation.
 

@@ -18,7 +18,12 @@ internal static class BuildOutputGuard
     /// timestamps, so neither Godot's assembly watcher nor <see cref="AssemblyReload"/> takes them for a new build.
     /// Best effort: a snapshot that cannot be taken or restored is logged and never fails the build.
     /// </summary>
-    public static BuildOutcome Run(string outputDirectory, string snapshotDirectory, string assemblyFile, ILogger? logger, Func<BuildOutcome> build)
+    /// <param name="keepNewAssembly">
+    /// Whether a failed build that compiled the project's assembly anyway (an error in another project of the solution)
+    /// keeps it; false puts the previous one back then too, e.g. when the code it was built with is removed again.
+    /// </param>
+    public static BuildOutcome Run(string outputDirectory, string snapshotDirectory, string assemblyFile, ILogger? logger, Func<BuildOutcome> build,
+        bool keepNewAssembly = true)
     {
         var taken = false;
         try
@@ -37,25 +42,29 @@ internal static class BuildOutputGuard
 
         BuildOutcome outcome;
         try { outcome = build(); }
-        catch { if (taken) Restore(outputDirectory, snapshotDirectory, assemblyFile, logger); throw; }
-        if (taken && outcome.ExitCode != 0) Restore(outputDirectory, snapshotDirectory, assemblyFile, logger);
+        catch { if (taken) Restore(outputDirectory, snapshotDirectory, assemblyFile, logger, keepNewAssembly); throw; }
+        if (taken && outcome.ExitCode != 0) Restore(outputDirectory, snapshotDirectory, assemblyFile, logger, keepNewAssembly);
         try { Delete(snapshotDirectory); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { logger?.Warn($"Cannot remove {snapshotDirectory}: {ex.Message}"); }
         return outcome;
     }
 
-    private static void Restore(string outputDirectory, string snapshotDirectory, string assemblyFile, ILogger? logger)
+    private static void Restore(string outputDirectory, string snapshotDirectory, string assemblyFile, ILogger? logger, bool keepNewAssembly)
     {
-        // A failure after the project compiled (another project of the solution) leaves its new assembly, which stays.
-        if (File.Exists(Path.Combine(outputDirectory, assemblyFile))) return;
+        // A failure after the project compiled (another project of the solution) leaves its new assembly, which stays
+        // unless the caller takes its code away again.
+        var compiled = File.Exists(Path.Combine(outputDirectory, assemblyFile));
+        if (compiled && keepNewAssembly) return;
         try
         {
-            Copy(snapshotDirectory, outputDirectory, overwrite: false);
-            logger?.Warn("The build failed and removed the built assembly; the previous one was put back so the editor still loads it after a restart.");
+            Copy(snapshotDirectory, outputDirectory, overwrite: compiled);
+            if (!compiled) logger?.Warn("The build failed and removed the built assembly; the previous one was put back so the editor still loads it after a restart.");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            logger?.Error($"The build failed and removed the built assembly, which could not be put back ({ex.Message}). Fix the build before restarting the editor, or no C# plugin will load.");
+            logger?.Error(compiled
+                ? $"The build failed after compiling the project, and the previous assembly could not be put back ({ex.Message}). The editor may load code that was removed again until the project is built."
+                : $"The build failed and removed the built assembly, which could not be put back ({ex.Message}). Fix the build before restarting the editor, or no C# plugin will load.");
         }
     }
 

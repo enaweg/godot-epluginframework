@@ -58,13 +58,17 @@ internal sealed class AddonInstaller(string addonsDirectory, string projectRoot,
         host.Log($"Installed {name}{version} into res://addons/{slug}.");
         if (package.ContainsCSharp)
         {
-            var build = host.Build();
+            BuildOutcome build;
+            try { build = host.Build(); }
+            // not installed after all: the add-on is removed like after a failed build
+            catch (Exception ex) { build = new(1, ["The build could not run: " + ex.Message]); }
             if (build.ExitCode != 0)
             {
                 var log = Path.Combine(transactionDirectory, "build-install.log");
                 try { File.WriteAllLines(log, build.Output); }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { log = null; }
-                // The failed build kept the editor's assembly (BuildKeepingOutput), so taking the files away is enough.
+                // The failed build kept the editor's assembly (BuildKeepingOutput without the new one), so taking the files
+                // away is enough.
                 var removed = Remove(target, package.StagingDir);
                 var failure = BuildFailure(name, build.Output, target) + (removed ? " It was removed again." : $" Remove res://addons/{slug} by hand.");
                 host.Log(failure + (log is null ? "" : " Build log: " + log));
