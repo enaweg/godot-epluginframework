@@ -190,6 +190,10 @@ public class GDExtensionPluginTests
         // e.g. lua-gdextension, which releases a variant next to it
         Assertions.AssertString(Select("lua-gdextension", "lua-gdextension+luajit.zip", "lua-gdextension.zip")).IsEqual("lua-gdextension.zip");
         Assertions.AssertString(Select("lua_gdextension", "Lua-GDExtension.zip", "lua-gdextension+luajit.zip")).IsEqual("Lua-GDExtension.zip");
+        // e.g. LimboAI, whose release names every ZIP like the slug: a demo, engine builds and export templates
+        Assertions.AssertString(Select("limboai", "limboai+v1.8.1.demo-project.zip", "limboai+v1.8.1.gdextension-4.6.zip",
+                "limboai+v1.8.1.godot-4.7.2.editor.linux.x86_64.zip", "limboai+v1.8.1.godot-4.7.2.export-templates.zip"))
+            .IsEqual("limboai+v1.8.1.gdextension-4.6.zip");
     }
 
     [TestCase]

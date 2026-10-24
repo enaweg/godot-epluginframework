@@ -16,8 +16,10 @@ internal static class ReleaseAssets
     /// The ZIP asset of a release to install as <paramref name="slug"/>: the only one, else the one named exactly like the
     /// slug (as "lua-gdextension.zip" next to "lua-gdextension+luajit.zip"), else the one whose name contains the slug
     /// (also with '-', '_' and '.' mixed up, as in "godot-servo-1.2.zip" for godot_servo), else the one named like an
-    /// add-on or plugin. Among several, a demo, example, sample or tutorial project released next to the add-on is left
-    /// out. Null when that leaves none or several, and the source archive is installed instead.
+    /// add-on, plugin or GDExtension. Among several, a demo, example, sample or tutorial project released next to the
+    /// add-on is left out, and of those left the one named like an add-on is taken, as LimboAI's
+    /// "limboai+v1.8.1.gdextension-4.6.zip" next to its engine builds and export templates. Null when that leaves none or
+    /// several, and the source archive is installed instead.
     /// </summary>
     public static string? Select(IEnumerable<(string Name, string Url)> assets, string slug)
     {
@@ -29,11 +31,12 @@ internal static class ReleaseAssets
                      name => Plain(Path.GetFileNameWithoutExtension(name)) == Plain(slug),
                      name => name.Contains(slug, StringComparison.OrdinalIgnoreCase),
                      name => Plain(name).Contains(Plain(slug), StringComparison.Ordinal),
-                     name => name.Contains("addon", StringComparison.OrdinalIgnoreCase) || name.Contains("plugin", StringComparison.OrdinalIgnoreCase)
+                     IsAddon
                  })
         {
             var named = zips.Where(a => matches(a.Name)).ToArray();
             if (named.Length > 1) named = named.Where(a => !IsExtra(a.Name)).ToArray();
+            if (named.Length > 1 && named.Where(a => IsAddon(a.Name)).ToArray() is { Length: > 0 } addons) named = addons;
             if (named.Length == 1) return named[0].Url;
         }
         return null;
@@ -42,9 +45,13 @@ internal static class ReleaseAssets
     private static string Plain(string name) => new(name.Where(c => c is not ('-' or '_' or '.' or ' ')).Select(char.ToLowerInvariant).ToArray());
 
     private static readonly string[] Extras = ["demo", "example", "sample", "tutorial"];
+    private static readonly string[] Addons = ["addon", "plugin", "gdextension"];
 
     /// <summary>A project released next to the add-on rather than the add-on itself.</summary>
     private static bool IsExtra(string name) => Extras.Any(extra => name.Contains(extra, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The add-on itself, rather than an engine build, export template or library released next to it.</summary>
+    private static bool IsAddon(string name) => Addons.Any(addon => name.Contains(addon, StringComparison.OrdinalIgnoreCase));
     public static string? String(JsonElement element, string property) => element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
     public static bool Flag(JsonElement element, string property) => element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.True;
     public static JsonElement[] Array(JsonElement element, string property) => element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Array ? value.EnumerateArray().ToArray() : [];

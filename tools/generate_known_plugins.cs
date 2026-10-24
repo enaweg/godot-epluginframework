@@ -73,8 +73,10 @@ var read = addons.Where(a => !ForGodot3(a.Name)).ToArray();
 await Parallel.ForEachAsync(read, new ParallelOptions { MaxDegreeOfParallelism = 8 }, async (addon, ct) =>
 {
     var tree = trees[addon] = await ReadTree(addon, ct);
-    // The updater chooses among several ZIP assets by the plugin's slug.
-    var hint = addon.Slug ?? existing.GetValueOrDefault(addon.Repository) ?? (tree.Plugins.Length == 1 ? Name(tree.Plugins[0]) : null);
+    // The updater chooses among several ZIP assets by the plugin's slug. A .gdextension outside addons/ names none: LimboAI
+    // has gdextension/limboai.gdextension in its repository and addons/limboai/ in its release ZIP.
+    var hint = addon.Slug ?? existing.GetValueOrDefault(addon.Repository) ??
+        (tree.Plugins.Length == 1 && NamesSlug(tree, tree.Plugins[0]) ? Name(tree.Plugins[0]) : null);
     if (SelectAsset(addon.ReleaseAssets ?? [], hint) is { } asset) zips[addon] = await ReadZip(asset, hint, ct);
     Console.Error.Write($"\rRead {Interlocked.Increment(ref done)}/{read.Length} repositories");
 });
@@ -226,24 +228,28 @@ Statistics(entries.Count, leftOut.Select(l => (l.Addon.Repository, l.Addon.Stars
     return (folder, note);
 }
 
-// The ZIP asset ePlugin's updater downloads (ReleaseAssets.Select): the only one, else the one named like the slug (also
-// with '-', '_' and '.' mixed up), else the one named like an add-on or plugin, leaving out demo, example, sample and
-// tutorial projects among several. Without one it downloads the source archive, which the repository stands for.
+// The ZIP asset ePlugin's updater downloads (ReleaseAssets.Select): the only one, else the one named exactly like the
+// slug, else the one named like the slug (also with '-', '_' and '.' mixed up), else the one named like an add-on, plugin
+// or GDExtension, leaving out demo, example, sample and tutorial projects among several and preferring the one named
+// like an add-on of those left. Without one it downloads the source archive, which the repository stands for.
 static ReleaseAsset? SelectAsset(ReleaseAsset[] assets, string? slug)
 {
     var zips = assets.Where(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
                                  Uri.TryCreate(a.Url, UriKind.Absolute, out var uri) && uri.AbsolutePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)).ToArray();
     if (zips.Length == 1) return zips[0];
+    static bool IsAddon(string name) => new[] { "addon", "plugin", "gdextension" }.Any(addon => name.Contains(addon, StringComparison.OrdinalIgnoreCase));
     foreach (var matches in new Func<string, bool>[]
              {
+                 name => slug is not null && Plain(Path.GetFileNameWithoutExtension(name), keepGodot: true) == Plain(slug, keepGodot: true),
                  name => slug is not null && name.Contains(slug, StringComparison.OrdinalIgnoreCase),
                  name => slug is not null && Plain(name, keepGodot: true).Contains(Plain(slug, keepGodot: true), StringComparison.Ordinal),
-                 name => name.Contains("addon", StringComparison.OrdinalIgnoreCase) || name.Contains("plugin", StringComparison.OrdinalIgnoreCase)
+                 IsAddon
              })
     {
         var named = zips.Where(a => matches(a.Name)).ToArray();
         if (named.Length > 1)
             named = named.Where(a => !new[] { "demo", "example", "sample", "tutorial" }.Any(extra => a.Name.Contains(extra, StringComparison.OrdinalIgnoreCase))).ToArray();
+        if (named.Length > 1 && named.Where(a => IsAddon(a.Name)).ToArray() is { Length: > 0 } addons) named = addons;
         if (named.Length == 1) return named[0];
     }
     return null;
@@ -372,6 +378,10 @@ static string Name(string folder) => folder.TrimEnd('/').Split('/')[^1];
 // "Godot 3D ..." is not one of them.
 static bool ForGodot3(string name) => Regex.IsMatch(name, @"\bgodot[\s-]*3\b", RegexOptions.IgnoreCase);
 static int Depth(string folder) => folder.Count(c => c == '/');
+// Whether a plugin folder of the repository is one the updater installs by its name: a plugin.cfg's, or a GDExtension
+// add-on's below addons/.
+static bool NamesSlug(Tree tree, string folder) =>
+    tree.Files.Contains(folder + "plugin.cfg", StringComparer.Ordinal) || Regex.IsMatch(folder, "(^|/)addons/[^/]+/$");
 
 // The folders of the GDExtension add-ons among the files: the folder below an addons/ folder that holds a .gdextension
 // file ("x/addons/servo/bin/servo.gdextension" is in "x/addons/servo/"), else the folder of the file itself. Hidden
