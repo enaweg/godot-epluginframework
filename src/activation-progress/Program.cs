@@ -213,10 +213,11 @@ internal sealed class Commands(IProgressWindow window, string? commandFile, stri
         window.Close();
         if (exit is not null) return;
         // The native UI loops own the main thread; exiting from here too avoids per-platform shutdown plumbing should
-        // a window never get there.
+        // a window never get there. Only a stuck UI loop is that late: one that is merely slow, e.g. while a build uses
+        // every core, must still exit on the UI thread, since exiting while it runs managed code crashes the helper.
         new Thread(() =>
         {
-            Thread.Sleep(TimeSpan.FromSeconds(Animation.TotalSeconds + 1));
+            Thread.Sleep(TimeSpan.FromSeconds(Animation.TotalSeconds + 15));
             Environment.Exit(0);
         }) { IsBackground = true }.Start();
     }
