@@ -52,8 +52,8 @@ internal static class InterimBridge
         foreach (var path in preserved.OrderByDescending(p => p.Length))
         {
             var full = PackageFiles.Inside(installed, path);
-            if (Directory.Exists(full)) Directory.Delete(full, true);
-            else if (File.Exists(full)) File.Delete(full);
+            if (Directory.Exists(full)) AddonFiles.DeleteTree(full);
+            else AddonFiles.DeleteFile(full);
         }
     }
 }

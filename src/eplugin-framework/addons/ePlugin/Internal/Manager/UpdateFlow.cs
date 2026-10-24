@@ -298,7 +298,7 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
     {
         if (_directory is not null && !File.Exists(Path.Combine(_directory, "journal.json")) && Directory.Exists(_directory))
         {
-            try { Directory.Delete(_directory, true); }
+            try { AddonFiles.DeleteTree(_directory); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         }
 

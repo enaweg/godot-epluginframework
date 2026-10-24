@@ -35,7 +35,7 @@ public class UpdateRecoveryTests
             ProjectFiles = ["Game.csproj"], Plugins = [new() { Slug = "ePlugin", OldVersion = "1.0.0", NewVersion = "2.0.0", SwapStarted = true }] };
         _journal.Save();
     }
-    [AfterTest] public void Cleanup() => Directory.Delete(_root, true);
+    [AfterTest] public void Cleanup() => AddonFiles.DeleteTree(_root);
     private UpdateRecovery.Outcome Recover(bool build = true) => UpdateRecovery.RunIfNeeded(_root, new NullLogger(), () => build, () => { });
     [TestCase]
     public void TwoUnhealthyStartsRestoreAndClearMarkerWithoutChangingSharedIndex()
@@ -53,6 +53,19 @@ public class UpdateRecoveryTests
         Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/ePlugin/plugin.cfg")).Contains("1.0.0")).IsTrue();
         Assertions.AssertInt(JsonNode.Parse(File.ReadAllText(path))!["futureField"]!.GetValue<int>()).IsEqual(42);
         Assertions.AssertObject(Recover()).IsEqual(UpdateRecovery.Outcome.Continue);
+    }
+    [TestCase]
+    public void EarlyRecoveryRestoresReadOnlyProjectFiles()
+    {
+        // version control systems such as Perforce sync files read-only
+        File.SetAttributes(Path.Combine(_root, "Game.csproj"), FileAttributes.ReadOnly);
+        File.SetAttributes(Path.Combine(_root, "addons/ePlugin/plugin.cfg"), FileAttributes.ReadOnly);
+
+        Assertions.AssertObject(Recover()).IsEqual(UpdateRecovery.Outcome.Continue);
+        Assertions.AssertObject(Recover()).IsEqual(UpdateRecovery.Outcome.Restart);
+
+        Assertions.AssertString(File.ReadAllText(Path.Combine(_root, "Game.csproj"))).IsEqual("working project");
+        Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/ePlugin/plugin.cfg")).Contains("1.0.0")).IsTrue();
     }
     [TestCase]
     public void EarlyRecoveryRestoresUnchangedDependantsDirectoryVisibility()

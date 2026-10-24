@@ -46,14 +46,14 @@ internal sealed class PackageFetcher(UpdateHttp http, IGitRunner git)
                 if (reason is not null)
                 {
                     refused.Add(new(candidate, reason));
-                    if (Directory.Exists(stage)) Directory.Delete(stage, true);
+                    AddonFiles.DeleteTree(stage);
                 }
                 progress?.Report((i + 1.0) / candidates.Count);
             }
             if (result.Count == 0) throw new InvalidDataException(string.Join(" ", refused.Select(r => r.Reason)));
             return new(result, refused);
         }
-        catch { if (Directory.Exists(transactionDirectory)) Directory.Delete(transactionDirectory, true); throw; }
+        catch { AddonFiles.DeleteTree(transactionDirectory); throw; }
     }
 
     private async Task<ValidatedPackage> StageAsync(UpdateCandidate candidate, IReadOnlyList<PluginUpdateTarget> targets, string stage,

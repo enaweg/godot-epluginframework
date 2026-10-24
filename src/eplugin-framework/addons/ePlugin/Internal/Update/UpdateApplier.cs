@@ -118,7 +118,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             try
             {
                 // A group refused before its marker leaves only its staging behind.
-                if (!File.Exists(Path.Combine(directory, "journal.json")) && System.IO.Directory.Exists(directory)) System.IO.Directory.Delete(directory, true);
+                if (!File.Exists(Path.Combine(directory, "journal.json"))) AddonFiles.DeleteTree(directory);
             }
             catch (Exception ex) { host.Log($"Cannot remove the staging folder {directory}: {ex.Message}"); }
             results.Add(result);
@@ -171,7 +171,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         catch
         {
             foreach (var (_, directory) in split.Skip(1))
-                if (System.IO.Directory.Exists(directory)) System.IO.Directory.Delete(directory, true);
+                AddonFiles.DeleteTree(directory);
             throw;
         }
         return split;
@@ -558,7 +558,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         catch (Exception ex) { build = new(1, ["The plugins-only build could not run: " + ex.Message]); }
         finally
         {
-            try { if (System.IO.Directory.Exists(work)) System.IO.Directory.Delete(work, true); }
+            try { AddonFiles.DeleteTree(work); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { host.Log($"Cannot remove {work}: {ex.Message}"); }
         }
         File.WriteAllLines(Path.Combine(journal.Directory, log), build.Output);
@@ -605,7 +605,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         var backup = Path.Combine(journal.Directory, ProjectBackup.Folder);
         // A replaced backup is written next to the old one and swapped in, so it is never half written; see ProjectBackup.
         var target = replace ? backup + ".new" : backup;
-        if (replace && System.IO.Directory.Exists(target)) System.IO.Directory.Delete(target, true);
+        if (replace) AddonFiles.DeleteTree(target);
         System.IO.Directory.CreateDirectory(target);
         var files = new List<string>();
         foreach (var file in System.IO.Directory.GetFiles(projectRoot).Where(f => Path.GetExtension(f) is ".csproj" or ".sln" or ".slnx" || Path.GetFileName(f).Equals("nuget.config", StringComparison.OrdinalIgnoreCase) || Path.GetFileName(f) == "project.godot"))
@@ -616,10 +616,10 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         if (replace)
         {
             var old = backup + ".old";
-            if (System.IO.Directory.Exists(old)) System.IO.Directory.Delete(old, true);
+            AddonFiles.DeleteTree(old);
             if (System.IO.Directory.Exists(backup)) Move(backup, old);
             Move(target, backup);
-            if (System.IO.Directory.Exists(old)) System.IO.Directory.Delete(old, true);
+            AddonFiles.DeleteTree(old);
         }
         journal.ProjectFiles = files;
     }
@@ -628,8 +628,8 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         // The live editor owns project.godot; normal rollback restores autoloads via recipe operations.
         // Its backup is reserved for independent early recovery, which reloads settings before restart.
         var (backup, files) = ProjectBackup.Find(journal.Directory, journal.ProjectFiles);
-        foreach (var file in files.Where(f => f != "project.godot")) File.Copy(PackageFiles.Inside(backup, file), PackageFiles.Inside(projectRoot, file), true);
-        if (!files.Any(p => p.Equals("nuget.config", StringComparison.OrdinalIgnoreCase)) && File.Exists(Path.Combine(projectRoot, "nuget.config"))) File.Delete(Path.Combine(projectRoot, "nuget.config"));
+        foreach (var file in files.Where(f => f != "project.godot")) AddonFiles.Overwrite(PackageFiles.Inside(backup, file), PackageFiles.Inside(projectRoot, file));
+        if (!files.Any(p => p.Equals("nuget.config", StringComparison.OrdinalIgnoreCase))) AddonFiles.DeleteFile(Path.Combine(projectRoot, "nuget.config"));
     }
     private static void Move(string from, string to) => AddonFiles.MoveDirectory(from, to);
 }
