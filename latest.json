@@ -1,8 +1,8 @@
 {
- "commit": "b778fa2146c4db3ef67a3bd9785348588e4c8a5c",
- "date": "2026-10-24T11:39:28Z",
- "covered": 10532,
- "coverable": 11616,
+ "commit": "6d8a61774cf869b8adb817da34b5d71b38235383",
+ "date": "2026-10-24T11:40:05Z",
+ "covered": 10544,
+ "coverable": 11631,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -105,8 +105,8 @@
    19
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Licenses.cs": [
-   231,
-   237
+   243,
+   252
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.LocalSources.cs": [
    46,
