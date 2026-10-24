@@ -1,8 +1,8 @@
 {
- "commit": "058a838a4d69344f49bb378b612bfa11e3899499",
- "date": "2026-10-24T18:15:18Z",
- "covered": 10608,
- "coverable": 11701,
+ "commit": "458e5b24696bfa78295d5c1b44e5e93efabf9fa7",
+ "date": "2026-10-24T20:33:18Z",
+ "covered": 10731,
+ "coverable": 11829,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -381,8 +381,8 @@
    71
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/AddonPackageValidator.cs": [
-   120,
-   121
+   134,
+   136
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/AddonSwap.cs": [
    114,
@@ -401,8 +401,8 @@
    44
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/KnownPlugins.Data.cs": [
-   962,
-   962
+   1028,
+   1028
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/KnownPlugins.cs": [
    6,
@@ -421,8 +421,8 @@
    46
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/PackageFetcher.cs": [
-   61,
-   61
+   80,
+   84
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/PackageFiles.cs": [
    104,
@@ -441,8 +441,8 @@
    26
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/ReleaseSources.cs": [
-   134,
-   136
+   158,
+   160
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/SafeZipExtractor.cs": [
    78,
