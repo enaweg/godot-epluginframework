@@ -384,7 +384,9 @@ operations need Godot APIs. While users are active a
 `System.Threading.Timer` sends a heartbeat for each every 5 s, also while the main thread is blocked; the assembly's
 `Unloading` hook stops it (a running timer would keep the collectible assembly loaded). The helper (`src/activation-progress`,
 protocol in its `Commands`) shows the newest text of the active users, closes the window after 15 s without a message
-from any of them (a user's `HOLD` extends that once, used for restarts) and exits 15 minutes after the last message.
+from any of them (a user's `HOLD` extends that once, used for restarts) and exits 15 minutes after the last message. It exits only on its UI thread, once the closed window is hidden
+(`Commands.Quit`): exiting from another thread while the native UI loop calls into managed code crashed it (SIGSEGV with
+GTK on .NET 8).
 Editors of the OS user using the same `ProgressSession.Protocol` share one helper: it is published as
 `<token>.helper` in Godot's editor data directory (`eplugin/progress`), next to `<token>.commands`. Editors connect to
 the oldest running compatible helper whose command file they can open; missing or inaccessible command files are

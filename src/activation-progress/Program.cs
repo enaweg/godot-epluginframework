@@ -127,7 +127,9 @@ internal static class Program
 /// </para>
 /// </remarks>
 /// <param name="clock">Milliseconds since some start; <see cref="Environment.TickCount64"/> unless a test drives time.</param>
-/// <param name="exit">Ends the helper; <see cref="Environment.Exit"/> unless a test watches for it.</param>
+/// <param name="exit">
+/// Ends the helper, on the UI thread once the window is hidden; <see cref="Environment.Exit"/> unless a test watches for it.
+/// </param>
 internal sealed class Commands(IProgressWindow window, string? commandFile, string initialText, TimeSpan windowTimeout,
     TimeSpan lifetime, Func<long>? clock = null, Action? exit = null)
 {
@@ -196,16 +198,27 @@ internal sealed class Commands(IProgressWindow window, string? commandFile, stri
             // The parent process closed the pipe, or deleted the command file before the helper could open it.
         }
 
-        // The window exits the process once its closing animation has played. The native UI loops own the main
-        // thread; exiting from here too avoids per-platform shutdown plumbing should a window never get there.
-        lock (_gate)
-        {
-            _quitting = true;
-            window.Close();
-        }
+        lock (_gate) Quit();
+    }
 
-        Thread.Sleep(TimeSpan.FromSeconds(Animation.TotalSeconds + 1));
-        Environment.Exit(0);
+    /// <summary>
+    /// Closes the window, and exits once its closing animation has played: <see cref="Hidden"/> runs on the UI thread,
+    /// so the native UI loop is not calling into managed code while the runtime shuts down. Exiting from another thread
+    /// while it ran crashed the helper (SIGSEGV with GTK on .NET 8). The caller holds the lock.
+    /// </summary>
+    private void Quit()
+    {
+        if (_quitting) return;
+        _quitting = true;
+        window.Close();
+        if (exit is not null) return;
+        // The native UI loops own the main thread; exiting from here too avoids per-platform shutdown plumbing should
+        // a window never get there.
+        new Thread(() =>
+        {
+            Thread.Sleep(TimeSpan.FromSeconds(Animation.TotalSeconds + 1));
+            Environment.Exit(0);
+        }) { IsBackground = true }.Start();
     }
 
     internal static string ReadAppendedLine(StreamReader input, StringBuilder pending)
@@ -324,7 +337,7 @@ internal sealed class Commands(IProgressWindow window, string? commandFile, stri
         if (now - _lastMessage < forget) return;
         if (commandFile is null)
         {
-            _exit();
+            Quit();
             return;
         }
 
@@ -348,7 +361,7 @@ internal sealed class Commands(IProgressWindow window, string? commandFile, stri
             // Editors discard the files of a helper that is no longer running.
         }
 
-        _exit();
+        Quit();
     }
 
     private sealed class User
