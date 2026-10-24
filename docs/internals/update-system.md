@@ -67,8 +67,10 @@ topic and no add-on topic is skipped, and entries found by a search are marked `
 A searched entry is listed only when its slug is named like its repository (one contains the other, ignoring `-`, `_`,
 `.` and "godot"), because games and projects often hold someone else's add-on in `addons/`. A slug claimed by several
 repositories goes to the one with the most stars. Since entries match by slug only, `generate_known_plugins.cs` leaves
-out add-ons whose name says they are made for Godot 3 (the input has no Godot version) and slugs too generic to tell an
-add-on from a project's own folder (`genericSlugs`, e.g. `plugin`, `misc`, `log`). Release ZIPs the updater refuses
+out add-ons whose name says they are made for Godot 3 (the input has no Godot version), unless the repository at the tag
+shows Godot 4 (a `.gdextension`, or only `project.godot` files with `config_version=5`; the ranking keeps titles such as
+"TODO Manager (Godot 3.x)" after an add-on moved on), whose listed name then loses that note, and slugs too generic to
+tell an add-on from a project's own folder (`genericSlugs`, e.g. `plugin`, `misc`, `log`). Release ZIPs the updater refuses
 (no or several plugin roots) leave the add-on out. Entries are not installed or validated in advance. Both tools end with statistics: how many repositories
 were added and filtered out, how many each kind of filter left out, and the ten most-starred ones left out with their
 reason, the likeliest to be add-ons a filter missed. Each also compares its result with the previous one (the existing

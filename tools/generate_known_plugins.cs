@@ -14,7 +14,8 @@
 // A plugin folder holds a plugin.cfg; without any, the folder of a GDExtension add-on (its .gdextension below addons/)
 // counts, which the updater installs without plugin.cfg. An add-on found by GitLab's or Codeberg's search is only listed
 // when its slug is named like its repository, since a search also finds games that hold other add-ons. Add-ons whose name
-// says they are made for Godot 3, and slugs too generic to match a project's folder by name (GenericSlugs), are left out.
+// says they are made for Godot 3, unless their repository at that tag shows Godot 4 (then the name loses that note), and
+// slugs too generic to match a project's folder by name (GenericSlugs), are left out.
 // No token is needed.
 using System.Collections.Concurrent;
 using System.Diagnostics;
@@ -68,9 +69,7 @@ http.DefaultRequestHeaders.UserAgent.ParseAdd("eplugin-known-plugins/1.0");
 var trees = new ConcurrentDictionary<Addon, Tree>();
 var zips = new ConcurrentDictionary<Addon, Package>();
 var done = 0;
-// Add-ons made for Godot 3 are left out without being read.
-var read = addons.Where(a => !ForGodot3(a.Name)).ToArray();
-await Parallel.ForEachAsync(read, new ParallelOptions { MaxDegreeOfParallelism = 8 }, async (addon, ct) =>
+await Parallel.ForEachAsync(addons, new ParallelOptions { MaxDegreeOfParallelism = 8 }, async (addon, ct) =>
 {
     var tree = trees[addon] = await ReadTree(addon, ct);
     // The updater chooses among several ZIP assets by the plugin's slug. A .gdextension outside addons/ names none: LimboAI
@@ -78,7 +77,7 @@ await Parallel.ForEachAsync(read, new ParallelOptions { MaxDegreeOfParallelism =
     var hint = addon.Slug ?? existing.GetValueOrDefault(addon.Repository) ??
         (tree.Plugins.Length == 1 && NamesSlug(tree, tree.Plugins[0]) ? Name(tree.Plugins[0]) : null);
     if (SelectAsset(addon.ReleaseAssets ?? [], hint) is { } asset) zips[addon] = await ReadZip(asset, hint, ct);
-    Console.Error.Write($"\rRead {Interlocked.Increment(ref done)}/{read.Length} repositories");
+    Console.Error.Write($"\rRead {Interlocked.Increment(ref done)}/{addons.Length} repositories");
 });
 Console.Error.WriteLine();
 
@@ -89,12 +88,14 @@ var chosen = new List<(string Slug, Addon Addon, string Note)>();
 var leftOut = new List<(Addon Addon, string Kind, string Reason)>();
 foreach (var addon in addons)
 {
-    if (ForGodot3(addon.Name))
+    var tree = trees[addon];
+    // The ranking keeps an Asset Library title such as "TODO Manager (Godot 3.x)" after the add-on moved to Godot 4.
+    if (ForGodot3(addon.Name) && !tree.Godot4)
     {
-        leftOut.Add((addon, "made for Godot 3", $"its name {addon.Name} says it is made for Godot 3, which Godot 4 cannot load"));
+        leftOut.Add((addon, "made for Godot 3", $"its name {addon.Name} says it is made for Godot 3, which Godot 4 cannot load, " +
+            "and its repository shows no Godot 4 project or GDExtension"));
         continue;
     }
-    var tree = trees[addon];
     var zip = zips.GetValueOrDefault(addon);
     var repositoryName = Regex.Replace(addon.Repository.TrimEnd('/').Split('/', ':')[^1], @"\.git$", "");
     string? slug;
@@ -139,6 +140,14 @@ foreach (var addon in addons)
             leftOut.Add((addon, folder is null ? "several plugins, none named like the repository" : "plugin at the repository root", note));
             continue;
         }
+        // The updater chooses the ZIP by this slug, which may be one no hint led to before, so the list does not keep
+        // changing between runs.
+        if (zip is null && SelectAsset(addon.ReleaseAssets ?? [], slug) is { } asset &&
+            await ReadZip(asset, slug, CancellationToken.None) is { Error: { } refusal, Refuses: true })
+        {
+            leftOut.Add((addon, "release ZIP refused by the updater", $"the release ZIP {asset.Name} {refusal}"));
+            continue;
+        }
     }
     // A search also finds games and projects that hold someone else's add-on; only a plugin named like its repository is
     // the repository's own.
@@ -177,8 +186,8 @@ var text = new StringBuilder($$"""
     // GitLab's or Codeberg's search are listed only with a slug named like their repository. Each slug is the one
     // extra_addons.txt gives, else the plugin folder in the latest release's ZIP, else the add-on's slug in the previous list,
     // else the plugin folder in the repository at that release or tag. Add-ons without a plugin folder, with a release ZIP
-    // the updater refuses, named as made for Godot 3 or with a slug too generic to match by folder name are left out. The
-    // packages were not installed or validated.
+    // the updater refuses, named as made for Godot 3 without a Godot 4 project or GDExtension in their repository, or with a
+    // slug too generic to match by folder name are left out. The packages were not installed or validated.
     internal static partial class KnownPlugins
     {
         private static KnownPlugin[] Entries() =>
@@ -188,7 +197,7 @@ var text = new StringBuilder($$"""
 foreach (var (slug, addon, _) in entries.OrderBy(e => e.Slug, StringComparer.OrdinalIgnoreCase).ThenBy(e => e.Slug, StringComparer.Ordinal))
 {
     text.Append($"        // {addon.Repository}, latest {(addon.UpdateSource == "tags" ? "tag" : "release")} {addon.LatestVersion}\n");
-    text.Append($"        new({Cs(slug)}, {Cs(addon.Name)}, {Cs(addon.UpdateUrl!)},\n");
+    text.Append($"        new({Cs(slug)}, {Cs(WithoutGodot3(addon.Name))}, {Cs(addon.UpdateUrl!)},\n");
     text.Append($"            {Cs(addon.DocumentationUrl)}, {Cs(addon.WebsiteUrl)}, {Cs(addon.Repository)}),\n");
 }
 text.Append("    ];\n}\n#endif\n");
@@ -342,7 +351,7 @@ async Task<Tree> ReadTree(Addon addon, CancellationToken ct)
             .Select(f => f[..^"plugin.cfg".Length]).ToArray();
         if (folders.Length == 0) folders = ExtensionFolders(files);
         var plugins = folders.Where(f => !folders.Any(o => o != f && f.StartsWith(o, StringComparison.Ordinal))).Order(StringComparer.Ordinal).ToArray();
-        return new(plugins, files, null);
+        return new(plugins, files, null, ForGodot3(addon.Name) && await ShowsGodot4(work, files, ct));
     }
     catch (OperationCanceledException) { return new([], [], "timed out"); }
     finally
@@ -356,6 +365,31 @@ async Task<Tree> ReadTree(Addon addon, CancellationToken ct)
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
     }
+}
+
+// Whether the repository at the fetched tag is made for Godot 4: it has a GDExtension, which only Godot 4 loads, or Godot
+// projects that are all Godot 4 ones (config_version 5; Godot 3 writes 4). Only the project.godot files are fetched.
+static async Task<bool> ShowsGodot4(string work, string[] files, CancellationToken ct)
+{
+    if (files.Any(f => f.EndsWith(".gdextension", StringComparison.OrdinalIgnoreCase))) return true;
+    var versions = new List<int>();
+    foreach (var project in files.Where(f => f == "project.godot" || f.EndsWith("/project.godot", StringComparison.Ordinal)))
+    {
+        var (code, text, _) = await Git(work, ["cat-file", "-p", "FETCH_HEAD:" + project], ct);
+        if (code == 0 && Regex.Match(text, @"^config_version\s*=\s*(\d+)", RegexOptions.Multiline) is { Success: true } match)
+            versions.Add(int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture));
+    }
+    return versions.Count > 0 && versions.All(v => v >= 5);
+}
+
+// The name without a note that it is made for Godot 3, for an add-on whose repository shows it moved to Godot 4:
+// "TODO Manager (Godot 3.x)" is listed as "TODO Manager".
+static string WithoutGodot3(string name)
+{
+    if (!ForGodot3(name)) return name;
+    var stripped = Regex.Replace(name, @"\s*(?:[-–:]\s*)?[(\[]?\bgodot[\s-]*3(?:\.[\dx]+)?\b[)\]]?", "", RegexOptions.IgnoreCase);
+    stripped = Regex.Replace(stripped, @"\s{2,}", " ").Trim(' ', '-', '–', ':');
+    return stripped.Length > 0 ? stripped : name;
 }
 
 static async Task<(int Code, string Output, string Error)> Git(string directory, string[] arguments, CancellationToken ct)
@@ -460,7 +494,8 @@ record Addon(string Name, int Stars, string? UpdateUrl, string? UpdateSource, st
     public string CloneUrl => GitUrl ?? Repository + ".git";
 }
 record ReleaseAsset(string Name, string Url);
-record Tree(string[] Plugins, string[] Files, string? Error);
+/// <param name="Godot4">The add-on's name says Godot 3, but the repository shows a Godot 4 project or GDExtension.</param>
+record Tree(string[] Plugins, string[] Files, string? Error, bool Godot4 = false);
 /// <param name="Root">The plugin root in the ZIP; null when it has none the updater accepts.</param>
 /// <param name="Refuses">The updater refuses this ZIP, so the add-on cannot be updated from its releases.</param>
 record Package(string Asset, string? Root, string[] Files, string? Error, bool Refuses);

@@ -7,8 +7,8 @@ namespace Enaweg.Plugin.Internal.Update;
 // GitLab's or Codeberg's search are listed only with a slug named like their repository. Each slug is the one
 // extra_addons.txt gives, else the plugin folder in the latest release's ZIP, else the add-on's slug in the previous list,
 // else the plugin folder in the repository at that release or tag. Add-ons without a plugin folder, with a release ZIP
-// the updater refuses, named as made for Godot 3 or with a slug too generic to match by folder name are left out. The
-// packages were not installed or validated.
+// the updater refuses, named as made for Godot 3 without a Godot 4 project or GDExtension in their repository, or with a
+// slug too generic to match by folder name are left out. The packages were not installed or validated.
 internal static partial class KnownPlugins
 {
     private static KnownPlugin[] Entries() =>
@@ -940,6 +940,9 @@ internal static partial class KnownPlugins
         // https://github.com/ImTani/godot-time-rewind-2d, latest release v1.0.1
         new("time_rewind_2d", "TimeRewind2D", "https://github.com/ImTani/godot-time-rewind-2d/releases",
             "https://github.com/ImTani/godot-time-rewind-2d#readme", "https://godotengine.org/asset-library/asset/3283", "https://github.com/ImTani/godot-time-rewind-2d"),
+        // https://github.com/OrigamiDev-Pete/TODO_Manager, latest release v2.7.0
+        new("Todo_Manager", "TODO Manager", "https://github.com/OrigamiDev-Pete/TODO_Manager/releases",
+            "https://github.com/OrigamiDev-Pete/TODO_Manager#readme", "https://github.com/OrigamiDev-Pete/TODO_Manager", "https://github.com/OrigamiDev-Pete/TODO_Manager"),
         // https://github.com/wyvernbw/tracer.gd, latest release v1.0.0
         new("tracer", "Tracer", "https://github.com/wyvernbw/tracer.gd/releases",
             "https://github.com/wyvernbw/tracer.gd#readme", "https://github.com/wyvernbw/tracer.gd", "https://github.com/wyvernbw/tracer.gd"),
