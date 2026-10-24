@@ -18,6 +18,12 @@ internal static class EditorWindows
     // Asking for EditorInterface outside the editor logs an error, so it is not asked at all.
     public static Theme? Theme => Engine.IsEditorHint() ? EditorInterface.Singleton.GetEditorTheme() : null;
 
+    /// <summary>Selects <paramref name="path"/> in the editor's FileSystem dock; does nothing without an editor.</summary>
+    public static void SelectFile(string path)
+    {
+        if (Engine.IsEditorHint()) EditorInterface.Singleton.SelectFile(path);
+    }
+
     /// <summary>
     /// Opens a dialog that has no parent above whatever exclusive editor window is open, e.g. Project Settings or the
     /// ePlugin Manager. Without an editor, e.g. in tests, it opens in the scene tree's root.

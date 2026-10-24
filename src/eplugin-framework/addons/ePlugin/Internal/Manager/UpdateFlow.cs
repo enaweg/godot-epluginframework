@@ -114,13 +114,14 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
     public ValidatedPackage? StagedAddon { get; private set; }
 
     private string? _directory;
+    // Raised whenever the loaded versions are forgotten, so a load still running then does not bring them back.
+    private int _versionsGeneration;
 
     /// <summary>Checks every plugin for updates now, also local packages; returns the status line.</summary>
     public async Task<CheckOutcome> CheckAsync()
     {
         Clear();
-        _remoteVersions.Clear();
-        _remoteVersionErrors.Clear();
+        ClearVersions();
         try
         {
             var result = await host.CheckForUpdatesAsync(true);
@@ -142,15 +143,19 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
 
     /// <summary>
     /// Loads the versions published at a plugin's update site. False when they were loading already or the manager
-    /// closed meanwhile; true once they or the reason they are missing are known.
+    /// closed meanwhile; true once they or the reason they are missing are known, or once they were forgotten while
+    /// loading (<see cref="ClearVersions"/>), when they have to be loaded again.
     /// </summary>
     public async Task<bool> LoadVersionsAsync(PluginUpdateTarget target, CancellationToken ct)
     {
         var slug = target.Slug;
         if (!_loadingVersions.Add(slug)) return false;
+        var generation = _versionsGeneration;
         try
         {
-            _remoteVersions[slug] = await host.ListRemoteVersionsAsync(target, ct);
+            var versions = await host.ListRemoteVersionsAsync(target, ct);
+            // e.g. from an update site the plugin no longer uses
+            if (generation == _versionsGeneration) _remoteVersions[slug] = versions;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -158,7 +163,7 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
         }
         catch (Exception ex)
         {
-            _remoteVersionErrors[slug] = ex.Message;
+            if (generation == _versionsGeneration) _remoteVersionErrors[slug] = ex.Message;
         }
         finally
         {
@@ -171,6 +176,7 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
     /// <summary>Forgets loaded versions, e.g. after a plugin's update site changed.</summary>
     public void ClearVersions()
     {
+        _versionsGeneration++;
         _remoteVersions.Clear();
         _remoteVersionErrors.Clear();
     }

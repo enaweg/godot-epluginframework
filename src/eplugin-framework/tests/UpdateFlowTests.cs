@@ -356,6 +356,16 @@ public class UpdateFlowTests : IDisposable
         Assertions.AssertBool(await flow.LoadVersionsAsync(target, CancellationToken.None)).IsTrue();
         Assertions.AssertString(flow.RemoteVersionErrors["a"]).IsEqual("rate limited");
 
+        // versions forgotten while they load, e.g. because the update site changed, are not kept
+        flow.ClearVersions();
+        var outdated = new TaskCompletionSource<IReadOnlyList<UpdateCandidate>>();
+        _host.Versions = outdated.Task;
+        var loading = flow.LoadVersionsAsync(target, CancellationToken.None);
+        flow.ClearVersions();
+        outdated.SetResult([Candidate("a")]);
+        Assertions.AssertBool(await loading).IsTrue();
+        Assertions.AssertBool(flow.RemoteVersions.ContainsKey("a") || flow.RemoteVersionErrors.ContainsKey("a")).IsFalse();
+
         // a manager closed meanwhile keeps nothing
         flow.ClearVersions();
         using var closed = new CancellationTokenSource();
