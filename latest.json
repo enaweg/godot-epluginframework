@@ -1,8 +1,8 @@
 {
- "commit": "8bc353965fcd43bbeea1a15dc83cfc23a67a2cfc",
- "date": "2026-10-24T11:46:21Z",
- "covered": 10576,
- "coverable": 11669,
+ "commit": "43b3ea1d80695ca3c8d615652e3d9b02ddf2e15c",
+ "date": "2026-10-24T12:15:49Z",
+ "covered": 10608,
+ "coverable": 11701,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -65,8 +65,8 @@
    1
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/NugetConfigManager.cs": [
-   224,
-   232
+   256,
+   264
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/PluginsOnlyBuild.cs": [
    32,
