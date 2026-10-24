@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using Enaweg.Plugin.Internal.Kinds;
 
 namespace Enaweg.Plugin.Internal.Update;
@@ -27,7 +28,7 @@ internal sealed record ValidatedPackage(UpdateCandidate Candidate, string Stagin
 {
     public bool IsValid => Findings.All(f => f.Severity != FindingSeverity.Error);
 }
-internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules = null)
+internal sealed partial class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules = null)
 {
     public ValidatedPackage Validate(ValidationContext context)
     {
@@ -139,6 +140,8 @@ internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules 
         var kind = PluginKinds.ForPackage(installed, script, files, installedFiles);
         // R21 says how an update loads new native libraries; a new add-on has no old ones to replace.
         findings.AddRange(PluginKinds.Workflow(kind).Validate(new(context, files, installedFiles)).Where(f => !context.NewInstall || f.Code != "R21"));
+        // E.g. the Godot 3 build a project releases next to its Godot 4 one, under the same version.
+        if (Godot3Evidence(stage, files) is { } godot3) Add("R27", FindingSeverity.Error, $"The package is made for Godot 3, which Godot 4 cannot load: {godot3}.");
         long bytes = 0;
         foreach (var file in files)
         {
@@ -166,6 +169,31 @@ internal sealed class AddonPackageValidator(IEnumerable<IAddonRule>? extraRules 
         if (installed.IsBlocked || installed.StoreReadOnly) Add("R17", FindingSeverity.Error, "Resolve the plugin's problem under Needs attention in the ePlugin Manager first.");
         foreach (var rule in extraRules ?? []) findings.AddRange(rule.Check(context));
         return new(candidate, stage, version, newUrl, files.Concat(installedFiles).Any(f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)), findings, kind);
+    }
+
+    // GDScript that Godot 4 refuses to parse: a bare tool line and export and onready without the '@' of an annotation.
+    [GeneratedRegex(@"^(?:tool[ \t]*\r?$|[ \t]*(?:export(?:\([^)\r\n]*\))?|onready)[ \t]+var\b)", RegexOptions.Multiline | RegexOptions.CultureInvariant)]
+    private static partial Regex Godot3Script();
+
+    /// <summary>
+    /// Why the staged package is made for Godot 3, or null: a GDNative library, which Godot 4 replaced by GDExtension, or
+    /// a script in Godot 3's GDScript. ePlugin runs in Godot 4 only.
+    /// </summary>
+    internal static string? Godot3Evidence(string stage, IEnumerable<string> files)
+    {
+        foreach (var file in files)
+        {
+            var relative = Path.GetRelativePath(stage, file).Replace('\\', '/');
+            var extension = Path.GetExtension(file).ToLowerInvariant();
+            if (extension is ".gdnlib" or ".gdns") return $"{relative} is a GDNative library";
+            if (extension != ".gd") continue;
+            string text;
+            try { text = File.ReadAllText(file); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { continue; }
+            if (Godot3Script().Match(text) is { Success: true } match)
+                return $"{relative} has the line \"{match.Value.Trim()}\", which Godot 4 writes with an annotation (@)";
+        }
+        return null;
     }
 }
 #endif

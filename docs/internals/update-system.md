@@ -50,7 +50,9 @@ slug. `PluginUpdateTarget.KnownUrl` is the last entry of `UpdateUrls`, and `Plug
 source and website links. `eplugin/updates/builtin_update_sites` (default on, `EGlobal.UseKnownPlugins`) turns it off.
 
 Regenerate the data with `tools/generate_known_plugins.cs` from the output of `tools/build_godot_addons.cs` (run both in
-`tools/`); never edit it by hand. `build_godot_addons.cs` needs a GitHub token without scopes and reads three hosts at
+`tools/`); never edit it by hand. Its texts come from other people's repositories and it is C# source, so the generator escapes
+every line break C# knows (also U+0085, U+2028 and U+2029) in its strings and replaces them in its comments, and
+`build_godot_addons.cs` records no release tag with whitespace or control characters. `build_godot_addons.cs` needs a GitHub token without scopes and reads three hosts at
 the same time: GitHub repositories from the godot-stars ranking (at least 20 stars, read in GraphQL batches one after
 another), and the searches of gitlab.com and codeberg.org for Godot projects (at least 5 stars; a token is optional, with
 one GitLab also leaves out forks). Each token comes from its environment variables (`GITHUB_TOKEN` or `GH_TOKEN`,
@@ -60,15 +62,19 @@ version tag. The 500-entry maximum applies to the GitHub ranking only. Searches 
 topic and no add-on topic is skipped, and entries found by a search are marked `searched`. Each slug is, in this order:
 
 1. the one `tools/extra_addons.txt` gives;
-2. the plugin folder in the latest release's ZIP, chosen like the updater's `ReleaseAssets.Select` (file list only);
+2. the plugin folder in the latest release's ZIP, chosen like the updater's `ReleaseAssets.Select` (file list only); of
+   several releases of the newest version (`build_godot_addons.cs` records each asset's release tag) the first whose ZIP
+   the updater accepts, including R27's Godot 3 check;
 3. the slug already in the list;
 4. the plugin folder in the repository at the latest release or version tag.
 
 A searched entry is listed only when its slug is named like its repository (one contains the other, ignoring `-`, `_`,
 `.` and "godot"), because games and projects often hold someone else's add-on in `addons/`. A slug claimed by several
 repositories goes to the one with the most stars. Since entries match by slug only, `generate_known_plugins.cs` leaves
-out add-ons whose name says they are made for Godot 3 (the input has no Godot version) and slugs too generic to tell an
-add-on from a project's own folder (`genericSlugs`, e.g. `plugin`, `misc`, `log`). Release ZIPs the updater refuses
+out add-ons whose name says they are made for Godot 3 (the input has no Godot version), unless the repository at the tag
+shows Godot 4 (a `.gdextension`, or only `project.godot` files with `config_version=5`; the ranking keeps titles such as
+"TODO Manager (Godot 3.x)" after an add-on moved on), whose listed name then loses that note, and slugs too generic to
+tell an add-on from a project's own folder (`genericSlugs`, e.g. `plugin`, `misc`, `log`). Release ZIPs the updater refuses
 (no or several plugin roots) leave the add-on out. Entries are not installed or validated in advance. Both tools end with statistics: how many repositories
 were added and filtered out, how many each kind of filter left out, and the ten most-starred ones left out with their
 reason, the likeliest to be add-ons a filter missed. Each also compares its result with the previous one (the existing
@@ -156,7 +162,12 @@ its activated shared entry is not reported as a disabled plugin.
 
 Every apply requires dialog confirmation. Stage and validate the whole batch before touching addons: `PackageFetcher`
 leaves a package that cannot be fetched or is refused out of the batch, as a `RefusedPackage`, and fails only when all are
-refused. The manager deletes a staged batch it does not install (`UpdateFlow.Clear`); since an assembly reload or a
+refused. A release source reads a release's version with `ReleaseAssets.TryVersion` (the tag, else the first word of the title,
+then of the tag, split at spaces, `_` and `-` (only in words that are no version), that is a version and not right after "Godot", unless another number follows it) and groups releases of one version (`ByVersion`); the newest release of a group is the
+candidate and the others' ZIPs are its `ZipPackageRef.Alternatives`, which `PackageFetcher` downloads and validates in
+turn until one is accepted (R28 names it; with all refused, the announced one's reason). `AddonPackageValidator` refuses
+packages made for Godot 3 (R27, `Godot3Evidence`: GDNative files or GDScript that Godot 4 cannot parse), the usual
+reason for a release of the same version. The manager deletes a staged batch it does not install (`UpdateFlow.Clear`); since an assembly reload or a
 crash forgets it, `ResumeUpdates` deletes folders without a journal last written more than six hours ago
 (`UpdateJournals.AbandonedStaging`). A plugin folder that is a link (to a working copy) is refused for every kind (R20), and both swaps refuse it
 too (`AddonFiles.RefuseLink`), since moving it would replace the link with the downloaded copy. Version control systems such as Perforce sync files

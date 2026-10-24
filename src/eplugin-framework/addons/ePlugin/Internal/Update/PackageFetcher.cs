@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -63,15 +64,41 @@ internal sealed class PackageFetcher(UpdateHttp http, IGitRunner git)
         Directory.CreateDirectory(Path.GetDirectoryName(stage)!);
         if (candidate.Package is ZipPackageRef zip)
         {
-            var download = Path.Combine(transactionDirectory, "download.tmp");
-            try
+            string[] urls = [zip.Url, .. zip.Alternatives ?? []];
+            // With alternatives, the announced package's refusal or failure is reported when every package is refused.
+            ValidatedPackage? refused = null;
+            ExceptionDispatchInfo? failure = null;
+            foreach (var url in urls)
             {
-                await http.DownloadAsync(zip.Url, download, relay, ct, candidate.SourceUrl).ConfigureAwait(false);
-                SafeZipExtractor.Extract(download, candidate.Slug, stage, ct);
+                AddonFiles.DeleteTree(stage);
+                try
+                {
+                    var download = Path.Combine(transactionDirectory, "download.tmp");
+                    try
+                    {
+                        await http.DownloadAsync(url, download, relay, ct, candidate.SourceUrl).ConfigureAwait(false);
+                        SafeZipExtractor.Extract(download, candidate.Slug, stage, ct);
+                    }
+                    finally { if (File.Exists(download)) File.Delete(download); }
+                    var validated = new AddonPackageValidator().Validate(new(target, candidate, stage, allowDowngrade, allowReinstall));
+                    if (urls.Length == 1) return validated;
+                    if (validated.IsValid)
+                        return url == zip.Url ? validated : validated with
+                        {
+                            Findings = [.. validated.Findings, new("R28", FindingSeverity.Info,
+                                $"The release's first package was refused; this one of another release of version {candidate.NewVersion} is installed: {url}")]
+                        };
+                    if (failure is null) refused ??= validated;
+                }
+                catch (Exception ex) when (urls.Length > 1 && !ct.IsCancellationRequested)
+                {
+                    if (refused is null) failure ??= ExceptionDispatchInfo.Capture(ex);
+                }
             }
-            finally { if (File.Exists(download)) File.Delete(download); }
+            failure?.Throw();
+            return refused!;
         }
-        else if (candidate.Package is LocalZipPackageRef local)
+        if (candidate.Package is LocalZipPackageRef local)
         {
             // Read in place: the archive is only opened, never changed, and staging validates it like a download.
             if (candidate.SourceUrl is not null || !Path.IsPathFullyQualified(local.Path) || !local.Path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
