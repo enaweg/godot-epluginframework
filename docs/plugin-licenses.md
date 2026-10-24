@@ -73,6 +73,8 @@ An update whose license is unchanged is installed without asking again. When the
 
 A license set by a recipe is only known once the new code is compiled. Such a license is checked after the update instead: if it changed, the dialog asks for it, and declining disables the plugin.
 
+A new version may also require a plugin that is installed but disabled. The update enables it only when that plugin's license, and the licenses of the plugins it would enable in turn, are accepted or `eplugin/licenses/auto_accept` is on. Otherwise the update fails and is rolled back: enable the plugin in the ePlugin Manager, which shows its license, then install the update again.
+
 ## Reading a license again
 
 The plugin details of the [ePlugin Manager](eplugin-manager.md) show each plugin's license. Click it to open the license again. For a plugin that requires a license, the details also show whether and when it was accepted. A missing `LICENSE` file is shown as missing.

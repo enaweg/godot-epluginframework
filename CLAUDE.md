@@ -431,7 +431,8 @@ throw-away instance of its compiled script type. With pending licenses the plugi
 still inside its `_EnablePlugin`), the review is queued, and `EPluginPlugin._Process` shows `LicenseDialog` a frame
 later; accepting re-enables it. `ReviewEnabledLicenses` (end of `Initialize`) asks about enabled plugins whose license
 source is not accepted, e.g. a recipe license an update changed; declining disables them. The ePlugin Manager asks
-before `SetPluginEnabled` and before installing staged updates (skipping recipe-licensed plugins), and its details link
+before `SetPluginEnabled` and before installing staged updates (skipping recipe-licensed plugins; a disabled dependency a
+new recipe adds is enabled by `EnsureUpdateDependency` only with its licenses accepted, otherwise the update fails), and its details link
 the license to `LicenseDialog.CreateViewer`. The `eplugin/licenses/auto_accept` project setting (on the settings' General tab, which confirms turning it on; logged)
 skips the dialog.
 
