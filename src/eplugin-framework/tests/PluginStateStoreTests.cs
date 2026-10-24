@@ -102,6 +102,25 @@ public class PluginStateStoreTests
     }
 
     [TestCase]
+    public void AParticipantJoiningAgainChangesItsTargetAndKeepsItsInstalledVersion()
+    {
+        var (store, path) = NewStore();
+        Assertions.AssertBool(store.TryCreateBaseline([])).IsTrue();
+        Assertions.AssertBool(store.TryBeginAttempt("dependency", "1.0", PersistedPluginState.Deactivated, out var id)).IsTrue();
+        Assertions.AssertBool(store.TryAddParticipant(id, "consumer", "1.0", PersistedPluginState.Activated)).IsTrue();
+
+        Assertions.AssertBool(store.TryAddParticipant(id, "consumer", "2.0", PersistedPluginState.Deactivated)).IsTrue();
+        Assertions.AssertBool(store.TryAddParticipant(Guid.NewGuid(), "consumer", "1.0", PersistedPluginState.Deactivated)).IsFalse();
+
+        var reloaded = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(reloaded.Load()).IsTrue();
+        var consumer = reloaded.GetLocal("consumer")!;
+        Assertions.AssertObject(consumer.TargetState).IsEqual(PersistedPluginState.Deactivated);
+        Assertions.AssertString(consumer.InstalledVersion).IsEqual("1.0");
+        Assertions.AssertObject(consumer.AttemptId).IsEqual(id);
+    }
+
+    [TestCase]
     public void InvalidSharedFileIsPreservedAndBlocksWrites()
     {
         var (store, path) = NewStore();

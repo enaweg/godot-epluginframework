@@ -48,7 +48,28 @@ internal sealed partial class EGlobal
         // transition's own local marker must not block it then.
         if (_transition?.Participants.TryGetValue(context, out var joinedTarget) == true)
         {
-            return joinedTarget == target;
+            if (joinedTarget == target)
+            {
+                return true;
+            }
+
+            // A plugin that joined to stay activated, e.g. because the optional recipe it had on a plugin disabled before
+            // it was removed, can still be disabled by the same transition, e.g. as a dependant of another plugin.
+            if (joinedTarget != PersistedPluginState.Activated || target != PersistedPluginState.Deactivated)
+            {
+                context.Logger?.Error($"Plugin {context.Slug} cannot be {(target == PersistedPluginState.Activated ? "activated" : "deactivated")} by the plugin operation that is deactivating it.");
+                return false;
+            }
+
+            if (!_stateStore.TryAddParticipant(_transition.AttemptId, context.Slug, context.Metadata?.Version, target))
+            {
+                context.State = EEditorPluginState.Error;
+                FailTransition("cannot_record_participant");
+                return false;
+            }
+
+            _transition.Participants[context] = target;
+            return true;
         }
 
         var ownMarker = _transition is not null && _stateStore.GetLocal(context.Slug)?.AttemptId == _transition.AttemptId;

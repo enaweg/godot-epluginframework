@@ -143,7 +143,8 @@ plugin in error and discards a half-built recipe when `CreateRecipe` throws. Sca
 the failure but leaves that plugin's state alone, since no attempt of its own could resolve that error. `FindDependencyCycle` fails an activation
 whose hard dependencies lead back to the plugin (otherwise it waits for itself forever). Godot frees a plugin's instance
 on disable, so `AddContext` replaces a deactivated or freed context of the same slug. A transition has one participant
-per slug: when a manual retry re-enables a plugin whose failed activation disabled it, the new instance's
+per slug. Its target changes only when one that joined to stay activated (its optional recipe on a plugin disabled
+before it was removed) is then disabled. When a manual retry re-enables a plugin whose failed activation disabled it, the new instance's
 `EnableEPlugin` replaces the stale participant, and the retry drops the old context instead of continuing with it. That includes the framework
 itself: its `_DisablePlugin` calls `EGlobal.Detach`, which drops the singleton, so the instance created when it is
 enabled again initializes like after an assembly reload instead of using the freed one. The compiled plugin types are read

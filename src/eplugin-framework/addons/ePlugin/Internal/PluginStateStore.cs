@@ -311,13 +311,25 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
 
         if (_local.TryGetValue(slug, out var existing))
         {
-            return existing.AttemptId == attemptId && existing.TargetState == targetState;
+            if (existing.AttemptId != attemptId)
+            {
+                return false;
+            }
+
+            if (existing.TargetState == targetState)
+            {
+                return true;
+            }
         }
 
+        // A participant joining again with another target, e.g. one that joined to stay activated and is then disabled,
+        // keeps its installed version: that is what a recovery restores.
         var next = new Dictionary<string, LocalPluginAttempt>(_local, StringComparer.Ordinal)
         {
-            [slug] = new LocalPluginAttempt(attemptId, slug, installedVersion, targetState,
-                PersistedPluginState.Failed, "attempt_in_progress")
+            [slug] = existing is not null
+                ? existing with { TargetState = targetState }
+                : new LocalPluginAttempt(attemptId, slug, installedVersion, targetState,
+                    PersistedPluginState.Failed, "attempt_in_progress")
         };
         if (!SaveLocal(next))
         {
