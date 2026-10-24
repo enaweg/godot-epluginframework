@@ -26,7 +26,7 @@ namespace Enaweg.Plugin.Internal.Dotnet;
 /// configured by hand) is left untouched. The whole file is only ever deleted when, after removing
 /// the last managed entry, nothing else is left in it.
 /// </remarks>
-internal static class NugetConfigManager
+internal static partial class NugetConfigManager
 {
     private const string ManagedKeyPrefix = "ePlugin-";
     private const string UsedByCommentPrefix = "ePlugin-managed used-by=\"";
@@ -198,13 +198,17 @@ internal static class NugetConfigManager
     }
 
     internal static string DecodeSlug(string text) =>
-        Regex.Replace(text, "%(25|2C|22|2D)", match => match.Groups[1].Value switch
+        EncodedCharacter().Replace(text, match => match.Groups[1].Value switch
         {
             "25" => "%",
             "2C" => ",",
             "22" => "\"",
             _ => "-",
         });
+
+    // The characters EncodeSlug percent-encodes; group 1 is their code.
+    [GeneratedRegex("%(25|2C|22|2D)", RegexOptions.CultureInvariant)]
+    private static partial Regex EncodedCharacter();
 
     private static void SetUsedByComment(XElement add, string[] usedBy)
     {
