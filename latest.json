@@ -1,8 +1,8 @@
 {
- "commit": "f5a499d4d6b22cd9a8d5ee4ab58f78a4abcfc749",
- "date": "2026-10-24T07:35:12Z",
- "covered": 10176,
- "coverable": 11214,
+ "commit": "6d754dc1d1887e3640564f9f2f7ff5c73496b042",
+ "date": "2026-10-24T07:59:02Z",
+ "covered": 10191,
+ "coverable": 11224,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -89,8 +89,8 @@
    35
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Activation.cs": [
-   278,
-   304
+   279,
+   305
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Deactivation.cs": [
    120,
@@ -109,20 +109,20 @@
    58
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.OptionalDependencies.cs": [
-   101,
-   107
+   108,
+   112
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.PlainPlugins.cs": [
    130,
-   146
+   143
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.PluginManager.cs": [
    75,
    82
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.RecipeOperations.cs": [
-   96,
-   109
+   103,
+   116
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Retry.cs": [
    130,
