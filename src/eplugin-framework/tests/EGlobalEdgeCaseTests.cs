@@ -106,12 +106,16 @@ public partial class EGlobalEdgeCaseTests : IDisposable
         // like an ePlugin whose _EnablePlugin does not call EnableEPlugin: enabled, but never activated
         _fixture.Context("base")!.State = EEditorPluginState.Created;
         _fixture.Enable("app");
+        var start = _fixture.Operations.Count;
 
         // resumes the waiting app, which waits again; this used to pop and push it back forever
         _fixture.Enable("other");
 
         Assertions.AssertObject(_fixture.State("other")).IsEqual(EEditorPluginState.Activated);
         Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Created);
+        // other joined the transition app keeps open, which builds once base activates: a plugin that never calls
+        // EnableEPlugin cannot be told apart from one Godot has not enabled yet, e.g. while the editor starts
+        Assertions.AssertThat(_fixture.Operations.Skip(start).ToArray()).ContainsExactly("add-nuget Other.Package");
         Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsTrue();
     }
 

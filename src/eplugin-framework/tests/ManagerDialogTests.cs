@@ -413,9 +413,10 @@ public class ManagerDialogTests
 
     private static Button Button(Node node, string text) => Buttons(node).Single(b => b.Text == text);
 
+    /// <summary>Frees a dialog now, also one its own code queued for deletion, so the test leaves no orphan nodes.</summary>
     private static void Free(Node node)
     {
-        if (GodotObject.IsInstanceValid(node) && !node.IsQueuedForDeletion()) node.Free();
+        if (GodotObject.IsInstanceValid(node)) node.Free();
     }
 }
 #endif

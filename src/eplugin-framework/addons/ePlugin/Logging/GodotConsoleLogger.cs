@@ -80,7 +80,7 @@ public sealed class GodotConsoleLogger(string prefix) : ILogger
     /// The first frame outside logging: loggers wrapping this one (any <see cref="ILogger"/>) and methods marked
     /// <see cref="StackTraceHiddenAttribute"/> are skipped.
     /// </summary>
-    private static StackFrame? Caller()
+    internal static StackFrame? Caller()
     {
         foreach (var frame in new StackTrace(1, true).GetFrames())
         {

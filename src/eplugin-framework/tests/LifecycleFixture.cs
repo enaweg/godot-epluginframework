@@ -109,6 +109,7 @@ internal sealed class LifecycleFixture : IDisposable
     {
         if (Silent.Contains(slug) || Context(slug) is not { } context) return;
         if (context.State != EEditorPluginState.Deactivated) Global.DisableEPlugin(context);
+        if (context.PluginBase is { } instance && GodotObject.IsInstanceValid(instance)) instance.Free();
     }
 
     private void WriteConfig(string slug, string version, string script, string extraConfig)
