@@ -58,6 +58,15 @@ internal sealed partial class EGlobal
                 continue;
             }
 
+            // Godot counts an ePlugin as enabled inside its own _EnablePlugin, also while it waits for a dependency. It has
+            // installed nothing yet, and nothing installed its nested recipe: that follows once it is activated.
+            if (optional.Slug != assumeEnabledSlug && ManagedContext(optional.Slug) is { State: EEditorPluginState.Created })
+            {
+                context.Logger?.Log(
+                    $"Optional dependency {optional.Slug} is not activated yet, skipping its recipe for {context.Slug}.");
+                continue;
+            }
+
             if (optional.Version is not null)
             {
                 var optionalContext = _contexts.FirstOrDefault(c => c.Slug == optional.Slug);

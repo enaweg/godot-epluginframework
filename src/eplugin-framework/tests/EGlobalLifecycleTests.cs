@@ -342,6 +342,44 @@ public class EGlobalLifecycleTests : IDisposable
     }
 
     [TestCase]
+    public void AnOptionalPluginThatWaitsForItsOwnDependencyGetsItsNestedRecipeOnceItIsActivated()
+    {
+        _fixture.AddEPlugin("base", b => b.AddNuget("Base.Package"));
+        _fixture.AddEPlugin("extension", b => b.AddNuget("Extension.Package").AddPluginDependency("base"));
+        _fixture.AddEPlugin("app", b => b
+            .AddOptionalPluginDependency("base", null, optional => optional.AddNuget("App.Base"))
+            .AddOptionalPluginDependency("extension", null, optional => optional.AddNuget("App.Extension")));
+        _fixture.Enable("app");
+        // an assembly reload after the build lost the snapshot of what was applied
+        _fixture.Context("app")!.AppliedOptionalDependencies = null;
+        var start = _fixture.Operations.Count;
+
+        // the extension is enabled, and still waits for base while base activates
+        _fixture.Enable("extension");
+
+        Assertions.AssertObject(_fixture.State("extension")).IsEqual(EEditorPluginState.Activated);
+        Assertions.AssertThat(OperationsSince(start)).ContainsExactly(
+            "add-nuget Base.Package", "add-nuget App.Base", "add-nuget Extension.Package", "add-nuget App.Extension", "build");
+    }
+
+    [TestCase]
+    public void AnOptionalPluginWhoseActivationFailsLeavesNoNestedRecipe()
+    {
+        _fixture.AddEPlugin("base", b => b.AddNuget("Base.Package"));
+        _fixture.AddEPlugin("extension", b => b.AddNuget("Extension.Package").AddPluginDependency("base"));
+        _fixture.AddEPlugin("app", b => b
+            .AddOptionalPluginDependency("base", null, optional => optional.AddNuget("App.Base"))
+            .AddOptionalPluginDependency("extension", null, optional => optional.AddNuget("App.Extension")));
+        _fixture.Enable("app");
+        _fixture.Cli.FailingPackages.Add("Extension.Package");
+
+        _fixture.Enable("extension");
+
+        Assertions.AssertObject(_fixture.State("extension")).IsEqual(EEditorPluginState.Error);
+        Assertions.AssertThat(_fixture.Operations).NotContains("add-nuget App.Extension");
+    }
+
+    [TestCase]
     public void APlainPluginEnabledInProjectSettingsWaitsForItsLicense()
     {
         _fixture.AddPlainPlugin("tool", extraConfig: "license_required=true");

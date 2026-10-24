@@ -193,7 +193,8 @@ opposite order. Recipe application always goes through `PluginContext.Cli` (an `
 `dotnet` calls elsewhere.
 
 Optional dependencies are resolved by `EGlobal.ResolveOptionalRecipes` at install time: a nested recipe is
-applied only when its plugin is already enabled and satisfies any version constraint. It never enables a
+applied only when its plugin is already enabled (an ePlugin also activated, not one still waiting for its own
+dependency inside its `_EnablePlugin`) and satisfies any version constraint. It never enables a
 plugin and never fails the activation. What was applied is snapshotted in
 `PluginContext.AppliedOptionalDependencies` so uninstall reverses exactly that (falling back to re-resolving
 when the snapshot was lost to an assembly reload).
