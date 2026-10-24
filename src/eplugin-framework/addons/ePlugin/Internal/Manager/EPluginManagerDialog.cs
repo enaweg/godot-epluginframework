@@ -214,7 +214,9 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     public void Refresh()
     {
         if (_working) return;
-        _updates.Clear();
+        // A new add-on staged by Install from ZIP waits for its confirmation, which clears it; e.g. the local index
+        // finishing in the meantime must not drop it. Installing checks its folder again.
+        if (_updates.StagedAddon is null) _updates.Clear();
         _licenses.Clear(); _welcomes.Clear();
         var plugins = _global.CollectPlugins();
         _targets = _global.CollectUpdateTargets();

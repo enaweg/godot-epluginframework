@@ -185,6 +185,20 @@ public class AddonInstallTests
     }
 
     [TestCase]
+    public void APluginIsRemovedAgainWhenTheBuildCannotRun()
+    {
+        var package = Stage(CSharpZip());
+        var host = new FakeInstallHost { Throws = new InvalidOperationException("dotnet crashed") };
+
+        var result = new AddonInstaller(Addons, _root, host).Install(package, Transaction);
+
+        Assertions.AssertBool(result.Installed).IsFalse();
+        Assertions.AssertString(result.Failure).Contains("It was removed again.");
+        Assertions.AssertBool(Directory.Exists(Path.Combine(Addons, "plugin"))).IsFalse();
+        Assertions.AssertString(File.ReadAllText(result.BuildLog!)).Contains("dotnet crashed");
+    }
+
+    [TestCase]
     public void AFolderCreatedSinceValidationIsNotReplaced()
     {
         var package = Stage(CSharpZip());
@@ -200,6 +214,8 @@ public class AddonInstallTests
     public void AZipFileOfAnInstalledPluginInstallsItsVersion()
     {
         Assertions.AssertBool(ZipInstall.Choose(Archive("2.0.0"), null, null).IsNew).IsTrue();
+        // a folder that differs from an installed one only in case is refused on every system
+        Assertions.AssertString(ZipInstall.Choose(Archive("2.0.0"), null, null, "Plugin").Refused).Contains("differs from the installed res://addons/Plugin only in case");
 
         var plugin = new PluginInfo("plugin", "Plugin", PluginKind.GDScript, true) { Version = "1.0.0" };
         var target = new PluginUpdateTarget("plugin", "Plugin", "1.0.0", null, Path.Combine(Addons, "plugin"));
@@ -275,6 +291,7 @@ public class AddonInstallTests
     private sealed class FakeInstallHost : IAddonInstallHost
     {
         public BuildOutcome Build { get; init; } = new(0, ["Build succeeded."]);
+        public Exception? Throws { get; init; }
         public int Builds { get; private set; }
         public int Scans { get; private set; }
         public List<string> Logged { get; } = [];
@@ -282,6 +299,7 @@ public class AddonInstallTests
         BuildOutcome IAddonInstallHost.Build()
         {
             Builds++;
+            if (Throws is not null) throw Throws;
             return Build;
         }
 

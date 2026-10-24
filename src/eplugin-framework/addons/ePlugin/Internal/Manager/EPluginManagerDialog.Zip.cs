@@ -34,17 +34,27 @@ internal sealed partial class EPluginManagerDialog
         _operationNotice = null;
         var file = Path.GetFileName(path);
         _working = true; Buttons(); _status.Text = $"Reading {file}...";
+        try { await ReadZipAsync(path, file); }
+        // whatever failed, the manager must not stay locked
+        finally { _working = _installing = false; }
+    }
+
+    private async Task ReadZipAsync(string path, string file)
+    {
         AddonArchive archive;
         try { archive = await Task.Run(() => AddonArchive.Read(path), _lifetime); }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        catch (OperationCanceledException) { _working = false; return; }
+        // any file can be chosen, so reading it may fail in more ways than a damaged ZIP file
+        catch (Exception ex)
         {
             _working = false;
             if (IsShown) ShowZipNotice(new(InstallStep.Failed, $"Cannot install {file}: {ex.Message}", true));
             return;
         }
-        catch (OperationCanceledException) { _working = false; return; }
         if (!IsShown) { _working = false; return; }
-        var choice = ZipInstall.Choose(archive, _model.Find(archive.Slug), _targets.FirstOrDefault(t => t.Slug == archive.Slug));
+        var sameExceptCase = _model.Plugins.FirstOrDefault(p => p.Plugin.Slug != archive.Slug &&
+                                                                p.Plugin.Slug.Equals(archive.Slug, StringComparison.OrdinalIgnoreCase))?.Plugin.Slug;
+        var choice = ZipInstall.Choose(archive, _model.Find(archive.Slug), _targets.FirstOrDefault(t => t.Slug == archive.Slug), sameExceptCase);
         if (!choice.IsNew)
         {
             _working = false;

@@ -62,7 +62,7 @@ internal sealed partial class EGlobal
         public BuildOutcome Build()
         {
             ActivationProgress.SetText("Building the project with the new plugin...");
-            return (global.GetOrCreateContext(global._ePluginContext!).Cli as ICheckedDotnetCli)?.TryBuild() ?? new(1, ["Checked dotnet CLI is unavailable."]);
+            return (global.GetOrCreateContext(global._ePluginContext!).Cli as ICheckedDotnetCli)?.TryBuild(keepNewAssembly: false) ?? new(1, ["Checked dotnet CLI is unavailable."]);
         }
 
         public void Scan() => global._host.ScanFilesystem();

@@ -262,7 +262,7 @@ internal sealed class RecordingCli(List<string> operations) : IDotnetCli, ICheck
     public bool TryAddProjectReference(string projectReference) => Record($"add-reference {projectReference}");
     public bool TryRemoveProjectReference(string projectReference) => Record($"remove-reference {projectReference}");
     public bool TryRebuildSolution() => Record("build") && !BuildFails;
-    public BuildOutcome TryBuild() => new(TryRebuildSolution() ? 0 : 1, []);
+    public BuildOutcome TryBuild(bool keepNewAssembly = true) => new(TryRebuildSolution() ? 0 : 1, []);
     public BuildOutcome TryBuildPluginsOnly(PluginsOnlyBuild build) => new(Record("build plugins-only") ? 0 : 1, []);
 
     public void RebuildSolution() => TryRebuildSolution();

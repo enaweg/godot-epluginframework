@@ -18,7 +18,7 @@ internal sealed class DotnetCli10(ILogger? logger, bool enableDebugLogging, stri
 
     public override bool TryRebuildSolution() => TryBuild().ExitCode == 0;
 
-    public override BuildOutcome TryBuild() => BuildKeepingOutput(["build", SolutionPath, "--no-incremental"]);
+    public override BuildOutcome TryBuild(bool keepNewAssembly = true) => BuildKeepingOutput(["build", SolutionPath, "--no-incremental"], keepNewAssembly);
 
     public override BuildOutcome TryBuildPluginsOnly(PluginsOnlyBuild build)
     {

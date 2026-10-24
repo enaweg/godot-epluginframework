@@ -74,6 +74,30 @@ public class BuildOutputGuardTests
     }
 
     [TestCase]
+    public void AnAssemblyCompiledByAFailedBuildStaysUnlessItsCodeIsRemovedAgain()
+    {
+        var old = File.GetLastWriteTimeUtc(Path.Combine(_output, "Game.dll"));
+        BuildOutcome CompiledThenFailed()
+        {
+            // the project compiled, another project of the solution did not
+            Clean();
+            File.WriteAllText(Path.Combine(_output, "Game.dll"), "new");
+            return new(1, ["error in Other.csproj"]);
+        }
+
+        Assertions.AssertInt(Run(CompiledThenFailed).ExitCode).IsEqual(1);
+        Assertions.AssertString(File.ReadAllText(Path.Combine(_output, "Game.dll"))).IsEqual("new");
+
+        File.WriteAllText(Path.Combine(_output, "Game.dll"), "old");
+        File.SetLastWriteTimeUtc(Path.Combine(_output, "Game.dll"), old);
+        var outcome = BuildOutputGuard.Run(_output, _snapshot, "Game.dll", new RecordingLogger(_log, "guard"), CompiledThenFailed, keepNewAssembly: false);
+        Assertions.AssertInt(outcome.ExitCode).IsEqual(1);
+        Assertions.AssertString(File.ReadAllText(Path.Combine(_output, "Game.dll"))).IsEqual("old");
+        // with its timestamp, so the editor does not take it for a new build
+        Assertions.AssertObject(File.GetLastWriteTimeUtc(Path.Combine(_output, "Game.dll"))).IsEqual(old);
+    }
+
+    [TestCase]
     public void AnAssemblyThatCannotBePutBackIsReportedAndTheFailureReturned()
     {
         var outcome = Run(() =>

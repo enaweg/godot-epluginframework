@@ -122,12 +122,12 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
     /// Runs a non-incremental build. It cleans the outputs first, so <see cref="BuildOutputGuard"/> puts the editor's
     /// assembly back when the build fails.
     /// </summary>
-    protected BuildOutcome BuildKeepingOutput(string[] args) =>
+    protected BuildOutcome BuildKeepingOutput(string[] args, bool keepNewAssembly = true) =>
         BuildOutputGuard.Run(OutputDirectory, Path.Combine(ProjectRoot, ".godot", "eplugin", "build-output"), AssemblyName + ".dll", Logger, () =>
         {
             var (exitCode, output) = Execute(args[0], args[1..]);
             return new BuildOutcome(exitCode, output);
-        });
+        }, keepNewAssembly);
 
     /// <summary>
     /// A NuGet source as the CLI takes it: URLs unchanged, <c>user://</c> made absolute, and local paths like
@@ -150,7 +150,7 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
     public abstract void AddProjectReference(string projectReference);
     public abstract void RemoveProjectReference(string projectReference);
     public abstract (int, string[]) Execute(string command, string[] args);
-    public abstract BuildOutcome TryBuild();
+    public abstract BuildOutcome TryBuild(bool keepNewAssembly = true);
     public abstract BuildOutcome TryBuildPluginsOnly(PluginsOnlyBuild build);
     public abstract bool TryRebuildSolution();
     public abstract bool TryAddProjectToSolution(string projectPath, string? virtualFolderName);
