@@ -379,6 +379,92 @@ public class UpdateFlowTests : IDisposable
         Assertions.AssertBool(silent).IsTrue();
     }
 
+    private static AddonArchive Archive(string version = "1.0.0") => new("/downloads/plugin.zip", "addons/plugin/", "plugin", "Plugin", version, false, 2, 0);
+
+    [TestCase]
+    public async Task AZipFileIsStagedAndInstalledOnlyOnceConfirmed()
+    {
+        var flow = Flow();
+
+        var staged = await flow.StageAddonAsync(Archive(), View(), CancellationToken.None);
+
+        Assertions.AssertObject(staged.Step).IsEqual(InstallStep.Staged);
+        Assertions.AssertString(flow.StagedAddon!.Candidate.Slug).IsEqual("plugin");
+        Assertions.AssertInt(_host.InstalledAddons.Count).IsEqual(0);
+        Assertions.AssertThat(_progress).ContainsExactly("Extracting and validating Plugin...", "end");
+
+        var installed = flow.InstallAddon();
+
+        Assertions.AssertObject(installed.Step).IsEqual(InstallStep.Installed);
+        Assertions.AssertString(installed.Notice).IsEqual("Installed Plugin 1.0.0 into res://addons/plugin. Enable it with its On check box.");
+        Assertions.AssertBool(installed.IsError).IsFalse();
+        Assertions.AssertBool(installed.Refresh).IsTrue();
+        Assertions.AssertThat(_host.InstalledAddons.Single()).IsEqual(("plugin", _host.StagingDirectory));
+        Assertions.AssertObject(flow.StagedAddon).IsNull();
+        Assertions.AssertBool(Directory.Exists(_host.StagingDirectory)).IsFalse();
+    }
+
+    [TestCase]
+    public async Task ARefusedZipFileIsNotStaged()
+    {
+        _host.AddonFindings = [new("R26", FindingSeverity.Error, "res://addons/plugin exists already.")];
+        var flow = Flow();
+
+        var outcome = await flow.StageAddonAsync(Archive(), View(), CancellationToken.None);
+
+        Assertions.AssertObject(outcome.Step).IsEqual(InstallStep.Failed);
+        Assertions.AssertBool(outcome.IsError).IsTrue();
+        Assertions.AssertString(outcome.Notice).IsEqual("Plugin cannot be installed: res://addons/plugin exists already.");
+        Assertions.AssertObject(flow.StagedAddon).IsNull();
+        Assertions.AssertBool(Directory.Exists(_host.StagingDirectory)).IsFalse();
+    }
+
+    [TestCase]
+    public async Task CancelingTheConfirmationDeletesTheStagedAddon()
+    {
+        var flow = Flow();
+        await flow.StageAddonAsync(Archive(), View(), CancellationToken.None);
+
+        flow.Clear();
+
+        Assertions.AssertObject(flow.StagedAddon).IsNull();
+        Assertions.AssertBool(Directory.Exists(_host.StagingDirectory)).IsFalse();
+        Assertions.AssertInt(_host.InstalledAddons.Count).IsEqual(0);
+    }
+
+    [TestCase]
+    public async Task AnAddonThatDoesNotBuildKeepsItsBuildLog()
+    {
+        var flow = Flow();
+        await flow.StageAddonAsync(Archive(), View(), CancellationToken.None);
+        var log = Path.Combine(_host.StagingDirectory, "build-install.log");
+        File.WriteAllText(log, "error");
+        _host.AddonResult = new(false, "Plugin does not compile in this project (1 error). It was removed again.", BuildLog: log);
+
+        var outcome = flow.InstallAddon();
+
+        Assertions.AssertObject(outcome.Step).IsEqual(InstallStep.Failed);
+        Assertions.AssertBool(outcome.IsError).IsTrue();
+        Assertions.AssertBool(outcome.Refresh).IsTrue();
+        Assertions.AssertString(outcome.Notice).StartsWith("Plugin does not compile");
+        Assertions.AssertObject(flow.StagedAddon).IsNull();
+        Assertions.AssertBool(File.Exists(log)).IsTrue();
+    }
+
+    [TestCase]
+    public async Task AFailedInstallationIsReported()
+    {
+        var flow = Flow();
+        await flow.StageAddonAsync(Archive(""), View(), CancellationToken.None);
+        _host.ApplyFails = true;
+
+        var outcome = flow.InstallAddon();
+
+        Assertions.AssertObject(outcome.Step).IsEqual(InstallStep.Failed);
+        Assertions.AssertString(outcome.Notice).IsEqual("Installing Plugin failed: no space left");
+        Assertions.AssertBool(Directory.Exists(_host.StagingDirectory)).IsFalse();
+    }
+
     private sealed class RecordingScope : IEPluginProgressScope
     {
         private readonly List<string> _log;
@@ -460,6 +546,28 @@ public class UpdateFlowTests : IDisposable
             if (ApplyFails) return Task.FromException<IReadOnlyList<UpdateGroupResult>>(new IOException("no space left"));
             Applied.Add((packages, trustChangedSources, askOnBuildFailure));
             return Task.FromResult<IReadOnlyList<UpdateGroupResult>>([new UpdateGroupResult(packages, directory, Outcome, null)]);
+        }
+
+        public Finding[] AddonFindings { get; set; } = [];
+        public AddonInstallResult AddonResult { get; set; } = new(true);
+        public List<(string Slug, string Directory)> InstalledAddons { get; } = [];
+
+        public Task<(ValidatedPackage Package, string Directory)> StageNewAddonAsync(AddonArchive archive, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            Stagings++;
+            StagingDirectory = Path.Combine(_root, "addon-" + Stagings);
+            Directory.CreateDirectory(StagingDirectory);
+            _ = SemVer.TryParse(archive.Version, out var version);
+            var package = new ValidatedPackage(archive.Candidate(archive.Name, ""), Path.Combine(StagingDirectory, "staging", archive.Slug), version, null, false, AddonFindings);
+            return Task.FromResult((package, StagingDirectory));
+        }
+
+        public AddonInstallResult InstallNewAddon(ValidatedPackage package, string directory)
+        {
+            if (ApplyFails) throw new IOException("no space left");
+            InstalledAddons.Add((package.Candidate.Slug, directory));
+            return AddonResult;
         }
 
         public void Dispose()
