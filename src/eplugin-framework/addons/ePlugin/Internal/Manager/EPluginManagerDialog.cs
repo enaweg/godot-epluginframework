@@ -140,7 +140,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             Callable.From(() => _settings.Open(_model.Plugins.FirstOrDefault(r => r.Plugin.Kind == PluginKind.Framework)?.Plugin)));
         _signals.Connect(_attentionButton, BaseButton.SignalName.Pressed, Callable.From(() => OpenAttention(null)));
         _signals.Connect(_release, BaseButton.SignalName.Pressed, Callable.From(OpenRelease));
-        _signals.Connect(_locationLink, BaseButton.SignalName.Pressed, Callable.From(() => { if (_selectedSlug is not null) EditorInterface.Singleton.SelectFile(PluginDirectory(_selectedSlug)); }));
+        _signals.Connect(_locationLink, BaseButton.SignalName.Pressed, Callable.From(() => { if (_selectedSlug is not null) EditorWindows.SelectFile(PluginDirectory(_selectedSlug)); }));
         _signals.Connect(_openFolder, BaseButton.SignalName.Pressed, Callable.From(() => { if (_selectedSlug is not null) OS.ShellShowInFileManager(ProjectSettings.GlobalizePath(PluginDirectory(_selectedSlug)), true); }));
         _signals.Connect(_detailsText, RichTextLabel.SignalName.MetaClicked, Callable.From<Variant>(DetailsLinkClicked));
         _signals.Connect(_tree, Tree.SignalName.ItemEdited, Callable.From(ItemEdited));
