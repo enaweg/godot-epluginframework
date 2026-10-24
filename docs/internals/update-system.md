@@ -257,7 +257,10 @@ which the manager waits for like after an activation.
 
 A group owns one `PluginStateStore` attempt. Write its local marker before side effects; acknowledge all versions once
 after the final build and verification (`TryAcknowledgeVersions`, which also records the attempt as the shared file's
-`lastCompletedAttemptId`; recovery and rollback compare it with the journal). Rollback restores backups and abandons
+`lastCompletedAttemptId`; recovery and rollback compare it with the journal). The commit then saves the journal as
+`Committed` before anything else: a `Verified` journal blocks every later update. One left `Verified` after the
+acknowledgement (the editor stopped, or the journal could not be saved), whose versions the shared state holds while
+its marker is gone, is finished at the next start (`UpdateApplier.IsAcknowledged`, `FinishCommit`). Rollback restores backups and abandons
 the marker without changing the shared index.
 
 Keeping a version after a build failure retains an `update_kept_build_failed` marker; an acknowledgement conflict retains

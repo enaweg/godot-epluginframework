@@ -128,6 +128,14 @@ public class EGlobalUpdateResumeTests : IDisposable
     [TestCase]
     public void AVerifiedUpdateIsCommittedAndOneThatLostItsMarkerIsLeftForRepair()
     {
+        // lost before the acknowledgement: the shared state does not hold its versions
+        var unmarked = Journal(UpdatePhase.Verified, Guid.NewGuid());
+        _fixture.Global.ResumeUpdates();
+
+        Assertions.AssertObject(UpdateJournal.Load(unmarked.Directory).State).IsEqual(UpdatePhase.Verified);
+        Assertions.AssertBool(_fixture.Log.Any(l => l.StartsWith("error:", StringComparison.Ordinal) && l.Contains("Update marker is missing"))).IsTrue();
+        Directory.Delete(unmarked.Directory, true);
+
         var verified = Journal(UpdatePhase.Verified, Attempt());
 
         _fixture.Global.ResumeUpdates();
@@ -136,12 +144,27 @@ public class EGlobalUpdateResumeTests : IDisposable
         Assertions.AssertString(_fixture.Store.GetShared("tool")!.Version).IsEqual("2.0.0");
         Assertions.AssertObject(_fixture.Store.LastCompletedAttemptId).IsEqual(verified.AttemptId);
         Assertions.AssertInt(_fixture.Store.LocalAttempts.Count).IsEqual(0);
+    }
 
-        var unmarked = Journal(UpdatePhase.Verified, Guid.NewGuid());
+    [TestCase]
+    public void AnAcknowledgedUpdateWhoseJournalWasNotCommittedIsFinishedAndNoLongerBlocksUpdates()
+    {
+        // acknowledged, then the editor stopped (or the commit could not save the journal) before it was committed;
+        // a later group's commit took lastCompletedAttemptId
+        var attempt = Attempt();
+        var acknowledged = Journal(UpdatePhase.Verified, attempt);
+        Assertions.AssertBool(_fixture.Store.TryAcknowledgeVersions(attempt, new Dictionary<string, string> { ["tool"] = "2.0.0" })).IsTrue();
+        Assertions.AssertBool(_fixture.Store.TryBeginAttempt("other", "1.0.0", PersistedPluginState.Activated, out var later)).IsTrue();
+        Assertions.AssertBool(_fixture.Store.TryAcknowledgeVersions(later, new Dictionary<string, string> { ["other"] = "2.0.0" })).IsTrue();
+        var journals = new UpdateJournals(Path.Combine(_fixture.Root, ".godot", "eplugin", "updates"));
+        Assertions.AssertBool(journals.Read().Any(j => j.IsActive)).IsTrue();
+
         _fixture.Global.ResumeUpdates();
 
-        Assertions.AssertObject(UpdateJournal.Load(unmarked.Directory).State).IsEqual(UpdatePhase.Verified);
-        Assertions.AssertBool(_fixture.Log.Any(l => l.StartsWith("error:", StringComparison.Ordinal) && l.Contains("Update marker is missing"))).IsTrue();
+        Assertions.AssertBool(Directory.Exists(acknowledged.Directory)).IsFalse();
+        Assertions.AssertBool(journals.Read().Any(j => j.IsActive)).IsFalse();
+        Assertions.AssertString(Installed).Contains("2.0.0");
+        Assertions.AssertBool(_fixture.Log.Any(l => l.Contains("Update marker is missing"))).IsFalse();
     }
 
     [TestCase]

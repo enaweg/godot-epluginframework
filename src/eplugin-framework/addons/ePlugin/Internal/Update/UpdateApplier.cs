@@ -305,23 +305,51 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             host.Log(journal.Failure);
             return UpdateOutcome.KeptWithErrors;
         }
+        return FinishCommit(journal);
+    }
+
+    /// <summary>
+    /// Whether the shared state already holds every version of <paramref name="journal"/>, i.e. its attempt was
+    /// acknowledged although the journal was not saved as committed (e.g. the editor stopped right after it).
+    /// </summary>
+    public bool IsAcknowledged(UpdateJournal journal) =>
+        journal.Plugins.All(p => store.GetShared(p.Slug)?.Version == p.NewVersion) &&
+        journal.AdditionalVersions.All(v => store.GetShared(v.Key)?.Version == v.Value);
+
+    /// <summary>The part of <see cref="Commit"/> after the acknowledgement; it never rolls the update back.</summary>
+    public UpdateOutcome FinishCommit(UpdateJournal journal)
+    {
         RebasePending(journal, true);
         // Updates never show a welcome page, also not one the plugin did not have or show before.
         var unseen = journal.Plugins.Where(p => !store.IsWelcomeShown(p.Slug)).Select(p => new ShownWelcome(p.Slug, p.NewVersion, DateTimeOffset.UtcNow)).ToArray();
         if (unseen.Length > 0 && !store.TryRecordWelcomes(unseen)) host.Log("The updated plugins' welcome pages could not be marked as shown; they may be shown after the editor restarts.");
+        foreach (var plugin in journal.Plugins)
+        {
+            host.Log(plugin.OldVersion == plugin.NewVersion ? $"Reinstalled {plugin.Slug} {plugin.NewVersion}."
+                : plugin.OldVersion.Length == 0 ? $"Installed {plugin.Slug} {plugin.NewVersion} over a version ePlugin did not know."
+                : $"Updated {plugin.Slug} {plugin.OldVersion} -> {plugin.NewVersion}.");
+        }
+        // The journal first: a verified journal whose marker is gone blocks every later update until it is committed.
+        var committed = false;
+        try
+        {
+            journal.Save(UpdatePhase.Committed);
+            committed = true;
+        }
+        catch (Exception ex) { host.Log("Update was committed, but its journal could not be marked so; it is finished at startup: " + ex.Message); }
         try
         {
             foreach (var plugin in journal.Plugins)
             {
                 cache.State.Revisions[plugin.Slug] = new(plugin.SourceUrl, plugin.Revision, DateTimeOffset.UtcNow, plugin.NewVersion);
                 cache.State.Results.RemoveAll(c => c.Slug == plugin.Slug);
-                host.Log(plugin.OldVersion == plugin.NewVersion ? $"Reinstalled {plugin.Slug} {plugin.NewVersion}."
-                    : plugin.OldVersion.Length == 0 ? $"Installed {plugin.Slug} {plugin.NewVersion} over a version ePlugin did not know."
-                    : $"Updated {plugin.Slug} {plugin.OldVersion} -> {plugin.NewVersion}.");
             }
             cache.Save();
-            journal.Save(UpdatePhase.Committed);
-            AddonFiles.DeleteTree(journal.Directory);
+        }
+        catch (Exception ex) { host.Log("Update was committed, but the update cache could not be saved: " + ex.Message); }
+        try
+        {
+            if (committed) AddonFiles.DeleteTree(journal.Directory);
         }
         catch (Exception ex) { host.Log("Update was committed; cleanup will be retried at startup: " + ex.Message); }
         if (journal.Plugins.Any(p => p.IsEPlugin && p.ContainsCSharp) && !RunsInterimBuild(journal))
