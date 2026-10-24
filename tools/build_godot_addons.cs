@@ -367,7 +367,10 @@ Match? NamedVersion(string? text)
 // are builds for different Godot versions, whose packages the updater tries in that order. Each asset names its release.
 (string Tag, ReleaseAsset[] Assets)[] NewestReleases(IEnumerable<(string? Tag, string? Title, IEnumerable<ReleaseAsset> Assets)> releases)
 {
-    var versioned = releases.Where(r => r.Tag is not null).Select(r => (r.Tag, r.Assets, Version: ReleaseVersion(r.Tag, r.Title)))
+    // The tag is written into the generated list; only a version tag was before, which holds no whitespace or control
+    // character. git allows U+2028 in a tag, which ends a C# comment.
+    var versioned = releases.Where(r => r.Tag is { Length: > 0 } tag && !tag.Any(c => char.IsWhiteSpace(c) || char.IsControl(c)))
+        .Select(r => (r.Tag, r.Assets, Version: ReleaseVersion(r.Tag, r.Title)))
         .Where(r => r.Version.Success).ToArray();
     if (versioned.Length == 0) return [];
     var newest = versioned.MaxBy(r => r.Version, Comparer<Match>.Create(CompareVersions)).Version;

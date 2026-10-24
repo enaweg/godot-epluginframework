@@ -195,7 +195,7 @@ var text = new StringBuilder($$"""
     """);
 foreach (var (slug, addon, _) in entries.OrderBy(e => e.Slug, StringComparer.OrdinalIgnoreCase).ThenBy(e => e.Slug, StringComparer.Ordinal))
 {
-    text.Append($"        // {addon.Repository}, latest {(addon.UpdateSource == "tags" ? "tag" : "release")} {addon.LatestVersion}\n");
+    text.Append($"        // {Comment(addon.Repository)}, latest {(addon.UpdateSource == "tags" ? "tag" : "release")} {Comment(addon.LatestVersion!)}\n");
     text.Append($"        new({Cs(slug)}, {Cs(WithoutGodot3(addon.Name))}, {Cs(addon.UpdateUrl!)},\n");
     text.Append($"            {Cs(addon.DocumentationUrl)}, {Cs(addon.WebsiteUrl)}, {Cs(addon.Repository)}),\n");
 }
@@ -512,7 +512,17 @@ static void Statistics(int added, (string Repository, int Stars, string Kind, st
                  .ThenBy(f => f.Repository, StringComparer.OrdinalIgnoreCase).Take(10))
         Console.WriteLine($"  {stars,6} stars  {repository}: {reason}");
 }
-static string Cs(string value) => "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+// The generated list is C# source, and its texts come from other people's repositories: a line break of any kind C# knows
+// (also U+0085, U+2028 and U+2029, which git allows in tag names) would end a comment and make the rest code, or break a
+// string literal. Strings escape them, comments replace them.
+static string Cs(string value) => "\"" + string.Concat(value.Select(c => c switch
+{
+    '\\' => "\\\\",
+    '"' => "\\\"",
+    _ when char.IsControl(c) || c is '\u0085' or '\u2028' or '\u2029' => $"\\u{(int)c:x4}",
+    _ => c.ToString(),
+})) + "\"";
+static string Comment(string value) => new(value.Select(c => char.IsControl(c) || char.IsWhiteSpace(c) && c != ' ' ? '\uFFFD' : c).ToArray());
 static void Report(string title, IEnumerable<string> lines)
 {
     var items = lines.ToArray();

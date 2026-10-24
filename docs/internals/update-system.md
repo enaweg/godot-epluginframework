@@ -50,7 +50,9 @@ slug. `PluginUpdateTarget.KnownUrl` is the last entry of `UpdateUrls`, and `Plug
 source and website links. `eplugin/updates/builtin_update_sites` (default on, `EGlobal.UseKnownPlugins`) turns it off.
 
 Regenerate the data with `tools/generate_known_plugins.cs` from the output of `tools/build_godot_addons.cs` (run both in
-`tools/`); never edit it by hand. `build_godot_addons.cs` needs a GitHub token without scopes and reads three hosts at
+`tools/`); never edit it by hand. Its texts come from other people's repositories and it is C# source, so the generator escapes
+every line break C# knows (also U+0085, U+2028 and U+2029) in its strings and replaces them in its comments, and
+`build_godot_addons.cs` records no release tag with whitespace or control characters. `build_godot_addons.cs` needs a GitHub token without scopes and reads three hosts at
 the same time: GitHub repositories from the godot-stars ranking (at least 20 stars, read in GraphQL batches one after
 another), and the searches of gitlab.com and codeberg.org for Godot projects (at least 5 stars; a token is optional, with
 one GitLab also leaves out forks). Each token comes from its environment variables (`GITHUB_TOKEN` or `GH_TOKEN`,
