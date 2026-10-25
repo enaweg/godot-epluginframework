@@ -1,8 +1,8 @@
 {
- "commit": "8118a6d95c68d3b19931aafc7b631c30bb0d5d0f",
- "date": "2026-10-25T11:06:12Z",
+ "commit": "7ef226280f62784755211f9972b59c38708e3ac6",
+ "date": "2026-10-25T11:08:45Z",
  "covered": 10976,
- "coverable": 12051,
+ "coverable": 12049,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -170,7 +170,7 @@
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EditorHost.cs": [
    51,
-   86
+   84
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Kinds/CSharpPluginWorkflow.cs": [
    4,
