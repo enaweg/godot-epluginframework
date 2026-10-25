@@ -338,7 +338,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
             Engine.Singleton.SetMeta(recoveryKey, false);
             var host = EGlobal.Instance.Host;
             var recovery = UpdateRecovery.RunIfNeeded(host.ProjectRoot, Logger,
-                () => new DotnetVersionManager(Logger, EnableDebugLogging).Create(Logger, host.ProjectRoot, host.AssemblyName) is ICheckedDotnetCli cli && cli.TryBuild().ExitCode == 0,
+                () => new DotnetVersionManager(Logger, EnableDebugLogging).Create(Logger, host.ProjectRoot, host.AssemblyName, host.SolutionDirectory) is ICheckedDotnetCli cli && cli.TryBuild().ExitCode == 0,
                 RestoreEarlyUpdateSettings);
             if (recovery != UpdateRecovery.Outcome.Continue)
             {

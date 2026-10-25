@@ -57,12 +57,15 @@ internal sealed class DotnetVersionManager : ExecuteCliBase
         }
     }
 
-    /// <summary>The CLI for the project in <paramref name="projectRoot"/>, see <see cref="DotnetCliBase"/>.</summary>
-    public IDotnetCli Create(ILogger? logger, string projectRoot, string? assemblyName)
+    /// <summary>
+    /// The CLI for the project in <paramref name="projectRoot"/> and its solution in <paramref name="solutionDirectory"/>,
+    /// see <see cref="DotnetCliBase"/>.
+    /// </summary>
+    public IDotnetCli Create(ILogger? logger, string projectRoot, string? assemblyName, string solutionDirectory)
     {
         return Is10OrLater
-            ? new DotnetCli10(logger, _enableDebugLogging, projectRoot, assemblyName, _runner)
-            : new DotnetCli9(logger, _enableDebugLogging, projectRoot, assemblyName, _runner);
+            ? new DotnetCli10(logger, _enableDebugLogging, projectRoot, assemblyName, _runner, solutionDirectory)
+            : new DotnetCli9(logger, _enableDebugLogging, projectRoot, assemblyName, _runner, solutionDirectory);
     }
 
     private Probe ReadDotnetVersion()

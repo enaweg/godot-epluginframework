@@ -32,6 +32,13 @@ internal interface IEditorHost
     /// </summary>
     string AssemblyName { get; }
 
+    /// <summary>
+    /// The folder of the project's solution as an absolute path: <c>dotnet/project/solution_directory</c>, relative to
+    /// <c>res://</c> like GodotTools reads it (e.g. <c>..</c> for a solution in the repository's root), or the project's
+    /// folder while it is empty.
+    /// </summary>
+    string SolutionDirectory { get; }
+
     /// <summary>The folder holding every plugin's directory, as a path Godot's file APIs can read.</summary>
     string AddonsDirectory { get; }
 
@@ -107,6 +114,9 @@ internal sealed class EditorHost : IEditorHost
     public string ProjectRoot => ProjectSettings.GlobalizePath("res://");
 
     public string AssemblyName => ProjectSettings.GetSetting("dotnet/project/assembly_name").AsString();
+
+    public string SolutionDirectory =>
+        ProjectSettings.GlobalizePath(SolutionDirectoryPath(ProjectSettings.GetSetting("dotnet/project/solution_directory", "").AsString()));
 
     public string AddonsDirectory => "res://addons";
 
@@ -229,6 +239,15 @@ internal sealed class EditorHost : IEditorHost
 
     // GDExtensionManager knows the extensions it loaded by their res:// path.
     private static string ResourcePath(string file) => ProjectSettings.LocalizePath(file.Replace('\\', '/'));
+
+    /// <summary>
+    /// The <c>res://</c> path of a <c>dotnet/project/solution_directory</c> value, as GodotTools reads it: <c>res://</c>
+    /// while empty, else prefixed with <c>res://</c> unless it starts with it.
+    /// </summary>
+    internal static string SolutionDirectoryPath(string setting) =>
+        string.IsNullOrEmpty(setting) ? "res://"
+        : setting.StartsWith("res://", StringComparison.Ordinal) ? setting
+        : "res://" + setting;
 
     /// <summary>The plugin slugs of <c>editor_plugins/enabled</c> entries (<c>res://addons/&lt;slug&gt;/plugin.cfg</c>).</summary>
     internal static IReadOnlySet<string> ParseEnabledPlugins(IEnumerable<string> paths) =>

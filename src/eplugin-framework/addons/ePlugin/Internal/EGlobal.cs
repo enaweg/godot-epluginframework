@@ -359,7 +359,7 @@ internal sealed partial class EGlobal
 
     public IDotnetCli? GetCli(ILogger? logger)
     {
-        return CliService?.Create(logger, _host.ProjectRoot, _host.AssemblyName);
+        return CliService?.Create(logger, _host.ProjectRoot, _host.AssemblyName, _host.SolutionDirectory);
     }
 
     private void RefreshEditor(bool rebuild = true)
