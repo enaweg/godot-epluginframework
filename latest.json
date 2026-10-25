@@ -1,8 +1,8 @@
 {
- "commit": "0db5dafb8c32b3d416d7a6202ccab37b22d98a52",
- "date": "2026-10-25T10:53:53Z",
- "covered": 10829,
- "coverable": 11917,
+ "commit": "acd3cba0c55856981d6f8a3a8ae033054487120d",
+ "date": "2026-10-25T10:54:18Z",
+ "covered": 10834,
+ "coverable": 11922,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -317,8 +317,8 @@
    200
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateReview.cs": [
-   68,
-   68
+   71,
+   71
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateReviewDialog.cs": [
    71,
@@ -381,8 +381,8 @@
    71
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/AddonPackageValidator.cs": [
-   134,
-   136
+   136,
+   138
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/AddonSwap.cs": [
    114,
