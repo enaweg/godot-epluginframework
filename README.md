@@ -4,18 +4,19 @@ Line coverage of `src/eplugin-framework/addons/ePlugin` on `main`, recorded by t
 
 ![Line coverage](badge.svg)
 
-**90.72%** (10731 of 11829 lines) at [458e5b2](https://github.com/enaweg/godot-epluginframework/commit/458e5b24696bfa78295d5c1b44e5e93efabf9fa7), 2026-10-24.
+**90.70%** (10742 of 11843 lines) at [419bbe7](https://github.com/enaweg/godot-epluginframework/commit/419bbe77c30fb0ae4558e7447841ce7fce2bb781), 2026-10-25.
 
 ```mermaid
 xychart-beta
     title "Line coverage on main (last 30 pushes)"
-    x-axis ["8c6304d", "1ad0ad5", "1178656", "4c1bfde", "41c358e", "f5a4430", "a712cc3", "8b45459", "673dacb", "23cfbaa", "768878c", "960c63a", "f5a499d", "6d754dc", "2599d31", "459ef8e", "945210c", "c518b82", "b778fa2", "6d8a617", "78eacfd", "adf103b", "d2202a5", "6520e07", "8bc3539", "43b3ea1", "cffdace", "5515d95", "058a838", "458e5b2"]
+    x-axis ["1ad0ad5", "1178656", "4c1bfde", "41c358e", "f5a4430", "a712cc3", "8b45459", "673dacb", "23cfbaa", "768878c", "960c63a", "f5a499d", "6d754dc", "2599d31", "459ef8e", "945210c", "c518b82", "b778fa2", "6d8a617", "78eacfd", "adf103b", "d2202a5", "6520e07", "8bc3539", "43b3ea1", "cffdace", "5515d95", "058a838", "458e5b2", "419bbe7"]
     y-axis "Line coverage (%)" 88 --> 93
-    line [90.80, 90.80, 90.90, 90.90, 90.79, 90.77, 90.80, 90.71, 90.71, 90.70, 90.71, 90.73, 90.74, 90.80, 90.78, 90.70, 90.70, 90.66, 90.67, 90.65, 90.64, 90.66, 90.63, 90.63, 90.63, 90.66, 90.66, 90.66, 90.66, 90.72]
+    line [90.80, 90.90, 90.90, 90.79, 90.77, 90.80, 90.71, 90.71, 90.70, 90.71, 90.73, 90.74, 90.80, 90.78, 90.70, 90.70, 90.66, 90.67, 90.65, 90.64, 90.66, 90.63, 90.63, 90.63, 90.66, 90.66, 90.66, 90.66, 90.72, 90.70]
 ```
 
 | Date | Commit | Line coverage | Change |
 |:--|:--|--:|--:|
+| 2026-10-25 | [419bbe7](https://github.com/enaweg/godot-epluginframework/commit/419bbe77c30fb0ae4558e7447841ce7fce2bb781) | 90.70% | -0.02 pp |
 | 2026-10-24 | [458e5b2](https://github.com/enaweg/godot-epluginframework/commit/458e5b24696bfa78295d5c1b44e5e93efabf9fa7) | 90.72% | +0.06 pp |
 | 2026-10-24 | [058a838](https://github.com/enaweg/godot-epluginframework/commit/058a838a4d69344f49bb378b612bfa11e3899499) | 90.66% | +0.00 pp |
 | 2026-10-24 | [5515d95](https://github.com/enaweg/godot-epluginframework/commit/5515d9505b71cde85498a00b38558c94a0e1d9f8) | 90.66% | +0.00 pp |
@@ -45,11 +46,10 @@ xychart-beta
 | 2026-10-23 | [4c1bfde](https://github.com/enaweg/godot-epluginframework/commit/4c1bfde2252200ef1f7e8575df3d78b1e84f9543) | 90.90% | +0.00 pp |
 | 2026-10-23 | [1178656](https://github.com/enaweg/godot-epluginframework/commit/11786563a447ec0ec9abdc68fe62a9e5d01d7ae3) | 90.90% | +0.10 pp |
 | 2026-10-22 | [1ad0ad5](https://github.com/enaweg/godot-epluginframework/commit/1ad0ad55f4194abf44c7e0f1466a3eb1022975cc) | 90.80% | +0.00 pp |
-| 2026-10-22 | [8c6304d](https://github.com/enaweg/godot-epluginframework/commit/8c6304d882e2ede10338bc884b276796b73dce24) | 90.80% | +12.32 pp |
 
 All measurements: [history.csv](history.csv).
 
-<details><summary>Files at 458e5b2 (129)</summary>
+<details><summary>Files at 419bbe7 (129)</summary>
 
 | File | Line coverage | Covered lines |
 |:--|--:|--:|
@@ -58,7 +58,7 @@ All measurements: [history.csv](history.csv).
 | `Internal/EGlobal.UpdateWorkflow.cs` | 33.3% | 3 of 9 |
 | `Internal/Manager/EPluginManagerDialog.Updates.cs` | 35.1% | 20 of 57 |
 | `Internal/AssemblyUnloadCleanup.cs` | 38.9% | 7 of 18 |
-| `Internal/EditorHost.cs` | 54.5% | 36 of 66 |
+| `Internal/EditorHost.cs` | 58.8% | 47 of 80 |
 | `Internal/EGlobal.UpdateApply.cs` | 61.6% | 173 of 281 |
 | `Internal/Manager/EditorWindows.cs` | 61.8% | 42 of 68 |
 | `EPluginPlugin.cs` | 63.9% | 175 of 274 |
