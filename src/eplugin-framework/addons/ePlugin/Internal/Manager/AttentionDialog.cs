@@ -147,7 +147,7 @@ internal sealed partial class AttentionDialog : AcceptDialog, ISerializationList
         _rollbackConfirm.DialogText = $"Restore {versions}?\n\nOpen scenes are saved first. Changes made inside the plugin's folder since the update are lost. " +
             (kept.BeforeReconcile
                 ? "Project files you changed since then (.csproj, .sln, nuget.config) stay as they are. "
-                : "Project files (.csproj, .sln, nuget.config) are restored as they were before the update. ") +
+                : "Project files (.csproj, .sln, nuget.config) stay as they are; only the changes of the new version's recipe are undone. ") +
             "If you already adapted the project's code to the new version, it will not build with the old one.";
         _rollbackConfirm.PopupCentered();
     }

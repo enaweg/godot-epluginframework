@@ -29,6 +29,8 @@ The whole project lives under `src/eplugin-framework/` (Godot project root — `
 - `src/eplugin-framework/tests/` — gdUnit4 test suite for the framework.
 - `src/eplugin-framework/addons/eplugin-state.json` — the project's shared plugin state file (`docs/plugin-state.md`).
 - `src/activation-progress/` (+ `.Tests`) — the separate progress window helper (see ePlugin Manager below).
+- `src/Directory.Build.props` — analyzer settings for every project under `src/` (`docs/static-analysis.md`);
+  `src/eplugin-framework/coverage.settings.xml` — which sources `tools/coverage.cs` counts.
 - `tools/` — repository tooling (see Commands); `docs/` — user and internals documentation.
 - `design/` — logo/icon assets referenced by the README.
 
@@ -43,7 +45,8 @@ dotnet build "src/eplugin-framework/EPluginFramework.sln"
 ```
 
 Run tests (gdUnit4 via its VSTest adapter — requires the `GODOT_BIN` environment variable to point at a
-Godot .NET/Mono editor binary, since tests spin up a headless Godot runtime):
+Godot .NET/Mono editor binary, since tests spin up a headless Godot runtime; on a fresh checkout CI first imports the
+project with `"$GODOT_BIN" --path src/eplugin-framework --editor --headless --quit-after 2000`):
 ```
 dotnet test "src/eplugin-framework/EPluginFramework.sln" --settings "src/eplugin-framework/.runsettings"
 ```
@@ -63,10 +66,12 @@ The progress helper's command handling has plain xUnit tests that need no Godot:
 dotnet test "src/activation-progress.Tests/ActivationProgress.Tests.csproj"
 ```
 Repository tooling is C# on .NET 10, not Python or shell scripts: single-file apps in `tools/` (`dotnet run tools/<name>.cs
--- <args>`: `coverage.cs`, `progress_smoke.cs`, `package_release.cs` (a test build of the release archive),
-`screenshots/capture.cs`, and the known-plugins generators, run from `tools/` as `dotnet run build_godot_addons.cs`
-(needs a GitHub token) and then `dotnet run generate_known_plugins.cs`, which writes `KnownPlugins.Data.cs` from its
-output) and the CI reports project `tools/ci-reports` (coverage summary and `coverage` branch, static-analysis summary,
+-- <args>`: `coverage.cs`, `progress_smoke.cs` (checks a published helper: `dotnet run tools/progress_smoke.cs -- dotnet
+<dir>/ActivationProgress.dll` after `dotnet publish src/activation-progress/ActivationProgress.csproj --configuration
+Release --output <dir>`, under `xvfb-run` on headless Linux), `package_release.cs` (the release archive: local test
+builds, and CI's PR packages and releases), `screenshots/capture.cs`, and the known-plugins generators, run from `tools/`
+as `dotnet run build_godot_addons.cs` (needs a GitHub token) and then `dotnet run generate_known_plugins.cs`, which
+writes `KnownPlugins.Data.cs` from its output and `extra_addons.txt`) and the CI reports project `tools/ci-reports` (coverage summary and `coverage` branch, static-analysis summary,
 and the single PR comment combining them), tested with:
 ```
 dotnet test "tools/ci-reports.Tests/CiReports.Tests.csproj"
@@ -544,7 +549,8 @@ keep its pattern in step with the release workflow's `label_extractor`. Rules:
   is what counts. Merge PRs with a merge commit, as the history does. If you squash instead, keep the PR title
   (with its prefix) as the squash commit's subject.
 
-`.github/release.yml` (labels `enhancement`, `breaking-change`, `ignore-for-release`) is only used by GitHub's own
+`.github/release.yml` (labels `breaking-change`, `enhancement`/`feature`, and `ignore-for-release`/`github-actions`
+excluded) is only used by GitHub's own
 "Generate release notes" button, not by the release workflow.
 
 ## Known constraints (see README for full list)

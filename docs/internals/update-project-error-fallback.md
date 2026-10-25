@@ -11,13 +11,19 @@ Where the implementation differs from the plan below:
   the plugin's details show a **Kept update** section with the project errors; the Needs attention dialog rolls it back.
 - S1 found that a Rebuild resolves project references while cleaning, so the filter target runs before
   `BeforeRebuild;BeforeBuild;AssignProjectConfiguration`, not only `BeforeBuild`. Property values on the command line are
-  MSBuild-escaped (an apostrophe in the path broke item transforms), `OutDir` has no trailing separator (a quoted
+  MSBuild-escaped (an apostrophe in the path broke item transforms, and `-p:` also splits at commas), `OutDir` has no trailing separator (a quoted
   `...\"` escapes its quote on Windows), and errors-only logs of parallel builds prefix lines with the node (`1:7>`).
 - Names: the causes are `ProjectCode`/`PluginCode` (not `ProjectOnly`/`Plugin`/`Project`); the probe is the
   *plugins-only build*: `ICheckedDotnetCli.TryBuildPluginsOnly(PluginsOnlyBuild)` and `IUpdateHost.BuildPluginsOnly`
   (not `TryProbeBuild(ProbeBuild)`/`IUpdateHost.ProbeBuild`), run from `UpdateApplier.BuildPasses` (not
   `BuildFailureFallback`) and recorded in `journal.Builds` as `<name>-plugins-only`, e.g. `interim-plugins-only` (not
-  `probe-interim`), with its errors in `build-<name>-plugins-only.errors.log`.
+  `probe-interim`), with its errors in `build-<name>-plugins-only.errors.log`. Its targets file and outputs are in
+  `<journal>/<name>-plugins-only/` (`plugins-only.targets`, `bin/`), not `<journal>/probe/`, which is deleted after it.
+- Journal fields: `PluginsBuildAlone` records the plugins-only build's result, and `KeepProjectFiles` (e4c8ee6) skips
+  restoring the project backup. **Roll back** rebases (`RebaseRecipes`, `BackupProject(replace: true)`) only for an
+  update kept before its recipes were reconciled; one kept after reconciling sets `KeepProjectFiles` instead, and
+  `Reconcile` undoes its recipe changes. Either way the project files changed since the update stay.
+- `TryRebuildSolution` is in `EGlobal.Transitions.cs`, not `EGlobal.cs`.
 - The classifier reads the failed build's own output; only the plugins-only build writes an errors-only file log.
   `CS2012` is transient too.
 - Not done: the review-step warning while another update is kept (corner case 26), and the group baseline follow-up.

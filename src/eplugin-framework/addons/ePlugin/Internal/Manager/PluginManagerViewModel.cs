@@ -364,7 +364,7 @@ internal sealed class PluginManagerViewModel
         else if ((plugin.UpdateSite ?? plugin.UpdateUrl ?? plugin.Known?.UpdateUrl) is { } site) Link("Update site", site);
         else if (plugin.Kind == PluginKind.GDExtensionAddon)
             text.Append("Not updatable: the add-on has no plugin.cfg to name an update site, the project sets none, and ePlugin's " +
-                        "built-in list does not know it. Add an update site for it under Update sites.\n");
+                        "built-in list does not know it. Add an update site for it under Settings > Update sources.\n");
         else if (plugin.LocalPackages == 0)
             text.Append("Not updatable: plugin.cfg has no update_url, the project sets no update site, ePlugin's built-in list does " +
                         "not know it, and no local directory holds a package of it.\n");

@@ -140,7 +140,7 @@ text = "Built-in update sites"
 [node name="BuiltinSitesCheck" type="CheckBox" parent="SettingsTabs/General/GeneralScroll/GeneralBox/UpdatesGrid"]
 layout_mode = 2
 size_flags_horizontal = 3
-tooltip_text = "Uses ePlugin's list of update sites of popular add-ons for plugins that name no working update site. The Update sites tab shows the list.
+tooltip_text = "Uses ePlugin's list of update sites of popular add-ons for plugins that name no working update site. The Update sources tab shows the list.
 eplugin/updates/builtin_update_sites"
 text = "Use ePlugin's list for add-ons without a working update site"
 metadata/setting = "eplugin/updates/builtin_update_sites"

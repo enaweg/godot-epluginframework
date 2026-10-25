@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  dotnet-coverage settings for the test run (tools/coverage.sh). Only the framework itself counts: tests, sample
+  dotnet-coverage settings for the test run (tools/coverage.cs). Only the framework itself counts: tests, sample
   plugins, gdUnit4 and the Godot source generators' output are compiled into the same assembly but left out.
 -->
 <Configuration>

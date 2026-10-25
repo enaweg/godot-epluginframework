@@ -79,7 +79,7 @@ public interface IEEditorPluginRecipeBuilder
     /// <param name="source">
     /// Optional NuGet feed URL or local path. <c>res://</c>-relative paths are globalized
     /// automatically. When <see langword="null"/>, the configured feeds are used. An http(s) feed or one inside the
-    /// project is recorded in the project's <c>nuget.config</c>; one elsewhere (<c>user://</c>, an absolute path
+    /// project is recorded in the project's <c>nuget.config</c> (or its existing <c>NuGet.Config</c>); one elsewhere (<c>user://</c>, an absolute path
     /// outside the project) is not, so other checkouts cannot restore the package.
     /// </param>
     /// <returns>The builder itself.</returns>
@@ -97,8 +97,9 @@ public interface IEEditorPluginRecipeBuilder
     /// A directory is hidden by renaming it with a leading <c>.</c> (and setting the hidden attribute on Windows), so
     /// Godot and the C# build ignore it. Ship it hidden, e.g. as <c>.src</c>, so its code stays inert until the plugin
     /// is enabled. A directory already in the wanted state is left alone and a missing one is only logged as a warning;
-    /// both forms existing at once fails. A GDExtension in the directory must be reloadable: showing the directory
-    /// loads it and hiding it unloads it first.
+    /// both forms existing at once fails. The directory must be inside the plugin's directory: showing one outside it,
+    /// the plugin's own directory or one holding it (such as <c>res://addons</c>) fails the activation. A GDExtension in
+    /// the directory must be reloadable: showing the directory loads it and hiding it unloads it first.
     /// </remarks>
     /// <returns>The builder itself.</returns>
     IEEditorPluginRecipeBuilder AddDirectory(string path);

@@ -7,8 +7,8 @@ How ePlugin's updater is built, for maintainers of the framework. The user-facin
 
 `Internal/Update/` contains the pure parts: checks and sources, bounded ZIP and sparse-git staging, validation, the
 transaction applier, recipe snapshots and diffs, journal and cache persistence, and early self-update recovery.
-`EGlobal.Updates.cs`, `EGlobal.UpdateApply.cs`, `EGlobal.UpdateRecipes.cs` and `EGlobal.RecipeOperations.cs` connect
-them to Godot. HTTP and git work runs off the editor thread; lifecycle and recipe changes stay on it.
+`EGlobal.Updates.cs`, `EGlobal.UpdateApply.cs`, `EGlobal.UpdateRecipes.cs`, `EGlobal.RecipeOperations.cs`,
+`EGlobal.UpdateWorkflow.cs` (`IUpdateWorkflowHost`) and `EGlobal.AddonInstall.cs` (new add-ons) connect them to Godot. HTTP and git work runs off the editor thread; lifecycle and recipe changes stay on it.
 
 The ePlugin Manager's workflows (checking, loading a plugin's versions, staging, reviewing and installing a batch) are in
 `Internal/Manager/UpdateFlow.cs`, which reaches the framework through `IUpdateWorkflowHost` and is tested without the
@@ -96,6 +96,14 @@ raise it) is an R6 review warning rather than a refusal; once it is installed, `
 using the revision and version that `Commit` records in `UpdateCache.Revisions`. Checks do not skip a plugin blocked by
 an unfinished attempt; the manager and the validator refuse its update (R17).
 
+A plugin whose sites all failed keeps the cached results earlier checks found for it (`UpdateService` merges them with
+`UpdateScheduler.CurrentCached`), and `LastCheckUtc` only advances when at least one plugin was checked. The startup
+check is skipped while an update journal is active. `UpdateCheckGate` runs one check at a time: a scheduled check started
+while another runs returns the known updates, and a manual check waits for the running one, then returns its result when
+it was manual too and otherwise runs its own (only a manual check re-indexes the local directories). Installing a batch
+takes the manager's plugin-operation gate once addon files are about to be replaced (downloading and the reviews before
+stay cancelable), so a reload the install left pending keeps the manager locked like after an activation.
+
 ## Plugin kinds
 
 `Internal/Kinds/` tells the kinds of plugins apart (`PluginKind`: Framework, EPlugin, CSharp, GDScript, GDExtension,
@@ -133,7 +141,7 @@ version: the same files, all `reloadable` in both, and nothing discarded reload 
 restarts the editor. `NativeSession` names the editor process the flags refer to: after a rollback, an editor that
 neither reloaded nor restarted since the swap still runs the restored libraries and needs nothing; otherwise the restored
 extension is reloaded in place or the editor restarts. `GDExtensionRules` refuses libraries outside the plugin folder
-(R18, a warning for icons), a missing library for the editor's platform (R19, the one entry Godot chooses: `GDExtensionConfig.LibraryForThisEditor`, whose tags all are editor features and which has the most of them; Godot does not fall back to another) and an extension outside the editor's Godot version limits (R22, `GDExtensionConfig.CompatibilityProblem`, which follows
+(R18, a warning for icons), a missing library for the editor's platform (R19, the one entry Godot chooses: `GDExtensionConfig.LibraryForThisEditor`, whose tags all are editor features and which has the most of them; Godot does not fall back to another. The architecture tags are the editor process's, not the OS's, e.g. for an emulated x86_64 editor on Windows on ARM. A `.gdextension` without an entry for this editor is only an R19 warning) and an extension outside the editor's Godot version limits (R22, `GDExtensionConfig.CompatibilityProblem`, which follows
 Godot's own check), and warns about platforms or release libraries the installed version had and the new one drops
 (R23, `DroppedPlatforms`), for every kind with a GDExtension; R21 says whether the update reloads or restarts. An
 ePlugin with a GDExtension needs no reload logic: its update always builds and restarts, which loads the new libraries,
@@ -162,7 +170,9 @@ its activated shared entry is not reported as a disabled plugin.
 
 ## Staging and swapping
 
-Every apply requires dialog confirmation. Stage and validate the whole batch before touching addons: `PackageFetcher`
+Every apply requires dialog confirmation. `StageUpdatesAsync` and `StageNewAddonAsync` read
+`GDExtensionConfig.EditorVersion` on the editor thread before staging runs off it, so R22 never calls Godot from a
+worker thread. Stage and validate the whole batch before touching addons: `PackageFetcher`
 leaves a package that cannot be fetched or is refused out of the batch, as a `RefusedPackage`, and fails only when all are
 refused. A release source reads a release's version with `ReleaseAssets.TryVersion` (the tag, else the first word of the title,
 then of the tag, split at spaces, `_` and `-` (only in words that are no version), that is a version and not right after "Godot", unless another number follows it) and groups releases of one version (`ByVersion`). A release whose `prerelease` field is
@@ -263,7 +273,8 @@ alone (`UntouchedRecipes`).
 `AddonArchive.Read`, which applies the rules staging uses with `requireSlugFolder` (the root folder of the shallowest
 `plugin.cfg` names the slug, as for local packages; a GDExtension without `plugin.cfg` is the `addons/<slug>/` folder of
 its `.gdextension` files) and refuses what the updater could not update later, such as a `plugin.cfg` without a
-comparable version. A ZIP file of a listed plugin becomes a `VersionOption` with a `LocalZipPackageRef` and goes through
+comparable version. A ZIP whose folder differs from a listed plugin's only in letter case is refused with the name to
+rename it to (`ZipInstall.Choose`), since both folders cannot exist on Windows or macOS. A ZIP file of a listed plugin becomes a `VersionOption` with a `LocalZipPackageRef` and goes through
 `UpdateFlow.InstallAsync` like a version chosen in the details, so the transaction above applies unchanged.
 
 A new add-on has no transaction: nothing in the project refers to it and it stays disabled, so there is no recipe,
@@ -273,8 +284,8 @@ compare with an installed version and are left out, and R26 refuses an existing 
 (`EGlobal.InstallNewAddon`) checks the folder again, moves the staged folder into place in one step, builds through
 `ICheckedDotnetCli.TryBuild` when the package has C# code, and scans the file system. A failed build moves the folder
 back; `BuildKeepingOutput` kept the editor's assembly, also when the build compiled it before another project of the
-solution failed (`TryBuild(keepNewAssembly: false)`), so nothing reloads. A build that cannot run counts as failed. The build log stays in the staging folder,
-which `UpdateJournals.AbandonedStaging` deletes later. A successful build is loaded by the editor's assembly reload,
+solution failed (`TryBuild(keepNewAssembly: false)`), so nothing reloads. A build that cannot run counts as failed. The build log stays in the transaction
+folder (`build-install.log`, next to `staging/`), which `UpdateJournals.AbandonedStaging` deletes later. A successful build is loaded by the editor's assembly reload,
 which the manager waits for like after an activation.
 
 ## Plugin state attempts

@@ -9,6 +9,7 @@ The project using the plugin needs the Godot .NET editor and a .NET SDK, because
 | Feature | What the plugin provides | Details |
 |---|---|---|
 | Listed, enabled and disabled in the ePlugin Manager, with progress window | Nothing | [ePlugin Manager](#in-the-eplugin-manager) |
+| Installed from a ZIP file, such as an Asset Library download | A ZIP with one plugin folder and a `version` | [Install from ZIP](eplugin-manager.md#install-a-plugin-from-a-zip-file) |
 | Updates from GitHub, GitLab, Forgejo/Gitea or Git | `update_url` in `plugin.cfg` | [Updates](#updates) |
 | Downgrade or reinstall a published version | `update_url` in `plugin.cfg` | [Updates](#updates) |
 | Updates from local ZIP packages | A ZIP with one plugin folder | [Publish a release](#publish-a-release) |
@@ -76,7 +77,7 @@ Every key below `script` is optional. Leave out what the plugin does not need: w
 
 The [ePlugin Manager](eplugin-manager.md) lists every plugin below `res://addons`, enabled or not. A plugin whose `script` ends in `.gd` has the type *GDScript plugin*. Its details show the author, version, description, license, welcome page, documentation and source links, update site and any earlier failures.
 
-Enabling or disabling it, in the manager or in **Project Settings > Plugins**, is handled like for an ePlugin: a required [license](#license) is asked for first, ePlugins that require it are disabled with it, and optional recipes that depend on it are installed or removed (see [Using a GDScript plugin from an ePlugin](#using-a-gdscript-plugin-from-an-eplugin)). Longer work shows the [progress window](progress-dialog.md).
+Enabling or disabling it, in the manager or in **Project Settings > Plugins**, is handled like for an ePlugin: a required [license](#license) is asked for first, ePlugins that require it are disabled with it, and optional recipes that depend on it are installed or removed (see [Using a GDScript plugin from an ePlugin](#using-a-gdscript-plugin-from-an-eplugin)). Longer work shows the [progress window](progress-dialog.md). Toggles made while ePlugin Framework itself is disabled are not handled when it is enabled again: dependants are not disabled and optional recipes are not changed; only a required license is asked for once the framework has started again.
 
 ## Updates
 
@@ -95,7 +96,7 @@ update_url="https://github.com/owner/my_tool.git?path=addons/my_tool#main"
 
 Only enabled plugins are checked. The update is offered in the manager like any other: check it in the **Version** column and choose **Update**, or choose a version in the plugin's details to downgrade or reinstall. Before the files are replaced, the updater validates the package, saves and closes open scenes, and disables the plugin; it enables it again afterwards. A package without C# files is installed without a build and without restarting the editor, unless the `restart_policy` [update setting](updating-plugins.md#update-settings) is `always`. A failed installation is rolled back.
 
-An update replaces the whole plugin folder, `plugin.cfg` included, so every release must contain the `update_url` again. The review before installation warns when the plugin's name, `update_url` or major version changes, and when its entry script changes language, for example from `plugin.gd` to a C# script. See [Review before installation](updating-plugins.md#review-before-installation).
+An update replaces the whole plugin folder, `plugin.cfg` included, so every release must contain the `update_url` again. The review before installation warns when the plugin's name, `update_url` or major version changes, and when its entry script changes language, for example from `plugin.gd` to a C# script. An `update_url` that moves to another repository, or is removed, leaves the update unchecked until you trust the new source. See [Review before installation](updating-plugins.md#review-before-installation).
 
 ### Publish a release
 
@@ -204,7 +205,7 @@ Updates of plugins that depend on each other are installed together, also when o
 
 ## Plugin state
 
-ePlugin records the version and enabled state of GDScript plugins in the committed `res://addons/eplugin-state.json`, next to ePlugins, so the whole team shares them. Their state is read at editor start and before a retry, including plugins toggled in Project Settings. A plugin without a `version` in `plugin.cfg` gets an invalid record in the per-user local state, not in the committed file; add the version and use **Retry** under **Needs attention** in the manager. See [Plugin state files](plugin-state.md).
+ePlugin records the version and enabled state of GDScript plugins in the committed `res://addons/eplugin-state.json`, next to ePlugins, so the whole team shares them. Their state is read at editor start, when the ePlugin Manager lists the plugins, before update checks and installations, and before **Retry** or **Disable**, including plugins toggled in Project Settings. A plugin without a `version` in `plugin.cfg` gets an invalid record in the per-user local state, not in the committed file; add the version and use **Retry** under **Needs attention** in the manager. See [Plugin state files](plugin-state.md).
 
 ## When a plugin needs C#
 

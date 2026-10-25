@@ -33,7 +33,7 @@ solution; the framework's best-effort helper publish is not an analysis gate.
 Setting `CIStaticAnalysis=true` writes SARIF 2.1 reports to
 `artifacts/static-analysis/`, with one filename per project. CI preserves the
 reports as the `managed-analysis` artifact for 14 days, including reports from
-failed builds. These files are gitignored. The reporting script also merges owned
+failed builds. These files are gitignored. The reporting tool (`tools/ci-reports analysis`) also merges owned
 source findings into `github.sarif`, removing suppressed, generated, example and
 vendored diagnostics and normalizing locations to repository-relative paths.
 The filtered report is uploaded to GitHub code scanning with the `dotnet` category,
@@ -118,7 +118,9 @@ docker run --rm -v "$PWD:/repo:ro" -w /repo \
 ## GitHub configuration
 
 The workflow files produce status checks; repository rules decide which ones
-must pass before merging. Require `managed-analysis` and `workflow-lint`
+must pass before merging. Require `analysis / managed-analysis` and
+`analysis / workflow-lint` (CI-PR runs those jobs through the reusable
+CI-Analysis-Jobs workflow, so its checks are named after the calling job)
 alongside the existing test checks.
 For CodeQL, require successful `codeql-csharp` execution **and** the CodeQL
 results gate for high/critical security findings and error-level findings.
