@@ -142,8 +142,13 @@ public class PluginStateStoreTests
         Assertions.AssertBool(store.TryBeginAttempt("sample_plugin", "1.0", PersistedPluginState.Activated,
             out var id)).IsTrue();
 
-        // a teammate enabled it too, in another version
-        Pull(path, other => Complete(other, "sample_plugin", "1.1", PersistedPluginState.Activated));
+        // a teammate enabled it too, in another version (enabling alone keeps the recorded version, which agrees with this
+        // write; ATeammatesIdenticalChangeDoesNotPreventFinalization)
+        Pull(path, other =>
+        {
+            Assertions.AssertBool(other.TryBeginAttempt("sample_plugin", "1.1", PersistedPluginState.Activated, out var update)).IsTrue();
+            Assertions.AssertBool(other.TryAcknowledgeVersions(update, new Dictionary<string, string> { ["sample_plugin"] = "1.1" })).IsTrue();
+        });
         var edited = File.ReadAllBytes(path);
         Assertions.AssertBool(store.TryComplete(id, [
             new SharedPluginState("sample_plugin", "1.0", PersistedPluginState.Activated)
@@ -179,6 +184,61 @@ public class PluginStateStoreTests
         Assertions.AssertString(reloaded.GetShared("other_plugin")!.Version).IsEqual("2.0");
         Assertions.AssertBool(reloaded.IsLicenseAccepted("other_plugin", "LICENSE")).IsTrue();
         Assertions.AssertBool(reloaded.IsWelcomeShown("sample_plugin")).IsTrue();
+    }
+
+    [TestCase]
+    public void ATeammatesIdenticalChangeDoesNotPreventFinalization()
+    {
+        var (store, path) = NewStore();
+        Assertions.AssertBool(store.TryCreateBaseline([])).IsTrue();
+        Assertions.AssertBool(store.TryBeginAttempt("sample_plugin", "1.0", PersistedPluginState.Activated, out var id)).IsTrue();
+        var license = new AcceptedLicense("sample_plugin", "LICENSE", "1.0", DateTimeOffset.UnixEpoch, false);
+
+        // a teammate enabled the same plugin in the same version and accepted its license, then it was pulled
+        Pull(path, other =>
+        {
+            Complete(other, "sample_plugin", "1.0", PersistedPluginState.Activated);
+            Assertions.AssertBool(other.TryRecordLicenses([license])).IsTrue();
+        });
+        var pulled = File.ReadAllBytes(path);
+        Assertions.AssertBool(store.TryComplete(id, [new("sample_plugin", "1.0", PersistedPluginState.Activated)])).IsTrue();
+        Assertions.AssertBool(store.TryRecordLicenses([license])).IsTrue();
+
+        Assertions.AssertBool(store.IsBlocked("sample_plugin")).IsFalse();
+        Assertions.AssertBool(File.Exists(path + ".user")).IsFalse();
+        Assertions.AssertBool(pulled.SequenceEqual(File.ReadAllBytes(path))).IsTrue();
+
+        // and later writes start from the pulled file
+        Complete(store, "sample_plugin", "1.0", PersistedPluginState.Deactivated);
+        var reloaded = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(reloaded.Load()).IsTrue();
+        Assertions.AssertObject(reloaded.GetShared("sample_plugin")!.State).IsEqual(PersistedPluginState.Deactivated);
+        Assertions.AssertBool(reloaded.IsLicenseAccepted("sample_plugin", "LICENSE")).IsTrue();
+    }
+
+    [TestCase]
+    public void AnAcknowledgementAlreadyOnDiskDoesNotPreventFinalization()
+    {
+        var (store, path) = NewStore();
+        Assertions.AssertBool(store.TryCreateBaseline([new SharedPluginState("sample_plugin", "1.0", PersistedPluginState.Activated)])).IsTrue();
+        Assertions.AssertBool(store.TryBeginAttempt("sample_plugin", "1.0", PersistedPluginState.Activated, out var id)).IsTrue();
+        var versions = new Dictionary<string, string> { ["sample_plugin"] = "2.0" };
+
+        // the same acknowledgement written by another store of this attempt, e.g. one that crashed before cleaning up
+        var directory = Path.Combine(Path.GetTempPath(), "eplugin-state-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        _directories.Add(directory);
+        var copy = Path.Combine(directory, "eplugin-state.json");
+        File.Copy(path, copy);
+        File.Copy(path + ".user", copy + ".user");
+        var other = new PluginStateStore(copy, new NullLogger());
+        Assertions.AssertBool(other.Load()).IsTrue();
+        Assertions.AssertBool(other.TryAcknowledgeVersions(id, versions)).IsTrue();
+        File.Copy(copy, path, true);
+
+        Assertions.AssertBool(store.TryAcknowledgeVersions(id, versions)).IsTrue();
+        Assertions.AssertObject(store.LastCompletedAttemptId).IsEqual(id);
+        Assertions.AssertBool(store.IsBlocked("sample_plugin")).IsFalse();
     }
 
     [TestCase]
