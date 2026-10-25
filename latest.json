@@ -1,8 +1,8 @@
 {
- "commit": "3dd9ee61da6f71bbb0fbd3c0895e16a2f5c8ac67",
- "date": "2026-10-25T11:01:13Z",
- "covered": 10879,
- "coverable": 11967,
+ "commit": "8118a6d95c68d3b19931aafc7b631c30bb0d5d0f",
+ "date": "2026-10-25T11:06:12Z",
+ "covered": 10976,
+ "coverable": 12051,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -25,8 +25,8 @@
    15
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/ActivationProgress.cs": [
-   248,
-   300
+   253,
+   306
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/AssemblyReload.cs": [
    24,
@@ -149,12 +149,12 @@
    19
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateWorkflow.cs": [
-   3,
+   7,
    9
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Updates.cs": [
-   92,
-   117
+   132,
+   158
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Welcomes.cs": [
    69,
@@ -170,7 +170,7 @@
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EditorHost.cs": [
    51,
-   84
+   86
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Kinds/CSharpPluginWorkflow.cs": [
    4,
@@ -241,24 +241,24 @@
    117
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.Operations.cs": [
-   99,
-   131
+   100,
+   132
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.Updates.cs": [
-   20,
-   57
+   53,
+   64
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.Versions.cs": [
    81,
-   102
+   106
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.Zip.cs": [
-   73,
-   86
+   75,
+   88
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.cs": [
-   328,
-   360
+   329,
+   369
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EditorIcons.cs": [
    55,
@@ -301,7 +301,7 @@
    281
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/SettingsDialog.cs": [
-   39,
+   44,
    50
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/TextColors.cs": [
@@ -313,20 +313,20 @@
    62
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateFlow.cs": [
-   189,
-   200
+   195,
+   202
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateReview.cs": [
    71,
    71
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateReviewDialog.cs": [
-   71,
+   78,
    95
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateSourcesTab.cs": [
-   260,
-   280
+   253,
+   290
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/WelcomeDialog.cs": [
    54,
