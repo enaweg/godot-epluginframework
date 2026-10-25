@@ -1,8 +1,8 @@
 {
- "commit": "478d5e3f12b8d6f62517d80c1faaa450703c4f27",
- "date": "2026-10-25T10:59:48Z",
- "covered": 10869,
- "coverable": 11957,
+ "commit": "3dd9ee61da6f71bbb0fbd3c0895e16a2f5c8ac67",
+ "date": "2026-10-25T11:01:13Z",
+ "covered": 10879,
+ "coverable": 11967,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -49,8 +49,8 @@
    78
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetCliBase.cs": [
-   64,
-   64
+   70,
+   70
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetVersionManager.cs": [
    41,
@@ -169,8 +169,8 @@
    1
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EditorHost.cs": [
-   47,
-   80
+   51,
+   84
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Kinds/CSharpPluginWorkflow.cs": [
    4,
