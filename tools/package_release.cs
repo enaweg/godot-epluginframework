@@ -1,8 +1,8 @@
 #:property TargetFramework=net10.0
 #:property PublishAot=false
 // Packages addons/ePlugin like a release, to try a build before it is tagged: the framework's files and a freshly
-// published progress helper, in <output>/ePlugin-v<version>-test-<commit>-<timestamp>.zip. Tagged releases are packaged
-// by .github/workflows/ci-release.yml.
+// published progress helper, in <output>/ePlugin-v<version>-test-<commit>-<timestamp>.zip. CI packages pull requests
+// (.github/workflows/ci-pr-build.yml) and tagged releases (.github/workflows/ci-release.yml) with it too.
 //
 // Usage: dotnet run tools/package_release.cs -- [output directory, default out/] [--name <archive.zip>] [--helper <folder>]
 // Locally built helper binaries in addons/ePlugin/progress are left out; the archive gets the one published here, or the

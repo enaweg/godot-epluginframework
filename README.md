@@ -6,7 +6,7 @@
 
 **Extended C# Plugin Framework for [Godot](https://godotengine.org/).**
 
-[![CI](https://github.com/enaweg/godot-epluginframework/actions/workflows/ci-pr.yml/badge.svg)](https://github.com/enaweg/godot-epluginframework/actions/workflows/ci-pr.yml)
+[![CI](https://github.com/enaweg/godot-epluginframework/actions/workflows/ci-pr.yml/badge.svg?branch=main)](https://github.com/enaweg/godot-epluginframework/actions/workflows/ci-pr.yml)
 [![Static analysis](https://github.com/enaweg/godot-epluginframework/actions/workflows/ci-analysis.yml/badge.svg?branch=main)](https://github.com/enaweg/godot-epluginframework/actions/workflows/ci-analysis.yml)
 [![CodeQL](https://github.com/enaweg/godot-epluginframework/actions/workflows/ci-codeql.yml/badge.svg?branch=main)](https://github.com/enaweg/godot-epluginframework/actions/workflows/ci-codeql.yml)
 [![Coverage](https://raw.githubusercontent.com/enaweg/godot-epluginframework/coverage/badge.svg)](https://github.com/enaweg/godot-epluginframework/tree/coverage)
@@ -28,7 +28,7 @@ ePlugin Framework adds declarative dependency and resource management to Godot e
 
 The project targets `net8.0`. The current CI-tested setup is [Godot 4.7.2 .NET](https://godotengine.org/download/archive/4.7.2-stable/) with the [.NET 8](https://dotnet.microsoft.com/download/dotnet/8.0) and [.NET 10](https://dotnet.microsoft.com/download/dotnet/10.0) SDKs. Other tested combinations are listed under [Testing](#testing).
 
-Install [ePlugin Framework from the Godot Asset Store](https://store.godotengine.org/asset/enaweg/eplugin-framework/), or download a [release](https://github.com/enaweg/godot-epluginframework/releases) and copy its `addons/ePlugin` directory into your project's `addons` folder. Open the project in the Godot .NET editor and build it (**Build** at the top right; a project without C# code needs **Project > Tools > C# > Create C# solution** first), so Godot can load the plugin's C# script. Then enable **ePlugin** under **Project > Project Settings > Plugins**, followed by the ePlugins you want to use.
+Install [ePlugin Framework from the Godot Asset Store](https://store.godotengine.org/asset/enaweg/eplugin-framework/), or download a [release](https://github.com/enaweg/godot-epluginframework/releases) and copy its `addons/ePlugin` directory into your project's `addons` folder. Open the project in the Godot .NET editor and build it (**Build** at the top right; a project without C# code needs **Project > Tools > C# > Create C# solution** first), so Godot can load the plugin's C# script. Then enable **ePlugin** under **Project > Project Settings > Plugins**, followed by the ePlugins you want to use (enabling an ePlugin first enables ePlugin too).
 
 Release archives include a small shared progress helper (about 80 KB) that runs on the installed .NET runtime and draws its window with native UI. Source checkouts generate the helper during a normal build. Linux needs GTK 3 for that window. Plugin operations continue if the helper is missing or fails. Asset Library distributions should use the release archive to include the helper.
 
@@ -38,8 +38,8 @@ ePlugin works with plugins that have a `plugin.cfg` in their folder below `res:/
 
 For plugin authors:
 
-- **Declarative plugin recipes** install NuGet packages, C# projects and project references, autoloads, and managed directories on activation, then reverse those changes on deactivation. Declarations are checked when the recipe is created, so a mistake fails the activation with a clear message. Removing something that is already gone counts as done. NuGet sources are recorded in the project-root `nuget.config` for reproducible restores.
-- **Managed directories** keep plugin code that needs those packages or projects hidden (for example as `.src`) until the plugin is enabled, so the plugin's root code always compiles. A GDExtension in them must be reloadable; it is loaded when the directory is shown and unloaded before it is hidden.
+- **Declarative plugin recipes** install NuGet packages, C# projects and project references, autoloads, and managed directories on activation, then reverse those changes on deactivation. Declarations are checked when the recipe is created, so a mistake fails the activation with a clear message. Removing something that is already gone counts as done. NuGet sources at a URL or inside the project are recorded in the project's `nuget.config` (or its existing `NuGet.Config`) for reproducible restores. Resources that several enabled plugins declare stay until the last of them is disabled.
+- **Managed directories** inside the plugin's folder keep plugin code that needs those packages or projects hidden (for example as `.src`) until the plugin is enabled, so the plugin's root code always compiles. A GDExtension in them must be reloadable; it is loaded when the directory is shown and unloaded before it is hidden.
 - **Plugin dependencies** enable required C#, GDScript or GDExtension plugins first (GDExtensions without `plugin.cfg` are always available), check version constraints, and disable dependants when a required plugin is disabled. Dependency cycles fail the activation instead of stalling it.
 - **Optional dependencies** apply a nested resource recipe only while another plugin is enabled and matches its version, in whichever order the two are enabled. They never enable the other plugin or fail the declaring plugin's activation.
 - **Licenses and welcome pages** can be declared in the recipe or in `plugin.cfg`; by default the plugin's `LICENSE` and README are used. **Links**: `documentation_url` and `source_url` in `plugin.cfg` appear in the ePlugin Manager.
@@ -101,10 +101,13 @@ Static analysis also runs SDK analyzers, dependency vulnerability auditing, work
 
 The tests also measure the framework's line coverage. The PR's CI comment shows its coverage, the change against `main` and which of its changed lines no test runs; the history of `main` is kept on the [`coverage` branch](https://github.com/enaweg/godot-epluginframework/tree/coverage). See [Code coverage](docs/code-coverage.md).
 
-Every pull request is also packaged like a release by the **CI-PR-Build** workflow, which CI-PR runs first. Its ZIP carries the PR number as a semver prerelease (`0.12.0` becomes `0.12.0-pr.42`), so the release of that version still counts as an update. Its download link is posted as the pull request's CI comment as soon as the package is built; when all jobs have finished, CI-PR updates that one comment with the result of each job, the static analysis and the coverage. Pull requests from forks find all of it in the workflow run's summary. Downloading needs a GitHub login. Copy the archive's `addons/ePlugin` directory into a project to try the change.
+The progress helper's tests and smoke test also run on Windows and macOS.
+
+Every pull request is also packaged like a release by the **CI-PR-Build** workflow, which CI-PR runs alongside its other jobs. Its ZIP carries the PR number as a semver prerelease (`0.12.0` becomes `0.12.0-pr.42`), so the release of that version still counts as an update. Its download link is posted as the pull request's CI comment as soon as the package is built; when all jobs have finished, CI-PR updates that one comment with the result of each job, the static analysis and the coverage. Pull requests from forks find all of it in the workflow run's summary. Downloading needs a GitHub login. Copy the archive's `addons/ePlugin` directory into a project to try the change.
 
 ```bash
 cd src/eplugin-framework
+"$GODOT_BIN" --path . --editor --headless --quit-after 2000   # imports a fresh checkout once, as CI does
 dotnet build "EPluginFramework.sln" --configuration Debug
 dotnet test "EPluginFramework.sln" --configuration Debug --settings .runsettings
 dotnet test ../activation-progress.Tests/ActivationProgress.Tests.csproj

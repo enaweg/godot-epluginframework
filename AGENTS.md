@@ -24,7 +24,8 @@ dotnet test "src/activation-progress.Tests/ActivationProgress.Tests.csproj"
 ```
 
 The framework tests require `GODOT_BIN` to point to a Godot .NET/Mono editor executable; the progress helper's tests
-need only .NET. To run one test:
+need only .NET. On a fresh checkout, CI imports the project once before testing
+(`"$GODOT_BIN" --path src/eplugin-framework --editor --headless --quit-after 2000`). To run one test:
 
 ```text
 dotnet test "src/eplugin-framework/EPluginFramework.sln" --settings "src/eplugin-framework/.runsettings" --filter "FullyQualifiedName~IDotnetCliTests.VersionTest"
@@ -45,8 +46,13 @@ Alternative test runner: gdUnit4's `src/eplugin-framework/addons/gdUnit4/runtest
 
 - Repository tooling is C# on .NET 10, not Python or shell scripts: single-file apps in `tools/`
   (`dotnet run tools/<name>.cs -- <args>`: `coverage.cs`, `progress_smoke.cs`, `package_release.cs`,
-  `screenshots/capture.cs`, and the known-plugins generators `build_godot_addons.cs` and `generate_known_plugins.cs`)
-  and the CI reports project `tools/ci-reports`.
+  `screenshots/capture.cs`) and the CI reports project `tools/ci-reports`.
+- The known-plugins generators run from `tools/`: `dotnet run build_godot_addons.cs` (needs a GitHub token), then
+  `dotnet run generate_known_plugins.cs`, which writes `KnownPlugins.Data.cs` from its output and
+  `extra_addons.txt`. Never edit `KnownPlugins.Data.cs` by hand.
+- `progress_smoke.cs` exercises a published helper: `dotnet publish src/activation-progress/ActivationProgress.csproj
+  --configuration Release --output <dir>`, then `dotnet run tools/progress_smoke.cs -- dotnet <dir>/ActivationProgress.dll`
+  (under `xvfb-run` on headless Linux).
 - Documentation screenshots (`docs/images`) are regenerated with `dotnet run tools/screenshots/capture.cs` (needs a
   desktop session with X11 or Xwayland and `GODOT_BIN`). Add new dialogs to `tools/screenshots/DocScreenshots.cs`.
 - A pull request gets one CI comment, which CI-PR's `pr-comment` job composes from the `pr-comment-*` artifacts. Don't

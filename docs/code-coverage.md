@@ -46,7 +46,7 @@ Only line coverage is reported. Static instrumentation records no branch coverag
 ## Running it locally
 
 ```bash
-dotnet tool install --global dotnet-coverage
+dotnet tool install --global dotnet-coverage --version 18.12.0    # the version CI uses
 dotnet build src/eplugin-framework/EPluginFramework.sln --configuration Debug
 dotnet run tools/coverage.cs -- coverage.cobertura.xml    # further arguments go to dotnet test, e.g. --filter ...
 dotnet run --project tools/ci-reports -- coverage summary --report coverage.cobertura.xml --output-dir coverage
@@ -54,4 +54,4 @@ dotnet run --project tools/ci-reports -- coverage summary --report coverage.cobe
 
 Both tools need the .NET 10 SDK. coverage.cs needs `GODOT_BIN` like `dotnet test`, runs the tests with the `dotnet`
 on `PATH`, and exits with the exit code of `dotnet test`. `coverage/summary.md` is the coverage section a PR's comment would get. For an HTML report, run ReportGenerator
-(`dotnet tool install --global dotnet-reportgenerator-globaltool`) on the Cobertura file.
+(`dotnet tool install --global dotnet-reportgenerator-globaltool --version 5.5.11`, as in CI) on the Cobertura file.
