@@ -6,6 +6,7 @@ using System.Linq;
 using Enaweg.Plugin.Internal;
 using GdUnit4;
 using Godot;
+using Moq;
 
 namespace Enaweg.Plugin.Tests;
 
@@ -324,6 +325,85 @@ public partial class EGlobalEdgeCaseTests : IDisposable
         Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Error);
         Assertions.AssertBool(Logged("error", "Deactivating app failed")).IsTrue();
         Assertions.AssertString(_fixture.Store.GetLocal("app")!.Reason).IsEqual("deactivation_failed");
+    }
+
+    [TestCase]
+    public void ADirectoryOutsideThePluginIsNeitherShownNorHidden()
+    {
+        var other = Path.Combine(_fixture.Addon("other"), ".src");
+        Directory.CreateDirectory(other);
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package").AddDirectory(other));
+
+        _fixture.Enable("app");
+
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Error);
+        Assertions.AssertBool(Logged("error", "is outside the plugin's directory")).IsTrue();
+        Assertions.AssertBool(Directory.Exists(other)).IsTrue();
+
+        // giving up on it still uninstalls the rest of its recipe, and leaves the other plugin's directory alone
+        Directory.Move(other, Path.Combine(_fixture.Addon("other"), "src"));
+        Assertions.AssertBool(_fixture.Global.DisableFailedPlugin("app")).IsTrue();
+
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Deactivated);
+        Assertions.AssertThat(_fixture.Operations).Contains("remove-nuget App.Package");
+        Assertions.AssertBool(Directory.Exists(Path.Combine(_fixture.Addon("other"), "src"))).IsTrue();
+        Assertions.AssertBool(Logged("warn", "Not hiding the managed directory")).IsTrue();
+        Assertions.AssertObject(_fixture.Store.GetLocal("app")).IsNull();
+    }
+
+    [TestCase]
+    public void ARetryWhoseNewInstanceStopsAtTheLicenseGateEndsTheTransition()
+    {
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package").AddPluginDependency("missing"));
+        _fixture.Enable("app");
+        // the failed activation disables it on the next frame, which frees its instance
+        EGlobal.RunPosted();
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsFalse();
+        // fixed, but meanwhile its license has to be accepted first
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"), extraConfig: "license_required=true");
+        File.WriteAllText(Path.Combine(_fixture.Addon("app"), "LICENSE"), "Terms");
+
+        _fixture.Global.RetryFailedPlugins();
+        EGlobal.RunPosted();
+
+        Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsFalse();
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsFalse();
+        Assertions.AssertThat(_fixture.Operations).IsEmpty();
+        Assertions.AssertString(_fixture.Store.GetLocal("app")!.Reason).IsEqual("retry_not_continued");
+    }
+
+    [TestCase]
+    public void APluginDisabledBeforeTheFrameworkIsInitializedIsNotActivatedLater()
+    {
+        var global = new EGlobal(_fixture.Host);
+        var pluginBase = new EditorPlugin();
+        try
+        {
+            var plugin = new Mock<IEEditorPlugin>();
+            plugin.Setup(p => p.CreateRecipe(It.IsAny<IEEditorPluginBuilder>()))
+                .Callback<IEEditorPluginBuilder>(b => b.AddNuget("App.Package"));
+            // not a plugin of the fixture's addons folder, so the fake editor cannot enable it again
+            var context = new PluginContext(plugin.Object, pluginBase, new RecordingLogger(_fixture.Log, "app")) { Slug = "app", Cli = _fixture.Cli };
+            global.AddContext(context);
+            _fixture.Host.Enabled.Remove("ePlugin");
+            global.EnableEPlugin(context);
+            global.DisableEPlugin(context);
+
+            Assertions.AssertBool(global.IsChangingPlugins).IsFalse();
+            Assertions.AssertBool(Logged("warn", "app was disabled while the ePlugin framework is not running")).IsTrue();
+
+            // the framework starts, and resumes the plugins that wait for it
+            _fixture.Host.Enabled.Add("ePlugin");
+            global.Attach(_fixture.Framework, new Logging.GenericLoggerFactory(c => new RecordingLogger(_fixture.Log, c)), _fixture.Cli);
+            global.ResumeWaitingPlugins();
+
+            Assertions.AssertThat(_fixture.Operations).IsEmpty();
+            Assertions.AssertObject(context.State).IsEqual(EEditorPluginState.Created);
+        }
+        finally
+        {
+            pluginBase.Free();
+        }
     }
 
     [TestCase]

@@ -313,6 +313,82 @@ public class EGlobalLifecycleTests : IDisposable
     }
 
     [TestCase]
+    public void APackageOrProjectAnOptionalRecipeRepeatsIsRemovedWithThePluginItDependsOn()
+    {
+        _fixture.AddEPlugin("lib", b => b.AddNuget("Lib.Api").AddProject("lib/Lib.csproj"));
+        _fixture.AddEPlugin("app", b => b
+            .AddNuget("App.Package")
+            .AddOptionalPluginDependency("lib", null, optional => optional.AddNuget("Lib.Api").AddProject("lib/Lib.csproj")));
+        _fixture.Enable("lib");
+        _fixture.Enable("app");
+
+        var start = _fixture.Operations.Count;
+        _fixture.Disable("lib");
+
+        // lib keeps them for the optional recipe still installed; reversing that one removes them, as lib is gone
+        Assertions.AssertObject(_fixture.State("lib")).IsEqual(EEditorPluginState.Deactivated);
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Activated);
+        Assertions.AssertThat(OperationsSince(start)).ContainsExactly(
+            "remove-reference lib/Lib.csproj", "remove-project lib/Lib.csproj", "remove-nuget Lib.Api", "build");
+    }
+
+    [TestCase]
+    public void ADirectoryAnotherInstalledRecipeDeclaresStaysShown()
+    {
+        _fixture.AddPlainPlugin("one");
+        _fixture.AddPlainPlugin("two");
+        var hidden = Path.Combine(_fixture.Addon("app"), ".integration");
+        var shown = Path.Combine(_fixture.Addon("app"), "integration");
+        Directory.CreateDirectory(hidden);
+        // both optional recipes ship their code in the same directory, one naming its visible form
+        _fixture.AddEPlugin("app", b => b
+            .AddOptionalPluginDependency("one", null, optional => optional.AddDirectory(hidden))
+            .AddOptionalPluginDependency("two", null, optional => optional.AddDirectory(shown + "/")));
+        _fixture.Global.InitializePluginToggles();
+        _fixture.Host.Enabled.Add("one");
+        _fixture.Host.Enabled.Add("two");
+        _fixture.Global.ObservePluginToggles();
+        _fixture.Enable("app");
+        Assertions.AssertBool(Directory.Exists(shown)).IsTrue();
+
+        _fixture.Host.Enabled.Remove("one");
+        _fixture.Global.ObservePluginToggles();
+
+        Assertions.AssertBool(Directory.Exists(shown)).IsTrue();
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Activated);
+
+        _fixture.Host.Enabled.Remove("two");
+        _fixture.Global.ObservePluginToggles();
+
+        Assertions.AssertBool(Directory.Exists(hidden)).IsTrue();
+        Assertions.AssertBool(Directory.Exists(shown)).IsFalse();
+    }
+
+    [TestCase]
+    public void APackageOfAPluginInErrorStaysWhenAnotherPluginDeclaringItIsDisabled()
+    {
+        _fixture.AddEPlugin("a", b => b.AddNuget("Shared.Package"));
+        _fixture.AddEPlugin("b", b => b.AddNuget("Shared.Package").AddNuget("B.Package"));
+        _fixture.Enable("a");
+        // b's recipe is installed, but the project did not build: b stays enabled, in error
+        _fixture.Cli.BuildFails = true;
+        _fixture.Enable("b");
+        _fixture.Cli.BuildFails = false;
+        Assertions.AssertObject(_fixture.State("b")).IsEqual(EEditorPluginState.Error);
+
+        var start = _fixture.Operations.Count;
+        _fixture.Disable("a");
+
+        Assertions.AssertObject(_fixture.State("a")).IsEqual(EEditorPluginState.Deactivated);
+        Assertions.AssertThat(OperationsSince(start)).ContainsExactly("build");
+
+        // giving up on b removes it, a is gone
+        start = _fixture.Operations.Count;
+        Assertions.AssertBool(_fixture.Global.DisableFailedPlugin("b")).IsTrue();
+        Assertions.AssertThat(OperationsSince(start)).ContainsExactly("remove-nuget Shared.Package", "remove-nuget B.Package", "build");
+    }
+
+    [TestCase]
     public void AnAutoloadTwoPluginsDeclareStaysUntilTheLastOfThemIsDisabled()
     {
         _fixture.AddEPlugin("a", b => b.AddAutoload("EventBus", "res://addons/shared/bus.gd"));
@@ -843,6 +919,32 @@ public class EGlobalLifecycleTests : IDisposable
         Assertions.AssertThat(_fixture.Operations).Contains("remove-nuget App.Package");
         Assertions.AssertObject(_fixture.Store.GetLocal("app")).IsNull();
         Assertions.AssertObject(_fixture.Store.GetShared("app")!.State).IsEqual(PersistedPluginState.Deactivated);
+    }
+
+    [TestCase]
+    public void DisablingAFailedPluginAlsoDisablesTheDependantsThatFailedWithIt()
+    {
+        _fixture.AddEPlugin("lib", b => b.AddNuget("Lib.Package"));
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package").AddPluginDependency("lib"));
+        _fixture.AddEPlugin("tool", b => b.AddNuget("Tool.Package").AddPluginDependency("app"));
+        _fixture.Cli.FailingPackages.Add("Lib.Package");
+        _fixture.Enable("tool");
+        EGlobal.RunPosted();
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsFalse();
+        Assertions.AssertObject(_fixture.Store.GetLocal("app")!.AttemptId).IsEqual(_fixture.Store.GetLocal("lib")!.AttemptId);
+        Assertions.AssertObject(_fixture.Store.GetLocal("tool")!.AttemptId).IsEqual(_fixture.Store.GetLocal("lib")!.AttemptId);
+        _fixture.Cli.FailingPackages.Clear();
+
+        Assertions.AssertBool(_fixture.Global.DisableFailedPlugin("lib")).IsTrue();
+
+        // retried towards activation, app and tool would have enabled lib again
+        Assertions.AssertBool(_fixture.Host.Enabled.Overlaps(["lib", "app", "tool"])).IsFalse();
+        Assertions.AssertThat(_fixture.Operations).NotContains("add-nuget App.Package", "add-nuget Tool.Package");
+        foreach (var slug in new[] { "lib", "app", "tool" })
+        {
+            Assertions.AssertObject(_fixture.Store.GetLocal(slug)).IsNull();
+            Assertions.AssertObject(_fixture.Store.GetShared(slug)!.State).IsEqual(PersistedPluginState.Deactivated);
+        }
     }
 
     [TestCase]

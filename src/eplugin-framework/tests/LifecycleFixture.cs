@@ -97,6 +97,7 @@ internal sealed class LifecycleFixture : IDisposable
         var context = new PluginContext(plugin.Object, pluginBase, _loggers.CreateLogger(slug))
         {
             Slug = slug,
+            Directory = Addon(slug).Replace('\\', '/'),
             Metadata = EditorPluginExtensions.ReadMetadata(Path.Combine(Addon(slug), "plugin.cfg")),
             Cli = Cli
         };

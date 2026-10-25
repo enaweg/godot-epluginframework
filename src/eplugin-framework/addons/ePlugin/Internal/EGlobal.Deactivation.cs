@@ -24,6 +24,8 @@ internal sealed partial class EGlobal
             // Without the framework there is no dotnet CLI or state file to uninstall with, and Godot frees the plugin
             // right after this callback, so its uninstall cannot wait for the framework either. A partial uninstall that
             // records nothing would leave the project in a state no retry knows about.
+            // One enabled before the framework was initialized waits for its activation; resumed, it would be enabled again.
+            StopWaiting(context);
             var warning = $"{context.Slug} was disabled while the ePlugin framework is not running, so its recipe stays installed. " +
                           "Enable the framework, then enable and disable the plugin again to remove it.";
             if (context.Logger is { } logger) logger.Warn(warning);
@@ -143,6 +145,8 @@ internal sealed partial class EGlobal
         try
         {
             UninstallEPlugin(context, context.Builder.PluginRecipe);
+            // Its recipe is gone, so the optional recipes reversed next keep nothing for it that they also declare.
+            context.State = EEditorPluginState.Deactivated;
 
             // other plugins may have installed code that depends on this one via an optional dependency
             UninstallOptionalDependenciesOn(context.Slug);
@@ -155,8 +159,6 @@ internal sealed partial class EGlobal
             FailTransition("deactivation_failed");
             return;
         }
-
-        context.State = EEditorPluginState.Deactivated;
 
         // @ local dependencies: can not disable as we do not know which are needed. There is no way to track manual or
         //                       auto enabled plugins right now.
@@ -196,12 +198,22 @@ internal sealed partial class EGlobal
         context.AppliedOptionalDependencies = null;
     }
 
+    /// <summary>Takes a plugin off the plugins that wait for the framework to be initialized.</summary>
+    private void StopWaiting(PluginContext context)
+    {
+        _enabledWithFramework.Remove(context);
+        if (!_toCheckEnable.Contains(context)) return;
+        var waiting = _toCheckEnable.Where(c => c != context).Reverse().ToArray();
+        _toCheckEnable.Clear();
+        foreach (var plugin in waiting) _toCheckEnable.Push(plugin);
+    }
+
     private void ReverseRecipe(PluginContext context, EEditorPluginRecipe recipe)
     {
         var remaining = RemainingRecipes(context, recipe);
         var ownRemaining = InstalledRecipes(context).Where(r => !ReferenceEquals(r, recipe)).ToArray();
         foreach (var autoload in recipe.Autoloads) ReverseAutoload(context, autoload, remaining);
-        foreach (var directory in recipe.Directories) ShowHideHelper.HideDirectory(context, directory, _host);
+        foreach (var directory in recipe.Directories) ReverseDirectory(context, directory, remaining);
         foreach (var project in recipe.Projects) ReverseProject(context, project, remaining);
         foreach (var nuget in recipe.Nugets) ReverseNuget(context, nuget, remaining, ownRemaining);
     }

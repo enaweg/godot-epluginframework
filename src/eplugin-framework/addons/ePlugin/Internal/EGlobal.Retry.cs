@@ -31,7 +31,8 @@ internal sealed partial class EGlobal
 
     /// <summary>
     /// Gives up on a plugin whose activation or deactivation failed: undoes what it installed and disables it. The other
-    /// plugins of the same attempt are retried. False when it has no such attempt, e.g. after a failed update, which is
+    /// plugins of the same attempt are retried, except those that require it, which are disabled with it like the
+    /// dependants of any disabled plugin. False when it has no such attempt, e.g. after a failed update, which is
     /// retried or rolled back instead; the ePlugin Manager then disables it like any other plugin.
     /// </summary>
     public bool DisableFailedPlugin(string slug)
@@ -52,8 +53,29 @@ internal sealed partial class EGlobal
             return true;
         }
 
-        Retry(RetryScope([slug], dependencies: false), disable: slug);
+        var scope = RetryScope([slug], dependencies: false);
+        Retry(scope, disable: DisabledWith(slug, scope));
         return true;
+    }
+
+    /// <summary>
+    /// <paramref name="slug"/> and the plugins of <paramref name="scope"/> that require it, also through each other.
+    /// Retried towards activation, such a dependant would enable the plugin again as its dependency.
+    /// </summary>
+    private HashSet<string> DisabledWith(string slug, IReadOnlyCollection<LocalPluginAttempt> scope)
+    {
+        var disabled = new HashSet<string>(StringComparer.Ordinal) { slug };
+        var added = true;
+        while (added)
+        {
+            added = false;
+            foreach (var attempt in scope.Where(a => !disabled.Contains(a.Slug) && GetHardDependencySlugs(a.Slug).Any(disabled.Contains)))
+            {
+                added |= disabled.Add(attempt.Slug);
+            }
+        }
+
+        return disabled;
     }
 
     /// <summary>
@@ -81,14 +103,14 @@ internal sealed partial class EGlobal
         attempt.Reason.StartsWith("update_", StringComparison.Ordinal) ||
         _updateJournals?.Read().Any(j => j.AttemptId == attempt.AttemptId) == true;
 
-    /// <param name="disable">A plugin whose failed attempt is retried as a deactivation, whatever it aimed for.</param>
-    private void Retry(IReadOnlyCollection<LocalPluginAttempt> attempts, string? disable)
+    /// <param name="disable">The plugins whose failed attempts are retried as deactivations, whatever they aimed for.</param>
+    private void Retry(IReadOnlyCollection<LocalPluginAttempt> attempts, HashSet<string>? disable)
     {
         if (_stateStore is null) return;
         var retriedUpdates = new HashSet<Guid>();
         foreach (var failed in OrderRetries(attempts))
         {
-            var attempt = failed.Slug == disable ? failed with { TargetState = PersistedPluginState.Deactivated } : failed;
+            var attempt = disable?.Contains(failed.Slug) == true ? failed with { TargetState = PersistedPluginState.Deactivated } : failed;
             var updateJournal = _updateJournals?.Read().FirstOrDefault(j => j.AttemptId == attempt.AttemptId);
             if (updateJournal is not null || attempt.Reason.StartsWith("update_", StringComparison.Ordinal))
             {
