@@ -225,7 +225,10 @@ quote). Godot's own incremental build afterwards compiles the full project again
 
 `IUpdateHost.KeepOnProjectErrors`, `PluginCodeRoots` and `BuildPluginsOnly` have defaults (off, none, failing) so test
 hosts opt in. `UpdateApplier.RollbackKept` (**Roll back** in the manager's Needs attention dialog) rebases
-`backup-project` and the other plugins' recipes first when the journal was kept before reconciling, then rolls back.
+`backup-project` and the other plugins' recipes first when the journal was kept before reconciling, then rolls back. A
+journal that reconciled before it was kept (or whose acknowledgement failed, `Verified`) is rolled back without restoring
+`backup-project`, by RollbackKept and Retry alike (`UpdateJournal.KeepProjectFiles`, set when its rollback starts):
+Reconcile undoes its recipe changes, and the backup predates what other plugins and the user changed while it waited.
 
 Every non-incremental build goes through `DotnetCliBase.BuildKeepingOutput`: a Rebuild cleans
 `.godot/mono/temp/bin/Debug` before compiling, so a failed one left the editor without any assembly after a restart (no
@@ -242,8 +245,10 @@ When a journal commits or rolls back, `RebasePending` refreshes the `backup-proj
 reconciled yet and, on commit, its recipe baselines for plugins it does not update, so a later rollback keeps the earlier
 group's changes. A replaced `backup-project` is copied to `backup-project.new`, the old one moved to `.old` and the new
 one into place before the journal is saved; when a crash leaves neither in place, rollback and early recovery restore
-the new copy with its own files (`ProjectBackup.Find`). Reconcile leaves the recipes of plugins in another active journal or rolled back since the assembly
-was loaded alone (`UntouchedRecipes`).
+the new copy (`ProjectBackup.Find`). Both restore the files the backup folder holds rather than `ProjectFiles`, which the
+journal saved after the replacement may not list yet. Reconcile leaves the recipes of plugins in another active journal,
+in a journal kept before reconciling whose marker Retry still resumes, or rolled back since the assembly was loaded
+alone (`UntouchedRecipes`).
 
 ## Installing new add-ons
 
@@ -273,10 +278,15 @@ after the final build and verification (`TryAcknowledgeVersions`, which also rec
 `Committed` before anything else: a `Verified` journal blocks every later update. One left `Verified` after the
 acknowledgement (the editor stopped, or the journal could not be saved), whose versions the shared state holds while
 its marker is gone, is finished at the next start (`UpdateApplier.IsAcknowledged`, `FinishCommit`). Rollback restores backups and abandons
-the marker without changing the shared index.
+the marker without changing the shared index. It restores the project files once: `KeepProjectFiles` is saved right
+after, so a Retry after a failed rollback build (marker `update_rollback_failed`) only builds the project as the user
+repaired it. A failure after the marker never reports a group as refused: `ApplyGroups` reports `KeptWithErrors` once its
+journal exists, and failing to save the journal of a failed rollback or to write the README is only logged.
 
 Keeping a version after a build failure retains an `update_kept_build_failed` marker; an acknowledgement conflict retains
-`update_commit_failed`. Retry dispatches these to the update applier. A journal kept before reconciling
+`update_commit_failed`. Retry dispatches these to the update applier. A version that cannot be marked as kept (the local
+state cannot be written or lost the attempt) is rolled back, because Retry and **Roll back** find a kept update by its
+marker. A journal kept before reconciling
 (`BeforeReconcile`: the interim or plain C# build failed) is not committed by Retry: once the project builds, Retry
 resets the marker to `attempt_in_progress`, rebases the other plugins' recipes and `backup-project`, saves `InterimBuilt`
 and restarts, so the update resumes with reconciling and the final build.
@@ -297,7 +307,9 @@ editor never started again. Nothing may reload once a restart was requested.
 `EPluginPlugin` invokes `UpdateRecovery` before touching `EGlobal`; this reader is deliberately independent of `EGlobal`
 and recipe execution. A self-update holds the `ActivationProgress` window across the folder swap and always rolls back
 failures. Two unhealthy starts restore backups, project settings and directory visibility, force a build, then clear the
-marker. A health marker is written only after verification.
+marker. The project files are restored only while the journal's `keepProjectFiles` is unset, and it is set right after,
+so a start after a failed recovery build (or after the applier's rollback restored them) does not write the backup over
+the user's repairs again. A health marker is written only after verification.
 
 Keep journal readers additive and backward compatible across framework versions; unknown or newer schemas need manual
 repair.

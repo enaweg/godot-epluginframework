@@ -120,5 +120,39 @@ public class UpdateRecoveryTests
         _store.Load(); Assertions.AssertInt(_store.LocalAttempts.Count).IsEqual(1);
         Assertions.AssertObject(Recover()).IsEqual(UpdateRecovery.Outcome.Restart);
     }
+    [TestCase]
+    public void ARecoveryRepeatedAfterItsBuildFailedKeepsTheProjectFilesRepairedSince()
+    {
+        _journal.StartCount = 1; _journal.Save();
+        Assertions.AssertObject(Recover(false)).IsEqual(UpdateRecovery.Outcome.ManualRepair);
+        Assertions.AssertString(File.ReadAllText(Path.Combine(_root, "Game.csproj"))).IsEqual("working project");
+        Assertions.AssertBool(UpdateJournal.Load(_folder).KeepProjectFiles).IsTrue();
+
+        File.WriteAllText(Path.Combine(_root, "Game.csproj"), "repaired project");
+        Assertions.AssertObject(Recover()).IsEqual(UpdateRecovery.Outcome.Restart);
+
+        Assertions.AssertString(File.ReadAllText(Path.Combine(_root, "Game.csproj"))).IsEqual("repaired project");
+        _store.Load(); Assertions.AssertInt(_store.LocalAttempts.Count).IsEqual(0);
+    }
+    [TestCase]
+    public void EarlyRecoveryLeavesTheProjectFilesAFailedRollbackRestoredAlready()
+    {
+        _journal.StartCount = 1; _journal.State = UpdatePhase.RollingBack; _journal.KeepProjectFiles = true; _journal.Save();
+        Directory.Delete(Path.Combine(_folder, "backup-project"), true);
+        File.WriteAllText(Path.Combine(_root, "Game.csproj"), "repaired project");
+        Assertions.AssertObject(Recover()).IsEqual(UpdateRecovery.Outcome.Restart);
+        Assertions.AssertString(File.ReadAllText(Path.Combine(_root, "Game.csproj"))).IsEqual("repaired project");
+        Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/ePlugin/plugin.cfg")).Contains("1.0.0")).IsTrue();
+    }
+    [TestCase]
+    public void EarlyRecoveryRestoresTheFilesTheProjectBackupHoldsWhenTheJournalStillListsThePreviousOnes()
+    {
+        // the backup was replaced, but the editor stopped before the journal listing its files was saved
+        File.WriteAllText(Path.Combine(_folder, "backup-project/nuget.config"), "<configuration />");
+        _journal.StartCount = 1; _journal.ProjectFiles = ["Game.csproj", "Game.sln"]; _journal.Save();
+        Assertions.AssertObject(Recover()).IsEqual(UpdateRecovery.Outcome.Restart);
+        Assertions.AssertString(File.ReadAllText(Path.Combine(_root, "Game.csproj"))).IsEqual("working project");
+        Assertions.AssertBool(File.Exists(Path.Combine(_root, "nuget.config"))).IsTrue();
+    }
 }
 #endif

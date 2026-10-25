@@ -196,18 +196,24 @@ internal sealed partial class EGlobal
         finally { _recipeUpdateJournal = null; _updateRefreshSuppression--; }
     }
     /// <summary>
-    /// Plugins this journal must leave as they are: those another group of the batch has swapped but not reconciled yet,
-    /// whose loaded code may already be their new version, and those rolled back since this assembly was loaded, whose
-    /// loaded code still is. Their recipes are reconciled by their own journal, or after the next restart.
+    /// Plugins this journal must leave as they are: those another update has swapped but not reconciled yet (another
+    /// group of the batch, or an update kept before reconciling that Retry still resumes), whose loaded code may already
+    /// be their new version, and those rolled back since this assembly was loaded, whose loaded code still is. Their
+    /// recipes are reconciled by their own journal, or after the next restart.
     /// </summary>
     private HashSet<string> UntouchedRecipes(UpdateJournal journal)
     {
         var untouched = new HashSet<string>(_rolledBackUpdates, StringComparer.Ordinal);
-        foreach (var other in _updateJournals?.Read().Where(j => j.IsActive && j.Id != journal.Id) ?? [])
+        foreach (var other in _updateJournals?.Read().Where(j => j.Id != journal.Id && (j.IsActive || IsKeptBeforeReconcile(j))) ?? [])
             untouched.UnionWith(other.Plugins.Select(p => p.Slug));
         untouched.ExceptWith(journal.Plugins.Select(p => p.Slug));
         return untouched;
     }
+
+    /// <summary>Kept with build errors before reconciling, with the marker Retry resumes it by.</summary>
+    private bool IsKeptBeforeReconcile(UpdateJournal journal) =>
+        journal is { State: UpdatePhase.CommittedWithErrors, BeforeReconcile: true } &&
+        _stateStore?.LocalAttempts.Any(a => a.AttemptId == journal.AttemptId) == true;
 
     private void ExecuteUpdateOperation(PluginContext context, RecipeOperation operation, UpdateJournal journal, UpdatePluginJournal? plugin)
     {
