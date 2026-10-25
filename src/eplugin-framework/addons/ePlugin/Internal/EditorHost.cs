@@ -162,7 +162,33 @@ internal sealed class EditorHost : IEditorHost
 
     public IDisposable SuspendUnfocusedImports() => UnfocusedImportSuspension.Begin();
 
-    public void RestartEditor() => EditorInterface.Singleton.CallDeferred(EditorInterface.MethodName.RestartEditor, true);
+    public void RestartEditor()
+    {
+        StopAssemblyWatcher(PluginNodes());
+        EditorInterface.Singleton.CallDeferred(EditorInterface.MethodName.RestartEditor, true);
+    }
+
+    /// <summary>
+    /// Frees GodotTools' <c>HotReloadAssemblyWatcher</c> (a child of its editor plugin), which reloads the project
+    /// assembly when a newer build is on disk and the editor window gains focus. Restarting closes windows, which focuses
+    /// the editor while it shuts down, and Godot 4.7.2 crashed reloading the assembly then, so it never started again.
+    /// A restart loads the new build anyway, and nothing else may reload once one was requested; returns whether a
+    /// watcher was found.
+    /// </summary>
+    internal static bool StopAssemblyWatcher(IEnumerable<Node> pluginNodes)
+    {
+        var stopped = false;
+        foreach (var plugin in pluginNodes)
+        {
+            if (plugin.GetNodeOrNull(AssemblyWatcherName) is not { } watcher) continue;
+            plugin.RemoveChild(watcher);
+            watcher.Free();
+            stopped = true;
+        }
+        return stopped;
+    }
+
+    private const string AssemblyWatcherName = "HotReloadAssemblyWatcher";
 
     private sealed class UnfocusedImportSuspension : IDisposable
     {

@@ -125,7 +125,9 @@ callbacks and the build. If the operation produced a pending reload, its gate st
 is initialized; the timestamp guard's 15 s timeout must not reopen that old UI. A reload that fails requires an editor
 restart. Operations that need no reload (including declined licenses or failed builds) release the gate normally.
 Don't use GodotTools' `Internal.IsAssembliesReloadingNeeded` for this: it reported a reload as needed
-with no newer build on disk.
+with no newer build on disk. Editor restarts go through `IEditorHost.RestartEditor`, which frees GodotTools'
+`HotReloadAssemblyWatcher` first: a focus change while the editor shut down made it reload the updated assembly, which
+crashed Godot 4.7.2 before it started again.
 
 `EGlobal` (`addons/ePlugin/Internal/EGlobal.cs`) is an internal singleton owning all plugin state. Its partials split it by
 concern: `EGlobal.Transitions.cs`, `.Activation.cs`, `.Deactivation.cs`, `.OptionalDependencies.cs` and `.Retry.cs` hold

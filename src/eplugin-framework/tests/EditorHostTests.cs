@@ -64,5 +64,35 @@ public class EditorHostTests
 
         Assertions.AssertObject(host.GetAutoload(name)).IsNull();
     }
+
+    [TestCase]
+    public static void ARestartFreesTheWatcherThatWouldReloadTheAssemblyWhileTheEditorShutsDown()
+    {
+        // GodotTools adds the watcher as a child of its editor plugin; the other plugin has a node of its own
+        var godotTools = new Node { Name = "GodotSharpEditor" };
+        var watcher = new Node { Name = "HotReloadAssemblyWatcher" };
+        var timer = new Timer();
+        godotTools.AddChild(watcher);
+        watcher.AddChild(timer);
+        var other = new Node { Name = "OtherPlugin" };
+        var kept = new Node { Name = "Watcher" };
+        other.AddChild(kept);
+        try
+        {
+            Assertions.AssertBool(EditorHost.StopAssemblyWatcher([godotTools, other])).IsTrue();
+
+            Assertions.AssertBool(GodotObject.IsInstanceValid(watcher)).IsFalse();
+            Assertions.AssertBool(GodotObject.IsInstanceValid(timer)).IsFalse();
+            Assertions.AssertInt(godotTools.GetChildCount()).IsEqual(0);
+            Assertions.AssertObject(other.GetNodeOrNull("Watcher")).IsSame(kept);
+            // a second restart request finds nothing left to stop
+            Assertions.AssertBool(EditorHost.StopAssemblyWatcher([godotTools, other])).IsFalse();
+        }
+        finally
+        {
+            godotTools.Free();
+            other.Free();
+        }
+    }
 }
 #endif
