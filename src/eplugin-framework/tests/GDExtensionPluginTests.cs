@@ -180,13 +180,18 @@ public class GDExtensionPluginTests
     [TestCase]
     public static void ChoosesTheReleaseZipOfTheAddonAmongDemosAndOtherSpellings()
     {
-        static string? Select(string slug, params string[] names) =>
-            ReleaseAssets.Select(names.Select(n => (n, "https://example.org/" + n)), slug)?["https://example.org/".Length..];
+        static string Select(string slug, params string[] names) => string.Join(" ",
+            ReleaseAssets.Select(names.Select(n => (n, "https://example.org/" + n)), slug).Select(url => url["https://example.org/".Length..]));
         Assertions.AssertString(Select("godot_servo", "godot-servo-demo-v1.2.0.zip", "godot-servo-v1.2.0.zip")).IsEqual("godot-servo-v1.2.0.zip");
         Assertions.AssertString(Select("tweens_gd", "tweens.gd-0.2.4-beta.zip", "tweens.gd-tutorial.zip", "tweens.gd.0.2.4-beta.nupkg")).IsEqual("tweens.gd-0.2.4-beta.zip");
-        // an exact name still wins, and two add-on ZIPs leave the choice open
+        // an exact name still wins, and builds for one platform are never tried in turn
         Assertions.AssertString(Select("my_plugin", "my_plugin.zip", "my-plugin-extras.zip")).IsEqual("my_plugin.zip");
-        Assertions.AssertObject(Select("native", "native-windows.zip", "native-linux.zip")).IsNull();
+        Assertions.AssertString(Select("native", "native-windows.zip", "native-linux.zip")).IsEmpty();
+        Assertions.AssertString(Select("eos", "eos-linux-x86_64.zip", "eos-all.zip", "eos-windows.zip", "eos-macos.zip")).IsEqual("eos-all.zip");
+        // ZIPs named as much like the add-on are tried in the release's order, e.g. godot-ai's migration plugin and godot-ai
+        Assertions.AssertString(Select("godot_ai", "godot-ai-plugin.zip", "godot-ai-v4-plugin.zip")).IsEqual("godot-ai-plugin.zip godot-ai-v4-plugin.zip");
+        Assertions.AssertString(Select("godot_git", "godot_git-v2.1.0-offline.zip", "godot_git-v2.1.0-linux-arm64.zip", "godot_git-v2.1.0.zip",
+            "godot_git-v2.1.0-windows-x86_64.zip")).IsEqual("godot_git-v2.1.0-offline.zip godot_git-v2.1.0.zip");
         // e.g. lua-gdextension, which releases a variant next to it
         Assertions.AssertString(Select("lua-gdextension", "lua-gdextension+luajit.zip", "lua-gdextension.zip")).IsEqual("lua-gdextension.zip");
         Assertions.AssertString(Select("lua_gdextension", "Lua-GDExtension.zip", "lua-gdextension+luajit.zip")).IsEqual("Lua-GDExtension.zip");

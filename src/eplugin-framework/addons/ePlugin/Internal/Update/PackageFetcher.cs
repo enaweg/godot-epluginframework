@@ -68,35 +68,60 @@ internal sealed class PackageFetcher(UpdateHttp http, IGitRunner git)
             // With alternatives, the announced package's refusal or failure is reported when every package is refused.
             ValidatedPackage? refused = null;
             ExceptionDispatchInfo? failure = null;
+            // A release may ship another plugin for the same folder next to the add-on, as godot-ai its migration plugin:
+            // an accepted package that renames the installed plugin (R8) is installed only when none of the others keeps
+            // its name.
+            (string Url, ValidatedPackage Package)? renamed = null;
+            string? staged = null;
             foreach (var url in urls)
             {
-                AddonFiles.DeleteTree(stage);
                 try
                 {
-                    var download = Path.Combine(transactionDirectory, "download.tmp");
-                    try
-                    {
-                        await http.DownloadAsync(url, download, relay, ct, candidate.SourceUrl).ConfigureAwait(false);
-                        SafeZipExtractor.Extract(download, candidate.Slug, stage, ct);
-                    }
-                    finally { if (File.Exists(download)) File.Delete(download); }
-                    var validated = new AddonPackageValidator().Validate(new(target, candidate, stage, allowDowngrade, allowReinstall));
+                    var validated = await Stage(url).ConfigureAwait(false);
                     if (urls.Length == 1) return validated;
-                    if (validated.IsValid)
-                        return url == zip.Url ? validated : validated with
-                        {
-                            Findings = [.. validated.Findings, new("R28", FindingSeverity.Info,
-                                $"The release's first package was refused; this one of another release of version {candidate.NewVersion} is installed: {url}")]
-                        };
-                    if (failure is null) refused ??= validated;
+                    if (!validated.IsValid)
+                    {
+                        if (failure is null) refused ??= validated;
+                        continue;
+                    }
+                    if (!validated.Findings.Any(f => f.Code == "R8")) return Chosen(validated, url);
+                    renamed ??= (url, validated);
                 }
                 catch (Exception ex) when (urls.Length > 1 && !ct.IsCancellationRequested)
                 {
                     if (refused is null) failure ??= ExceptionDispatchInfo.Capture(ex);
                 }
             }
+            // Staging the next package replaced the renaming one's files.
+            if (renamed is { } kept) return Chosen(staged == kept.Url ? kept.Package : await Stage(kept.Url).ConfigureAwait(false), kept.Url);
             failure?.Throw();
             return refused!;
+
+            async Task<ValidatedPackage> Stage(string url)
+            {
+                staged = null;
+                AddonFiles.DeleteTree(stage);
+                var download = Path.Combine(transactionDirectory, "download.tmp");
+                try
+                {
+                    await http.DownloadAsync(url, download, relay, ct, candidate.SourceUrl).ConfigureAwait(false);
+                    SafeZipExtractor.Extract(download, candidate.Slug, stage, ct);
+                }
+                finally { if (File.Exists(download)) File.Delete(download); }
+                staged = url;
+                return new AddonPackageValidator().Validate(new(target, candidate, stage, allowDowngrade, allowReinstall));
+            }
+
+            ValidatedPackage Chosen(ValidatedPackage validated, string url)
+            {
+                if (url == zip.Url) return validated;
+                var skipped = renamed is { } other && other.Url == zip.Url ? "names another plugin" : "was refused";
+                return validated with
+                {
+                    Findings = [.. validated.Findings, new("R28", FindingSeverity.Info,
+                        $"The first package of version {candidate.NewVersion} {skipped}; this one is installed: {url}")]
+                };
+            }
         }
         if (candidate.Package is LocalZipPackageRef local)
         {

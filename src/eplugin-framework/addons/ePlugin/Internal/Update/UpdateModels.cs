@@ -16,8 +16,10 @@ namespace Enaweg.Plugin.Internal.Update;
 [JsonDerivedType(typeof(LocalZipPackageRef), "local-zip")]
 internal abstract record UpdatePackageRef;
 /// <param name="Alternatives">
-/// The packages of other releases of the same version, such as a Godot 3 build released next to the Godot 4 one: staging
-/// tries <paramref name="Url"/> and then these in turn and installs the first that validation accepts. Null for one.
+/// The other packages of the same version: ZIPs of the release named as much like the add-on (see
+/// <see cref="ReleaseAssets.Select"/>), its source archive after them, and the packages of other releases, such as a Godot 3
+/// build released next to the Godot 4 one. Staging tries <paramref name="Url"/> and then these in turn and installs the
+/// first that validation accepts, preferring one that keeps the installed plugin's name. Null for one.
 /// </param>
 internal sealed record ZipPackageRef(string Url, string ExpectedName, IReadOnlyList<string>? Alternatives = null) : UpdatePackageRef;
 internal sealed record GitPackageRef(string Repository, string Path, string Commit) : UpdatePackageRef;

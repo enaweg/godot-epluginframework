@@ -181,8 +181,11 @@ suffix that does not name a prerelease stage (`SemVer.NamesStage`), so `v9.8.0-4
 installed `plugin.cfg`'s `9.8.0` instead of never being offered; GitHub's `releases/latest` redirect, used when its API is
 rate limited, is treated the same. `SemVer` itself reads the suffixes `stable`, `release` and `final` as none. Checks read
 pages of 50 releases (`ReleaseAssets.NewestAsync`), a second one only while the first holds no version the target is
-offered. The newest release of a group is the candidate and the others' ZIPs are its `ZipPackageRef.Alternatives`, which `PackageFetcher` downloads and validates in
-turn until one is accepted (R28 names it; with all refused, the announced one's reason). `AddonPackageValidator` refuses
+offered. The newest release of a group is the candidate and the others' ZIPs are its `ZipPackageRef.Alternatives`, after the
+ZIPs of its own release that `ReleaseAssets.Select` cannot tell apart (named as much like the add-on, no platform build) and
+its source archive, which `PackageFetcher` downloads and validates in turn until one is accepted (R28 names it; with all
+refused, the announced one's reason). An accepted package that renames the installed plugin (R8), such as godot-ai's
+migration plugin, is kept only when no later one keeps the name, and is staged again then. `AddonPackageValidator` refuses
 packages made for Godot 3 (R27, `Godot3Evidence`: GDNative files or GDScript that Godot 4 cannot parse), the usual
 reason for a release of the same version. The manager deletes a staged batch it does not install (`UpdateFlow.Clear`); since an assembly reload or a
 crash forgets it, `ResumeUpdates` deletes folders without a journal last written more than six hours ago
