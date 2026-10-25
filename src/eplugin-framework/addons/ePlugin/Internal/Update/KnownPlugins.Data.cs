@@ -7,8 +7,9 @@ namespace Enaweg.Plugin.Internal.Update;
 // GitLab's or Codeberg's search are listed only with a slug named like their repository. Each slug is the one
 // extra_addons.txt gives, else the plugin folder in the latest release's ZIP, else the add-on's slug in the previous list,
 // else the plugin folder in the repository at that release or tag. Add-ons without a plugin folder, with a release ZIP
-// the updater refuses, named as made for Godot 3 without a Godot 4 project or GDExtension in their repository, or with a
-// slug too generic to match by folder name are left out. The packages were not installed or validated.
+// the updater refuses, installed from a source archive the updater refuses (without a release ZIP it accepts), named as
+// made for Godot 3 without a Godot 4 project or GDExtension in their repository, or with a slug too generic to match by
+// folder name are left out. The packages were not installed or validated.
 internal static partial class KnownPlugins
 {
     private static KnownPlugin[] Entries() =>
@@ -691,6 +692,9 @@ internal static partial class KnownPlugins
         // https://github.com/CodeNameTwister/Multi-Split-Container, latest release 1.3
         new("multi_spliter_container", "Multi Split Container", "https://github.com/CodeNameTwister/Multi-Split-Container/releases",
             "https://github.com/CodeNameTwister/Multi-Split-Container#readme", "https://github.com/CodeNameTwister/Multi-Split-Container", "https://github.com/CodeNameTwister/Multi-Split-Container"),
+        // https://github.com/mohsenph69/Godot-MTerrain-plugin, latest release v0.18.2-alpha
+        new("m_terrain", "M Terrain plugin", "https://github.com/mohsenph69/Godot-MTerrain-plugin/releases",
+            "https://github.com/mohsenph69/Godot-MTerrain-plugin#readme", "https://github.com/mohsenph69/Godot-MTerrain-plugin", "https://github.com/mohsenph69/Godot-MTerrain-plugin"),
         // https://github.com/pixelpen-dev/pixelpen, latest release v1.2.0
         new("net.yarvis.pixel_pen", "PixelPen | PixelArt Drawing and Animation", "https://github.com/pixelpen-dev/pixelpen/releases",
             "https://github.com/pixelpen-dev/pixelpen#readme", "https://pixelpen-dev.github.io", "https://github.com/pixelpen-dev/pixelpen"),
@@ -1003,6 +1007,9 @@ internal static partial class KnownPlugins
         // https://github.com/Wesley-Source/versatile-mobile-joystick, latest release 1.0.1
         new("versatile-mobile-joystick", "Versatile Mobile Joystick", "https://github.com/Wesley-Source/versatile-mobile-joystick/releases",
             "https://github.com/Wesley-Source/versatile-mobile-joystick#readme", "https://github.com/Wesley-Source/versatile-mobile-joystick", "https://github.com/Wesley-Source/versatile-mobile-joystick"),
+        // https://github.com/rothiotome/godot-very-simple-twitch, latest release v0.1.0
+        new("very-simple-twitch", "Very Simple Twitch", "https://github.com/rothiotome/godot-very-simple-twitch/releases",
+            "https://github.com/rothiotome/godot-very-simple-twitch#readme", "https://github.com/rothiotome/godot-very-simple-twitch", "https://github.com/rothiotome/godot-very-simple-twitch"),
         // https://github.com/CfStudiosDev/Virtual-Joystick-CF, latest release v2.0.1
         new("virtual_joystick_cf", "Virtual-Joystick-CF", "https://github.com/CfStudiosDev/Virtual-Joystick-CF/releases",
             "https://github.com/CfStudiosDev/Virtual-Joystick-CF#readme", "https://github.com/CfStudiosDev/Virtual-Joystick-CF", "https://github.com/CfStudiosDev/Virtual-Joystick-CF"),
@@ -1039,9 +1046,6 @@ internal static partial class KnownPlugins
         // https://github.com/MASSHUU12/godot-yat, latest release v1.31.1-beta
         new("yat", "YAT - Yet Another Terminal (C#)", "https://github.com/MASSHUU12/godot-yat/releases",
             "https://github.com/MASSHUU12/godot-yat#readme", "https://godotengine.org/asset-library/asset/2324", "https://github.com/MASSHUU12/godot-yat"),
-        // https://github.com/Kiamo2/YATI, latest release v2.2.10
-        new("YATI", "YATI (Yet Another Tiled Importer) for Godot 4", "https://github.com/Kiamo2/YATI/releases",
-            "https://github.com/Kiamo2/YATI#readme", "https://github.com/Kiamo2/YATI", "https://github.com/Kiamo2/YATI"),
         // https://github.com/Joy-less/YouCanDoIt, latest release v4.4
         new("YouCanDoIt", "You Can Do It!", "https://github.com/Joy-less/YouCanDoIt/releases",
             "https://github.com/Joy-less/YouCanDoIt#readme", "https://github.com/Joy-less/YouCanDoIt", "https://github.com/Joy-less/YouCanDoIt"),

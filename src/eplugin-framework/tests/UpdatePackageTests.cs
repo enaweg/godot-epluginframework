@@ -46,10 +46,16 @@ public class UpdatePackageTests
         SafeZipExtractor.Extract(withSub, "plugin", stage, CancellationToken.None, requireSlugFolder: true);
         Assertions.AssertBool(File.Exists(Path.Combine(stage, "sub", "plugin.cfg"))).IsTrue();
 
-        // Another plugin next to the root, or anywhere outside it, makes the package ambiguous.
-        Assertions.AssertBool(Extracts(Zip(("addons/plugin/plugin.cfg", Config("2.0.0")), ("addons/other/plugin.cfg", Config("2.0.0"))))).IsFalse();
-        Assertions.AssertBool(Extracts(Zip(("addons/plugin/plugin.cfg", Config("2.0.0")), ("tests/addons/gdUnit4/plugin.cfg", Config("2.0.0"))))).IsFalse();
+        // Next to other plugins, as a repository's test framework or godot-ai's migration plugin, the slug names the
+        // folder; without one named like it, or with several equally deep ones, the package is ambiguous.
+        Assertions.AssertBool(Extracts(Zip(("addons/plugin/plugin.cfg", Config("2.0.0")), ("addons/other/plugin.cfg", Config("2.0.0"))))).IsTrue();
+        Assertions.AssertBool(Extracts(Zip(("addons/plugin/plugin.cfg", Config("2.0.0")), ("tests/addons/gdUnit4/plugin.cfg", Config("2.0.0"))))).IsTrue();
+        Assertions.AssertString(SafeZipExtractor.PackageRoot(["repo-4.3.1/migration_bridge/plugin.cfg", "repo-4.3.1/plugin/addons/plugin/plugin.cfg",
+            "repo-4.3.1/docs/addons/control/plugin.cfg"], "plugin")).IsEqual("repo-4.3.1/plugin/addons/plugin/");
         Assertions.AssertBool(Extracts(Zip(("repo/addons/other/plugin.cfg", Config("2.0.0"))))).IsFalse();
+        Assertions.AssertBool(Extracts(Zip(("addons/other/plugin.cfg", Config("2.0.0")), ("addons/third/plugin.cfg", Config("2.0.0"))))).IsFalse();
+        Assertions.AssertThrown(() => SafeZipExtractor.PackageRoot(["a/plugin/plugin.cfg", "b/plugin/plugin.cfg", "c/plugin.cfg"], "plugin"))
+            .IsInstanceOf<InvalidDataException>().HasMessage("Ambiguous package, it has several plugin folders named 'plugin': a/plugin/, b/plugin/");
         // A download may wrap the plugin in one folder of any name or have it at the archive root; a local package may not.
         foreach (var loose in new[] { Zip(("plugin-2.0/plugin.cfg", Config("2.0.0"))), Zip(("plugin.cfg", Config("2.0.0"))) })
         {

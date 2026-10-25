@@ -13,19 +13,22 @@ namespace Enaweg.Plugin.Internal.Update;
 internal static class ReleaseAssets
 {
     /// <summary>
-    /// The ZIP asset of a release to install as <paramref name="slug"/>: the only one, else the one named exactly like the
+    /// The ZIP assets of a release to install as <paramref name="slug"/>: the only one, else the one named exactly like the
     /// slug (as "lua-gdextension.zip" next to "lua-gdextension+luajit.zip"), else the one whose name contains the slug
     /// (also with '-', '_' and '.' mixed up, as in "godot-servo-1.2.zip" for godot_servo), else the one named like an
-    /// add-on, plugin or GDExtension. Among several, a demo, example, sample or tutorial project released next to the
-    /// add-on is left out, and of those left the one named like an add-on is taken, as LimboAI's
-    /// "limboai+v1.8.1.gdextension-4.6.zip" next to its engine builds and export templates. Null when that leaves none or
-    /// several, and the source archive is installed instead.
+    /// add-on, plugin or GDExtension. Among several, a demo, example, sample or tutorial project and a build for one
+    /// platform released next to the add-on are left out, and of those left the one named like an add-on is taken, as
+    /// LimboAI's "limboai+v1.8.1.gdextension-4.6.zip" next to its engine builds and export templates. When no rule leaves
+    /// exactly one, the ones the first rule that matched several left, in the release's order: staging tries them in turn
+    /// (see <see cref="ZipPackageRef.Alternatives"/>), as godot-ai's "godot-ai-plugin.zip" (its migration plugin) and
+    /// "godot-ai-v4-plugin.zip". Empty when no rule matches any, and the source archive is installed instead.
     /// </summary>
-    public static string? Select(IEnumerable<(string Name, string Url)> assets, string slug)
+    public static string[] Select(IEnumerable<(string Name, string Url)> assets, string slug)
     {
         var zips = assets.Where(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
             new Uri(a.Url).AbsolutePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)).ToArray();
-        if (zips.Length == 1) return zips[0].Url;
+        if (zips.Length == 1) return [zips[0].Url];
+        string[]? tied = null;
         foreach (var matches in new Func<string, bool>[]
                  {
                      name => Plain(Path.GetFileNameWithoutExtension(name)) == Plain(slug),
@@ -35,20 +38,36 @@ internal static class ReleaseAssets
                  })
         {
             var named = zips.Where(a => matches(a.Name)).ToArray();
-            if (named.Length > 1) named = named.Where(a => !IsExtra(a.Name)).ToArray();
+            if (named.Length > 1) named = named.Where(a => !IsExtra(a.Name) && !IsPlatform(a.Name)).ToArray();
             if (named.Length > 1 && named.Where(a => IsAddon(a.Name)).ToArray() is { Length: > 0 } addons) named = addons;
-            if (named.Length == 1) return named[0].Url;
+            if (named.Length == 1) return [named[0].Url];
+            if (named.Length > 1) tied ??= named.Select(a => a.Url).ToArray();
         }
-        return null;
+        return tied ?? [];
     }
+
+    /// <summary>
+    /// The packages to try for a release: its <see cref="Select"/>ed ZIPs and, unless one was chosen, its source archive
+    /// after them, as before several equally named ZIPs were tried.
+    /// </summary>
+    public static string[] WithArchive(string[] zips, string? archive) => zips.Length == 1 || archive is null ? zips : [.. zips, archive];
 
     private static string Plain(string name) => new(name.Where(c => c is not ('-' or '_' or '.' or ' ')).Select(char.ToLowerInvariant).ToArray());
 
     private static readonly string[] Extras = ["demo", "example", "sample", "tutorial"];
     private static readonly string[] Addons = ["addon", "plugin", "gdextension"];
+    private static readonly string[] Platforms = ["windows", "win", "win32", "win64", "linux", "lin", "linux64", "macos", "mac", "osx", "android", "ios", "web", "x86", "x64", "arm64", "arm32"];
 
     /// <summary>A project released next to the add-on rather than the add-on itself.</summary>
     private static bool IsExtra(string name) => Extras.Any(extra => name.Contains(extra, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// A build for one platform, as "godot_git-v2.1.0-linux-arm64.zip": validation cannot tell it from the one for this
+    /// editor's, so it is never tried in turn with the others.
+    /// </summary>
+    private static bool IsPlatform(string name) =>
+        Path.GetFileNameWithoutExtension(name).ToLowerInvariant().Split(Separators, StringSplitOptions.RemoveEmptyEntries).Intersect(Platforms).Any();
+    private static readonly char[] Separators = ['-', '_', '.', ' ', '+', '(', ')', '[', ']'];
 
     /// <summary>The add-on itself, rather than an engine build, export template or library released next to it.</summary>
     private static bool IsAddon(string name) => Addons.Any(addon => name.Contains(addon, StringComparison.OrdinalIgnoreCase));
@@ -137,13 +156,13 @@ internal static class ReleaseAssets
     }
 
     /// <summary>
-    /// The package of the first release, with the other releases' packages as alternatives; a release without a ZIP
-    /// (<paramref name="download"/> returns null) is left out.
+    /// The first package of the first release, with its other packages and the other releases' as alternatives; a release
+    /// without a ZIP (<paramref name="download"/> returns none) is left out.
     /// </summary>
     /// <exception cref="IOException">None of the releases has a ZIP.</exception>
-    public static ZipPackageRef Package(IReadOnlyList<JsonElement> releases, string slug, Func<JsonElement, string?> download)
+    public static ZipPackageRef Package(IReadOnlyList<JsonElement> releases, string slug, Func<JsonElement, IEnumerable<string>> download)
     {
-        var urls = releases.Select(download).OfType<string>().Distinct(StringComparer.Ordinal).ToArray();
+        var urls = releases.SelectMany(download).Distinct(StringComparer.Ordinal).ToArray();
         if (urls.Length == 0) throw new IOException("Release has no ZIP package.");
         return new(urls[0], slug, urls.Length > 1 ? urls[1..] : null);
     }
@@ -172,10 +191,11 @@ internal sealed class GitHubReleaseSource(UpdateHttp http, string owner, string 
             ReleaseAssets.String(release, "html_url") ?? $"{root}/releases/tag/{Uri.EscapeDataString(tag)}", tag,
             ReleaseAssets.Package(releases, target.Slug, Download));
 
-        string Download(JsonElement r)
+        string[] Download(JsonElement r)
         {
             var assets = ReleaseAssets.Array(r, "assets").Select(a => (ReleaseAssets.String(a, "name") ?? "", ReleaseAssets.String(a, "browser_download_url") ?? "")).Where(a => a.Item2.Length > 0);
-            return ReleaseAssets.Select(assets, target.Slug) ?? $"{root}/archive/refs/tags/{Uri.EscapeDataString(ReleaseAssets.String(r, "tag_name")!)}.zip";
+            return ReleaseAssets.WithArchive(ReleaseAssets.Select(assets, target.Slug),
+                $"{root}/archive/refs/tags/{Uri.EscapeDataString(ReleaseAssets.String(r, "tag_name")!)}.zip");
         }
     }
     public async Task<UpdateCandidate?> CheckAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct)
@@ -245,9 +265,9 @@ internal sealed class GitLabReleaseSource(UpdateHttp http, string host, string p
         var package = ReleaseAssets.Package(releases, target.Slug, r =>
         {
             var assets = r.GetProperty("assets");
-            return ReleaseAssets.Select(ReleaseAssets.Array(assets, "links").Select(a =>
-                (ReleaseAssets.String(a, "name") ?? "", ReleaseAssets.String(a, "direct_asset_url") ?? ReleaseAssets.String(a, "url") ?? "")).Where(a => a.Item2.Length > 0), target.Slug)
-                ?? ReleaseAssets.Array(assets, "sources").Where(a => ReleaseAssets.String(a, "format") == "zip").Select(a => ReleaseAssets.String(a, "url")).FirstOrDefault();
+            return ReleaseAssets.WithArchive(ReleaseAssets.Select(ReleaseAssets.Array(assets, "links").Select(a =>
+                (ReleaseAssets.String(a, "name") ?? "", ReleaseAssets.String(a, "direct_asset_url") ?? ReleaseAssets.String(a, "url") ?? "")).Where(a => a.Item2.Length > 0), target.Slug),
+                ReleaseAssets.Array(assets, "sources").Where(a => ReleaseAssets.String(a, "format") == "zip").Select(a => ReleaseAssets.String(a, "url")).FirstOrDefault());
         });
         var link = release.TryGetProperty("_links", out var links) ? ReleaseAssets.String(links, "self") : null;
         return new(target.Slug, target.Name, target.InstalledVersion, version.ToString(), target.UpdateUrl,
@@ -297,8 +317,8 @@ internal sealed class ForgejoReleaseSource(UpdateHttp http, string host, string 
             ReleaseAssets.Package(releases, target.Slug, r =>
             {
                 var assets = ReleaseAssets.Array(r, "assets").Select(a => (ReleaseAssets.String(a, "name") ?? "", ReleaseAssets.String(a, "browser_download_url") ?? "")).Where(a => a.Item2.Length > 0);
-                return ReleaseAssets.Select(assets, target.Slug) ?? ReleaseAssets.String(r, "zipball_url") ??
-                    $"{root}/archive/{Uri.EscapeDataString(ReleaseAssets.String(r, "tag_name")!)}.zip";
+                return ReleaseAssets.WithArchive(ReleaseAssets.Select(assets, target.Slug), ReleaseAssets.String(r, "zipball_url") ??
+                    $"{root}/archive/{Uri.EscapeDataString(ReleaseAssets.String(r, "tag_name")!)}.zip");
             }));
     }
 }

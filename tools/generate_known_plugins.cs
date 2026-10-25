@@ -11,6 +11,9 @@
 // 2. the plugin folder in its latest release's ZIP, chosen and read like ePlugin's updater does (only the file list);
 // 3. the slug it already has in the list, so the key stays stable;
 // 4. the plugin folder in its repository at its latest release or version tag, read with git (git 2.25 or newer on PATH).
+// An add-on whose release ZIPs the updater refuses is left out, and so is one installed from its source archive (no ZIP
+// fits the slug, or several do and none is accepted) when the archive's files at that tag are refused, as a repository
+// with several plugins of which none is named like the slug.
 // A plugin folder holds a plugin.cfg; without any, the folder of a GDExtension add-on (its .gdextension below addons/)
 // counts, which the updater installs without plugin.cfg. An add-on found by GitLab's or Codeberg's search is only listed
 // when its slug is named like its repository, since a search also finds games that hold other add-ons. Add-ons whose name
@@ -67,16 +70,17 @@ http.DefaultRequestHeaders.UserAgent.ParseAdd("eplugin-known-plugins/1.0");
 
 // The plugin folders of each repository and its release ZIP; read in parallel, git and the downloads do the waiting.
 var trees = new ConcurrentDictionary<Addon, Tree>();
-var zips = new ConcurrentDictionary<Addon, Package>();
+var choices = new ConcurrentDictionary<Addon, Choice>();
+var hints = new ConcurrentDictionary<Addon, string?>();
 var done = 0;
 await Parallel.ForEachAsync(addons, new ParallelOptions { MaxDegreeOfParallelism = 8 }, async (addon, ct) =>
 {
     var tree = trees[addon] = await ReadTree(addon, ct);
     // The updater chooses among several ZIP assets by the plugin's slug. A .gdextension outside addons/ names none: LimboAI
     // has gdextension/limboai.gdextension in its repository and addons/limboai/ in its release ZIP.
-    var hint = addon.Slug ?? existing.GetValueOrDefault(addon.Repository) ??
+    var hint = hints[addon] = addon.Slug ?? existing.GetValueOrDefault(addon.Repository) ??
         (tree.Plugins.Length == 1 && NamesSlug(tree, tree.Plugins[0]) ? Name(tree.Plugins[0]) : null);
-    if (await ChooseZip(addon, hint, ct) is { } zip) zips[addon] = zip;
+    choices[addon] = await ChooseZip(addon, hint, ct);
     Console.Error.Write($"\rRead {Interlocked.Increment(ref done)}/{addons.Length} repositories");
 });
 Console.Error.WriteLine();
@@ -96,11 +100,13 @@ foreach (var addon in addons)
             "and its repository shows no Godot 4 project or GDExtension"));
         continue;
     }
-    var zip = zips.GetValueOrDefault(addon);
+    var choice = choices[addon];
+    var zip = choice.Zip;
     var repositoryName = Regex.Replace(addon.Repository.TrimEnd('/').Split('/', ':')[^1], @"\.git$", "");
     string? slug;
     string note;
-    if (zip is { Error: { } refused, Refuses: true })
+    // Without the source archive to fall back to, as with several ZIPs named like the add-on.
+    if (zip is { Error: { } refused, Refuses: true } && !choice.Archive)
     {
         // The updater downloads this ZIP for every update and refuses it, whatever the slug.
         leftOut.Add((addon, "release ZIP refused by the updater", $"the release ZIP {zip.Asset} {refused}"));
@@ -140,13 +146,26 @@ foreach (var addon in addons)
             leftOut.Add((addon, folder is null ? "several plugins, none named like the repository" : "plugin at the repository root", note));
             continue;
         }
-        // The updater chooses the ZIP by this slug, which may be one no hint led to before, so the list does not keep
-        // changing between runs.
-        if (zip is null && await ChooseZip(addon, slug, CancellationToken.None) is { Error: { } refusal, Refuses: true } chosenZip)
+    }
+    // The updater chooses the ZIP by this slug, which may be one no hint led to before, so the list does not keep changing
+    // between runs.
+    if (slug != hints[addon])
+    {
+        choice = await ChooseZip(addon, slug, CancellationToken.None);
+        if (choice.Zip is { Error: { } refusal, Refuses: true } chosenZip && !choice.Archive)
         {
             leftOut.Add((addon, "release ZIP refused by the updater", $"the release ZIP {chosenZip.Asset} {refusal}"));
             continue;
         }
+    }
+    // The updater installs the source archive when no release ZIP is accepted; the repository's files at the tag stand for
+    // it. A ZIP that could not be downloaded leaves that open.
+    if (choice.Zip is null or { Refuses: true } && tree.Error is null && ArchiveRefusal(tree.Files, slug) is { } archiveRefusal)
+    {
+        leftOut.Add((addon, "source archive refused by the updater", (choice.Zip is { } refusedZip
+            ? $"the release ZIP {refusedZip.Asset} {refusedZip.Error}, and " : "no release ZIP is installed as " + slug + ", and ") +
+            $"its source archive {archiveRefusal}"));
+        continue;
     }
     // A search also finds games and projects that hold someone else's add-on; only a plugin named like its repository is
     // the repository's own.
@@ -185,8 +204,9 @@ var text = new StringBuilder($$"""
     // GitLab's or Codeberg's search are listed only with a slug named like their repository. Each slug is the one
     // extra_addons.txt gives, else the plugin folder in the latest release's ZIP, else the add-on's slug in the previous list,
     // else the plugin folder in the repository at that release or tag. Add-ons without a plugin folder, with a release ZIP
-    // the updater refuses, named as made for Godot 3 without a Godot 4 project or GDExtension in their repository, or with a
-    // slug too generic to match by folder name are left out. The packages were not installed or validated.
+    // the updater refuses, installed from a source archive the updater refuses (without a release ZIP it accepts), named as
+    // made for Godot 3 without a Godot 4 project or GDExtension in their repository, or with a slug too generic to match by
+    // folder name are left out. The packages were not installed or validated.
     internal static partial class KnownPlugins
     {
         private static KnownPlugin[] Entries() =>
@@ -236,16 +256,22 @@ Statistics(entries.Count, leftOut.Select(l => (l.Addon.Repository, l.Addon.Stars
     return (folder, note);
 }
 
-// The ZIP asset ePlugin's updater downloads (ReleaseAssets.Select): the only one, else the one named exactly like the
-// slug, else the one named like the slug (also with '-', '_' and '.' mixed up), else the one named like an add-on, plugin
-// or GDExtension, leaving out demo, example, sample and tutorial projects among several and preferring the one named
-// like an add-on of those left. Without one it downloads the source archive, which the repository stands for.
-static ReleaseAsset? SelectAsset(ReleaseAsset[] assets, string? slug)
+// The ZIP assets ePlugin's updater tries (ReleaseAssets.Select): the only one, else the one named exactly like the slug,
+// else the one named like the slug (also with '-', '_' and '.' mixed up), else the one named like an add-on, plugin or
+// GDExtension, leaving out demo, example, sample and tutorial projects and builds for one platform among several and
+// preferring the one named like an add-on of those left. When no rule leaves exactly one, the ones the first rule that
+// matched several left, which it tries in turn before the source archive. Without any it downloads the source archive,
+// which the repository stands for.
+static ReleaseAsset[] SelectAsset(ReleaseAsset[] assets, string? slug)
 {
     var zips = assets.Where(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
                                  Uri.TryCreate(a.Url, UriKind.Absolute, out var uri) && uri.AbsolutePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)).ToArray();
-    if (zips.Length == 1) return zips[0];
+    if (zips.Length == 1) return zips;
     static bool IsAddon(string name) => new[] { "addon", "plugin", "gdextension" }.Any(addon => name.Contains(addon, StringComparison.OrdinalIgnoreCase));
+    static bool IsPlatform(string name) => Path.GetFileNameWithoutExtension(name).ToLowerInvariant()
+        .Split(['-', '_', '.', ' ', '+', '(', ')', '[', ']'], StringSplitOptions.RemoveEmptyEntries)
+        .Intersect(["windows", "win", "win32", "win64", "linux", "lin", "linux64", "macos", "mac", "osx", "android", "ios", "web", "x86", "x64", "arm64", "arm32"]).Any();
+    ReleaseAsset[]? tied = null;
     foreach (var matches in new Func<string, bool>[]
              {
                  name => slug is not null && Plain(Path.GetFileNameWithoutExtension(name), keepGodot: true) == Plain(slug, keepGodot: true),
@@ -256,11 +282,13 @@ static ReleaseAsset? SelectAsset(ReleaseAsset[] assets, string? slug)
     {
         var named = zips.Where(a => matches(a.Name)).ToArray();
         if (named.Length > 1)
-            named = named.Where(a => !new[] { "demo", "example", "sample", "tutorial" }.Any(extra => a.Name.Contains(extra, StringComparison.OrdinalIgnoreCase))).ToArray();
+            named = named.Where(a => !new[] { "demo", "example", "sample", "tutorial" }.Any(extra => a.Name.Contains(extra, StringComparison.OrdinalIgnoreCase)) &&
+                                     !IsPlatform(a.Name)).ToArray();
         if (named.Length > 1 && named.Where(a => IsAddon(a.Name)).ToArray() is { Length: > 0 } addons) named = addons;
-        if (named.Length == 1) return named[0];
+        if (named.Length == 1) return named;
+        if (named.Length > 1) tied ??= named;
     }
-    return null;
+    return tied ?? [];
 }
 
 // The file list and plugin root of a release ZIP, found like the updater's SafeZipExtractor.PackageRoot: the folder of the
@@ -293,23 +321,10 @@ async Task<Package> ReadZip(ReleaseAsset asset, string? slug, CancellationToken 
             paths = archive.Entries.Select(e => e.FullName.Replace('\\', '/')).Where(p => !p.EndsWith('/')).ToArray();
         }
         catch (InvalidDataException) { return new(asset.Name, null, [], "is not a readable ZIP", true); }
-        var folders = paths.Where(p => p == "plugin.cfg" || p.EndsWith("/plugin.cfg", StringComparison.Ordinal))
-            .Select(p => p[..^"plugin.cfg".Length]).ToArray();
-        if (folders.Length == 0)
-        {
-            var extensions = ExtensionFolders(paths);
-            // The updater looks for the folder named like the slug; without one known, the ZIP's only add-on folder names it.
-            var named = slug is null ? extensions : extensions.Where(f => Name(f) == slug).ToArray();
-            if (named.Length == 0) return new(asset.Name, null, paths, "has no plugin.cfg and no GDExtension folder" + (slug is null ? "" : $" named {slug}") + "; the updater refuses it", true);
-            var shallowest = named.Where(f => Depth(f) == named.Min(Depth)).ToArray();
-            if (shallowest.Length > 1) return new(asset.Name, null, paths, "holds several GDExtensions (" + string.Join(", ", shallowest) + "); the updater refuses it", true);
-            return Accepted(shallowest[0]);
-        }
-        var depth = folders.Min(Depth);
-        var roots = folders.Where(f => Depth(f) == depth).ToArray();
-        if (roots.Length > 1 || folders.Any(f => !f.StartsWith(roots[0], StringComparison.Ordinal)))
-            return new(asset.Name, null, paths, "holds several plugins (" + string.Join(", ", folders) + "); the updater refuses it", true);
-        return Accepted(roots[0]);
+        // A plugin root named otherwise is taken as well: the slug is only a hint here, and the one the root names is
+        // chosen again (and refused then if need be) when it differs.
+        var (root, refusal) = PackageRoot(paths, slug);
+        return root is not null ? Accepted(root) : new(asset.Name, null, paths, refusal + "; the updater refuses it", true);
 
         // The validator's R27 refuses a package made for Godot 3 too.
         Package Accepted(string root) => Godot3Evidence(file, root) is { } godot3
@@ -343,20 +358,84 @@ static string? Godot3Evidence(string file, string root)
     return null;
 }
 
-// The release ZIP the updater installs as the slug: of the releases of the newest version, in order, the first whose ZIP it
-// accepts (PackageFetcher tries them in turn), else the first one's. Null when no release has a ZIP for the slug.
-async Task<Package?> ChooseZip(Addon addon, string? slug, CancellationToken ct)
+// The release ZIP the updater installs as the slug: of the ZIPs of the releases of the newest version, in order, the first
+// it accepts (PackageFetcher tries them in turn), else the first one. Its plugin.cfg name, which the updater prefers to be
+// the installed plugin's, is not known here. Null when no release has a ZIP for the slug. Archive tells whether the
+// updater also tries the source archive, which it does for a release without exactly one ZIP for the slug.
+async Task<Choice> ChooseZip(Addon addon, string? slug, CancellationToken ct)
 {
     Package? first = null;
-    foreach (var release in (addon.ReleaseAssets ?? []).GroupBy(a => a.Tag))
+    var archive = false;
+    var releases = (addon.ReleaseAssets ?? []).GroupBy(a => a.Tag).ToArray();
+    foreach (var release in releases)
     {
-        if (SelectAsset(release.ToArray(), slug) is not { } asset) continue;
-        var package = await ReadZip(asset, slug, ct);
-        if (!package.Refuses) return package;
-        first ??= package;
+        var assets = SelectAsset(release.ToArray(), slug);
+        archive |= assets.Length != 1;
+        foreach (var asset in assets)
+        {
+            var package = await ReadZip(asset, slug, ct);
+            if (!package.Refuses) return new(package, archive);
+            first ??= package;
+        }
     }
-    return first;
+    return new(first, archive || releases.Length == 0);
 }
+
+// The folder of the package the updater installs as the slug, read like SafeZipExtractor.PackageRoot: the plugin root
+// (the folder of the shallowest plugin.cfg, with the others below it) when it is named like the slug or at most one folder
+// deep, else the shallowest folder named like the slug that holds a plugin.cfg, else the shallowest one holding a
+// .gdextension (outside hidden folders). Without a slug, the plugin root or the package's only GDExtension add-on folder.
+// Refusal says why the updater refuses the package; with it, Root is a plugin root named otherwise, or null.
+static (string? Root, string? Refusal) PackageRoot(string[] paths, string? slug)
+{
+    var folders = paths.Where(p => p == "plugin.cfg" || p.EndsWith("/plugin.cfg", StringComparison.Ordinal))
+        .Select(p => p[..^"plugin.cfg".Length]).ToArray();
+    string? plugin = null;
+    string? ambiguous = null;
+    if (folders.Length > 0)
+    {
+        var roots = folders.Where(f => Depth(f) == folders.Min(Depth)).ToArray();
+        if (roots.Length > 1 || folders.Any(f => !f.StartsWith(roots[0], StringComparison.Ordinal)))
+            ambiguous = "holds several plugins (" + string.Join(", ", folders) + ")";
+        else plugin = roots[0];
+    }
+    if (plugin is not null && (slug is null || Name(plugin) == slug || Depth(plugin) <= 1)) return (plugin, null);
+    if (slug is null)
+    {
+        if (ambiguous is not null) return (null, ambiguous);
+        var extensions = Shallowest(ExtensionFolders(paths));
+        return extensions.Length switch
+        {
+            0 => (null, "has no plugin.cfg and no GDExtension folder"),
+            1 => (extensions[0], null),
+            _ => (null, "holds several GDExtensions (" + string.Join(", ", extensions) + ")"),
+        };
+    }
+    var named = Shallowest(folders.Where(f => Name(f) == slug));
+    if (named.Length > 1) return (null, $"holds several plugin folders named {slug} (" + string.Join(", ", named) + ")");
+    if (named.Length == 1) return (named[0], null);
+    // Every folder holding a .gdextension named like the slug, as "x/slug/bin/a.gdextension" has x/slug/.
+    var namedExtensions = Shallowest(paths
+        .Where(p => p.EndsWith(".gdextension", StringComparison.OrdinalIgnoreCase) && !p.Split('/').Any(part => part.StartsWith('.')))
+        .SelectMany(p => p.Split('/')[..^1].Select((_, i) => string.Join('/', p.Split('/')[..(i + 1)]) + "/"))
+        .Where(f => Name(f) == slug).Distinct(StringComparer.Ordinal));
+    if (namedExtensions.Length == 1) return (namedExtensions[0], null);
+    if (folders.Length == 0)
+        return (null, namedExtensions.Length > 1 ? $"holds several GDExtensions named {slug} (" + string.Join(", ", namedExtensions) + ")"
+            : $"has no plugin.cfg and no GDExtension folder named {slug}");
+    return plugin is null ? (null, $"{ambiguous}, none of them named {slug}") : (plugin, $"has its plugin in {plugin}, a folder not named {slug}");
+
+    static string[] Shallowest(IEnumerable<string> folders)
+    {
+        var all = folders.ToArray();
+        return all.Where(f => Depth(f) == all.Min(Depth)).ToArray();
+    }
+}
+
+// Why the updater refuses the source archive of the add-on's tag when installing it as the slug, or null: its files, in
+// the archive's wrapper folder, are read like SafeZipExtractor.PackageRoot does.
+static string? ArchiveRefusal(string[] files, string slug) =>
+    PackageRoot(files.Select(f => "wrapper/" + f).ToArray(), slug).Refusal?.Replace("wrapper/", "", StringComparison.Ordinal);
 
 // The slug a ZIP's plugin root names: its folder, unless the plugin is at the ZIP's root or in a source archive's
 // wrapper folder ("repo-1.2.3/"), which the updater also installs but whose name is not the slug.
@@ -546,6 +625,9 @@ record Addon(string Name, int Stars, string? UpdateUrl, string? UpdateSource, st
 record ReleaseAsset(string Name, string Url, string? Tag = null);
 /// <param name="Godot4">The add-on's name says Godot 3, but the repository shows a Godot 4 project or GDExtension.</param>
 record Tree(string[] Plugins, string[] Files, string? Error, bool Godot4 = false);
+/// <param name="Zip">The ZIP the updater installs, or the refused one it tries first; null when none fits the slug.</param>
+/// <param name="Archive">The updater tries the source archive too, after the ZIPs.</param>
+record Choice(Package? Zip, bool Archive);
 /// <param name="Root">The plugin root in the ZIP; null when it has none the updater accepts.</param>
 /// <param name="Refuses">The updater refuses this ZIP, so the add-on cannot be updated from its releases.</param>
 record Package(string Asset, string? Root, string[] Files, string? Error, bool Refuses);

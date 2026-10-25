@@ -443,6 +443,78 @@ public class UpdateSourceTests
     }
 
     [TestCase]
+    public static async Task EquallyNamedZipsOfAReleaseAreTriedInTurnPreferringTheInstalledPlugin()
+    {
+        // godot-ai releases its migration plugin for the same folder next to the plugin, both named like it
+        using var github = new HttpClient(new Handler(_ => Json("""
+            [{"tag_name":"v4.3.1","draft":false,"assets":[
+              {"name":"godot-ai-plugin.zip","browser_download_url":"https://example.org/bridge.zip"},
+              {"name":"godot-ai-plugin.zip.sha256","browser_download_url":"https://example.org/bridge.zip.sha256"},
+              {"name":"godot-ai-v4-plugin.zip","browser_download_url":"https://example.org/plugin.zip"}]}]
+            """)));
+        var candidate = (await new GitHubReleaseSource(new(github), "owner", "repo").CheckAsync(Target() with { Slug = "godot_ai" }, new(), CancellationToken.None))!;
+        var package = (ZipPackageRef)candidate.Package;
+        Assertions.AssertString(package.Url).IsEqual("https://example.org/bridge.zip");
+        Assertions.AssertArray(package.Alternatives!.ToArray())
+            .ContainsExactly("https://example.org/plugin.zip", "https://github.com/owner/repo/archive/refs/tags/v4.3.1.zip");
+
+        var root = Path.Combine(Path.GetTempPath(), "fetch-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var installed = Path.Combine(root, "installed");
+            Directory.CreateDirectory(installed);
+            File.WriteAllText(Path.Combine(installed, "plugin.cfg"), "[plugin]\nname=\"Godot AI\"\nversion=\"4.3.0\"\nscript=\"plugin.gd\"\n");
+            var archives = new Dictionary<string, byte[]>
+            {
+                ["https://example.org/bridge.zip"] = PluginZip("Godot AI v4 Migration"),
+                ["https://example.org/plugin.zip"] = PluginZip("Godot AI"),
+                ["https://example.org/other.zip"] = PluginZip("Godot AI Bridge"),
+            };
+            var requested = new List<string>();
+            using var client = new HttpClient(new Handler(request =>
+            {
+                requested.Add(request.RequestUri!.ToString());
+                return new(HttpStatusCode.OK) { Content = new ByteArrayContent(archives[request.RequestUri!.ToString()]) };
+            }));
+            var update = new UpdateCandidate("godot_ai", "Godot AI", "4.3.0", "4.3.1", "https://example.org/releases", null, null,
+                new ZipPackageRef("https://example.org/bridge.zip", "godot_ai", ["https://example.org/plugin.zip", "https://example.org/other.zip"]));
+            var targets = new[] { new PluginUpdateTarget("godot_ai", "Godot AI", "4.3.0", null, installed) };
+            var fetcher = new PackageFetcher(new UpdateHttp(client), new FakeGit());
+
+            var staged = (await fetcher.FetchAsync([update], targets, Path.Combine(root, "transaction"), null, CancellationToken.None)).Packages.Single();
+            Assertions.AssertThat(requested).ContainsExactly("https://example.org/bridge.zip", "https://example.org/plugin.zip");
+            Assertions.AssertString(File.ReadAllText(Path.Combine(staged.StagingDir, "plugin.cfg"))).Contains("name=\"Godot AI\"");
+            Assertions.AssertString(staged.Findings.Single(f => f.Code == "R28").Message)
+                .IsEqual("The first package of version 4.3.1 names another plugin; this one is installed: https://example.org/plugin.zip");
+            Assertions.AssertBool(staged.Findings.Any(f => f.Code == "R8")).IsFalse();
+
+            // every package renames the plugin: the first one, staged again since the others replaced its files
+            requested.Clear();
+            var renaming = update with { Package = new ZipPackageRef("https://example.org/bridge.zip", "godot_ai", ["https://example.org/other.zip"]) };
+            staged = (await fetcher.FetchAsync([renaming], targets, Path.Combine(root, "transaction"), null, CancellationToken.None)).Packages.Single();
+            Assertions.AssertThat(requested).ContainsExactly("https://example.org/bridge.zip", "https://example.org/other.zip", "https://example.org/bridge.zip");
+            Assertions.AssertString(File.ReadAllText(Path.Combine(staged.StagingDir, "plugin.cfg"))).Contains("name=\"Godot AI v4 Migration\"");
+            Assertions.AssertBool(staged.Findings.Any(f => f.Code == "R8")).IsTrue();
+            Assertions.AssertBool(staged.Findings.Any(f => f.Code == "R28")).IsFalse();
+        }
+        finally { Directory.Delete(root, true); }
+
+        static byte[] PluginZip(string name)
+        {
+            using var stream = new MemoryStream();
+            using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, true))
+                foreach (var (path, text) in new[] { ("addons/godot_ai/plugin.cfg", $"[plugin]\nname=\"{name}\"\nversion=\"4.3.1\"\nscript=\"plugin.gd\"\n"),
+                             ("addons/godot_ai/plugin.gd", "@tool\nextends EditorPlugin\n") })
+                {
+                    using var writer = new StreamWriter(zip.CreateEntry(path).Open());
+                    writer.Write(text);
+                }
+            return stream.ToArray();
+        }
+    }
+
+    [TestCase]
     public static void PackagesInGodot3ScriptOrWithGDNativeAreMadeForGodot3()
     {
         var root = Path.Combine(Path.GetTempPath(), "godot3-" + Guid.NewGuid().ToString("N"));
