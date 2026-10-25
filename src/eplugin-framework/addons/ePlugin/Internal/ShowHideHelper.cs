@@ -15,6 +15,11 @@ namespace Enaweg.Plugin.Internal;
 /// done. A directory found in neither form is logged, not a failure; only both forms existing at once is, because
 /// neither can be renamed onto the other without losing files.
 /// <para>
+/// Only a directory inside the plugin's directory is managed. One outside it (another plugin's, the project's, or the
+/// plugin's own directory or one holding it) is refused when it is shown, and left as it is when it is hidden, so a
+/// recipe that names one can still be uninstalled. A relative path is relative to the project, like <c>res://</c>.
+/// </para>
+/// <para>
 /// A directory may hold a GDExtension only when every one of its extensions is <c>reloadable</c>: Godot does not load
 /// extensions in hidden directories, so showing loads them and hiding unloads them first. That also closes the library
 /// copies the editor on Windows keeps open, which would keep the directory from being renamed. One that is not
@@ -30,6 +35,9 @@ internal static class ShowHideHelper
         var (shown, hidden) = Forms(directory);
         var baseDirectory = BaseDirectory(plugin);
         RefuseEnclosingDirectory(directory, shown, baseDirectory);
+        if (!IsInside(shown, baseDirectory))
+            throw new InvalidOperationException($"The managed directory {directory} is outside the plugin's directory. " +
+                "Only directories inside the plugin can be added with AddDirectory.");
         if (shown.Exists && hidden.Exists) throw Conflict(shown, hidden, baseDirectory);
         if (shown.Exists)
         {
@@ -61,7 +69,13 @@ internal static class ShowHideHelper
     {
         var (shown, hidden) = Forms(directory);
         var baseDirectory = BaseDirectory(plugin);
-        RefuseEnclosingDirectory(directory, shown, baseDirectory);
+        if (!IsInside(shown, baseDirectory))
+        {
+            // showing refuses it, and renaming it would change what is not the plugin's; failing would keep the recipe
+            // from being uninstalled
+            plugin.Logger?.Warn($"Not hiding the managed directory {directory}: it is outside the plugin's directory.");
+            return;
+        }
         if (shown.Exists && hidden.Exists) throw Conflict(shown, hidden, baseDirectory);
         if (hidden.Exists)
         {
@@ -112,6 +126,19 @@ internal static class ShowHideHelper
                 "Only directories inside the plugin can be added with AddDirectory.");
     }
 
+    /// <summary>Whether a managed directory is below the plugin's directory; any directory when that is unknown.</summary>
+    private static bool IsInside(DirectoryInfo shown, string? baseDirectory)
+    {
+        if (baseDirectory is null) return true;
+        var plugin = Path.TrimEndingDirectorySeparator(baseDirectory) + Path.DirectorySeparatorChar;
+        var managed = Path.TrimEndingDirectorySeparator(shown.FullName) + Path.DirectorySeparatorChar;
+        return managed.Length > plugin.Length && managed.StartsWith(plugin, PackageFiles.PathComparison);
+    }
+
+    /// <summary>Whether two recipe entries name the same managed directory, in either form.</summary>
+    internal static bool SameDirectory(string a, string b) =>
+        string.Equals(Forms(a).Shown.FullName, Forms(b).Shown.FullName, PackageFiles.PathComparison);
+
     /// <summary>Refuses to show a directory with a GDExtension that could not be unloaded to hide it again.</summary>
     private static void RefuseFixedExtensions(DirectoryInfo hidden, string? baseDirectory)
     {
@@ -127,11 +154,20 @@ internal static class ShowHideHelper
     /// <summary>The visible and the hidden form of a directory, whichever of the two the recipe names.</summary>
     private static (DirectoryInfo Shown, DirectoryInfo Hidden) Forms(string directory)
     {
-        var path = ProjectSettings.GlobalizePath(directory).TrimEnd('/', '\\');
-        var parent = Path.GetDirectoryName(path)!;
+        var path = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Globalize(directory)));
+        var parent = Path.GetDirectoryName(path) ?? path;
         var name = Path.GetFileName(path).TrimStart('.');
         return (new DirectoryInfo(Path.Combine(parent, name)), new DirectoryInfo(Path.Combine(parent, "." + name)));
     }
+
+    /// <summary>
+    /// The file system path a recipe names. A relative path is relative to the project, like a project path in a recipe,
+    /// and not to the editor's working directory.
+    /// </summary>
+    private static string Globalize(string directory) =>
+        directory.Contains("://", StringComparison.Ordinal) || Path.IsPathRooted(directory)
+            ? ProjectSettings.GlobalizePath(directory)
+            : ProjectSettings.GlobalizePath("res://" + directory.Replace('\\', '/'));
 
     private static InvalidOperationException Conflict(DirectoryInfo shown, DirectoryInfo hidden, string? baseDirectory) =>
         new($"Both <plugin>{Relative(shown, baseDirectory)} and <plugin>{Relative(hidden, baseDirectory)} exist; remove the outdated one.");

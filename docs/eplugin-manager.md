@@ -56,7 +56,7 @@ Decisions about plugins that went wrong have their own dialog, so they are not l
 
 - **Retry** retries its failed or interrupted work after you fixed the cause. It also retries the plugins that failed together with it and the failed plugins it depends on; the button's tooltip names them. For a kept update, it finishes the update once the project builds again.
 - **Roll back** restores the versions a kept update replaced, after a confirmation.
-- **Disable** gives up on enabling the plugin: it removes what its recipe installed and leaves it disabled. A plugin that runs with a problem, e.g. a GDExtension Godot did not load, is disabled as it would be from the list.
+- **Disable** gives up on enabling the plugin: it removes what its recipe installed and leaves it disabled. Plugins that failed together with it and require it are disabled with it, since they cannot run without it; the others are retried. A plugin that runs with a problem, e.g. a GDExtension Godot did not load, is disabled as it would be from the list.
 - **Open log** opens the build log of a failed update, and **Open folder** shows the plugin's folder in the system file manager for a manual repair.
 
 **Retry all** retries every failed attempt at once. The dialog shows the list again after each decision and closes when no plugin is left. The manager opens it by itself when it opens with a problem that was not shown yet in this editor session; otherwise the button at the top right opens it.

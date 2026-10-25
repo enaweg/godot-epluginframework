@@ -78,12 +78,16 @@ internal sealed partial class EGlobal
     /// The recipes that stay installed while <paramref name="reversed"/>, one of <paramref name="context"/>'s recipes, is
     /// reversed: the recipes and applied optional recipes of every other activated plugin, and the context's own main
     /// recipe and applied optional recipes besides <paramref name="reversed"/>. Two plugins may declare the same NuGet
-    /// package or project, and removing it with one of them would break the other's code.
+    /// package or project, and removing it with one of them would break the other's code. A plugin in error counts too:
+    /// its failed attempt may have installed all of its recipe (e.g. when only the build failed), and its retry or
+    /// disable reverses it later. A plugin whose recipe was reversed already is deactivated and does not count.
     /// </summary>
     private List<EEditorPluginRecipe> RemainingRecipes(PluginContext context, EEditorPluginRecipe reversed)
     {
         var remaining = new List<EEditorPluginRecipe>();
-        foreach (var other in _contexts.Where(c => c.Plugin is not null && (c == context || c.State == EEditorPluginState.Activated)).ToArray())
+        // another context of the same plugin is one left by an earlier editor instance; its recipe is this one
+        foreach (var other in _contexts.Where(c => c.Plugin is not null && (c == context ||
+                     (c.Slug != context.Slug && c.State is EEditorPluginState.Activated or EEditorPluginState.Error))).ToArray())
         {
             if (other != context && !TryEnsureRecipe(other, scan: true)) continue;
             remaining.AddRange(other == context ? InstalledRecipes(context) : InstalledRecipes(other, resolveOptional: true));
@@ -121,6 +125,16 @@ internal sealed partial class EGlobal
         }
         if (_host.GetAutoload(autoload.Name) is not null) _host.RemoveAutoload(AutoloadPlugin(context), autoload.Name);
         if (_host.GetAutoload(autoload.Name) is not null) throw new InvalidOperationException($"Removing autoload {autoload.Name} failed.");
+    }
+    /// <param name="remaining">The recipes that stay installed (<see cref="RemainingRecipes"/>); a directory one of them declares stays shown.</param>
+    private void ReverseDirectory(PluginContext context, string directory, IReadOnlyList<EEditorPluginRecipe> remaining)
+    {
+        if (remaining.SelectMany(r => r.Directories).Any(d => ShowHideHelper.SameDirectory(d, directory)))
+        {
+            context.Logger?.Log($"Keeping directory {directory} shown, another installed recipe still uses it.");
+            return;
+        }
+        ShowHideHelper.HideDirectory(context, directory, _host);
     }
     /// <summary>
     /// The editor plugin an autoload is changed through. Godot frees a plugin's instance when it is disabled, also one

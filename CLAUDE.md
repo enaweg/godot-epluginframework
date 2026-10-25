@@ -375,7 +375,7 @@ installs the checked and unlisted packages or nothing. **Install from ZIP** (`EP
 `AttentionDialog` (pure model `AttentionItem`/`PluginAttention`,
 child of the manager scene like `SettingsDialog`) lists plugins that `NeedsAttention` with Retry (`EGlobal.RetryFailedPlugins`
 with slugs, widened by `RetryScope` to the same attempt and failed hard dependencies), Disable (`DisableFailedPlugin`, a
-manual retry as a deactivation), Roll back (a kept update), Open log and Retry all; the manager carries out the
+manual retry as a deactivation, also of the plugins of its attempt that require it), Roll back (a kept update), Open log and Retry all; the manager carries out the
 `Requested` decision and shows the list again. It opens from the manager's attention button, and by itself when the
 manager opens with a problem whose `AttentionItem.Key` is not in `EGlobal.ShownAttention`. Start asynchronous work from a signal with `ObservedTask.Run` on an `async Task` method, never as an
 `async void` handler, which would crash the editor on an unexpected exception. New user-facing actions belong in this dialog, not in
@@ -483,11 +483,15 @@ outside any `ILogger` (or `[StackTraceHidden]` method) as the location; without 
 
 `ShowHideHelper` implements `AddDirectory`: it toggles a managed directory's visibility by renaming it with/
 without a leading `.` (POSIX-style hidden dirs) and toggling the Windows hidden attribute. Used for shipping
-plugin source that should stay inert until the plugin is activated. A recipe may name either form (`src` or `.src`).
+plugin source that should stay inert until the plugin is activated. A recipe may name either form (`src` or `.src`);
+a relative path is relative to the project, never the working directory.
 A directory already in the wanted state is left alone and one missing in both forms is only logged as a warning. It fails
-when both forms exist at once (neither can be renamed onto the other), when it names the plugin's own directory or one
-holding it (`res://addons`, the project) or when a GDExtension inside is not reloadable or
-cannot be unloaded.
+when both forms exist at once (neither can be renamed onto the other), when a GDExtension inside is not reloadable or
+cannot be unloaded, and, when showing, for a directory not inside the plugin's directory (the plugin's own, one holding
+it, another plugin's). Hiding such a directory only warns, so its recipe can still be uninstalled (`RecipeEntries` must
+not refuse it either). `ReverseRecipe` keeps a directory shown while a remaining recipe declares it (`SameDirectory`).
+`RemainingRecipes` counts plugins in error (their recipe may be installed), not the plugin being disabled once its own
+recipe is reversed, so optional recipes reversed after it drop what they shared with it.
 
 ## Commit and PR messages
 

@@ -1,5 +1,7 @@
 #if TOOLS
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.IO;
 using Enaweg.Plugin.Internal;
 using Enaweg.Plugin.Logging;
@@ -81,18 +83,56 @@ public class ShowHideHelperTests : IDisposable
         Directory.CreateDirectory(addon);
         var context = new PluginContext(null, _pluginBase, new NullLogger()) { Slug = "plugin", Directory = addon };
 
-        // e.g. AddDirectory(this.GetPluginDirectory()) or AddDirectory("res://addons")
-        foreach (var directory in new[] { addon, Path.Combine(_root, "addons"), _root, Path.Combine(_root, "addons", ".plugin") })
+        // e.g. AddDirectory(this.GetPluginDirectory()) or AddDirectory("res://addons"); hiding one leaves it, so the
+        // recipe can still be uninstalled
+        foreach (var directory in new[] { addon, Path.Combine(_root, "addons"), _root, Path.Combine(_root, "addons", ".plugin"), addon + "/src/.." })
         {
-            Assertions.AssertThrown(() => ShowHideHelper.HideDirectory(context, directory)).IsInstanceOf<InvalidOperationException>();
-            Assertions.AssertThrown(() => ShowHideHelper.ShowDirectory(context, directory)).IsInstanceOf<InvalidOperationException>();
+            Assertions.AssertThrown(() => ShowHideHelper.ShowDirectory(context, directory)).IsInstanceOf<InvalidOperationException>()
+                .HasMessage($"The managed directory {directory} is the plugin's own directory or holds it. Only directories inside the plugin can be added with AddDirectory.");
+            ShowHideHelper.HideDirectory(context, directory);
         }
         Assertions.AssertBool(Directory.Exists(addon)).IsTrue();
+        Assertions.AssertBool(Directory.Exists(Path.Combine(_root, "addons", ".plugin"))).IsFalse();
+    }
 
-        // a sibling of the plugin stays possible, as before
-        Directory.CreateDirectory(Path.Combine(_root, "addons", "plugin_data"));
-        ShowHideHelper.HideDirectory(context, Path.Combine(_root, "addons", "plugin_data"));
+    [TestCase]
+    public void DirectoriesOutsideThePluginAreRefusedWhenShownAndLeftWhenHidden()
+    {
+        var addon = Path.Combine(_root, "addons", "plugin");
+        Directory.CreateDirectory(addon);
+        var log = new List<string>();
+        var context = new PluginContext(null, _pluginBase, new RecordingLogger(log, "plugin")) { Slug = "plugin", Directory = addon };
+        var sibling = Path.Combine(_root, "addons", "plugin_data");
+        var other = Path.Combine(_root, "addons", "other", ".src");
+        Directory.CreateDirectory(Path.Combine(_root, "addons", ".plugin_data"));
+        Directory.CreateDirectory(Path.Combine(_root, "addons", "other", "src"));
+
+        // a sibling of the plugin, another plugin's directory, one reached through '..', and the project's own
+        foreach (var directory in new[] { sibling, other, addon + "/../other/src", "res://.godot" })
+        {
+            Assertions.AssertThrown(() => ShowHideHelper.ShowDirectory(context, directory)).IsInstanceOf<InvalidOperationException>()
+                .HasMessage($"The managed directory {directory} is outside the plugin's directory. Only directories inside the plugin can be added with AddDirectory.");
+            ShowHideHelper.HideDirectory(context, directory);
+        }
+
         Assertions.AssertBool(Directory.Exists(Path.Combine(_root, "addons", ".plugin_data"))).IsTrue();
+        Assertions.AssertBool(Directory.Exists(Path.Combine(_root, "addons", "other", "src"))).IsTrue();
+        Assertions.AssertInt(log.Count(l => l.StartsWith("warn: plugin: Not hiding the managed directory", StringComparison.Ordinal))).IsEqual(4);
+
+        // inside the plugin, also through '..'
+        Directory.CreateDirectory(Path.Combine(addon, ".src"));
+        ShowHideHelper.ShowDirectory(context, addon + "/tools/../.src");
+        Assertions.AssertBool(Directory.Exists(Path.Combine(addon, "src"))).IsTrue();
+    }
+
+    [TestCase]
+    public void TheSameDirectoryMayBeNamedInEitherFormOrRelativeToTheProject()
+    {
+        var project = ProjectSettings.GlobalizePath("res://");
+        Assertions.AssertBool(ShowHideHelper.SameDirectory(Path.Combine(_root, ".src"), Path.Combine(_root, "src") + "/")).IsTrue();
+        Assertions.AssertBool(ShowHideHelper.SameDirectory("addons/plugin/.src", "res://addons/plugin/src")).IsTrue();
+        Assertions.AssertBool(ShowHideHelper.SameDirectory("addons/plugin/src", Path.Combine(project, "addons", "plugin", ".src"))).IsTrue();
+        Assertions.AssertBool(ShowHideHelper.SameDirectory(Path.Combine(_root, ".src"), Path.Combine(_root, ".tools"))).IsFalse();
     }
 }
 #endif

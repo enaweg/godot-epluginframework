@@ -114,6 +114,14 @@ internal sealed partial class EGlobal
             if (_contexts.LastOrDefault(c => c.Slug == context.Slug && c.Plugin is not null) is { } current && current != context)
             {
                 _contexts.Remove(context);
+                // Joining, the new instance took this one's place in the transition. One that stopped before, e.g. at the
+                // license gate, did not: the activation did not happen, and waiting for this context would never end.
+                if (_transition?.Participants.ContainsKey(context) == true)
+                {
+                    context.Logger?.Error($"{context.Slug} was enabled again, but did not continue its activation.");
+                    FailTransition("retry_not_continued");
+                }
+
                 return;
             }
         }
