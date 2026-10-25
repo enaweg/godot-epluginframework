@@ -10,7 +10,7 @@ namespace Enaweg.Plugin.Internal.Update;
 
 internal static class SafeZipExtractor
 {
-    /// <summary>Extracts the plugin root of the archive (see <see cref="PluginRoot"/>) into <paramref name="destination"/>.</summary>
+    /// <summary>Extracts the plugin folder of the archive (see <see cref="PackageRoot"/>) into <paramref name="destination"/>.</summary>
     /// <param name="requireSlugFolder">
     /// The root folder must be named like the slug. Downloads may also have the plugin at the archive root or in one
     /// wrapper folder, such as a repository archive, because their update_url already identifies the plugin.
@@ -22,7 +22,7 @@ internal static class SafeZipExtractor
         using var archive = ZipFile.OpenRead(archivePath);
         var entries = Inspect(archive);
         var root = PackageRoot(entries.Select(e => e.Path), slug);
-        if (RootSlug(root) != slug && (requireSlugFolder || root.Count(c => c == '/') > 1))
+        if (requireSlugFolder && RootSlug(root) != slug)
             throw new InvalidDataException($"The plugin root '{(root.Length == 0 ? "/" : root)}' of the package is not a folder named '{slug}'.");
         if (entries.Any(e => e.Path.StartsWith(root, StringComparison.Ordinal) && e.Path.Split('/').Last().Equals(".gitmodules", StringComparison.OrdinalIgnoreCase)))
             throw new InvalidDataException("Packages cannot contain .gitmodules.");
@@ -89,19 +89,31 @@ internal static class SafeZipExtractor
     }
 
     /// <summary>
-    /// The folder of the package to install as <paramref name="slug"/>: its plugin root (see <see cref="PluginRoot"/>),
-    /// unless that is a deeper folder named otherwise and the package has a GDExtension add-on of that name (see
-    /// <see cref="ExtensionRoot"/>), or the package has no plugin.cfg at all.
+    /// The folder of the package to install as <paramref name="slug"/>: its plugin root (see <see cref="PluginRoot"/>)
+    /// when that is named like the slug or lies at most one folder deep (at the archive root or in a wrapper folder, as in
+    /// a source archive). Otherwise, as in a project or repository that holds other plugins too (the gdUnit4 of its tests,
+    /// godot-ai's migration plugin), the shallowest folder named like the slug that holds a plugin.cfg, else the folder of
+    /// a GDExtension add-on of that name (see <see cref="ExtensionRoot"/>). Several equally deep folders of that name
+    /// make the package ambiguous, and it is refused like one with neither.
     /// </summary>
     internal static string PackageRoot(IEnumerable<string> paths, string slug)
     {
         var all = paths.ToArray();
         string? plugin = null;
+        InvalidDataException? ambiguous = null;
         try { plugin = PluginRoot(all); }
-        catch (InvalidDataException) when (!all.Any(IsPluginConfig)) { }
+        catch (InvalidDataException ex) { ambiguous = ex; }
         if (plugin is not null && (RootSlug(plugin) == slug || plugin.Count(c => c == '/') <= 1)) return plugin;
+        var named = all.Where(IsPluginConfig).Select(p => p[..^"plugin.cfg".Length]).Where(f => RootSlug(f) == slug)
+            .GroupBy(f => f.Count(c => c == '/')).MinBy(g => g.Key)?.ToArray() ?? [];
+        if (named.Length > 1) throw new InvalidDataException($"Ambiguous package, it has several plugin folders named '{slug}': " + string.Join(", ", named));
+        if (named.Length == 1) return named[0];
         try { return ExtensionRoot(all, slug); }
-        catch (InvalidDataException) when (plugin is not null) { return plugin; }
+        catch (InvalidDataException) when (all.Any(IsPluginConfig))
+        {
+            throw plugin is null ? new InvalidDataException(ambiguous!.Message + $" None of them is named '{slug}'.")
+                : new InvalidDataException($"The plugin root '{plugin}' of the package is not a folder named '{slug}'.");
+        }
     }
 
     /// <summary>

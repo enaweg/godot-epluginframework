@@ -164,7 +164,11 @@ version is unknown, R24 when the new version brings a `plugin.cfg`), and
 `UpdateApplier` reads the old version from the store (`InstalledVersion`) and the new one from the package
 (`PackageVersion`). The add-on is never disabled, `IUpdateHost.IsEnabled` counts it as enabled, and verification only
 checks that it is still an add-on or became a plugin. Staging finds its folder with `SafeZipExtractor.PackageRoot` /
-`ExtensionRoot` (the shallowest folder named like the slug holding a `.gdextension`), also in git; a git source pinned
+`ExtensionRoot` (the shallowest folder named like the slug holding a `.gdextension`), also in git. `PackageRoot` is how
+every download and Git source without `?path=` finds the plugin: the plugin root when it is named like the slug or at most
+one folder deep, else the shallowest `plugin.cfg` folder named like the slug, so a source archive bundling other plugins
+(its tests' gdUnit4) still installs; the slug-less `PluginRoot` stays for local packages and Install from ZIP, whose slug
+the root names. A git source pinned
 to a branch cannot name its version, so only tags and releases update it. `PlainPluginObserver` treats it as owned, so
 its activated shared entry is not reported as a disabled plugin.
 
