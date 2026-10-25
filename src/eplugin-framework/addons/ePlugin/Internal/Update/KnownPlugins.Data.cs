@@ -1,7 +1,7 @@
 #if TOOLS
 namespace Enaweg.Plugin.Internal.Update;
 
-// Generated on 2026-10-24 by tools/generate_known_plugins.cs from godot_addons_active_20_stars.json (built by
+// Generated on 2026-10-25 by tools/generate_known_plugins.cs from godot_addons_active_20_stars.json (built by
 // tools/build_godot_addons.cs): popular add-ons with at least 20 stars on GitHub (fewer on GitLab and Codeberg) and a
 // commit within the last two years, plus those in tools/extra_addons.txt, with a release or version tag. Add-ons found by
 // GitLab's or Codeberg's search are listed only with a slug named like their repository. Each slug is the one
@@ -91,6 +91,9 @@ internal static partial class KnownPlugins
         // https://github.com/Portponky/better-terrain, latest tag v4.1
         new("better-terrain", "Better Terrain", "https://github.com/Portponky/better-terrain/tags",
             "https://github.com/Portponky/better-terrain#readme", "https://github.com/Portponky/better-terrain", "https://github.com/Portponky/better-terrain"),
+        // https://github.com/cidwel/BetterTileEditor, latest release v0.4.0
+        new("better-tile-editor", "BetterTileEditor", "https://github.com/cidwel/BetterTileEditor/releases",
+            "https://github.com/cidwel/BetterTileEditor#readme", "https://github.com/cidwel/BetterTileEditor", "https://github.com/cidwel/BetterTileEditor"),
         // https://github.com/endlessm/godot-block-coding, latest release v0.10.1
         new("block_code", "Block Coding", "https://github.com/endlessm/godot-block-coding/releases",
             "https://github.com/endlessm/godot-block-coding#readme", "https://godotengine.org/asset-library/asset/3095", "https://github.com/endlessm/godot-block-coding"),
@@ -169,7 +172,7 @@ internal static partial class KnownPlugins
         // https://github.com/timothyqiu/godot-csv-data-importer, latest tag 2.1
         new("csv-data-importer", "CSV Data Importer", "https://github.com/timothyqiu/godot-csv-data-importer/tags",
             "https://github.com/timothyqiu/godot-csv-data-importer#readme", "https://github.com/timothyqiu/godot-csv-data-importer", "https://github.com/timothyqiu/godot-csv-data-importer"),
-        // https://github.com/Teaching-myself-Godot/ez-curved-lines-2d, latest release 3.3.0
+        // https://github.com/Teaching-myself-Godot/ez-curved-lines-2d, latest release 3.3.1
         new("curved_lines_2d", "Scalable Vector Shapes 2D", "https://github.com/Teaching-myself-Godot/ez-curved-lines-2d/releases",
             "https://github.com/Teaching-myself-Godot/ez-curved-lines-2d#readme", "https://github.com/Teaching-myself-Godot/ez-curved-lines-2d", "https://github.com/Teaching-myself-Godot/ez-curved-lines-2d"),
         // https://github.com/arukurei/Daicon, latest release v1.6
@@ -358,6 +361,9 @@ internal static partial class KnownPlugins
         // https://github.com/zijcht/godot-game-settings, latest release 3.3.0
         new("ggs", "Godot Game Settings", "https://github.com/zijcht/godot-game-settings/releases",
             "https://github.com/zijcht/godot-game-settings#readme", "https://zijcht.github.io/godot-game-settings-docs/", "https://github.com/zijcht/godot-game-settings"),
+        // https://github.com/SigKdev/godot-gitot, latest tag v0.17.2
+        new("gitot", "godot-gitot", "https://github.com/SigKdev/godot-gitot/tags",
+            "https://github.com/SigKdev/godot-gitot#readme", "https://store.godotengine.org/asset/sigk/gitot/", "https://github.com/SigKdev/godot-gitot"),
         // https://github.com/zibetnu/godot-git-describe, latest release 1.1.1
         new("git_describe", "Godot Git Describe", "https://github.com/zibetnu/godot-git-describe/releases",
             "https://github.com/zibetnu/godot-git-describe#readme", "https://github.com/zibetnu/godot-git-describe", "https://github.com/zibetnu/godot-git-describe"),
@@ -466,6 +472,9 @@ internal static partial class KnownPlugins
         // https://github.com/addmix/godot_aerodynamic_physics, latest release v0.9.1
         new("godot_aerodynamic_physics", "Godot Aerodynamic Physics", "https://github.com/addmix/godot_aerodynamic_physics/releases",
             "https://github.com/addmix/godot_aerodynamic_physics#readme", "https://godotengine.org/asset-library/asset/2580", "https://github.com/addmix/godot_aerodynamic_physics"),
+        // https://github.com/hi-godot/godot-ai, latest release v4.3.1
+        new("godot_ai", "godot-ai", "https://github.com/hi-godot/godot-ai/releases",
+            "https://github.com/hi-godot/godot-ai#readme", "https://github.com/hi-godot/godot-ai", "https://github.com/hi-godot/godot-ai"),
         // https://github.com/kagenash1/godot-behavior-tree, latest release 2.0
         new("godot_bt", "Godot Behavior Tree", "https://github.com/kagenash1/godot-behavior-tree/releases",
             "https://github.com/kagenash1/godot-behavior-tree#readme", "https://github.com/kagenash1/godot-behavior-tree", "https://github.com/kagenash1/godot-behavior-tree"),
@@ -475,6 +484,9 @@ internal static partial class KnownPlugins
         // https://github.com/OctoD/godot-gameplay-systems, latest release 0.20.5
         new("godot_gameplay_systems", "Godot Gameplay Systems", "https://github.com/OctoD/godot-gameplay-systems/releases",
             "https://github.com/OctoD/godot-gameplay-systems#readme", "https://github.com/OctoD/godot-gameplay-systems", "https://github.com/OctoD/godot-gameplay-systems"),
+        // https://github.com/mssbabou/Godot-Git, latest release v2.1.0
+        new("godot_git", "Godot-Git", "https://github.com/mssbabou/Godot-Git/releases",
+            "https://github.com/mssbabou/Godot-Git#readme", "https://store.godotengine.org/asset/markus-steen/godot-git/", "https://github.com/mssbabou/Godot-Git"),
         // https://github.com/tipragot/godot-iroh, latest release v0.1.6
         new("godot_iroh", "Godot Iroh", "https://github.com/tipragot/godot-iroh/releases",
             "https://github.com/tipragot/godot-iroh#readme", "https://github.com/tipragot/godot-iroh", "https://github.com/tipragot/godot-iroh"),
@@ -544,7 +556,7 @@ internal static partial class KnownPlugins
         // https://github.com/Inspiaaa/HCoroutines, latest release v2.0.1
         new("HCoroutines", "HCoroutines (C#)", "https://github.com/Inspiaaa/HCoroutines/releases",
             "https://github.com/Inspiaaa/HCoroutines#readme", "https://godotengine.org/asset-library/asset/3327", "https://github.com/Inspiaaa/HCoroutines"),
-        // https://git.johnsoellner.me/swoopy/health-system, latest release v2.0.0
+        // https://git.johnsoellner.me/swoopy/health-system, latest release v2.1.0
         new("health-system", "health-system", "https://git.johnsoellner.me/swoopy/health-system/releases",
             "https://git.johnsoellner.me/swoopy/health-system", "https://git.johnsoellner.me/swoopy/health-system", "https://git.johnsoellner.me/swoopy/health-system"),
         // https://github.com/cluttered-code/godot-health-hitbox-hurtbox, latest release v5.0.4
