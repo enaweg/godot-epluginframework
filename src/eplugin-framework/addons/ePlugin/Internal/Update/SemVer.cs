@@ -49,9 +49,10 @@ internal readonly record struct SemVer(int Major, int Minor, int Patch, string? 
         suffix.Equals("stable", StringComparison.OrdinalIgnoreCase) || suffix.Equals("release", StringComparison.OrdinalIgnoreCase) ||
         suffix.Equals("final", StringComparison.OrdinalIgnoreCase);
 
-    // The words a prerelease suffix starts with: 1.0.0-beta1, 4.6.0-dev2, 1.1.0-rc.1, 5.2.0-nightly.4dc91441.
+    // The words a prerelease suffix starts with: 1.0.0-beta1, 4.6.0-dev2, 1.1.0-rc.1, 5.2.0-nightly.4dc91441, and the
+    // pull request builds CI packages (0.12.0-pr.155), which the release of their numbers updates.
     private static readonly string[] Stages =
-        ["alpha", "beta", "rc", "pre", "preview", "prerelease", "dev", "devel", "develop", "nightly", "snapshot", "canary", "test",
+        ["alpha", "beta", "rc", "pr", "pre", "preview", "prerelease", "dev", "devel", "develop", "nightly", "snapshot", "canary", "test",
          "testing", "experimental", "unstable", "wip"];
 
     /// <summary>
