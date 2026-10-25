@@ -138,8 +138,8 @@ enable/disable state machine (`EEditorPluginState`: `Created → Activated`/`Dea
 plugin dependencies (enabling/version-checking them before the dependent plugin), and applies/reverses each
 plugin's install recipe.
 
-Lifecycle code calls the editor only through `IEditorHost` (toggling plugins, the enabled list, the project root and
-assembly name, the addons folder and plugin directories, the user's editor config folder, the plugin nodes an assembly reload rebuilds contexts from, whether a slug is an
+Lifecycle code calls the editor only through `IEditorHost` (toggling plugins, the enabled list, the project root,
+assembly name and solution directory, the addons folder and plugin directories, the user's editor config folder, the plugin nodes an assembly reload rebuilds contexts from, whether a slug is an
 ePlugin and the recipe of a disabled one, autoloads, filesystem scans and whether one runs, pausing imports while
 unfocused, restarting the editor, whether dialogs can show, loading/unloading GDExtensions and whether one is loaded);
 keep new lifecycle code behind it so it stays testable. Recipes are created through `TryEnsureRecipe`, which puts the
@@ -256,10 +256,12 @@ removing the last managed entry leaves nothing else in the file. It works on the
 `DotnetCli9` (both `DotnetCliBase : ExecuteCliBase, IDotnetCli`) — the two dotnet CLI generations differ
 enough in `sln`/`nuget`/reference command behavior to need separate implementations. `ExecuteCliBase` runs commands
 through an `IProcessRunner` (`GodotProcessRunner` uses `OS.Execute`); tests record the arguments instead. The
-`dotnet --version` probe is cached until the assembly reloads. A CLI is created for a project root and assembly name
-(`IEditorHost.ProjectRoot`/`AssemblyName`; tests pass a scratch project), and the CLI classes never read
+`dotnet --version` probe is cached until the assembly reloads. A CLI is created for a project root, assembly name and solution directory
+(`IEditorHost.ProjectRoot`/`AssemblyName`/`SolutionDirectory`, the last read from `dotnet/project/solution_directory`
+relative to `res://` like GodotTools; tests pass a scratch project), and the CLI classes never read
 `ProjectSettings` (only `user://` NuGet sources are globalized through it; the Godot project is the `.csproj` named
-after the assembly, local NuGet sources are relative to the project root like `nuget.config` records them). Any new dotnet CLI operation needs a corresponding
+after the assembly in the project root, the solution `<assembly>.sln`, else `<assembly>.slnx`, else the only one in the
+solution directory; local NuGet sources are relative to the project root like `nuget.config` records them). Any new dotnet CLI operation needs a corresponding
 abstract member on `DotnetCliBase`/`IDotnetCli` implemented in both `DotnetCli9` and `DotnetCli10`, with its arguments
 checked in `IDotnetCliTests`. Pass arguments one per element and unquoted (`OS.Execute` quotes them; outside Windows it runs them through `/bin/sh`
 in double quotes, so `GodotProcessRunner` escapes `\ " $` and backticks), and project

@@ -7,12 +7,15 @@ namespace Enaweg.Plugin.Internal.Dotnet;
 
 internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotnetCli
 {
-    /// <summary>The solution the CLI changes and builds.</summary>
+    /// <summary>
+    /// The solution the CLI changes and builds, in the solution directory: named after the assembly (<c>.sln</c>, else
+    /// <c>.slnx</c>), else its only <c>.sln</c>, else its only <c>.slnx</c>, else the <c>.sln</c> named after the assembly.
+    /// </summary>
     internal string SolutionPath { get; }
 
     /// <summary>
-    /// The main Godot project: named after the assembly, else the only project in the project directory, else next to the
-    /// solution and named like it.
+    /// The main Godot project, always in the project directory: named after the assembly, else the only project there,
+    /// else named like the solution.
     /// </summary>
     internal string GodotProjectPath { get; }
 
@@ -31,36 +34,50 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
 
     /// <param name="projectRoot">The Godot project directory, <see cref="IEditorHost.ProjectRoot"/>. Tests use a scratch project.</param>
     /// <param name="assemblyName">The project's <see cref="IEditorHost.AssemblyName"/>; null or empty to use its only solution.</param>
-    protected DotnetCliBase(ILogger? logger, bool enableDebugLogging, string projectRoot, string? assemblyName = null, IProcessRunner? runner = null)
+    /// <param name="solutionDirectory">The absolute <see cref="IEditorHost.SolutionDirectory"/>; null for the project directory.</param>
+    protected DotnetCliBase(ILogger? logger, bool enableDebugLogging, string projectRoot, string? assemblyName = null, IProcessRunner? runner = null,
+        string? solutionDirectory = null)
         : base(logger, enableDebugLogging, runner)
     {
         Logger = logger;
         ProjectRoot = Path.GetFullPath(projectRoot);
         assemblyName ??= "";
-        var solutionName = $"{assemblyName}.sln";
-
-        var expectedSolutionPath = Path.GetFullPath(Path.Combine(ProjectRoot, solutionName));
-        // Godot's assembly name need not match the solution name (the sample project uses
-        // "MyGame" and "My Game.sln", for example).
-        var solutions = Directory.GetFiles(ProjectRoot, "*.sln");
-        if (solutions.Length == 0)
-        {
-            solutions = Directory.GetFiles(ProjectRoot, "*.slnx");
-        }
-        SolutionPath = File.Exists(expectedSolutionPath) || solutions.Length != 1
-            ? expectedSolutionPath
-            : solutions[0];
-        // Godot names the project after the assembly, also when the solution has another name.
+        SolutionPath = FindSolution(string.IsNullOrEmpty(solutionDirectory) ? ProjectRoot : Path.GetFullPath(solutionDirectory), assemblyName);
+        // Godot names the project after the assembly, also when the solution has another name, and keeps it in res://
+        // wherever the solution is.
         var expectedProjectPath = Path.Combine(ProjectRoot, $"{assemblyName}.csproj");
         GodotProjectPath = assemblyName.Length > 0 && File.Exists(expectedProjectPath) ? expectedProjectPath
             : Directory.GetFiles(ProjectRoot, "*.csproj") is [var only] ? only
-            : Path.ChangeExtension(SolutionPath, ".csproj");
+            : Path.Combine(ProjectRoot, Path.GetFileNameWithoutExtension(SolutionPath) + ".csproj");
         AssemblyName = string.IsNullOrEmpty(assemblyName) ? Path.GetFileNameWithoutExtension(GodotProjectPath) : assemblyName;
 
         if (enableDebugLogging)
         {
             logger?.Log($"Using {this.GetType().Name} for dotnet commands.");
         }
+    }
+
+    /// <summary>See <see cref="SolutionPath"/>.</summary>
+    private static string FindSolution(string directory, string assemblyName)
+    {
+        var expected = Path.Combine(directory, $"{assemblyName}.sln");
+        if (assemblyName.Length > 0)
+        {
+            // GodotTools creates <assembly>.sln; a project migrated to the XML format has <assembly>.slnx instead.
+            if (File.Exists(expected)) return expected;
+            if (File.Exists(Path.ChangeExtension(expected, ".slnx"))) return Path.ChangeExtension(expected, ".slnx");
+        }
+
+        if (!Directory.Exists(directory)) return expected;
+        // Godot's assembly name need not match the solution name (the sample project uses
+        // "MyGame" and "My Game.sln", for example).
+        var solutions = Directory.GetFiles(directory, "*.sln");
+        if (solutions.Length == 0)
+        {
+            solutions = Directory.GetFiles(directory, "*.slnx");
+        }
+
+        return solutions is [var only] ? only : expected;
     }
 
     /// <summary>

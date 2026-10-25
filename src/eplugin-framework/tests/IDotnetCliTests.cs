@@ -77,6 +77,60 @@ public class IDotnetCliTests
     }
 
     [TestCase]
+    public static void TheSolutionIsFoundInTheSolutionDirectory()
+    {
+        // GodotTools reads dotnet/project/solution_directory relative to res://
+        Assertions.AssertString(Internal.EditorHost.SolutionDirectoryPath("")).IsEqual("res://");
+        Assertions.AssertString(Internal.EditorHost.SolutionDirectoryPath("..")).IsEqual("res://..");
+        Assertions.AssertString(Internal.EditorHost.SolutionDirectoryPath("res://sln")).IsEqual("res://sln");
+
+        var repository = Path.Combine(Path.GetTempPath(), "eplugin-cli-" + Path.GetRandomFileName());
+        var root = Path.Combine(repository, "game");
+        Directory.CreateDirectory(root);
+        try
+        {
+            // a solution in the repository's root (solution_directory ".."), which lists the game's library
+            File.WriteAllText(Path.Combine(repository, "MyGame.sln"),
+                "Project(\"{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}\") = \"Lib\", \"game\\Lib\\Lib.csproj\", \"{00000000-0000-0000-0000-000000000001}\"\nEndProject\n");
+            File.WriteAllText(Path.Combine(repository, "Tools.sln"), "");
+            File.WriteAllText(Path.Combine(root, "Other.sln"), "");
+            foreach (var generation in new[] { 9, 10 })
+            {
+                var runner = new RecordingRunner();
+                DotnetCliBase cli = generation == 9
+                    ? new DotnetCli9(new NullLogger(), false, root, "MyGame", runner, Path.Combine(root, ".."))
+                    : new DotnetCli10(new NullLogger(), false, root, "MyGame", runner, Path.Combine(root, ".."));
+                Assertions.AssertString(cli.SolutionPath).IsEqual(Path.Combine(repository, "MyGame.sln"));
+                // the Godot project stays in res://
+                Assertions.AssertString(cli.GodotProjectPath).IsEqual(Path.Combine(root, "MyGame.csproj"));
+
+                Assertions.AssertBool(cli.TryAddProjectToSolution("res://Lib/Lib.csproj", null)).IsTrue();
+                Assertions.AssertBool(cli.TryRemoveProjectFromSolution("res://Lib/Lib.csproj")).IsTrue();
+                // already gone from that solution: nothing to run
+                Assertions.AssertBool(cli.TryRemoveProjectFromSolution("res://Gone/Gone.csproj")).IsTrue();
+                var library = Path.Combine(root, "Lib", "Lib.csproj");
+                Assertions.AssertThat(runner.Calls[0]).ContainsExactly("dotnet", "sln", Path.Combine(repository, "MyGame.sln"), "add", library);
+                Assertions.AssertThat(runner.Calls[1]).ContainsExactly("dotnet", "sln", Path.Combine(repository, "MyGame.sln"), "remove", library);
+                Assertions.AssertInt(runner.Calls.Count).IsEqual(2);
+            }
+
+            // the solution named after the assembly also in the XML format, before another solution
+            File.Delete(Path.Combine(repository, "MyGame.sln"));
+            File.WriteAllText(Path.Combine(repository, "MyGame.slnx"), "<Solution />");
+            Assertions.AssertString(new DotnetCli10(new NullLogger(), false, root, "MyGame", new RecordingRunner(), repository).SolutionPath)
+                .IsEqual(Path.Combine(repository, "MyGame.slnx"));
+            // without one, the only solution there
+            File.Delete(Path.Combine(repository, "MyGame.slnx"));
+            Assertions.AssertString(new DotnetCli10(new NullLogger(), false, root, "MyGame", new RecordingRunner(), repository).SolutionPath)
+                .IsEqual(Path.Combine(repository, "Tools.sln"));
+            // and the project's folder without a solution directory
+            Assertions.AssertString(new DotnetCli10(new NullLogger(), false, root, "MyGame", new RecordingRunner()).SolutionPath)
+                .IsEqual(Path.Combine(root, "Other.sln"));
+        }
+        finally { Directory.Delete(repository, true); }
+    }
+
+    [TestCase]
     public static void TheDetectedGenerationChoosesTheCli()
     {
         foreach (var (version, expected) in new[] { ("10.0.401", typeof(DotnetCli10)), ("11.0.100-preview.1", typeof(DotnetCli10)), ("8.0.425", typeof(DotnetCli9)) })
@@ -85,8 +139,8 @@ public class IDotnetCliTests
             var manager = new DotnetVersionManager(new NullLogger(), false, runner);
 
             Assertions.AssertString(manager.DotnetVersion).IsEqual(version);
-            Assertions.AssertObject(manager.Create(new NullLogger(), ProjectRoot, AssemblyName)).IsInstanceOf<IDotnetCli>();
-            Assertions.AssertString(manager.Create(new NullLogger(), ProjectRoot, AssemblyName).GetType().Name).IsEqual(expected.Name);
+            Assertions.AssertObject(manager.Create(new NullLogger(), ProjectRoot, AssemblyName, ProjectRoot)).IsInstanceOf<IDotnetCli>();
+            Assertions.AssertString(manager.Create(new NullLogger(), ProjectRoot, AssemblyName, ProjectRoot).GetType().Name).IsEqual(expected.Name);
             Assertions.AssertThat(runner.Calls.Single()).ContainsExactly("dotnet", "--version");
         }
     }
@@ -101,7 +155,7 @@ public class IDotnetCliTests
 
             Assertions.AssertBool(manager.IsDotnetAvailable).IsFalse();
             Assertions.AssertObject(manager.DotnetVersion).IsNull();
-            Assertions.AssertString(manager.Create(new NullLogger(), ProjectRoot, AssemblyName).GetType().Name).IsEqual(nameof(DotnetCli9));
+            Assertions.AssertString(manager.Create(new NullLogger(), ProjectRoot, AssemblyName, ProjectRoot).GetType().Name).IsEqual(nameof(DotnetCli9));
         }
     }
 
