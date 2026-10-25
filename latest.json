@@ -1,8 +1,8 @@
 {
- "commit": "9b13b3f4aaad822e3b339ff52819b9ed91425a76",
- "date": "2026-10-25T13:16:00Z",
- "covered": 10976,
- "coverable": 12051,
+ "commit": "9512f175db8865f82d1940c19773c986f9dcf6cc",
+ "date": "2026-10-25T13:24:27Z",
+ "covered": 10988,
+ "coverable": 12063,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -401,8 +401,8 @@
    44
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/KnownPlugins.Data.cs": [
-   1028,
-   1028
+   1040,
+   1040
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/KnownPlugins.cs": [
    6,
