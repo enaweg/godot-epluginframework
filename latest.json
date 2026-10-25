@@ -1,8 +1,8 @@
 {
- "commit": "acd3cba0c55856981d6f8a3a8ae033054487120d",
- "date": "2026-10-25T10:54:18Z",
- "covered": 10834,
- "coverable": 11922,
+ "commit": "e0977c81c789ea6eb2e5b35853e60d9e3a817db4",
+ "date": "2026-10-25T10:57:17Z",
+ "covered": 10868,
+ "coverable": 11956,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -441,16 +441,16 @@
    26
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/ReleaseSources.cs": [
-   158,
-   160
+   182,
+   184
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/SafeZipExtractor.cs": [
    78,
    81
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/SemVer.cs": [
-   37,
-   37
+   46,
+   46
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UidMap.cs": [
    10,
@@ -481,8 +481,8 @@
    155
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateService.cs": [
-   110,
-   114
+   111,
+   115
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateSettings.cs": [
    18,
