@@ -56,9 +56,9 @@ internal sealed partial class EPluginManagerDialog
 
     /// <summary>
     /// Stages and validates the batch, has the user review packages that need a decision in their own dialog, then
-    /// installs.
+    /// installs. Tests call it directly to await it.
     /// </summary>
-    private async Task InstallAsync(InstallRequest request)
+    internal async Task InstallAsync(InstallRequest request)
     {
         if (Busy || request.Batch.Count == 0) return;
         _operationNotice = null;
@@ -71,7 +71,7 @@ internal sealed partial class EPluginManagerDialog
             {
                 Alive = () => !_lifetime.IsCancellationRequested && IsShown,
                 Status = text => _status.Text = text,
-                Swapping = () => { _swapping = true; Buttons(); }
+                Swapping = BeginApply
             }, _cancel.Token);
         }
         finally { _working = _installing = _swapping = false; }
@@ -85,7 +85,22 @@ internal sealed partial class EPluginManagerDialog
             _keepNotice = !Visible;
             if (outcome.IsError) GD.PushError(outcome.Notice);
         }
-        if (outcome.Refresh) Refresh(); else Render();
+        // A build the update left for the editor to load keeps the manager locked like a plugin operation's.
+        if (_pluginOperation.IsRunning) CompletePluginOperation(outcome.Refresh);
+        else if (outcome.Refresh) Refresh();
+        else Render();
+    }
+
+    /// <summary>
+    /// Addon files are about to be replaced: from now on the installation is a plugin operation, which may build the
+    /// project. Downloading and the reviews before it can still be canceled.
+    /// </summary>
+    private void BeginApply()
+    {
+        _swapping = true;
+        // InstallAsync started only while no operation ran, and none can start while it works.
+        if (_pluginOperation.TryBegin()) AssemblyReload.Capture();
+        Buttons();
     }
 
     private void Cancel()

@@ -348,13 +348,25 @@ internal static class ActivationProgress
         }
     }
 
+    /// <summary>
+    /// Ends the user in the connected helper only. A helper started or connected just for this would never show the
+    /// window, only replay text and then idle until its lifetime ends; a helper without the user closes its window anyway.
+    /// </summary>
+    private static void SendEnd(User user)
+    {
+        if (user.Held || _helper is null) return;
+        try { _helper.Send(user.Id, "END"); }
+        catch (ProgressHelperBusyException) { /* the helper closes the window after its timeout */ }
+        catch (Exception) { Lost(); }
+    }
+
     private static void End(User user, User? previous)
     {
         if (Current.Value == user) Current.Value = previous;
         lock (Gate)
         {
             if (--user.Depth > 0) return;
-            Send(user, "END");
+            SendEnd(user);
             user.Ended = true;
             Users.Remove(user);
             if (Users.Count == 0) Last();

@@ -217,6 +217,8 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
                 return new(InstallStep.Abandoned);
             }
 
+            // Canceled while the last package was validated: no review is asked for a batch nobody waits for.
+            ct.ThrowIfCancellationRequested();
             // Warnings, a changed host and refusals discovered inside the packages are decided before the first project
             // side effect.
             IReadOnlyList<UpdateReviewEntry> leftOut = [];
@@ -327,6 +329,8 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
                 return new(InstallStep.Abandoned);
             }
 
+            // Canceled while it was validated: nothing is left waiting for a confirmation.
+            ct.ThrowIfCancellationRequested();
             if (!staged.Package.IsValid)
             {
                 var reasons = string.Join("; ", staged.Package.Findings.Where(f => f.Severity == FindingSeverity.Error).Select(f => f.Message));

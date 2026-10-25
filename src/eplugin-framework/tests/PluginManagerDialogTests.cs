@@ -1,12 +1,15 @@
 #if TOOLS
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Enaweg.Plugin.Internal;
+using Enaweg.Plugin.Internal.Dotnet;
 using Enaweg.Plugin.Internal.Manager;
+using Enaweg.Plugin.Internal.Update;
 using GdUnit4;
 using Godot;
 
@@ -267,6 +270,78 @@ public class PluginManagerDialogTests : IDisposable
         Assertions.AssertString(confirm.DialogText).StartsWith("Replace tool 2.1.0 with version 3.0.0?");
         // without dialogs, a build failure restores the previous version
         Assertions.AssertString(confirm.DialogText).EndsWith(" and restored if installation fails.");
+    }
+
+    [TestCase]
+    public async Task InstallingAnUpdateLocksTheManagerLikeAPluginOperation()
+    {
+        var updates = new RecordingUpdateHost(_fixture, () => _dialog.GuiDisableInput);
+        _fixture.Global.UpdateHost = updates;
+        _fixture.Global.InitializeUpdateJournals();
+        _fixture.Global.ResumeUpdates();
+        var packages = Path.Combine(_fixture.Root, "packages");
+        Directory.CreateDirectory(packages);
+        using (var zip = ZipFile.Open(Path.Combine(packages, "tool-3.0.0.zip"), ZipArchiveMode.Create))
+        {
+            foreach (var (path, content) in new[] { ("addons/tool/plugin.cfg", "[plugin]\nname=\"tool\"\nversion=\"3.0.0\"\nscript=\"plugin.gd\"\n"), ("addons/tool/plugin.gd", "extends EditorPlugin") })
+            {
+                using var writer = new StreamWriter(zip.CreateEntry(path).Open());
+                writer.Write(content);
+            }
+        }
+        _fixture.Global.AddLocalDirectory(packages);
+        for (var frame = 0; frame < 500 && _fixture.Global.IsIndexingLocalSources; frame++)
+        {
+            EGlobal.RunPosted();
+            await Task.Delay(10);
+        }
+        _dialog.Open();
+        Assertions.AssertString(Row("tool").GetText(VersionColumn)).IsEqual("2.1.0 → 3.0.0");
+
+        var install = _dialog.InstallAsync(new(_fixture.Global.PendingUpdates));
+        for (var frame = 0; frame < 300 && !install.IsCompleted; frame++)
+        {
+            // e.g. a warning about the package; the operation starts only once it was decided
+            if (Popped<UpdateReviewDialog>() is { } review)
+            {
+                Assertions.AssertThat(updates.LockedWhileApplying).IsEmpty();
+                Assertions.AssertBool(_dialog.GuiDisableInput).IsFalse();
+                review.EmitSignal(AcceptDialog.SignalName.Confirmed);
+            }
+            await Frames(1);
+        }
+        Assertions.AssertBool(install.IsCompleted).IsTrue();
+        await install;
+
+        Assertions.AssertString(File.ReadAllText(Path.Combine(_fixture.Addon("tool"), "plugin.cfg"))).Contains("version=\"3.0.0\"");
+        // native input was locked while addon files were replaced, as for enabling a plugin
+        Assertions.AssertThat(updates.LockedWhileApplying).ContainsExactly(true);
+        // no build waits for the editor, so the operation ended with it
+        Assertions.AssertBool(_dialog.GuiDisableInput).IsFalse();
+        Assertions.AssertBool(_dialog.GetNode<Button>("%CheckButton").Disabled).IsFalse();
+        Assertions.AssertString(Row("tool").GetText(VersionColumn)).IsEqual("3.0.0");
+    }
+
+    /// <summary>Applies updates with the fixture's editor, recording whether the manager was locked meanwhile.</summary>
+    private sealed class RecordingUpdateHost(LifecycleFixture fixture, Func<bool> locked) : IUpdateHost
+    {
+        public List<bool> LockedWhileApplying { get; } = [];
+        public bool UiAvailable => false;
+        public string BuildFailurePolicy => "rollback";
+        public bool RestartAlways => false;
+        public bool IsEnabled(string slug) => fixture.Host.IsPluginEnabled(slug);
+        public bool IsManaged(string slug) => false;
+        public void Preflight(IReadOnlyList<ValidatedPackage> packages) { }
+        public void PrepareJournal(UpdateJournal journal) { }
+        public void Bridge(UpdateJournal journal, UpdatePluginJournal plugin) { }
+        public void Reconcile(UpdateJournal journal, bool rollback) { }
+        public void SetPlainEnabled(string slug, bool enabled) => fixture.Host.SetPluginEnabled(slug, enabled);
+        public void CloseScenes() => LockedWhileApplying.Add(locked());
+        public void Scan() { }
+        public BuildOutcome Build() => new(0, []);
+        public void RequestReload(UpdateJournal journal) { }
+        public bool Verify(UpdatePluginJournal plugin) => true;
+        public void Log(string message) => fixture.Log.Add("log: update: " + message);
     }
 
     [TestCase]

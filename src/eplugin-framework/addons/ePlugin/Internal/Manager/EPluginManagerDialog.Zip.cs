@@ -41,8 +41,11 @@ internal sealed partial class EPluginManagerDialog
 
     private async Task ReadZipAsync(string path, string file)
     {
+        // Closing the manager while the file is read or staged cancels; nothing is asked afterwards.
+        _cancel?.Dispose(); _cancel = CancellationTokenSource.CreateLinkedTokenSource(_lifetime);
+        var ct = _cancel.Token;
         AddonArchive archive;
-        try { archive = await Task.Run(() => AddonArchive.Read(path), _lifetime); }
+        try { archive = await Task.Run(() => AddonArchive.Read(path), ct); }
         catch (OperationCanceledException) { _working = false; return; }
         // any file can be chosen, so reading it may fail in more ways than a damaged ZIP file
         catch (Exception ex)
@@ -51,7 +54,7 @@ internal sealed partial class EPluginManagerDialog
             if (IsShown) ShowZipNotice(new(InstallStep.Failed, $"Cannot install {file}: {ex.Message}", true));
             return;
         }
-        if (!IsShown) { _working = false; return; }
+        if (!IsShown || ct.IsCancellationRequested) { _working = false; return; }
         var sameExceptCase = _model.Plugins.FirstOrDefault(p => p.Plugin.Slug != archive.Slug &&
                                                                 p.Plugin.Slug.Equals(archive.Slug, StringComparison.OrdinalIgnoreCase))?.Plugin.Slug;
         var choice = ZipInstall.Choose(archive, _model.Find(archive.Slug), _targets.FirstOrDefault(t => t.Slug == archive.Slug), sameExceptCase);
@@ -68,7 +71,7 @@ internal sealed partial class EPluginManagerDialog
             else ShowZipNotice(new(InstallStep.Failed, $"Cannot install {file}: {choice.Refused}", true));
             return;
         }
-        _installing = true; _cancel?.Dispose(); _cancel = CancellationTokenSource.CreateLinkedTokenSource(_lifetime);
+        _installing = true;
         Render();
         InstallOutcome outcome;
         try
@@ -77,7 +80,7 @@ internal sealed partial class EPluginManagerDialog
             {
                 Alive = () => !_lifetime.IsCancellationRequested && IsShown,
                 Status = text => _status.Text = text
-            }, _cancel.Token);
+            }, ct);
         }
         finally { _working = _installing = false; }
         if (!IsShown || outcome.Step == InstallStep.Abandoned) return;

@@ -73,10 +73,15 @@ internal sealed partial class EPluginManagerDialog
         if (!await _updates.LoadVersionsAsync(target, _lifetime) || !IsShown) return;
         var slug = target.Slug;
         // A newer listed version is now a pending update; read the list again so the plugin shows it. Never discard a
-        // staged batch awaiting review or interrupt work.
+        // staged batch awaiting review, interrupt work or read the plugins while they change: that waits until it ended.
         var pending = _global.PendingUpdates.FirstOrDefault(c => c.Slug == slug);
-        if (!_working && pending?.NewVersion != _model.Find(slug)?.Update?.Candidate.NewVersion) Refresh();
-        else if (_selectedSlug == slug) RenderVersions(_model.Find(slug));
+        var changed = pending?.NewVersion != _model.Find(slug)?.Update?.Candidate.NewVersion;
+        if (changed && !Busy) Refresh();
+        else
+        {
+            if (changed) _refreshWhenIdle = true;
+            if (_selectedSlug == slug) RenderVersions(_model.Find(slug));
+        }
     }
 
     private VersionOption? SelectedVersion()

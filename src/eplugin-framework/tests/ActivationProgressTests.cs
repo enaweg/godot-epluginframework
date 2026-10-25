@@ -385,6 +385,45 @@ public class ActivationProgressTests
     }
 
     [TestCase]
+    public void EndingAUserNeverStartsAHelperJustToSendEnd()
+    {
+        var editorThread = true;
+        ActivationProgress.IsEditorThread = () => editorThread;
+        var launch = ActivationProgress.Launch;
+        ActivationProgress.Launch = () => editorThread ? launch() : null;
+        using (ActivationProgress.Begin("Activating A..."))
+        {
+            _launched[0].Age = TimeSpan.FromMinutes(20);
+            _launched[0].Dead = true;
+            // the heartbeat timer finds it dead and may not start another; the editor thread may, but has no text to show
+            editorThread = false;
+            _tick!();
+            editorThread = true;
+        }
+
+        Assertions.AssertInt(_launched.Count).IsEqual(1);
+        Assertions.AssertBool(_timer!.Disposed).IsTrue();
+        // the next operation starts one as usual
+        using (ActivationProgress.Begin("Activating B...")) { }
+        Assertions.AssertInt(_launched.Count).IsEqual(2);
+        Assertions.AssertThat(_launched[1].Of(_launched[1].Users[0])).ContainsExactly("TEXT Activating B...", "END");
+    }
+
+    [TestCase]
+    public void AHelperThatFailsOnEndIsReleasedAndNotReplaced()
+    {
+        using (ActivationProgress.Begin("Activating A..."))
+        {
+            // old enough to be replaced right away by any other command
+            _launched[0].Age = TimeSpan.FromMinutes(20);
+            _launched[0].Dead = true;
+        }
+
+        Assertions.AssertInt(_launched.Count).IsEqual(1);
+        Assertions.AssertBool(_launched[0].Disposed).IsTrue();
+    }
+
+    [TestCase]
     public void RepeatedReplacementFailuresAreBoundedUntilTheNextOperation()
     {
         using (ActivationProgress.Begin("Activating A..."))

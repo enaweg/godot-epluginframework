@@ -105,7 +105,10 @@ internal sealed partial class EPluginManagerDialog
         return true;
     }
 
-    private void CompletePluginOperation()
+    /// <param name="refresh">
+    /// Read the list again; false only redraws it, e.g. while an update waits for the reload that continues it.
+    /// </param>
+    private void CompletePluginOperation(bool refresh = true)
     {
         // A dependency's deferred callback can keep the activation open after SetPluginEnabled returns.
         if (_global.IsChangingPlugins)
@@ -119,7 +122,8 @@ internal sealed partial class EPluginManagerDialog
         _working = false;
         // A pending reload keeps the old native UI locked. Its replacement is initialized after the reload.
         // Do not reopen it if the timestamp guard times out: another operation would still run on the old code.
-        if (GodotObject.IsInstanceValid(this) && IsInsideTree()) Refresh();
+        if (!GodotObject.IsInstanceValid(this) || !IsInsideTree()) return;
+        if (refresh) Refresh(); else Render();
     }
 
     /// <summary>
