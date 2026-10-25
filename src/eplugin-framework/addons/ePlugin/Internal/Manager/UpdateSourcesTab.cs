@@ -38,6 +38,8 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
     private Dictionary<string, string?> _configuredUrls = [];
     // Local directories whose packages the user folded away; rendering keeps them that way.
     private readonly HashSet<string> _collapsedDirectories = new(PackageFiles.PathComparer);
+    // The local index changed while the tab was hidden or plugins were changing; it is rendered once it is shown again.
+    private bool _stale;
 
     /// <summary>Raised after a site was added, changed or removed, so the plugin list can be read again.</summary>
     public event Action? Changed;
@@ -88,6 +90,7 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
     public void Render()
     {
         if (!GodotObject.IsInstanceValid(this)) return;
+        _stale = false;
         var selectedSlug = SelectedSlug();
         var selectedDirectory = SelectedDirectory();
         var plugins = _global.CollectPlugins().ToDictionary(p => p.Slug, StringComparer.Ordinal);
@@ -340,16 +343,34 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
         Render();
     }
 
+    /// <summary>
+    /// Renders the new index only while the tab is shown, and not while plugins change: reading the plugins records plain
+    /// plugins in the shared state file.
+    /// </summary>
+    private void LocalIndexChanged()
+    {
+        if (CanRender) Render();
+        else _stale = true;
+    }
+
+    private bool CanRender => GodotObject.IsInstanceValid(this) && IsVisibleInTree() && !_global.IsChangingPlugins;
+
+    public override void _Process(double delta)
+    {
+        base._Process(delta);
+        if (_stale && _global is not null && CanRender) Render();
+    }
+
     public override void _EnterTree()
     {
         base._EnterTree();
-        if (_global is not null) _global.LocalIndexChanged += Render;
+        if (_global is not null) _global.LocalIndexChanged += LocalIndexChanged;
     }
 
     private void ReleaseCallbacks()
     {
         _signals.Dispose();
-        if (_global is not null) _global.LocalIndexChanged -= Render;
+        if (_global is not null) _global.LocalIndexChanged -= LocalIndexChanged;
     }
 
     // Reload serializes every script before disposing any of them, so callback targets are still valid here.

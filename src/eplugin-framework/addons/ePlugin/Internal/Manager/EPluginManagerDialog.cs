@@ -88,6 +88,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     // The notice of work that ended while the manager was closed: Escape and the window's close button hide it also
     // while its work goes on, so the next Open shows how it ended instead of dropping it.
     private bool _keepNotice;
+    // The local index or a setting changed while plugins were changing or work ran; the list is read again afterwards.
+    private bool _refreshWhenIdle;
 
     /// <summary>False once an assembly reload dropped the C# state of this still existing editor node.</summary>
     public bool IsInitialized => _global is not null;
@@ -214,6 +216,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     public void Refresh()
     {
         if (_working) return;
+        _refreshWhenIdle = false;
         // A new add-on staged by Install from ZIP waits for its confirmation, which clears it; e.g. the local index
         // finishing in the meantime must not drop it. Installing checks its folder again.
         if (_updates.StagedAddon is null) _updates.Clear();
@@ -425,9 +428,11 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     /// <summary>A new local index can add or remove local versions and updates, so the lists are read again.</summary>
     private void LocalIndexChanged()
     {
-        // Never interrupt work; it refreshes when it finishes.
-        if (!IsShown || !Visible || _working) return;
-        if (_global.IsIndexingLocalSources) Render();
+        if (!IsShown || !Visible) return;
+        // Never interrupt work or read the plugins while they change (reading them records plain plugins in the shared
+        // state file); the list is read again once that ended.
+        if (Busy) _refreshWhenIdle = true;
+        else if (_global.IsIndexingLocalSources) Render();
         else Refresh();
     }
 
@@ -438,8 +443,9 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private void SettingsChanged(bool sourcesChanged)
     {
         if (sourcesChanged) _updates.ClearVersions();
-        if (!IsShown || _working) return;
-        Refresh();
+        if (!IsShown) return;
+        if (Busy) _refreshWhenIdle = true;
+        else Refresh();
     }
 
     private static Texture2D? VersionIcon(bool downgrade, bool reinstall) =>
@@ -453,6 +459,13 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         if (_pluginOperation.IsRunning && !_working && !_global.IsChangingPlugins) CompletePluginOperation();
         var pending = AssemblyReload.IsPending;
         var locked = _pluginOperation.IsBusy || _global.IsChangingPlugins || pending;
+        if (_refreshWhenIdle && !locked && !_working)
+        {
+            _refreshWhenIdle = false;
+            _reloadPending = pending;
+            Refresh();
+            return;
+        }
         if (pending == _reloadPending && locked == GuiDisableInput) return;
         _reloadPending = pending;
         // Not while staging or installing: those render their own progress and refresh when done.

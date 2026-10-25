@@ -135,9 +135,54 @@ public class UpdateSourcesTabTests : IDisposable
         Assertions.AssertString(row.GetTooltipText(0)).IsEqual("gone is not in res://addons.");
     }
 
+    /// <summary>Opens the settings on the Update sources tab, which follows the local index only while it is shown.</summary>
+    private void ShowTab()
+    {
+        _dialog.Open(null);
+        _dialog.GetNode<TabContainer>("%SettingsTabs").CurrentTab = 1;
+    }
+
+    private async Task Indexed()
+    {
+        for (var frame = 0; frame < 500 && _fixture.Global.IsIndexingLocalSources; frame++)
+        {
+            EGlobal.RunPosted();
+            await Task.Delay(10);
+        }
+        Assertions.AssertBool(_fixture.Global.IsIndexingLocalSources).IsFalse();
+    }
+
+    [TestCase]
+    public async Task AHiddenTabRendersTheNewIndexOnceItIsShown()
+    {
+        var directory = Path.Combine(_fixture.Root, "packages");
+        Directory.CreateDirectory(directory);
+        _dialog.GetNode<FileDialog>("%LocalSourceFolderDialog").EmitSignal(FileDialog.SignalName.DirSelected, directory);
+        Assertions.AssertString(Group(1).GetChild(0).GetText(0)).IsEqual("Indexing...");
+
+        await Indexed();
+        // the settings are closed, so the plugins are not read for a list nobody sees
+        Assertions.AssertString(Group(1).GetChild(0).GetText(0)).IsEqual("Indexing...");
+
+        // shown on another tab, it renders the index it missed once it is switched to
+        _dialog.GetNode<TabContainer>("%SettingsTabs").CurrentTab = 0;
+        _dialog.Popup();
+        SourceTree.Clear();
+        var rescan = _fixture.Global.RebuildLocalIndexAsync();
+        await Indexed();
+        await rescan;
+        Assertions.AssertObject(SourceTree.GetRoot()).IsNull();
+        _dialog.GetNode<TabContainer>("%SettingsTabs").CurrentTab = 1;
+        var tree = (SceneTree)Engine.GetMainLoop();
+        await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        Assertions.AssertString(Group(1).GetChild(0).GetText(0)).IsEqual("0 plugin packages");
+    }
+
     [TestCase]
     public async Task ALocalDirectoryIsListedWithThePackagesItsIndexFound()
     {
+        ShowTab();
         var directory = Path.Combine(_fixture.Root, "packages");
         Directory.CreateDirectory(directory);
         var folders = _dialog.GetNode<FileDialog>("%LocalSourceFolderDialog");

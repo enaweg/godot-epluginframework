@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Enaweg.Plugin.Internal;
 using Enaweg.Plugin.Internal.Licenses;
 using Enaweg.Plugin.Internal.Manager;
 using Enaweg.Plugin.Internal.Update;
@@ -296,6 +297,30 @@ public class UpdateFlowTests : IDisposable
     }
 
     [TestCase]
+    public async Task ACancelWhileTheLastPackageIsValidatedAsksNothing()
+    {
+        _host.Packages["a"] = [Warning()];
+        using var cancel = new CancellationTokenSource();
+        // e.g. the manager was closed after the download, while its package was validated
+        _host.OnStaged = _ => cancel.Cancel();
+        var flow = Flow();
+
+        var outcome = await flow.InstallAsync(new([Candidate("a")]), View(), cancel.Token);
+
+        Assertions.AssertObject(outcome.Step).IsEqual(InstallStep.Canceled);
+        Assertions.AssertObject(_askedReview).IsNull();
+        Assertions.AssertInt(_host.Applied.Count).IsEqual(0);
+        Assertions.AssertObject(flow.Staged).IsNull();
+        Assertions.AssertBool(Directory.Exists(_host.StagingDirectory)).IsFalse();
+
+        var addon = await flow.StageAddonAsync(Archive(), View(), cancel.Token);
+
+        Assertions.AssertObject(addon.Step).IsEqual(InstallStep.Canceled);
+        Assertions.AssertObject(flow.StagedAddon).IsNull();
+        Assertions.AssertBool(Directory.Exists(_host.StagingDirectory)).IsFalse();
+    }
+
+    [TestCase]
     public async Task RefusedPackagesAreReviewedAndTheRestIsInstalled()
     {
         _host.Packages["a"] = [];
@@ -333,6 +358,69 @@ public class UpdateFlowTests : IDisposable
 
         _host.CheckThrows = true;
         Assertions.AssertString((await flow.CheckAsync()).Notice).IsEqual("Update check failed: offline");
+    }
+
+    private static UpdateCheckResult CheckResult(string slug) => new([Candidate(slug)], [], DateTimeOffset.UtcNow);
+
+    [TestCase]
+    public static async Task AManualCheckWaitsForTheScheduledCheckThenChecksItself()
+    {
+        var gate = new UpdateCheckGate();
+        var scheduled = new TaskCompletionSource<UpdateCheckResult>();
+        var checks = new List<bool>();
+        Task<UpdateCheckResult> Check(bool force)
+        {
+            checks.Add(force);
+            return force ? Task.FromResult(CheckResult("manual")) : scheduled.Task;
+        }
+
+        var running = gate.RunAsync(false, Check, () => CheckResult("known"));
+        // another scheduled check gets the known updates at once
+        Assertions.AssertString((await gate.RunAsync(false, Check, () => CheckResult("known"))).Updates.Single().Slug).IsEqual("known");
+        var manual = gate.RunAsync(true, Check, () => CheckResult("known"));
+        Assertions.AssertBool(manual.IsCompleted).IsFalse();
+
+        scheduled.SetResult(CheckResult("scheduled"));
+
+        Assertions.AssertString((await running).Updates.Single().Slug).IsEqual("scheduled");
+        // a scheduled check neither indexes the local directories again nor always asks the update sites
+        Assertions.AssertString((await manual).Updates.Single().Slug).IsEqual("manual");
+        Assertions.AssertThat(checks).ContainsExactly(false, true);
+    }
+
+    [TestCase]
+    public static async Task AManualCheckStartedWhileAnotherRunsReturnsItsResultOrFailure()
+    {
+        var gate = new UpdateCheckGate();
+        var first = new TaskCompletionSource<UpdateCheckResult>();
+        var checks = 0;
+        Task<UpdateCheckResult> Check(bool force)
+        {
+            checks++;
+            return first.Task;
+        }
+
+        var running = gate.RunAsync(true, Check, () => CheckResult("known"));
+        var waiting = gate.RunAsync(true, Check, () => CheckResult("known"));
+        first.SetResult(CheckResult("manual"));
+
+        Assertions.AssertString((await waiting).Updates.Single().Slug).IsEqual("manual");
+        Assertions.AssertBool(ReferenceEquals(await waiting, await running)).IsTrue();
+        Assertions.AssertInt(checks).IsEqual(1);
+
+        var failing = new TaskCompletionSource<UpdateCheckResult>();
+        var thrown = gate.RunAsync(true, _ => failing.Task, () => CheckResult("known"));
+        var reported = gate.RunAsync(true, _ => failing.Task, () => CheckResult("known"));
+        failing.SetException(new InvalidOperationException("offline"));
+
+        var threw = false;
+        try { await thrown; }
+        catch (InvalidOperationException) { threw = true; }
+        Assertions.AssertBool(threw).IsTrue();
+        Assertions.AssertString((await reported).Failures.Single().Message).IsEqual("offline");
+        // nothing is left running
+        Assertions.AssertString((await gate.RunAsync(false, _ => Task.FromResult(CheckResult("next")), () => CheckResult("known"))).Updates.Single().Slug)
+            .IsEqual("next");
     }
 
     [TestCase]
@@ -568,6 +656,7 @@ public class UpdateFlowTests : IDisposable
             Stagings++;
             StagingDirectory = Path.Combine(_root, "addon-" + Stagings);
             Directory.CreateDirectory(StagingDirectory);
+            OnStaged?.Invoke(StagingDirectory);
             _ = SemVer.TryParse(archive.Version, out var version);
             var package = new ValidatedPackage(archive.Candidate(archive.Name, ""), Path.Combine(StagingDirectory, "staging", archive.Slug), version, null, false, AddonFindings);
             return Task.FromResult((package, StagingDirectory));

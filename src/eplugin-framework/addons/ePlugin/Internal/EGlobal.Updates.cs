@@ -16,7 +16,7 @@ internal sealed partial class EGlobal
 {
     private UpdateStateStore? _updateCache;
     private UpdateService? _updateService;
-    private bool _checkingUpdates;
+    private readonly UpdateCheckGate _updateChecks = new();
     private IReadOnlyList<UpdateCandidate> _remoteUpdates = [];
     /// <summary>
     /// The highest known version per plugin, from its update_url or from the local directories, without a release
@@ -82,12 +82,21 @@ internal sealed partial class EGlobal
         }).Where(t => t is not null).Cast<PluginUpdateTarget>().Concat(ExtensionAddonSlugs().Select(ExtensionAddonTarget)).ToArray();
     }
 
-    public async Task<UpdateCheckResult> CheckForUpdatesAsync(bool force = false)
+    /// <summary>
+    /// Checks for updates; <paramref name="force"/> for a manual check. See <see cref="UpdateCheckGate"/> for a check
+    /// started while another one runs.
+    /// </summary>
+    public Task<UpdateCheckResult> CheckForUpdatesAsync(bool force = false)
+    {
+        if (_updateService is null || _updateCache is null || _ePluginContext is null)
+            return Task.FromResult(new UpdateCheckResult([], [], DateTimeOffset.UtcNow));
+        return _updateChecks.RunAsync(force, RunUpdateCheckAsync, () => new(PendingUpdates, [], LastUpdateCheck ?? DateTimeOffset.UtcNow));
+    }
+
+    private async Task<UpdateCheckResult> RunUpdateCheckAsync(bool force)
     {
         if (_updateService is null || _updateCache is null || _ePluginContext is null)
             return new([], [], DateTimeOffset.UtcNow);
-        if (_checkingUpdates) return new(PendingUpdates, [], LastUpdateCheck ?? DateTimeOffset.UtcNow);
-        _checkingUpdates = true;
         var ct = _ePluginContext.UpdateLifetime;
         try
         {
@@ -117,7 +126,6 @@ internal sealed partial class EGlobal
             await OnEditorThread(() => _ePluginContext?.Logger.Warn($"Update check failed: {ex.Message}"), ct).ConfigureAwait(false);
             return new([], [new("ePlugin", ex.Message)], DateTimeOffset.UtcNow);
         }
-        finally { _checkingUpdates = false; }
     }
 
     /// <summary>The versions of an enabled plugin in the local directories, newest first. Never touches the disk.</summary>
@@ -186,6 +194,74 @@ internal sealed partial class EGlobal
                 _ePluginContext?.Logger.Warn($"  {update.Slug} {update.NewVersion} failed previously; repair the cause before retrying.");
         }
         _ePluginContext?.Logger.Log("Open the ePlugin Manager (Project > Tools > ePlugin Manager... or the ePlugin toolbar button) to install them.");
+    }
+}
+
+/// <summary>
+/// Runs one update check at a time. A scheduled check started while one runs returns the known updates at once. A manual
+/// check waits for the running one: it returns that check's result when it was manual too, and otherwise checks itself
+/// afterwards, as only a manual check indexes the local directories again and always asks the update sites.
+/// </summary>
+internal sealed class UpdateCheckGate
+{
+    private readonly object _gate = new();
+    private Task<UpdateCheckResult>? _running;
+    private bool _runningForced;
+
+    /// <param name="force">A manual check.</param>
+    /// <param name="check">Runs the check; called for one check at a time.</param>
+    /// <param name="known">The updates known now, for a scheduled check that is not run.</param>
+    public async Task<UpdateCheckResult> RunAsync(bool force, Func<bool, Task<UpdateCheckResult>> check, Func<UpdateCheckResult> known)
+    {
+        while (true)
+        {
+            var mine = new TaskCompletionSource<UpdateCheckResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+            Task<UpdateCheckResult>? running;
+            bool runningForced;
+            // Checks may start and end on the editor thread or, after an await, on a thread-pool thread.
+            lock (_gate)
+            {
+                running = _running;
+                runningForced = _runningForced;
+                if (running is null)
+                {
+                    _running = mine.Task;
+                    _runningForced = force;
+                }
+            }
+
+            if (running is not null)
+            {
+                if (!force) return known();
+                var result = await running.ConfigureAwait(false);
+                if (runningForced) return result;
+                continue;
+            }
+
+            try
+            {
+                var result = await check(force).ConfigureAwait(false);
+                End(mine.Task);
+                mine.SetResult(result);
+                return result;
+            }
+            catch (Exception ex)
+            {
+                // A waiting manual check reports the failure too, rather than throwing it a second time.
+                End(mine.Task);
+                mine.SetResult(new([], [new("ePlugin", ex.Message)], DateTimeOffset.UtcNow));
+                throw;
+            }
+        }
+    }
+
+    // Ended before its waiters continue, so a waiter that checks itself afterwards finds no check running.
+    private void End(Task<UpdateCheckResult> check)
+    {
+        lock (_gate)
+        {
+            if (_running == check) _running = null;
+        }
     }
 }
 #endif
