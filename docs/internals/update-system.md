@@ -309,7 +309,10 @@ project or directory and the bridge kept no old files (`UpdateApplier.ChangedSin
 keeps them. Engine metadata prevents scheduled checks and early recovery counters from repeating after assembly reloads.
 `EditorHost.RestartEditor` first frees GodotTools' `HotReloadAssemblyWatcher`: it reloads the newer build when the editor
 window gains focus, which closing windows during the restart's shutdown causes, and Godot 4.7.2 crashed doing so, so the
-editor never started again. Nothing may reload once a restart was requested.
+editor never started again. Nothing may reload once a restart was requested. It also marks the editor's global undo
+history as saved right before the restart: Godot 4.7 asks to save modified resources before restarting while that
+history is unsaved, and every plugin that adds an autoload when the editor starts leaves it so, which kept the editor
+open behind the progress window waiting for an answer.
 
 `EPluginPlugin` invokes `UpdateRecovery` before touching `EGlobal`; this reader is deliberately independent of `EGlobal`
 and recipe execution. A self-update holds the `ActivationProgress` window across the folder swap and always rolls back
