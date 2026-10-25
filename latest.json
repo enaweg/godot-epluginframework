@@ -1,8 +1,8 @@
 {
- "commit": "f8bd2763202c939e23a41cbc61d1dcaa39fcf312",
- "date": "2026-10-25T10:36:34Z",
- "covered": 10742,
- "coverable": 11843,
+ "commit": "2b0e94f888db40a19927f2d1e8e0b7f7962dedf4",
+ "date": "2026-10-25T10:52:57Z",
+ "covered": 10772,
+ "coverable": 11866,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -137,12 +137,12 @@
    132
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateApply.cs": [
-   173,
-   281
+   181,
+   282
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateRecipes.cs": [
-   184,
-   187
+   187,
+   189
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateSites.cs": [
    19,
@@ -457,8 +457,8 @@
    10
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateApplier.cs": [
-   414,
-   449
+   427,
+   463
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateGroups.cs": [
    20,
@@ -477,8 +477,8 @@
    62
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateRecovery.cs": [
-   145,
-   149
+   151,
+   155
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateService.cs": [
    110,
