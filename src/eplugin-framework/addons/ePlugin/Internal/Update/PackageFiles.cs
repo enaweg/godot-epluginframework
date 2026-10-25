@@ -16,7 +16,8 @@ internal static class PluginIni
     {
         var values = new Dictionary<string, string>(StringComparer.Ordinal);
         var section = "";
-        var position = 0;
+        // A UTF-8 byte order mark, which a file read from a raw URL keeps and Trim does not remove.
+        var position = text.StartsWith('\uFEFF') ? 1 : 0;
         while (position < text.Length)
         {
             var start = position;

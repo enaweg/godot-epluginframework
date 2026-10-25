@@ -294,6 +294,99 @@ public class UpdateSourceTests
     }
 
     [TestCase]
+    public static async Task ReleasesTheHostMarksAsNoPrereleaseAreStable()
+    {
+        // Aseprite Wizard tags its releases for Godot 4 as v9.8.0-4, with 9.8.0 in plugin.cfg and not marked as prereleases.
+        // A suffix that names a stage stays a prerelease, also when the author left the release unmarked.
+        using var github = new HttpClient(new Handler(_ => Json("""
+            [{"tag_name":"v9.9.0-beta","draft":false,"prerelease":false,"assets":[]},
+             {"tag_name":"v9.8.0-4","draft":false,"prerelease":false,"assets":[{"name":"AsepriteWizard.zip","browser_download_url":"https://example.org/9.8.zip"}]},
+             {"tag_name":"v9.7.0-3","draft":false,"prerelease":true,"assets":[]},
+             {"tag_name":"v9.7.0-4","draft":false,"prerelease":false,"assets":[]}]
+            """)));
+        var source = new GitHubReleaseSource(new(github), "owner", "repo");
+        var update = (await source.CheckAsync(Target() with { InstalledVersion = "9.7.0" }, new(), CancellationToken.None))!;
+        Assertions.AssertString(update.NewVersion).IsEqual("v9.8.0");
+        Assertions.AssertString(update.ResolvedRevision!).IsEqual("v9.8.0-4");
+        Assertions.AssertString(((ZipPackageRef)update.Package).Url).IsEqual("https://example.org/9.8.zip");
+        // the installed release is no update of itself
+        var service = new UpdateService(new FixedFactory(source), new SystemClock(), new MemoryStore());
+        var check = await service.CheckAsync([Target() with { InstalledVersion = "9.8.0" }], new(), CancellationToken.None);
+        Assertions.AssertThat(check.Updates).IsEmpty();
+        Assertions.AssertThat(check.Failures).IsEmpty();
+        var listed = await source.ListAsync(Target(), new(), CancellationToken.None);
+        Assertions.AssertArray(listed.Select(c => c.NewVersion).ToArray()).ContainsExactly("v9.9.0-beta", "v9.8.0", "v9.7.0-3", "v9.7.0");
+
+        // GitLab marks no prereleases, so only the suffix decides
+        using var gitlab = new HttpClient(new Handler(_ => Json("""
+            [{"tag_name":"1.5.0-4","upcoming_release":false,"assets":{"links":[],"sources":[{"format":"zip","url":"https://git.example/1.5.zip"}]}},
+             {"tag_name":"1.4.0-stable","upcoming_release":false,"assets":{"links":[],"sources":[{"format":"zip","url":"https://git.example/1.4.zip"}]}}]
+            """)));
+        var stable = await new GitLabReleaseSource(new(gitlab), "git.example", "team/project").CheckAsync(Target(), new(), CancellationToken.None);
+        Assertions.AssertString(stable!.NewVersion).IsEqual("1.4.0-stable");
+
+        // GitHub's latest release, used when its API is rate limited, is never a prerelease
+        using var limited = new HttpClient(new Handler(request =>
+        {
+            if (request.RequestUri!.Host == "api.github.com")
+            {
+                var response = new HttpResponseMessage(HttpStatusCode.Forbidden);
+                response.Headers.Add("X-RateLimit-Remaining", "0");
+                return response;
+            }
+            return request.RequestUri.AbsolutePath.EndsWith("latest", StringComparison.Ordinal)
+                ? Redirect("https://github.com/owner/repo/releases/tag/v9.8.0-4") : Json("{}");
+        }));
+        var latest = await new GitHubReleaseSource(new(limited), "owner", "repo").CheckAsync(Target(), new(), CancellationToken.None);
+        Assertions.AssertString(latest!.NewVersion).IsEqual("v9.8.0");
+    }
+
+    [TestCase]
+    public static async Task ChecksReadFurtherPagesWhileNoReleaseIsOffered()
+    {
+        // a stable install is offered no prerelease, and the newest 50 releases may all be ones
+        var requested = new List<string>();
+        var page = string.Join(",", Enumerable.Range(0, 50).Select(i => $$"""{"tag_name":"v2.0.0-dev.{{50 - i}}","draft":false,"prerelease":true,"assets":[]}"""));
+        using var client = new HttpClient(new Handler(request =>
+        {
+            requested.Add(request.RequestUri!.PathAndQuery);
+            return Json(request.RequestUri.Query.Contains("page=1", StringComparison.Ordinal) ? $"[{page}]"
+                : """[{"tag_name":"v1.2.0","draft":false,"prerelease":false,"assets":[{"name":"plugin.zip","browser_download_url":"https://example.org/1.2.zip"}]}]""");
+        }));
+        var source = new GitHubReleaseSource(new(client), "owner", "repo");
+        Assertions.AssertString((await source.CheckAsync(Target(), new(), CancellationToken.None))!.NewVersion).IsEqual("v1.2.0");
+        Assertions.AssertArray(requested.ToArray()).ContainsExactly("/repos/owner/repo/releases?per_page=50&page=1", "/repos/owner/repo/releases?per_page=50&page=2");
+        // a prerelease install finds its update on the first page
+        requested.Clear();
+        Assertions.AssertString((await source.CheckAsync(Target() with { InstalledVersion = "2.0.0-dev.1" }, new(), CancellationToken.None))!.NewVersion).IsEqual("v2.0.0-dev.50");
+        Assertions.AssertInt(requested.Count).IsEqual(1);
+
+        requested.Clear();
+        var gitlabPage = string.Join(",", Enumerable.Range(0, 50).Select(i => $$$"""{"tag_name":"2.0.0-rc.{{{50 - i}}}","upcoming_release":false,"assets":{"links":[],"sources":[]}}"""));
+        using var gitlab = new HttpClient(new Handler(request =>
+        {
+            requested.Add(request.RequestUri!.Query);
+            return Json(request.RequestUri.Query.Contains("page=1", StringComparison.Ordinal) ? $"[{gitlabPage}]"
+                : """[{"tag_name":"1.3.0","upcoming_release":false,"assets":{"links":[],"sources":[{"format":"zip","url":"https://git.example/1.3.zip"}]}}]""");
+        }));
+        var fromGitLab = await new GitLabReleaseSource(new(gitlab), "git.example", "team/project").CheckAsync(Target(), new(), CancellationToken.None);
+        Assertions.AssertString(fromGitLab!.NewVersion).IsEqual("1.3.0");
+        Assertions.AssertArray(requested.ToArray()).ContainsExactly("?per_page=50&page=1", "?per_page=50&page=2");
+
+        requested.Clear();
+        var forgejoPage = string.Join(",", Enumerable.Range(0, 50).Select(i => $$"""{"tag_name":"v2.0.0-beta.{{50 - i}}","draft":false,"prerelease":true,"assets":[]}"""));
+        using var forgejo = new HttpClient(new Handler(request =>
+        {
+            requested.Add(request.RequestUri!.Query);
+            return Json(request.RequestUri.Query.Contains("page=1", StringComparison.Ordinal) ? $"[{forgejoPage}]"
+                : """[{"tag_name":"v1.3.0","draft":false,"prerelease":false,"zipball_url":"https://codeberg.org/owner/repo/archive/v1.3.0.zip","assets":[]}]""");
+        }));
+        var fromForgejo = await new ForgejoReleaseSource(new(forgejo), "codeberg.org", "owner", "repo").CheckAsync(Target(), new(), CancellationToken.None);
+        Assertions.AssertString(fromForgejo!.NewVersion).IsEqual("v1.3.0");
+        Assertions.AssertArray(requested.ToArray()).ContainsExactly("?limit=50&page=1", "?limit=50&page=2");
+    }
+
+    [TestCase]
     public static async Task StagingInstallsTheFirstReleaseOfAVersionThatValidationAccepts()
     {
         var root = Path.Combine(Path.GetTempPath(), "fetch-" + Guid.NewGuid().ToString("N"));
@@ -565,6 +658,12 @@ public class UpdateSourceTests
         Assertions.AssertString(candidate!.NewVersion).IsEqual("2.0.0");
         Assertions.AssertThat(requested).ContainsExactly($"https://gitlab.com/group/project/-/raw/{FakeGit.Commit}/addon/plugin.cfg");
         Assertions.AssertBool(git.Calls.Any(c => c.Contains("fetch"))).IsFalse();
+
+        // a raw file that starts with a UTF-8 byte order mark
+        using var marked = new HttpClient(new Handler(_ => new(HttpStatusCode.OK) { Content = new ByteArrayContent([0xEF, 0xBB, 0xBF, .. "[plugin]\nversion=\"2.1.0\"\n"u8.ToArray()]) }));
+        var withMark = await new GitSource(new(marked), git, new("https://gitlab.com/group/project.git", "addon", "main"))
+            .CheckAsync(Target(), new(), CancellationToken.None);
+        Assertions.AssertString(withMark!.NewVersion).IsEqual("2.1.0");
     }
 
     [TestCase]
@@ -644,6 +743,8 @@ public class UpdateSourceTests
     }
 
     private static PluginUpdateTarget Target() => new("plugin", "Plugin", "1.0.0", "https://github.com/owner/repo/releases", "/unused");
+    private sealed class FixedFactory(IUpdateSource source) : IUpdateSourceFactory { public IUpdateSource Create(string url) => source; }
+    private sealed class MemoryStore : IUpdateStateStore { public UpdateCache State { get; } = new(); public void Save() { } }
     private static HttpResponseMessage Json(string text) => new(HttpStatusCode.OK) { Content = new StringContent(text) };
     private static HttpResponseMessage Redirect(string url)
     {

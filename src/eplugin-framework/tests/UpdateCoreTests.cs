@@ -49,6 +49,38 @@ public class UpdateCoreTests
     }
 
     [TestCase]
+    public static void StableSuffixesAndReleasesWithoutPrereleaseSuffixAreStable()
+    {
+        // ResourceDatabases tags 1.4.0-stable, gd-achievements 3.0.1-release: no prereleases, the same as their numbers
+        foreach (var text in new[] { "1.4.0-stable", "3.0.1-release", "v2.0-Final" })
+        {
+            Assertions.AssertBool(SemVer.TryParse(text, out var stable)).IsTrue();
+            Assertions.AssertObject(stable.Prerelease).IsNull();
+            Assertions.AssertString(stable.ToString()).IsEqual(text);
+            Assertions.AssertBool(UpdateService.IsUpdate(new SemVer(1, 0, 0), stable)).IsTrue();
+        }
+        Assertions.AssertBool(SemVer.Same("1.4.0-stable", "1.4.0")).IsTrue();
+        Assertions.AssertBool(SemVer.TryParse("1.4.0-stable.1", out var other) && other.Prerelease == "stable.1").IsTrue();
+        // which suffixes name a prerelease stage, and the version a host's stable release has
+        foreach (var stage in new[] { "1.0.0-beta", "1.0.0-beta1", "4.6.0-dev2", "1.1.0-rc.1", "5.2.0-nightly.4dc91441", "1.3.2-develop.0", "1.3.0-Alpha1" })
+            Assertions.AssertBool(SemVer.TryParse(stage, out var v) && v.NamesStage && ReleaseAssets.Stable(v).Prerelease is not null).IsTrue();
+        foreach (var (text, stable) in new[] { ("v9.8.0-4", "v9.8.0"), ("v1.2.0-assetlib", "v1.2.0"), ("1.1.0-S+build.1", "1.1.0+build.1"), ("v1.5.0-ParentFollow", "v1.5.0") })
+        {
+            Assertions.AssertBool(SemVer.TryParse(text, out var v) && !v.NamesStage).IsTrue();
+            Assertions.AssertString(ReleaseAssets.Stable(v).ToString()).IsEqual(stable);
+            Assertions.AssertObject(ReleaseAssets.Stable(v).Prerelease).IsNull();
+        }
+    }
+
+    [TestCase]
+    public static void PluginIniSkipsAByteOrderMark()
+    {
+        // read from a raw URL, the mark stays at the start of the text
+        var text = System.Text.Encoding.UTF8.GetString([.. System.Text.Encoding.UTF8.GetPreamble(), .. "[plugin]\nversion=\"2.0.0\"\n"u8.ToArray()]);
+        Assertions.AssertString(PluginIni.Parse(text).GetValueOrDefault("version")).IsEqual("2.0.0");
+    }
+
+    [TestCase]
     public static void PluginIniReadsGodotStrings()
     {
         var values = PluginIni.Parse("[plugin]\r\n\r\nname=\"Edit Resources as Spreadsheet\"\r\n" +
@@ -240,6 +272,10 @@ public class UpdateCoreTests
         Assertions.AssertBool(IsUpdate("1.0.0-beta.2", "1.0.0-beta.1")).IsFalse();
         Assertions.AssertBool(IsUpdate("1.0.0", "1.0.0")).IsFalse();
         Assertions.AssertBool(IsUpdate("1.0.0", "0.9.0")).IsFalse();
+        // a release offered without a suffix naming no stage (v9.8.0-4 as 9.8.0) may be the one installed with it
+        Assertions.AssertBool(IsUpdate("9.8.0-4", "9.8.0")).IsFalse();
+        Assertions.AssertBool(IsUpdate("9.8.0-4", "9.9.0")).IsTrue();
+        Assertions.AssertBool(IsUpdate("9.8.0-beta", "9.8.0")).IsTrue();
     }
 
     private static PluginUpdateTarget Target(string slug, string installed = "1.0.0") => new(slug, slug, installed, "https://example.org/releases", "/unused");

@@ -165,8 +165,13 @@ its activated shared entry is not reported as a disabled plugin.
 Every apply requires dialog confirmation. Stage and validate the whole batch before touching addons: `PackageFetcher`
 leaves a package that cannot be fetched or is refused out of the batch, as a `RefusedPackage`, and fails only when all are
 refused. A release source reads a release's version with `ReleaseAssets.TryVersion` (the tag, else the first word of the title,
-then of the tag, split at spaces, `_` and `-` (only in words that are no version), that is a version and not right after "Godot", unless another number follows it) and groups releases of one version (`ByVersion`); the newest release of a group is the
-candidate and the others' ZIPs are its `ZipPackageRef.Alternatives`, which `PackageFetcher` downloads and validates in
+then of the tag, split at spaces, `_` and `-` (only in words that are no version), that is a version and not right after "Godot", unless another number follows it) and groups releases of one version (`ByVersion`). A release whose `prerelease` field is
+`false` (GitHub, Forgejo, Gitea; GitLab has none, and neither have Git tags) is stable: `ReleaseAssets.Stable` drops a
+suffix that does not name a prerelease stage (`SemVer.NamesStage`), so `v9.8.0-4` is announced as `v9.8.0` and equals the
+installed `plugin.cfg`'s `9.8.0` instead of never being offered; GitHub's `releases/latest` redirect, used when its API is
+rate limited, is treated the same. `SemVer` itself reads the suffixes `stable`, `release` and `final` as none. Checks read
+pages of 50 releases (`ReleaseAssets.NewestAsync`), a second one only while the first holds no version the target is
+offered. The newest release of a group is the candidate and the others' ZIPs are its `ZipPackageRef.Alternatives`, which `PackageFetcher` downloads and validates in
 turn until one is accepted (R28 names it; with all refused, the announced one's reason). `AddonPackageValidator` refuses
 packages made for Godot 3 (R27, `Godot3Evidence`: GDNative files or GDScript that Godot 4 cannot parse), the usual
 reason for a release of the same version. The manager deletes a staged batch it does not install (`UpdateFlow.Clear`); since an assembly reload or a

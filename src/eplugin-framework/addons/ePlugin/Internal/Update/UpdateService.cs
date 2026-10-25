@@ -18,9 +18,13 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
     /// <summary>
     /// Whether <paramref name="version"/> is offered as an update of <paramref name="installed"/>: the next better version
     /// of the same kind. A stable version moves only to a newer stable one, a prerelease to any newer version (a newer
-    /// prerelease or the release). Every other version is installed from the plugin's version list.
+    /// prerelease or the release). Every other version is installed from the plugin's version list. A stable release whose
+    /// host dropped a suffix naming no stage (<see cref="ReleaseAssets.Stable"/>: v9.8.0-4 is 9.8.0) is no update of the
+    /// same numbers installed with such a suffix, which may be that release.
     /// </summary>
-    public static bool IsUpdate(SemVer installed, SemVer version) => version.CompareTo(installed) > 0 && Offers(installed, version);
+    public static bool IsUpdate(SemVer installed, SemVer version) =>
+        version.CompareTo(version.Prerelease is null && !installed.NamesStage ? installed.WithoutPrerelease() : installed) > 0 &&
+        Offers(installed, version);
 
     /// <summary>
     /// Whether a check may choose <paramref name="version"/> for the target, before comparing it with the installed one
