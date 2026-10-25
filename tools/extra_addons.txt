@@ -15,6 +15,7 @@ eMessagePipe;https://github.com/enaweg/godot-emessagepipe
 # Add-ons with too few stars for the GitHub ranking.
 anvil;https://github.com/AhmedGD1/Anvil
 audio_service;https://github.com/AhmedGD1/Godot-Audio-Service
+better-tile-editor;https://github.com/cidwel/BetterTileEditor
 # On Codeberg; its search finds it too, but only above the star and activity minimums.
 cogito;https://codeberg.org/Phazorknight/Cogito
 # A GDExtension plugin whose libraries are built by CI (only in the release ZIP).
@@ -25,8 +26,13 @@ disco_tools;https://codeberg.org/Fireye/disco-tools
 dynamic_water_2d;https://github.com/90-008/dynamic_water_2d
 # No release or version tag yet, so it is left out until it has one.
 GD-Sync;https://github.com/GD-Sync/GD-Sync
+gitot;https://github.com/SigKdev/godot-gitot
 global_asset_manager;https://github.com/sn1ks0h/Global-Asset-Manager
 godot_advanced_logger;https://github.com/DYNMC-Motorsports/GodotAdvancedLogger
+# Its plugin is in the repository's plugin/ folder, next to other plugin.cfg files (a migration bridge, a docs fixture).
+godot_ai;https://github.com/hi-godot/godot-ai
+# A GDExtension plugin whose libraries are built by CI (only in the release ZIPs: one per platform and an offline one).
+godot_git;https://github.com/mssbabou/Godot-Git
 # A GDExtension whose libraries are built by CI (only in the release ZIP). Neither the ZIP nor the repository has a
 # plugin.cfg, so ePlugin updates it as a GDExtension add-on, found by its folder name.
 godot_servo;https://github.com/shiena/godot-servo
