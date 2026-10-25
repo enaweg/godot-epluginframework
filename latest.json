@@ -1,8 +1,8 @@
 {
- "commit": "9512f175db8865f82d1940c19773c986f9dcf6cc",
- "date": "2026-10-25T13:24:27Z",
- "covered": 10988,
- "coverable": 12063,
+ "commit": "5237cbdf3003cc691fe9f4f1a9111186558155b1",
+ "date": "2026-10-25T14:30:02Z",
+ "covered": 11006,
+ "coverable": 12081,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -393,16 +393,16 @@
    54
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/GitSource.cs": [
-   210,
-   214
+   194,
+   198
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/InterimBridge.cs": [
    41,
    44
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/KnownPlugins.Data.cs": [
-   1040,
-   1040
+   1043,
+   1043
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/KnownPlugins.cs": [
    6,
@@ -421,8 +421,8 @@
    46
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/PackageFetcher.cs": [
-   80,
-   84
+   96,
+   100
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/PackageFiles.cs": [
    104,
@@ -441,12 +441,12 @@
    26
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/ReleaseSources.cs": [
-   182,
-   184
+   189,
+   191
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/SafeZipExtractor.cs": [
-   78,
-   81
+   86,
+   89
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/SemVer.cs": [
    46,
