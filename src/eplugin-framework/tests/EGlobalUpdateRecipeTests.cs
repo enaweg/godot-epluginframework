@@ -244,6 +244,34 @@ public class EGlobalUpdateRecipeTests : IDisposable
     }
 
     [TestCase]
+    public void ReconcileLeavesThePluginOfAnUpdateKeptBeforeReconcilingToItsOwnJournal()
+    {
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"));
+        _fixture.AddEPlugin("lib", b => b.AddNuget("Old.Lib"));
+        _fixture.Enable("app");
+        _fixture.Enable("lib");
+        _fixture.Global.InitializeUpdateJournals();
+        var journal = BeginUpdate("app");
+        // lib's update was kept when its interim build failed; the project builds again, so its new code is loaded
+        Assertions.AssertBool(_fixture.Store.TryBeginAttempt("lib", "1.0.0", PersistedPluginState.Activated, out var kept)).IsTrue();
+        Assertions.AssertBool(_fixture.Store.TryFail(kept, PersistedPluginState.Failed, "update_kept_build_failed")).IsTrue();
+        var keptJournal = new UpdateJournal
+        {
+            Id = "kept", Directory = Path.Combine(_fixture.Root, ".godot", "eplugin", "updates", "kept"), AttemptId = kept, BeforeReconcile = true,
+            Plugins = [new() { Slug = "lib", OldVersion = "1.0.0", NewVersion = "2.0.0", IsEPlugin = true, WasEnabled = true }]
+        };
+        Directory.CreateDirectory(keptJournal.Directory);
+        keptJournal.Save(UpdatePhase.CommittedWithErrors);
+        ReloadRecipe("lib", b => b.AddNuget("New.Lib"));
+        _fixture.Operations.Clear();
+
+        _fixture.Global.ReconcileUpdateRecipes(journal, false);
+
+        Assertions.AssertThat(_fixture.Operations).IsEmpty();
+        Assertions.AssertString(journal.Recipes["lib"].Applied.Nugets.Single().Name).IsEqual("Old.Lib");
+    }
+
+    [TestCase]
     public void AnEnabledPluginMissingAfterReloadFailsBeforeChangingResources()
     {
         _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"));

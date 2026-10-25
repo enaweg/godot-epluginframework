@@ -114,7 +114,8 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             starting?.Invoke(i, packages);
             UpdateGroupResult result;
             try { result = Result(packages, directory, Apply(packages, directory, trustChangedSources, i)); }
-            catch (Exception ex) { result = new(packages, directory, null, ex.Message); }
+            // Once its journal exists the transaction began and its marker blocks the plugins, so it needs recovery.
+            catch (Exception ex) { result = new(packages, directory, File.Exists(Path.Combine(directory, "journal.json")) ? UpdateOutcome.KeptWithErrors : null, ex.Message); }
             try
             {
                 // A group refused before its marker leaves only its staging behind.
@@ -139,7 +140,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                 failure = journal.Failure;
                 projectCode = outcome == UpdateOutcome.KeptWithErrors && journal.KeptForProjectCode;
             }
-            catch (Exception ex) when (ex is IOException or InvalidDataException or System.Text.Json.JsonException) { }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException) { }
         }
         return new(packages, directory, outcome, failure, projectCode);
     }
@@ -212,7 +213,12 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             journal.Save(UpdatePhase.Staged);
         }
         catch { store.TryAbandonAttempt(attempt); throw; }
-        File.WriteAllText(Path.Combine(transactionDirectory, "README.txt"), "Manual restore: close the editor, move backup/<slug> to addons/<slug>, restore backup-project files if necessary, delete .godot/mono/temp and rebuild. Do not remove the local plugin-state marker until recovery succeeds.\n");
+        try
+        {
+            File.WriteAllText(Path.Combine(transactionDirectory, "README.txt"), "Manual restore: close the editor, move backup/<slug> to addons/<slug>, restore backup-project files if necessary, delete .godot/mono/temp and rebuild. Do not remove the local plugin-state marker until recovery succeeds.\n");
+        }
+        // Only notes for a manual repair; the transaction holds the marker already and continues without them.
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { host.Log("Cannot write the manual restore notes: " + ex.Message); }
         try
         {
             host.CloseScenes();
@@ -370,7 +376,9 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
 
     public UpdateOutcome Keep(UpdateJournal journal)
     {
-        store.TryFail(journal.AttemptId, PersistedPluginState.Failed, "update_kept_build_failed");
+        // Retry and Roll back find a kept update by its marker; one that cannot be marked so is not kept.
+        if (!store.TryFail(journal.AttemptId, PersistedPluginState.Failed, "update_kept_build_failed"))
+            return Rollback(journal, "The new versions could not be kept: the local plugin state cannot record them.");
         journal.Save(UpdatePhase.CommittedWithErrors);
         host.Log($"New versions kept with build errors. Fix the project and use Retry under Needs attention in the ePlugin Manager. Backup: {journal.Directory}");
         return UpdateOutcome.KeptWithErrors;
@@ -384,6 +392,10 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             return UpdateOutcome.Completed;
         }
         journal.Failure = reason;
+        // These reconciled their recipes, which Reconcile undoes below, and then waited for Retry: their project backup
+        // predates the changes made since (other plugins' NuGets, the user's fixes), which restoring it would drop.
+        if (journal.State is UpdatePhase.Verified || journal.State is UpdatePhase.CommittedWithErrors && !journal.BeforeReconcile)
+            journal.KeepProjectFiles = true;
         try
         {
             journal.Save(UpdatePhase.RollingBack);
@@ -406,7 +418,16 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                     throw new IOException($"Backup for {plugin.Slug} is missing; restore manually.");
             }
             try { host.Reconcile(journal, true); }
-            finally { RestoreProject(journal); }
+            finally
+            {
+                if (!journal.KeepProjectFiles)
+                {
+                    RestoreProject(journal);
+                    // Once only: a retry after the build below failed must not write the backup over the repairs made since.
+                    journal.KeepProjectFiles = true;
+                    journal.Save();
+                }
+            }
             foreach (var plugin in journal.Plugins.Where(p => PluginKinds.Workflow(p).DisabledDuringSwap)) host.SetPlainEnabled(plugin.Slug, plugin.WasEnabled);
             host.Scan();
             if (journal.Plugins.Any(p => p.ContainsCSharp) && Build(journal, "rollback").ExitCode != 0) throw new IOException("Restored project failed to build.");
@@ -417,7 +438,10 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         {
             store.TryFail(journal.AttemptId, PersistedPluginState.Failed, "update_rollback_failed");
             journal.Failure = reason + "; rollback failed: " + ex.Message;
-            journal.Save(UpdatePhase.RollingBack);
+            // The marker sends the update to Retry even when the journal cannot say why; throwing here would report it as
+            // never begun.
+            try { journal.Save(UpdatePhase.RollingBack); }
+            catch (Exception saveEx) { host.Log("Cannot save the update journal: " + saveEx.Message); }
             host.Log(journal.Failure + ". Use Retry under Needs attention in the ePlugin Manager after repair. Backup: " + journal.Directory);
             return UpdateOutcome.KeptWithErrors;
         }
@@ -446,7 +470,9 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
     /// <summary>
     /// Rolls back an update kept with build errors, on the user's request. One kept before its recipes were reconciled
     /// first takes the project files and the other plugins' recipes as they are now, so changes made while fixing the
-    /// project survive; the updated plugins' recipes were never applied, so there is nothing of theirs to undo.
+    /// project survive; the updated plugins' recipes were never applied, so there is nothing of theirs to undo. One kept
+    /// after reconciling leaves the project files alone (<see cref="UpdateJournal.KeepProjectFiles"/>): Reconcile undoes
+    /// its recipe changes, and anything else changed since stays.
     /// </summary>
     public UpdateOutcome RollbackKept(UpdateJournal journal)
     {
@@ -636,11 +662,13 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         if (replace) AddonFiles.DeleteTree(target);
         System.IO.Directory.CreateDirectory(target);
         var files = new List<string>();
-        foreach (var file in System.IO.Directory.GetFiles(projectRoot).Where(f => Path.GetExtension(f) is ".csproj" or ".sln" or ".slnx" || Path.GetFileName(f).Equals("nuget.config", StringComparison.OrdinalIgnoreCase) || Path.GetFileName(f) == "project.godot"))
+        foreach (var file in System.IO.Directory.GetFiles(projectRoot).Where(f => ProjectBackup.Includes(Path.GetFileName(f))))
         {
             files.Add(Path.GetFileName(file));
             File.Copy(file, Path.Combine(target, Path.GetFileName(file)), false);
         }
+        // Informational: restoring lists the backup folder itself (ProjectBackup.Find), as the caller saves the journal later.
+        journal.ProjectFiles = files;
         if (replace)
         {
             var old = backup + ".old";
@@ -649,7 +677,6 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             Move(target, backup);
             AddonFiles.DeleteTree(old);
         }
-        journal.ProjectFiles = files;
     }
     private void RestoreProject(UpdateJournal journal)
     {

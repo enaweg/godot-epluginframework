@@ -433,6 +433,87 @@ public class UpdateTransactionTests
     }
 
     [TestCase]
+    public void RetryingARollbackWhoseBuildFailedKeepsTheProjectFilesRepairedSince()
+    {
+        _host.Managed = true;
+        _host.Builds.Enqueue(new(1, ["compile error"]));
+        _host.Builds.Enqueue(new(1, ["restored project does not build"]));
+        var package = Package(true);
+        Assertions.AssertObject(_applier.Apply([package.Package], package.Directory)).IsEqual(UpdateOutcome.KeptWithErrors);
+        Assertions.AssertString(File.ReadAllText(Path.Combine(_root, "Game.csproj"))).IsEqual("old project");
+        Assertions.AssertBool(UpdateJournal.Load(package.Directory).KeepProjectFiles).IsTrue();
+
+        // the user repairs the restored project; the retry only builds it again
+        File.WriteAllText(Path.Combine(_root, "Game.csproj"), "repaired project");
+        Assertions.AssertObject(_applier.Retry(UpdateJournal.Load(package.Directory))).IsEqual(UpdateOutcome.RolledBack);
+
+        Assertions.AssertString(File.ReadAllText(Path.Combine(_root, "Game.csproj"))).IsEqual("repaired project");
+        Assertions.AssertInt(_store.LocalAttempts.Count).IsEqual(0);
+    }
+
+    [TestCase]
+    public void AnUpdateKeptAfterReconcilingIsRolledBackWithoutRestoringItsOutdatedProjectBackup()
+    {
+        // rolled back on request, and by Retry once the project builds but the plugin does not load
+        foreach (var onRequest in new[] { true, false })
+        {
+            Cleanup(); Setup(); Defaults();
+            var package = Package(true);
+            _host.OnPrepareJournal = journal => journal.Recipes["plugin"] = new() { Old = new() { Nugets = [new("Shared", "1.0", null)] }, Applied = new() };
+            _host.OnReconcile = journal => journal.Recipes["plugin"].Target = new() { Nugets = [new("Shared", "2.0", null)] };
+            Assertions.AssertObject(_applier.Apply([package.Package], package.Directory)).IsEqual(UpdateOutcome.AwaitingReload);
+            _host.Builds.Enqueue(ProjectError());
+            Assertions.AssertObject(_applier.Resume(UpdateJournal.Load(package.Directory))).IsEqual(UpdateOutcome.KeptWithErrors);
+            // another plugin added its package and the user fixed the project while the update was kept
+            File.WriteAllText(Path.Combine(_root, "Game.csproj"), "project with another plugin's package");
+            _host.Verified = onRequest;
+
+            var journal = UpdateJournal.Load(package.Directory);
+            Assertions.AssertObject(onRequest ? _applier.RollbackKept(journal) : _applier.Retry(journal)).IsEqual(UpdateOutcome.RolledBack);
+
+            Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/plugin/plugin.cfg")).Contains("1.0.0")).IsTrue();
+            Assertions.AssertString(File.ReadAllText(Path.Combine(_root, "Game.csproj"))).IsEqual("project with another plugin's package");
+            Assertions.AssertInt(_store.LocalAttempts.Count).IsEqual(0);
+        }
+    }
+
+    [TestCase]
+    public void RollbackRestoresTheFilesTheProjectBackupHoldsWhenTheJournalStillListsThePreviousOnes()
+    {
+        var package = Package(true); _host.Managed = true;
+        Assertions.AssertObject(_applier.Apply([package.Package], package.Directory)).IsEqual(UpdateOutcome.AwaitingReload);
+        // the backup was replaced, but the editor stopped before the journal listing its files was saved
+        var backup = Path.Combine(package.Directory, "backup-project");
+        File.WriteAllText(Path.Combine(backup, "Game.csproj"), "refreshed project");
+        File.WriteAllText(Path.Combine(backup, "nuget.config"), "<configuration />");
+        File.WriteAllText(Path.Combine(_root, "nuget.config"), "<configuration />");
+        var journal = UpdateJournal.Load(package.Directory);
+        journal.ProjectFiles = ["Game.csproj", "Game.sln"];
+        journal.Save();
+
+        Assertions.AssertObject(_applier.Rollback(UpdateJournal.Load(package.Directory), "test")).IsEqual(UpdateOutcome.RolledBack);
+
+        Assertions.AssertString(File.ReadAllText(Path.Combine(_root, "Game.csproj"))).IsEqual("refreshed project");
+        Assertions.AssertBool(File.Exists(Path.Combine(_root, "nuget.config"))).IsTrue();
+    }
+
+    [TestCase]
+    public void AnUpdateThatCannotBeMarkedAsKeptIsRolledBack()
+    {
+        _host.HasUi = true; _host.Policy = "ask"; _host.Builds.Enqueue(new(1, ["error CS0246"]));
+        var package = Package(true);
+        Assertions.AssertObject(_applier.Apply([package.Package], package.Directory, askOnBuildFailure: true)).IsEqual(UpdateOutcome.AwaitingDecision);
+        var journal = UpdateJournal.Load(package.Directory);
+        // the local plugin state lost the marker, so neither Retry nor Roll back could find a kept update
+        Assertions.AssertBool(_store.TryAbandonAttempt(journal.AttemptId)).IsTrue();
+
+        Assertions.AssertObject(_applier.Keep(journal)).IsEqual(UpdateOutcome.RolledBack);
+
+        Assertions.AssertObject(UpdateJournal.Load(package.Directory).State).IsEqual(UpdatePhase.RolledBack);
+        Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/plugin/plugin.cfg")).Contains("1.0.0")).IsTrue();
+    }
+
+    [TestCase]
     public void ARollbackWithoutTheBackupLeavesTheNewFilesAndAsksForManualRepair()
     {
         _host.HasUi = true; _host.Policy = "ask"; _host.Builds.Enqueue(new(1, ["error CS0246"]));
@@ -570,6 +651,43 @@ public class UpdateTransactionTests
         Assertions.AssertString(_store.GetShared("plugin")!.Version).IsEqual("2.0.0");
     }
     [TestCase]
+    public void AGroupThatFailsAfterItsMarkerIsReportedForRecoveryRatherThanAsRefused()
+    {
+        var package = Package();
+        var other = Other(package.Directory);
+        string? second = null;
+        // the second group's backup is lost after its swap, and reporting the failed rollback fails too
+        _host.OnScan = () =>
+        {
+            if (second is null || !Directory.Exists(Path.Combine(second, "backup/other"))) return;
+            Directory.Delete(Path.Combine(second, "backup/other"), true);
+            throw new IOException("scan failed");
+        };
+        _host.OnLog = message => { if (message.Contains("rollback failed")) throw new IOException("log failed"); };
+
+        var results = _applier.ApplyGroups([[package.Package], [other]], package.Directory, () => second = NewDirectory());
+
+        Assertions.AssertObject(results[0].Outcome).IsEqual(UpdateOutcome.Completed);
+        Assertions.AssertObject(results[1].Outcome).IsEqual(UpdateOutcome.KeptWithErrors);
+        Assertions.AssertBool(File.Exists(Path.Combine(results[1].Directory, "journal.json"))).IsTrue();
+        Assertions.AssertString(_store.GetLocal("other")!.Reason).IsEqual("update_rollback_failed");
+    }
+    [TestCase]
+    public void AGroupWhoseManualRestoreNotesCannotBeWrittenIsStillInstalled()
+    {
+        var package = Package();
+        var other = Other(package.Directory);
+        var results = _applier.ApplyGroups([[package.Package], [other]], package.Directory, () =>
+        {
+            var directory = NewDirectory();
+            Directory.CreateDirectory(Path.Combine(directory, "README.txt"));
+            return directory;
+        });
+        Assertions.AssertThat(results.Select(r => r.Outcome).ToArray()).ContainsExactly(UpdateOutcome.Completed, UpdateOutcome.Completed);
+        Assertions.AssertString(_store.GetShared("other")!.Version).IsEqual("2.0.0");
+        Assertions.AssertInt(_store.LocalAttempts.Count).IsEqual(0);
+    }
+    [TestCase]
     public void FinishedGroupRebasesTheBackupsOfAPendingGroup()
     {
         var package = Package(true);
@@ -700,7 +818,8 @@ public class UpdateTransactionTests
         public void RequestReload(UpdateJournal journal) { Reloads++; }
         public bool Verified = true;
         public bool Verify(UpdatePluginJournal plugin) => Verified;
-        public void Log(string message) { }
+        public Action<string>? OnLog;
+        public void Log(string message) => OnLog?.Invoke(message);
     }
 }
 #endif

@@ -206,8 +206,10 @@ internal sealed partial class EGlobal
                 _ePluginContext?.Logger.Warn($"Cannot delete the abandoned update download {folder} yet; it is tried again at the next start: {ex.Message}");
             }
         }
-        // Groups of one batch restart the editor once, after the last of them.
+        // Groups of one batch restart the editor once, after the last of them, and scan once: the editor drops a scan
+        // requested while one runs.
         using var restarts = DeferRestarts();
+        using var scans = DeferScans();
         foreach (var listed in _updateJournals.Read())
         {
             // Runs inside Initialize: one journal that cannot be resumed must not keep the framework from starting.

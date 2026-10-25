@@ -35,6 +35,7 @@ internal static class UpdateRecovery
         public int StartCount { get; set; }
         public List<Plugin> Plugins { get; set; } = [];
         public List<string> ProjectFiles { get; set; } = [];
+        public bool KeepProjectFiles { get; set; }
         public Dictionary<string, Recipe> Recipes { get; set; } = [];
     }
     private static readonly JsonSerializerOptions Options = new() { PropertyNameCaseInsensitive = true, WriteIndented = true };
@@ -76,7 +77,8 @@ internal static class UpdateRecovery
                         (!File.Exists(Path.Combine(installed, "plugin.cfg")) || !HasVersion(Path.Combine(installed, "plugin.cfg"), plugin.OldVersion)))
                         throw new IOException("Missing backup for " + plugin.Slug);
                 }
-                var (projectBackup, projectFiles) = ProjectBackup.Find(folder, journal.ProjectFiles);
+                // Restored already, by an earlier start or a rollback whose build failed: the project may have been repaired since.
+                var (projectBackup, projectFiles) = journal.KeepProjectFiles ? ("", []) : ProjectBackup.Find(folder, journal.ProjectFiles);
                 foreach (var file in projectFiles)
                 {
                     if (file.Contains('/') || file.Contains('\\') || !File.Exists(Inside(projectBackup, file)))
@@ -103,9 +105,13 @@ internal static class UpdateRecovery
                     foreach (var dir in applied.Where(d => !recipe.Value.Old.Directories.Contains(d)).OrderByDescending(d => d.Length)) Visibility(addon, recipe.Key, dir, false);
                     foreach (var dir in recipe.Value.Old.Directories.OrderBy(d => d.Length)) Visibility(addon, recipe.Key, dir, true);
                 }
-                foreach (var file in projectFiles) AddonFiles.Overwrite(Inside(projectBackup, file), Inside(projectRoot, file));
-                if (!projectFiles.Any(f => f.Equals("nuget.config", StringComparison.OrdinalIgnoreCase))) AddonFiles.DeleteFile(Path.Combine(projectRoot, "nuget.config"));
-                restoreSettings();
+                if (!journal.KeepProjectFiles)
+                {
+                    foreach (var file in projectFiles) AddonFiles.Overwrite(Inside(projectBackup, file), Inside(projectRoot, file));
+                    if (!projectFiles.Any(f => f.Equals("nuget.config", StringComparison.OrdinalIgnoreCase))) AddonFiles.DeleteFile(Path.Combine(projectRoot, "nuget.config"));
+                    json["keepProjectFiles"] = true; Write(path, json);
+                    restoreSettings();
+                }
                 if (!rebuild()) throw new IOException("Restored project failed to build.");
                 if (store.LocalAttempts.Any(a => a.AttemptId == journal.AttemptId) && !store.TryAbandonAttempt(journal.AttemptId)) throw new IOException("Cannot clear restored update marker.");
                 json["state"] = "RolledBack";
@@ -195,17 +201,24 @@ internal static class ProjectBackup
 {
     public const string Folder = "backup-project";
 
+    /// <summary>Whether a file in the project root is one of the project files the backup holds.</summary>
+    public static bool Includes(string fileName) =>
+        Path.GetExtension(fileName) is ".csproj" or ".sln" or ".slnx" || fileName.Equals("nuget.config", StringComparison.OrdinalIgnoreCase) || fileName == "project.godot";
+
     /// <summary>
     /// The folder to restore from and its files. When a replacement stopped between its two moves, the new copy is
-    /// complete (the old one is moved aside only after it) and is used with its own files, because the journal still lists
-    /// the old copy's; without the new copy, the old one is.
+    /// complete (the old one is moved aside only after it) and is used; without the new copy, the old one is. The files
+    /// are those the folder holds: each copy is complete before it is moved into place, while the journal listing them is
+    /// saved only afterwards, so after an interruption it may still list the previous copy's (<paramref name="recorded"/>
+    /// is used only when the folder is missing).
     /// </summary>
     public static (string Directory, IReadOnlyList<string> Files) Find(string journalDirectory, IReadOnlyList<string> recorded)
     {
         var backup = Path.Combine(journalDirectory, Folder);
-        if (Directory.Exists(backup) || !Directory.Exists(backup + ".old")) return (backup, recorded);
-        if (!Directory.Exists(backup + ".new")) return (backup + ".old", recorded);
-        return (backup + ".new", Directory.GetFiles(backup + ".new").Select(f => Path.GetFileName(f)).ToArray());
+        var directory = Directory.Exists(backup) || !Directory.Exists(backup + ".old") ? backup
+            : Directory.Exists(backup + ".new") ? backup + ".new" : backup + ".old";
+        if (!Directory.Exists(directory)) return (directory, recorded);
+        return (directory, Directory.GetFiles(directory).Select(f => Path.GetFileName(f)).Where(Includes).ToArray());
     }
 }
 #endif

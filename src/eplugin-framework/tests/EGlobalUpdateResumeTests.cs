@@ -44,24 +44,24 @@ public class EGlobalUpdateResumeTests : IDisposable
 
     private string Installed => File.ReadAllText(Path.Combine(_fixture.Addon("tool"), "plugin.cfg"));
 
-    private Guid Attempt()
+    private Guid Attempt(string slug = "tool")
     {
-        Assertions.AssertBool(_fixture.Store.TryBeginAttempt("tool", "1.0.0", PersistedPluginState.Activated, out var id)).IsTrue();
+        Assertions.AssertBool(_fixture.Store.TryBeginAttempt(slug, "1.0.0", PersistedPluginState.Activated, out var id)).IsTrue();
         return id;
     }
 
     /// <summary>A journal whose new files are installed and whose old ones are in its backup.</summary>
-    private UpdateJournal Journal(UpdatePhase phase, Guid attempt, DateTimeOffset? created = null)
+    private UpdateJournal Journal(UpdatePhase phase, Guid attempt, DateTimeOffset? created = null, string slug = "tool")
     {
         var directory = Path.Combine(_fixture.Root, ".godot", "eplugin", "updates", "update-" + Guid.NewGuid().ToString("N")[..8]);
         var journal = new UpdateJournal { Id = Path.GetFileName(directory), Directory = directory, AttemptId = attempt, CreatedUtc = created ?? DateTimeOffset.UtcNow };
         journal.Plugins.Add(new()
         {
-            Slug = "tool", OldVersion = "1.0.0", NewVersion = "2.0.0", SourceUrl = "https://example.org/releases", WasEnabled = true,
+            Slug = slug, OldVersion = "1.0.0", NewVersion = "2.0.0", SourceUrl = "https://example.org/releases", WasEnabled = true,
             SwapStarted = true
         });
-        Directory.CreateDirectory(journal.Backup("tool"));
-        File.WriteAllText(Path.Combine(journal.Backup("tool"), "plugin.cfg"), "[plugin]\nname=\"tool\"\nversion=\"1.0.0\"\nscript=\"plugin.gd\"\n");
+        Directory.CreateDirectory(journal.Backup(slug));
+        File.WriteAllText(Path.Combine(journal.Backup(slug), "plugin.cfg"), $"[plugin]\nname=\"{slug}\"\nversion=\"1.0.0\"\nscript=\"plugin.gd\"\n");
         journal.Save(phase);
         return journal;
     }
@@ -86,6 +86,24 @@ public class EGlobalUpdateResumeTests : IDisposable
         _fixture.Global.ResumeUpdates();
 
         AssertRolledBack(journal, "Interrupted update.");
+    }
+
+    [TestCase]
+    public void UpdatesResumedAtStartupScanTheFilesystemOnce()
+    {
+        // the editor's own update host, whose scans the editor drops while one runs
+        _fixture.Global.UpdateHost = null!;
+        _fixture.AddPlainPlugin("other", "2.0.0");
+        _fixture.Host.Enabled.Add("other");
+        Journal(UpdatePhase.Swapped, Attempt());
+        Journal(UpdatePhase.Swapped, Attempt("other"), slug: "other");
+        var scans = _fixture.Host.Scans;
+
+        _fixture.Global.ResumeUpdates();
+
+        Assertions.AssertString(Installed).Contains("1.0.0");
+        Assertions.AssertString(File.ReadAllText(Path.Combine(_fixture.Addon("other"), "plugin.cfg"))).Contains("1.0.0");
+        Assertions.AssertInt(_fixture.Host.Scans - scans).IsEqual(1);
     }
 
     [TestCase]

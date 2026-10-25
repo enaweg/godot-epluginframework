@@ -81,6 +81,13 @@ internal sealed class UpdateJournal
     public bool? PluginsBuildAlone { get; set; }
     /// <summary>The errors in project code of the last failed build, at most <see cref="BuildDiagnostics.MaxProjectErrors"/>.</summary>
     public List<BuildError> ProjectErrors { get; set; } = [];
+    /// <summary>
+    /// A rollback leaves the project files as they are rather than restoring <c>backup-project</c>: set once a rollback
+    /// (or early recovery) restored them, so a retry after a failed rollback build does not overwrite the repairs made
+    /// since, and for an update that reconciled its recipes before it was kept or its acknowledgement failed, whose backup
+    /// predates what changed while it waited and whose recipe changes Reconcile undoes. Older readers ignore it.
+    /// </summary>
+    public bool KeepProjectFiles { get; set; }
     /// <summary>Kept because only project code failed and the plugins compile on their own.</summary>
     [JsonIgnore] public bool KeptForProjectCode => FailureCause == BuildFailureCause.ProjectCode && PluginsBuildAlone == true;
     [JsonIgnore] public string Directory { get; set; } = "";
