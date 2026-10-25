@@ -127,7 +127,8 @@ restart. Operations that need no reload (including declined licenses or failed b
 Don't use GodotTools' `Internal.IsAssembliesReloadingNeeded` for this: it reported a reload as needed
 with no newer build on disk. Editor restarts go through `IEditorHost.RestartEditor`, which frees GodotTools'
 `HotReloadAssemblyWatcher` first: a focus change while the editor shut down made it reload the updated assembly, which
-crashed Godot 4.7.2 before it started again.
+crashed Godot 4.7.2 before it started again. It also marks the global undo history as saved right before restarting,
+because Godot otherwise asks to save modified resources first (plugins adding autoloads at startup leave it unsaved).
 
 `EGlobal` (`addons/ePlugin/Internal/EGlobal.cs`) is an internal singleton owning all plugin state. Its partials split it by
 concern: `EGlobal.Transitions.cs`, `.Activation.cs`, `.Deactivation.cs`, `.OptionalDependencies.cs` and `.Retry.cs` hold

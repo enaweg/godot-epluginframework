@@ -165,6 +165,12 @@ internal sealed class EditorHost : IEditorHost
     public void RestartEditor()
     {
         StopAssemblyWatcher(PluginNodes());
+        // Godot asks to save modified resources before it restarts while its global undo history is unsaved, and saving
+        // only the unsaved scenes leaves it so. Every plugin that adds an autoload when the editor starts makes it unsaved,
+        // so the restart waited for a confirmation behind the progress window and the editor stayed open. Queued first,
+        // so it runs right before the restart.
+        EditorInterface.Singleton.GetEditorUndoRedo().CallDeferred(EditorUndoRedoManager.MethodName.ClearHistory,
+            (int)EditorUndoRedoManager.SpecialHistory.GlobalHistory, false);
         EditorInterface.Singleton.CallDeferred(EditorInterface.MethodName.RestartEditor, true);
     }
 
