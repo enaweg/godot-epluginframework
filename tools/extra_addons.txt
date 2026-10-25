@@ -29,7 +29,9 @@ GD-Sync;https://github.com/GD-Sync/GD-Sync
 gitot;https://github.com/SigKdev/godot-gitot
 global_asset_manager;https://github.com/sn1ks0h/Global-Asset-Manager
 godot_advanced_logger;https://github.com/DYNMC-Motorsports/GodotAdvancedLogger
-# Its plugin is in the repository's plugin/ folder, next to other plugin.cfg files (a migration bridge, a docs fixture).
+# Its plugin is in the repository's plugin/ folder, next to other plugin.cfg files (a migration bridge, a docs fixture), so
+# its source archive is refused. Its releases ZIP the v3 migration plugin (godot-ai-plugin.zip) next to it
+# (godot-ai-v4-plugin.zip), both for addons/godot_ai; the updater installs the one that keeps the installed plugin's name.
 godot_ai;https://github.com/hi-godot/godot-ai
 # A GDExtension plugin whose libraries are built by CI (only in the release ZIPs: one per platform and an offline one).
 godot_git;https://github.com/mssbabou/Godot-Git
