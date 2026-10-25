@@ -644,7 +644,8 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
     /// <summary>
     /// Moves this store's changes onto a shared file that changed on disk since it was read, e.g. by a git pull: the file
     /// becomes the store's state, and the entries the changes set (and <paramref name="touched"/>) are set in it. Returns
-    /// false, leaving the store as it was, when the file is gone, cannot be read, or changed one of those entries too.
+    /// false, leaving the store as it was, when the file is gone, cannot be read, or changed one of those entries to another
+    /// value.
     /// </summary>
     private bool Rebase(byte[]? actual, IReadOnlyCollection<string> touched, ref Dictionary<string, SharedPluginState> states,
         ref Guid? completedAttemptId, ref Dictionary<string, AcceptedLicense> licenses, ref Dictionary<string, ShownWelcome> welcomes)
@@ -674,7 +675,7 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
         var mergedWelcomes = Merge(baseWelcomes, welcomes, _welcomes, []);
         var completedChanged = completedAttemptId != baseCompleted;
         if (mergedStates is null || mergedLicenses is null || mergedWelcomes is null ||
-            completedChanged && _lastCompletedAttemptId != baseCompleted)
+            completedChanged && _lastCompletedAttemptId != baseCompleted && _lastCompletedAttemptId != completedAttemptId)
         {
             (_shared, _licenses, _welcomes, _lastCompletedAttemptId, _sharedExtras) = (baseStates, baseLicenses, baseWelcomes, baseCompleted, baseExtras);
             return false;
@@ -689,14 +690,16 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
 
     /// <summary>
     /// <paramref name="disk"/> with the entries <paramref name="ours"/> changed against <paramref name="original"/>, and
-    /// those of <paramref name="touched"/>; null when the disk changed one of them as well.
+    /// those of <paramref name="touched"/>; null when the disk changed one of them as well, to another value than ours
+    /// (a teammate who made the same change does not conflict with it).
     /// </summary>
     private static Dictionary<string, T>? Merge<T>(Dictionary<string, T> original, Dictionary<string, T> ours,
         Dictionary<string, T> disk, IReadOnlyCollection<string> touched)
     {
         var changed = original.Keys.Union(ours.Keys).Where(slug => !Equals(original.GetValueOrDefault(slug), ours.GetValueOrDefault(slug)))
             .Union(touched).ToArray();
-        if (changed.Any(slug => !Equals(original.GetValueOrDefault(slug), disk.GetValueOrDefault(slug))))
+        if (changed.Any(slug => !Equals(original.GetValueOrDefault(slug), disk.GetValueOrDefault(slug)) &&
+                                !Equals(ours.GetValueOrDefault(slug), disk.GetValueOrDefault(slug))))
         {
             return null;
         }
