@@ -290,6 +290,9 @@ C# handoff uses a durable editor restart, with another restart after a managed f
 already holds the new plugin code, so the final build and its restart are skipped when reconciling changed no NuGet,
 project or directory and the bridge kept no old files (`UpdateApplier.ChangedSinceInterimBuild`); `restart_policy=always`
 keeps them. Engine metadata prevents scheduled checks and early recovery counters from repeating after assembly reloads.
+`EditorHost.RestartEditor` first frees GodotTools' `HotReloadAssemblyWatcher`: it reloads the newer build when the editor
+window gains focus, which closing windows during the restart's shutdown causes, and Godot 4.7.2 crashed doing so, so the
+editor never started again. Nothing may reload once a restart was requested.
 
 `EPluginPlugin` invokes `UpdateRecovery` before touching `EGlobal`; this reader is deliberately independent of `EGlobal`
 and recipe execution. A self-update holds the `ActivationProgress` window across the folder swap and always rolls back
