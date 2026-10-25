@@ -111,7 +111,10 @@ internal sealed class UpdateReview
         foreach (var finding in entry.Findings)
             text.Append(CultureInfo.CurrentCulture, $"[color={Color(finding.Severity)}]{finding.Severity}:[/color] {Escape(finding.Message)}\n");
         if (!entry.NeedsTrust) return text.ToString().TrimEnd();
-        if (entry.Findings.Any(f => f.Code == "R9" && f.RequiresTrust))
+        if (entry.Findings.Any(f => f.Code == "R9" && f.RequiresTrust) && entry.Package is { NewUpdateUrl: var url } && string.IsNullOrWhiteSpace(url))
+            text.Append("\n[b]The plugin no longer names its update site.[/b] ")
+                .Append("Later updates come from the project's update site, if it sets one, or from ePlugin's built-in list, which matches add-ons by folder name only. ");
+        else if (entry.Findings.Any(f => f.Code == "R9" && f.RequiresTrust))
             text.Append(CultureInfo.CurrentCulture, $"\n[b]The plugin's updates move to {Link(entry.Package?.NewUpdateUrl ?? "another repository")}.[/b] ")
                 .Append("Later updates are downloaded from there. ");
         else

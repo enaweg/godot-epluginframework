@@ -37,9 +37,11 @@ Project update sites (`UpdateSiteSettings`, the committed `res://addons/eplugin-
 failing site falls back to `plugin.cfg` (reported in `UpdateCheckResult.Fallbacks`), and a candidate from either URL
 belongs to the plugin (`CurrentCached`, `source_changed`). Trust compares repositories (`UpdateSourceFactory.Repository`:
 host and path, so another owner on the same host differs, and a release page, tag page or git URL of one repository is
-the same): R9 when the package's `update_url` names another repository than the installed one, R25 when the candidate's
-`SourceUrl` is neither the project's site nor the `plugin.cfg` repository, i.e. the built-in site of a plugin that has its
-own. Both set `RequiresTrust`, which leaves the review entry unchecked. `CollectUpdateTargets` and `CollectPlugins` reload the file.
+the same): R9 when the package's `update_url` names another repository than the installed one or removes it, also with a project
+site (checks fall back to `update_url`, and once the new one is installed R25 compares with it, so a fork would never be
+reviewed again; without one, the built-in site of the slug follows), R25 when the candidate's `SourceUrl` is neither the
+project's site nor the `plugin.cfg` repository, i.e. the built-in site of a plugin that has its own. Both set
+`RequiresTrust`, which leaves the review entry unchecked. `CollectUpdateTargets` and `CollectPlugins` reload the file.
 Like `LocalSourceSettings`, it is never overwritten when it is unreadable or was written by a newer version, and it is
 deleted with its last entry.
 

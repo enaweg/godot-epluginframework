@@ -117,14 +117,15 @@ internal sealed partial class AddonPackageValidator(IEnumerable<IAddonRule>? ext
         var ownRepository = UpdateSourceFactory.Repository(installed.UpdateUrl);
         if (newUrl != installed.UpdateUrl && !context.NewInstall)
         {
-            // Checks keep using an update site the project sets, so the new plugin.cfg source is not trusted for anything.
-            // Otherwise later updates come from the new one; another repository may belong to someone else, also on the
-            // same host.
-            if (installed.OverrideUrl is { } site)
-                Add("R9", FindingSeverity.Warning, $"Update source changed: {newUrl ?? "removed"}. Updates still come from the project's update site {site}.");
-            else
-                Add("R9", FindingSeverity.Warning, "Update source changed: " + (newUrl ?? "removed"),
-                    !string.IsNullOrWhiteSpace(newUrl) && UpdateSourceFactory.Repository(newUrl) != ownRepository);
+            // Later updates come from the new update_url, with an update site the project sets whenever that one fails, and
+            // R25 compares with it once it is installed. Another repository may belong to someone else, also on the same
+            // host. Without one, they come from the built-in list's site for the slug, which may be another add-on.
+            var removed = string.IsNullOrWhiteSpace(newUrl);
+            var trust = removed ? ownRepository is not null : UpdateSourceFactory.Repository(newUrl) != ownRepository;
+            var change = "Update source changed: " + (removed ? "removed" : newUrl);
+            Add("R9", FindingSeverity.Warning, installed.OverrideUrl is { } site
+                ? $"{change}. Updates still come from the project's update site {site} first, and from the new source when it fails."
+                : change, trust);
         }
         // A package from the built-in list's site, used because the plugin's own one failed, may be someone else's plugin
         // with the same slug. The project's update site is the project's choice, and a plugin without an update site of
