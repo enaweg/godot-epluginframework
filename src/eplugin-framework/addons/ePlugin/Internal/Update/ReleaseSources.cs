@@ -61,11 +61,24 @@ internal static class ReleaseAssets
     /// <summary>
     /// The version a release names: its tag, else the version its title names (<see cref="TryNamedVersion"/>), as
     /// "4.x - v2.1.2" of GodotTouchInputManager's tag 4.x-v2.1.2, released for Godot 4 next to "3.x - v2.1.2", else the
-    /// one the words of its tag name ("v1.1.6" of v1.1.6_godot_4.6).
+    /// one the words of its tag name ("v1.1.6" of v1.1.6_godot_4.6). A release the host marks as no prerelease (GitHub,
+    /// Forgejo and Gitea; GitLab has no such mark) is stable, whatever suffix its version has (<see cref="Stable"/>).
     /// </summary>
-    public static bool TryVersion(JsonElement release, out SemVer version) =>
-        SemVer.TryParse(String(release, "tag_name"), out version) || TryNamedVersion(String(release, "name"), out version) ||
-        TryNamedVersion(String(release, "tag_name"), out version);
+    public static bool TryVersion(JsonElement release, out SemVer version)
+    {
+        if (!SemVer.TryParse(String(release, "tag_name"), out version) && !TryNamedVersion(String(release, "name"), out version) &&
+            !TryNamedVersion(String(release, "tag_name"), out version)) return false;
+        if (release.TryGetProperty("prerelease", out var prerelease) && prerelease.ValueKind == JsonValueKind.False) version = Stable(version);
+        return true;
+    }
+
+    /// <summary>
+    /// The version of a release its host publishes as no prerelease. Some add-ons tag every release with a suffix that
+    /// names no prerelease, such as Aseprite Wizard's v9.8.0-4 for Godot 4, whose plugin.cfg says 9.8.0: it is offered as
+    /// version 9.8.0 to stable installs. A suffix that names a prerelease stage (beta, rc, dev...) keeps it a prerelease,
+    /// since the host's mark is only the default an author did not change.
+    /// </summary>
+    public static SemVer Stable(SemVer version) => version.NamesStage ? version : version.WithoutPrerelease();
 
     /// <summary>
     /// The version a text names as one of its words, the first from the start. Words are split at spaces and '_', and
@@ -104,6 +117,26 @@ internal static class ReleaseAssets
         ByVersion(releases).Where(g => UpdateService.Offers(target, Version(g[0]))).OrderByDescending(g => Version(g[0])).FirstOrDefault();
 
     /// <summary>
+    /// The releases of the newest version <paramref name="target"/> is offered, reading the host's pages (newest first)
+    /// until one has such a version, at most <paramref name="pages"/>: a stable install is offered no prerelease, and the
+    /// last few dozen releases of an add-on may all be prereleases or nightly builds. <paramref name="page"/> returns a
+    /// page's releases (without drafts) and whether it was full, so that another one may follow.
+    /// </summary>
+    public static async Task<JsonElement[]?> NewestAsync(Func<int, Task<(JsonElement[] Releases, bool Full)>> page, int pages,
+        PluginUpdateTarget target)
+    {
+        var releases = new List<JsonElement>();
+        for (var number = 1; number <= pages; number++)
+        {
+            var (read, full) = await page(number).ConfigureAwait(false);
+            releases.AddRange(read);
+            if (Newest(releases, target) is { } newest) return newest;
+            if (!full) break;
+        }
+        return null;
+    }
+
+    /// <summary>
     /// The package of the first release, with the other releases' packages as alternatives; a release without a ZIP
     /// (<paramref name="download"/> returns null) is left out.
     /// </summary>
@@ -118,6 +151,8 @@ internal static class ReleaseAssets
 
 internal sealed class GitHubReleaseSource(UpdateHttp http, string owner, string repository, bool pinned = false) : IUpdateSource, IVersionListSource
 {
+    // A check reads up to two pages of 50, as many releases as the version list reads at once.
+    private const int CheckPageSize = 50;
     private static string? Token => ForgeTokens.GitHub(new Uri("https://api.github.com"));
     public async Task<IReadOnlyList<UpdateCandidate>> ListAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct)
     {
@@ -149,8 +184,13 @@ internal sealed class GitHubReleaseSource(UpdateHttp http, string owner, string 
         var root = $"https://github.com/{owner}/{repository}";
         try
         {
-            using var document = JsonDocument.Parse(await http.ReadTextAsync($"https://api.github.com/repos/{owner}/{repository}/releases?per_page=30", ct, Token).ConfigureAwait(false));
-            var releases = ReleaseAssets.Newest(document.RootElement.EnumerateArray().Where(r => !ReleaseAssets.Flag(r, "draft")), target);
+            var releases = await ReleaseAssets.NewestAsync(async page =>
+            {
+                using var document = JsonDocument.Parse(await http.ReadTextAsync(
+                    $"https://api.github.com/repos/{owner}/{repository}/releases?per_page={CheckPageSize}&page={page}", ct, Token).ConfigureAwait(false));
+                var list = document.RootElement.EnumerateArray().Select(r => r.Clone()).ToArray();
+                return (list.Where(r => !ReleaseAssets.Flag(r, "draft")).ToArray(), list.Length == CheckPageSize);
+            }, 2, target).ConfigureAwait(false);
             return releases is null ? null : Candidate(target, releases);
         }
         catch (UpdateHttpException ex) when (ex.RateLimited)
@@ -160,6 +200,8 @@ internal sealed class GitHubReleaseSource(UpdateHttp http, string owner, string 
             var path = final.AbsolutePath;
             var marker = path.IndexOf("/releases/tag/", StringComparison.Ordinal);
             if (final.Host != "github.com" || marker < 0 || !SemVer.TryParse(Uri.UnescapeDataString(path[(marker + 14)..]), out var version)) throw;
+            // GitHub's latest release is never one it marks as a prerelease.
+            version = ReleaseAssets.Stable(version);
             if (!UpdateService.Offers(target, version)) return null;
             var tag = Uri.UnescapeDataString(path[(marker + 14)..]);
             return new(target.Slug, target.Name, target.InstalledVersion, version.ToString(), target.UpdateUrl, final.ToString(), tag,
@@ -169,17 +211,20 @@ internal sealed class GitHubReleaseSource(UpdateHttp http, string owner, string 
 }
 internal sealed class GitLabReleaseSource(UpdateHttp http, string host, string project, bool pinned = false) : IUpdateSource, IVersionListSource
 {
-    private async Task<JsonElement[]> Releases(int count, CancellationToken ct)
+    /// <summary>One page of <paramref name="count"/> releases, and whether it was full.</summary>
+    private async Task<(JsonElement[] Releases, bool Full)> Releases(int count, int page, CancellationToken ct)
     {
-        var url = $"https://{host}/api/v4/projects/{Uri.EscapeDataString(project)}/releases?per_page={count}";
+        var url = $"https://{host}/api/v4/projects/{Uri.EscapeDataString(project)}/releases?per_page={count}&page={page}";
         using var document = JsonDocument.Parse(await http.ReadTextAsync(url, ct, ForgeTokens.GitLab(new Uri(url)), true).ConfigureAwait(false));
-        return document.RootElement.EnumerateArray().Where(r => !ReleaseAssets.Flag(r, "upcoming_release") && ReleaseAssets.TryVersion(r, out _))
-            .Select(r => r.Clone()).ToArray();
+        var list = document.RootElement.EnumerateArray().ToArray();
+        return (list.Where(r => !ReleaseAssets.Flag(r, "upcoming_release") && ReleaseAssets.TryVersion(r, out _)).Select(r => r.Clone()).ToArray(),
+            list.Length == count);
     }
     public async Task<UpdateCandidate?> CheckAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct)
     {
         if (pinned) return null;
-        var releases = ReleaseAssets.Newest(await Releases(30, ct).ConfigureAwait(false), target);
+        // Up to two pages of 50, as many releases as the version list reads at once.
+        var releases = await ReleaseAssets.NewestAsync(page => Releases(50, page, ct), 2, target).ConfigureAwait(false);
         return releases is null ? null : Candidate(target, releases);
     }
     public async Task<IReadOnlyList<UpdateCandidate>> ListAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct)
@@ -187,7 +232,7 @@ internal sealed class GitLabReleaseSource(UpdateHttp http, string host, string p
         if (pinned) return [];
         var candidates = new List<UpdateCandidate>();
         // A release without a ZIP cannot be installed; leave it out instead of failing the whole list.
-        foreach (var releases in ReleaseAssets.ByVersion(await Releases(100, ct).ConfigureAwait(false)))
+        foreach (var releases in ReleaseAssets.ByVersion((await Releases(100, 1, ct).ConfigureAwait(false)).Releases))
             try { candidates.Add(Candidate(target, releases)); } catch (IOException) { }
         return candidates;
     }
@@ -214,29 +259,31 @@ internal sealed class ForgejoReleaseSource(UpdateHttp http, string host, string 
 {
     // Forgejo and Gitea return at most 50 releases per page.
     private const int PageSize = 50;
-    private async Task<JsonElement[]> Releases(int pages, CancellationToken ct)
+    /// <summary>One page of releases, and whether it was full.</summary>
+    private async Task<(JsonElement[] Releases, bool Full)> Releases(int page, CancellationToken ct)
     {
-        var releases = new List<JsonElement>();
-        for (var page = 1; page <= pages; page++)
-        {
-            var url = $"https://{host}/api/v1/repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repository)}/releases?limit={PageSize}&page={page}";
-            using var document = JsonDocument.Parse(await http.ReadTextAsync(url, ct, ForgeTokens.Forgejo(new Uri(url))).ConfigureAwait(false));
-            var list = document.RootElement.EnumerateArray().Select(r => r.Clone()).ToArray();
-            releases.AddRange(list.Where(r => !ReleaseAssets.Flag(r, "draft") && ReleaseAssets.TryVersion(r, out _)));
-            if (list.Length < PageSize) break;
-        }
-        return releases.ToArray();
+        var url = $"https://{host}/api/v1/repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repository)}/releases?limit={PageSize}&page={page}";
+        using var document = JsonDocument.Parse(await http.ReadTextAsync(url, ct, ForgeTokens.Forgejo(new Uri(url))).ConfigureAwait(false));
+        var list = document.RootElement.EnumerateArray().Select(r => r.Clone()).ToArray();
+        return (list.Where(r => !ReleaseAssets.Flag(r, "draft") && ReleaseAssets.TryVersion(r, out _)).ToArray(), list.Length == PageSize);
     }
     public async Task<UpdateCandidate?> CheckAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct)
     {
         if (pinned) return null;
-        var releases = ReleaseAssets.Newest(await Releases(1, ct).ConfigureAwait(false), target);
+        var releases = await ReleaseAssets.NewestAsync(page => Releases(page, ct), 2, target).ConfigureAwait(false);
         return releases is null ? null : Candidate(target, releases);
     }
     public async Task<IReadOnlyList<UpdateCandidate>> ListAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct)
     {
         if (pinned) return [];
-        return ReleaseAssets.ByVersion(await Releases(2, ct).ConfigureAwait(false)).Select(r => Candidate(target, r)).ToArray();
+        var releases = new List<JsonElement>();
+        for (var page = 1; page <= 2; page++)
+        {
+            var (read, full) = await Releases(page, ct).ConfigureAwait(false);
+            releases.AddRange(read);
+            if (!full) break;
+        }
+        return ReleaseAssets.ByVersion(releases).Select(r => Candidate(target, r)).ToArray();
     }
     /// <param name="releases">The releases of one version; the first is announced, the others are alternatives.</param>
     private UpdateCandidate Candidate(PluginUpdateTarget target, JsonElement[] releases)

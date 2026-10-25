@@ -1,6 +1,7 @@
 #if TOOLS
 using System;
 using System.Globalization;
+using System.Linq;
 using System.Numerics;
 using System.Text.RegularExpressions;
 
@@ -10,7 +11,8 @@ namespace Enaweg.Plugin.Internal.Update;
 /// A plugin version, from a tag or plugin.cfg: an optional "v", two to four numbers (Godot add-ons such as Phantom Camera
 /// use a fourth, e.g. 0.11.0.3), then optionally any suffix after a '-' (0.1.2-beta.1, 0.2-anystringhere) and build
 /// metadata after a '+'. Versions are compared by their numbers; a suffix marks a prerelease, which comes before the same
-/// numbers without one (0.1.2-b1 &lt; 0.1.2). Only suffixes of equal numbers are compared with each other, like semantic
+/// numbers without one (0.1.2-b1 &lt; 0.1.2), except the suffixes stable, release and final, which some add-ons tag their
+/// releases with (1.4.0-stable is 1.4.0). Only suffixes of equal numbers are compared with each other, like semantic
 /// prereleases, so 0.1.2-beta.1 &lt; 0.1.2-beta.2. Build metadata is ignored. <see cref="ToString"/> is the version as it
 /// was written.
 /// </summary>
@@ -38,10 +40,33 @@ internal readonly record struct SemVer(int Major, int Minor, int Patch, string? 
             !int.TryParse(match.Groups[2].Value, out var minor) ||
             !int.TryParse(match.Groups[3].Success ? match.Groups[3].Value : "0", out var patch) ||
             !int.TryParse(match.Groups[4].Success ? match.Groups[4].Value : "0", out var revision)) return false;
-        var pre = match.Groups[5].Success ? match.Groups[5].Value : null;
+        var pre = match.Groups[5].Success && !IsStableSuffix(match.Groups[5].Value) ? match.Groups[5].Value : null;
         version = new SemVer(major, minor, patch, pre, revision) { Text = text.Trim() };
         return true;
     }
+
+    private static bool IsStableSuffix(string suffix) =>
+        suffix.Equals("stable", StringComparison.OrdinalIgnoreCase) || suffix.Equals("release", StringComparison.OrdinalIgnoreCase) ||
+        suffix.Equals("final", StringComparison.OrdinalIgnoreCase);
+
+    // The words a prerelease suffix starts with: 1.0.0-beta1, 4.6.0-dev2, 1.1.0-rc.1, 5.2.0-nightly.4dc91441.
+    private static readonly string[] Stages =
+        ["alpha", "beta", "rc", "pre", "preview", "prerelease", "dev", "devel", "develop", "nightly", "snapshot", "canary", "test",
+         "testing", "experimental", "unstable", "wip"];
+
+    /// <summary>
+    /// Whether the suffix names a prerelease stage, such as beta or rc, rather than something else, such as the Godot
+    /// version a build is for (9.8.0-4) or where it is published (1.2.0-assetlib).
+    /// </summary>
+    public bool NamesStage => Prerelease is { } suffix &&
+        Stages.Contains(new string(suffix.TakeWhile(char.IsAsciiLetter).ToArray()), StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The same numbers without the prerelease suffix, written without it ("v9.8.0-4" becomes "v9.8.0"): the version of
+    /// a release its host marks as no prerelease although its tag has a suffix.
+    /// </summary>
+    public SemVer WithoutPrerelease() => Prerelease is null ? this
+        : this with { Prerelease = null, Text = Text?.Remove(Text.IndexOf('-', StringComparison.Ordinal), Prerelease.Length + 1) };
 
     public int CompareTo(SemVer other)
     {
