@@ -309,10 +309,11 @@ public class UpdatePackageTests
         var findings = new AddonPackageValidator().Validate(new(target, candidate, stage)).Findings;
         Assertions.AssertBool(findings.Any(f => f.Code == "R9" && f.RequiresTrust)).IsTrue();
         Assertions.AssertBool(findings.Any(f => f.Code == "R11" && f.Severity == FindingSeverity.Error)).IsTrue();
-        // with an update site set by the project, checks keep using it, so the new host needs no trust
+        // an update site set by the project is tried first, but checks fall back to the new host when it fails, and once
+        // it is installed nothing compares a candidate from it with the old one
         var overridden = new AddonPackageValidator().Validate(new(target with { OverrideUrl = "https://github.com/fork/plugin/releases" }, candidate, stage)).Findings
             .Single(f => f.Code == "R9");
-        Assertions.AssertBool(overridden.RequiresTrust).IsFalse();
+        Assertions.AssertBool(overridden.RequiresTrust).IsTrue();
         Assertions.AssertString(overridden.Message).Contains("https://github.com/fork/plugin/releases");
     }
 
@@ -346,7 +347,12 @@ public class UpdatePackageTests
         Assertions.AssertBool(Trust(target, own, own)).IsFalse();
         Assertions.AssertBool(Trust(target, "https://github.com/owner/plugin.git", "https://github.com/Owner/plugin/releases/tag/v2.0.0")).IsFalse();
         Assertions.AssertBool(Trust(target, own, "https://github.com/owner/plugin/tags")).IsFalse();
-        Assertions.AssertBool(Trust(target, own, null)).IsFalse();
+        // dropping update_url hands later updates to the built-in list's site for the slug, which may be another add-on
+        Assertions.AssertBool(Trust(target, own, null)).IsTrue();
+        // checks fall back from the project's update site to update_url, so moving or dropping it needs trust there too
+        Assertions.AssertBool(Trust(target with { OverrideUrl = other }, own, other)).IsTrue();
+        Assertions.AssertBool(Trust(target with { OverrideUrl = other }, other, null)).IsTrue();
+        Assertions.AssertBool(Trust(target with { OverrideUrl = other }, own, "https://github.com/owner/plugin/tags")).IsFalse();
         // the project's update site is the project's choice, and the built-in list is the only site of a plugin without one
         Assertions.AssertBool(Trust(target with { OverrideUrl = other }, other, own)).IsFalse();
         Assertions.AssertBool(Trust(target with { UpdateUrl = null }, other, null)).IsFalse();

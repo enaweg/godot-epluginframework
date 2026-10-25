@@ -63,7 +63,7 @@ The update sites are saved in `res://addons/eplugin-update-sites.json`. Commit t
 }
 ```
 
-An update replaces the plugin's `plugin.cfg`, but not the project's update site, which stays in use. A new release that changes its own `update_url` is still shown for [review](#review-before-installation), but does not need to be trusted, because checks keep using the project's site. The plugin details in the manager show the project's update site and the `update_url` it replaces.
+An update replaces the plugin's `plugin.cfg`, but not the project's update site, which stays in use. A new release that changes its own `update_url` to another repository, or removes it, has to be trusted in the [review](#review-before-installation) all the same: checks fall back to the `update_url` (or, without one, to the [built-in update site](#built-in-update-sites)) whenever the project's site does not work. The plugin details in the manager show the project's update site and the `update_url` it replaces.
 
 ## Built-in update sites
 
@@ -116,7 +116,7 @@ Versions are listed from GitHub, GitLab or Forgejo releases (up to 100) or seman
 
 ### Review before installation
 
-**Update** first downloads and validates every package of the batch. Addon files are only changed afterwards. When a package has a warning, comes from or moves its update source to another repository, or was refused, the **Review updates** dialog opens before anything is installed. It lists only those packages, not the whole batch: each with its version change, update site, release link and findings, and a check box that decides whether it is installed. Updates with warnings are checked, so you only uncheck the ones to leave out. An update that moves to another repository, or comes from one because the plugin's own update site did not work and the [built-in list](#built-in-update-sites) named another, is unchecked: check it (**Trust and install**) only if you trust the new source, because later updates are downloaded from there. Another repository on the same host (another GitHub owner, for example) counts; the same repository named by a release page, a tag page or a git URL does not. A refused package cannot be checked; the dialog says why. The other updates of the batch have nothing to review and are installed together with the checked ones. **Cancel update** installs nothing. The same dialog reviews a version chosen in the **Version** selector.
+**Update** first downloads and validates every package of the batch. Addon files are only changed afterwards. When a package has a warning, comes from or moves its update source to another repository, or was refused, the **Review updates** dialog opens before anything is installed. It lists only those packages, not the whole batch: each with its version change, update site, release link and findings, and a check box that decides whether it is installed. Updates with warnings are checked, so you only uncheck the ones to leave out. An update that moves to another repository or removes its `update_url`, or comes from another repository because the plugin's own update site did not work and the [built-in list](#built-in-update-sites) named another, is unchecked: check it (**Trust and install**) only if you trust the new source, because later updates are downloaded from there. Another repository on the same host (another GitHub owner, for example) counts; the same repository named by a release page, a tag page or a git URL does not. A refused package cannot be checked; the dialog says why. The other updates of the batch have nothing to review and are installed together with the checked ones. **Cancel update** installs nothing. The same dialog reviews a version chosen in the **Version** selector.
 
 ![Review updates dialog listing a major version update, checked, and an update that moves to another repository, unchecked, with the warning and the new update source of the selected one](images/update-review.png)
 
@@ -125,7 +125,7 @@ Versions are listed from GitHub, GitLab or Forgejo releases (up to 100) or seman
 | Package version differs from the announced version | The `version` in the package's `plugin.cfg` is not the version of the release or tag that offered it. |
 | Release announced as newer, but not inside | The release or tag offers a newer version, but its `plugin.cfg` still names the installed version (or an older one, except for ePlugin Framework), usually because its author forgot to raise it. Confirming installs it anyway: the files are replaced and the installed version stays what `plugin.cfg` says. That release is not offered again afterwards. |
 | Plugin name changed | The package's `plugin.cfg` has a different `name`. |
-| Update source changed | The package's `plugin.cfg` has a different `update_url`, or none. Another repository has to be trusted in the review. |
+| Update source changed | The package's `plugin.cfg` has a different `update_url`, or none. Another repository, or none, has to be trusted in the review, also when the project sets an update site: checks fall back to the `update_url` when that site fails, and without one to the built-in list, which matches by folder name only. |
 | Update from another repository | The update was found at an update site of another repository than the plugin's `update_url`, through the built-in list. It has to be trusted in the review. |
 | Plugin entry-point language changed | The `script` changed language, for example from `.gd` to `.cs`. |
 | Major version change | The major version differs, so project code that uses the plugin may need changes. |
@@ -145,7 +145,7 @@ Some of these can only be found once the package is downloaded, for example a re
 Shown without stopping: an optional recipe of another plugin that no longer matches the new version (it stays installed until that plugin is toggled), and the last working version recorded in `addons/eplugin-state.json` when it differs from the installed one.
 
 > [!NOTE]
-> An update replaces the whole addon folder, `plugin.cfg` included. If you added `update_url` to a third-party plugin yourself, its next release usually does not contain it: the review reports **Update source changed: removed**, and after installing, the plugin has no `update_url` until you add it again. Set a [project update site](#project-update-sites) for plugins whose releases do not declare an `update_url`; it stays in use across updates.
+> An update replaces the whole addon folder, `plugin.cfg` included. If you added `update_url` to a third-party plugin yourself, its next release usually does not contain it: the review reports **Update source changed: removed** and leaves the update unchecked until you trust it, and after installing, the plugin has no `update_url` until you add it again. Set a [project update site](#project-update-sites) for plugins whose releases do not declare an `update_url`; it stays in use across updates.
 
 ## Builds, restart, and recovery
 
