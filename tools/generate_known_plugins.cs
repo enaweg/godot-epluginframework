@@ -13,7 +13,7 @@
 // 4. the plugin folder in its repository at its latest release or version tag, read with git (git 2.25 or newer on PATH).
 // An add-on whose release ZIPs the updater refuses is left out, and so is one installed from its source archive (no ZIP
 // fits the slug, or several do and none is accepted) when the archive's files at that tag are refused, as a repository
-// with several plugin.cfg folders that are not inside each other.
+// with several plugins of which none is named like the slug.
 // A plugin folder holds a plugin.cfg; without any, the folder of a GDExtension add-on (its .gdextension below addons/)
 // counts, which the updater installs without plugin.cfg. An add-on found by GitLab's or Codeberg's search is only listed
 // when its slug is named like its repository, since a search also finds games that hold other add-ons. Add-ons whose name
@@ -321,23 +321,10 @@ async Task<Package> ReadZip(ReleaseAsset asset, string? slug, CancellationToken 
             paths = archive.Entries.Select(e => e.FullName.Replace('\\', '/')).Where(p => !p.EndsWith('/')).ToArray();
         }
         catch (InvalidDataException) { return new(asset.Name, null, [], "is not a readable ZIP", true); }
-        var folders = paths.Where(p => p == "plugin.cfg" || p.EndsWith("/plugin.cfg", StringComparison.Ordinal))
-            .Select(p => p[..^"plugin.cfg".Length]).ToArray();
-        if (folders.Length == 0)
-        {
-            var extensions = ExtensionFolders(paths);
-            // The updater looks for the folder named like the slug; without one known, the ZIP's only add-on folder names it.
-            var named = slug is null ? extensions : extensions.Where(f => Name(f) == slug).ToArray();
-            if (named.Length == 0) return new(asset.Name, null, paths, "has no plugin.cfg and no GDExtension folder" + (slug is null ? "" : $" named {slug}") + "; the updater refuses it", true);
-            var shallowest = named.Where(f => Depth(f) == named.Min(Depth)).ToArray();
-            if (shallowest.Length > 1) return new(asset.Name, null, paths, "holds several GDExtensions (" + string.Join(", ", shallowest) + "); the updater refuses it", true);
-            return Accepted(shallowest[0]);
-        }
-        var depth = folders.Min(Depth);
-        var roots = folders.Where(f => Depth(f) == depth).ToArray();
-        if (roots.Length > 1 || folders.Any(f => !f.StartsWith(roots[0], StringComparison.Ordinal)))
-            return new(asset.Name, null, paths, "holds several plugins (" + string.Join(", ", folders) + "); the updater refuses it", true);
-        return Accepted(roots[0]);
+        // A plugin root named otherwise is taken as well: the slug is only a hint here, and the one the root names is
+        // chosen again (and refused then if need be) when it differs.
+        var (root, refusal) = PackageRoot(paths, slug);
+        return root is not null ? Accepted(root) : new(asset.Name, null, paths, refusal + "; the updater refuses it", true);
 
         // The validator's R27 refuses a package made for Godot 3 too.
         Package Accepted(string root) => Godot3Evidence(file, root) is { } godot3
@@ -394,37 +381,61 @@ async Task<Choice> ChooseZip(Addon addon, string? slug, CancellationToken ct)
     return new(first, archive || releases.Length == 0);
 }
 
-// Why the updater refuses the source archive of the add-on's tag when installing it as the slug, or null: its files, in
-// the archive's wrapper folder, are read like SafeZipExtractor.PackageRoot and Extract do.
-static string? ArchiveRefusal(string[] files, string slug)
+// The folder of the package the updater installs as the slug, read like SafeZipExtractor.PackageRoot: the plugin root
+// (the folder of the shallowest plugin.cfg, with the others below it) when it is named like the slug or at most one folder
+// deep, else the shallowest folder named like the slug that holds a plugin.cfg, else the shallowest one holding a
+// .gdextension (outside hidden folders). Without a slug, the plugin root or the package's only GDExtension add-on folder.
+// Refusal says why the updater refuses the package; with it, Root is a plugin root named otherwise, or null.
+static (string? Root, string? Refusal) PackageRoot(string[] paths, string? slug)
 {
-    var paths = files.Select(f => "wrapper/" + f).ToArray();
-    var folders = paths.Where(p => p.EndsWith("/plugin.cfg", StringComparison.Ordinal)).Select(p => p[..^"plugin.cfg".Length]).ToArray();
+    var folders = paths.Where(p => p == "plugin.cfg" || p.EndsWith("/plugin.cfg", StringComparison.Ordinal))
+        .Select(p => p[..^"plugin.cfg".Length]).ToArray();
     string? plugin = null;
+    string? ambiguous = null;
     if (folders.Length > 0)
     {
         var roots = folders.Where(f => Depth(f) == folders.Min(Depth)).ToArray();
-        if (roots.Length > 1) return "has several plugin roots (" + string.Join(", ", roots.Select(Unwrapped)) + ")";
-        if (folders.FirstOrDefault(f => !f.StartsWith(roots[0], StringComparison.Ordinal)) is { } outside)
-            return $"has {Unwrapped(outside)}plugin.cfg outside the plugin root {Unwrapped(roots[0])}";
-        plugin = roots[0];
+        if (roots.Length > 1 || folders.Any(f => !f.StartsWith(roots[0], StringComparison.Ordinal)))
+            ambiguous = "holds several plugins (" + string.Join(", ", folders) + ")";
+        else plugin = roots[0];
     }
-    var root = plugin;
-    if (plugin is null || Name(plugin) != slug && Depth(plugin) > 1)
+    if (plugin is not null && (slug is null || Name(plugin) == slug || Depth(plugin) <= 1)) return (plugin, null);
+    if (slug is null)
     {
-        // A GDExtension add-on's folder named like the slug, which wins over a plugin root named otherwise.
-        var extensions = paths.Where(p => p.EndsWith(".gdextension", StringComparison.OrdinalIgnoreCase) && !p.Split('/').Any(part => part.StartsWith('.')))
-            .SelectMany(p => p.Split('/')[..^1].Select((_, i) => string.Join('/', p.Split('/')[..(i + 1)]) + "/"))
-            .Where(f => Name(f) == slug).Distinct(StringComparer.Ordinal).ToArray();
-        var shallowest = extensions.Where(f => Depth(f) == extensions.Min(Depth)).ToArray();
-        if (shallowest.Length > 1 && plugin is null) return "holds several GDExtensions named " + slug;
-        if (shallowest.Length == 1) root = shallowest[0];
-        else if (plugin is null) return "has no plugin.cfg and no GDExtension folder named " + slug;
+        if (ambiguous is not null) return (null, ambiguous);
+        var extensions = Shallowest(ExtensionFolders(paths));
+        return extensions.Length switch
+        {
+            0 => (null, "has no plugin.cfg and no GDExtension folder"),
+            1 => (extensions[0], null),
+            _ => (null, "holds several GDExtensions (" + string.Join(", ", extensions) + ")"),
+        };
     }
-    return Name(root!) != slug && Depth(root!) > 1 ? $"has its plugin in {Unwrapped(root!)}, a folder not named {slug}" : null;
+    var named = Shallowest(folders.Where(f => Name(f) == slug));
+    if (named.Length > 1) return (null, $"holds several plugin folders named {slug} (" + string.Join(", ", named) + ")");
+    if (named.Length == 1) return (named[0], null);
+    // Every folder holding a .gdextension named like the slug, as "x/slug/bin/a.gdextension" has x/slug/.
+    var namedExtensions = Shallowest(paths
+        .Where(p => p.EndsWith(".gdextension", StringComparison.OrdinalIgnoreCase) && !p.Split('/').Any(part => part.StartsWith('.')))
+        .SelectMany(p => p.Split('/')[..^1].Select((_, i) => string.Join('/', p.Split('/')[..(i + 1)]) + "/"))
+        .Where(f => Name(f) == slug).Distinct(StringComparer.Ordinal));
+    if (namedExtensions.Length == 1) return (namedExtensions[0], null);
+    if (folders.Length == 0)
+        return (null, namedExtensions.Length > 1 ? $"holds several GDExtensions named {slug} (" + string.Join(", ", namedExtensions) + ")"
+            : $"has no plugin.cfg and no GDExtension folder named {slug}");
+    return plugin is null ? (null, $"{ambiguous}, none of them named {slug}") : (plugin, $"has its plugin in {plugin}, a folder not named {slug}");
 
-    static string Unwrapped(string folder) => folder["wrapper/".Length..] is { Length: > 0 } inner ? inner : "/";
+    static string[] Shallowest(IEnumerable<string> folders)
+    {
+        var all = folders.ToArray();
+        return all.Where(f => Depth(f) == all.Min(Depth)).ToArray();
+    }
 }
+
+// Why the updater refuses the source archive of the add-on's tag when installing it as the slug, or null: its files, in
+// the archive's wrapper folder, are read like SafeZipExtractor.PackageRoot does.
+static string? ArchiveRefusal(string[] files, string slug) =>
+    PackageRoot(files.Select(f => "wrapper/" + f).ToArray(), slug).Refusal?.Replace("wrapper/", "", StringComparison.Ordinal);
 
 // The slug a ZIP's plugin root names: its folder, unless the plugin is at the ZIP's root or in a source archive's
 // wrapper folder ("repo-1.2.3/"), which the updater also installs but whose name is not the slug.
