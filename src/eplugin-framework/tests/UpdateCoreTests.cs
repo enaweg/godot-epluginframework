@@ -62,7 +62,7 @@ public class UpdateCoreTests
         Assertions.AssertBool(SemVer.Same("1.4.0-stable", "1.4.0")).IsTrue();
         Assertions.AssertBool(SemVer.TryParse("1.4.0-stable.1", out var other) && other.Prerelease == "stable.1").IsTrue();
         // which suffixes name a prerelease stage, and the version a host's stable release has
-        foreach (var stage in new[] { "1.0.0-beta", "1.0.0-beta1", "4.6.0-dev2", "1.1.0-rc.1", "5.2.0-nightly.4dc91441", "1.3.2-develop.0", "1.3.0-Alpha1" })
+        foreach (var stage in new[] { "1.0.0-beta", "1.0.0-beta1", "4.6.0-dev2", "1.1.0-rc.1", "5.2.0-nightly.4dc91441", "1.3.2-develop.0", "1.3.0-Alpha1", "0.12.0-pr.155" })
             Assertions.AssertBool(SemVer.TryParse(stage, out var v) && v.NamesStage && ReleaseAssets.Stable(v).Prerelease is not null).IsTrue();
         foreach (var (text, stable) in new[] { ("v9.8.0-4", "v9.8.0"), ("v1.2.0-assetlib", "v1.2.0"), ("1.1.0-S+build.1", "1.1.0+build.1"), ("v1.5.0-ParentFollow", "v1.5.0") })
         {
@@ -276,6 +276,10 @@ public class UpdateCoreTests
         Assertions.AssertBool(IsUpdate("9.8.0-4", "9.8.0")).IsFalse();
         Assertions.AssertBool(IsUpdate("9.8.0-4", "9.9.0")).IsTrue();
         Assertions.AssertBool(IsUpdate("9.8.0-beta", "9.8.0")).IsTrue();
+        // a pull request build (CI-PR-Build) to the release of its numbers, never a release to one
+        Assertions.AssertBool(IsUpdate("0.12.0-pr.155", "0.12.0")).IsTrue();
+        Assertions.AssertBool(IsUpdate("0.12.0-pr.155", "0.12.0-pr.156")).IsTrue();
+        Assertions.AssertBool(IsUpdate("0.12.0", "0.13.0-pr.157")).IsFalse();
     }
 
     private static PluginUpdateTarget Target(string slug, string installed = "1.0.0") => new(slug, slug, installed, "https://example.org/releases", "/unused");
