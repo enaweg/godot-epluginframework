@@ -1,8 +1,8 @@
 {
- "commit": "391098c5badca5f2ce7155f5332658f7fd268380",
- "date": "2026-10-26T09:26:02Z",
- "covered": 11006,
- "coverable": 12081,
+ "commit": "15bd724bedf34f9f33929ba566dc188b53f4e2c5",
+ "date": "2026-10-26T11:25:57Z",
+ "covered": 11030,
+ "coverable": 12108,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -112,6 +112,10 @@
    46,
    58
   ],
+  "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.MissingPlugins.cs": [
+   29,
+   32
+  ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.OptionalDependencies.cs": [
    108,
    112
@@ -161,8 +165,8 @@
    74
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.cs": [
-   261,
-   302
+   264,
+   305
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EPluginProgress.cs": [
    1,
@@ -337,16 +341,16 @@
    45
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PlainPluginObserver.cs": [
-   67,
-   69
+   69,
+   71
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PluginContext.cs": [
    14,
    14
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PluginStateStore.cs": [
-   466,
-   478
+   456,
+   468
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PluginToggles.cs": [
    13,
