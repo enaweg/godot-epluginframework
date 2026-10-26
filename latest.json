@@ -1,8 +1,8 @@
 {
- "commit": "a44cb963be80bead366f40c51dec50fc41c9e911",
- "date": "2026-10-26T12:13:40Z",
- "covered": 11060,
- "coverable": 12139,
+ "commit": "5055ec0f97aa79d17390a792f963b84ae4c7f299",
+ "date": "2026-10-26T13:35:31Z",
+ "covered": 11438,
+ "coverable": 12550,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -13,8 +13,8 @@
    12
   ],
   "src/eplugin-framework/addons/ePlugin/EPluginPlugin.cs": [
-   175,
-   274
+   180,
+   297
   ],
   "src/eplugin-framework/addons/ePlugin/EditorPluginExtensions.cs": [
    62,
@@ -108,6 +108,10 @@
    243,
    252
   ],
+  "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.LocalCleanup.cs": [
+   20,
+   20
+  ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.LocalSources.cs": [
    46,
    58
@@ -157,8 +161,8 @@
    9
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Updates.cs": [
-   132,
-   158
+   134,
+   160
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Welcomes.cs": [
    69,
@@ -244,6 +248,10 @@
    99,
    117
   ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Manager/CleanupSuggestionDialog.cs": [
+   25,
+   34
+  ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.Operations.cs": [
    100,
    132
@@ -262,7 +270,7 @@
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.cs": [
    329,
-   369
+   372
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EditorIcons.cs": [
    55,
@@ -305,12 +313,16 @@
    281
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/SettingsDialog.cs": [
-   44,
-   50
+   46,
+   52
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/TextColors.cs": [
    11,
    11
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Manager/ToolsTab.cs": [
+   200,
+   219
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateFailureDialog.cs": [
    53,
@@ -329,8 +341,8 @@
    95
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateSourcesTab.cs": [
-   272,
-   310
+   285,
+   306
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/WelcomeDialog.cs": [
    54,
@@ -412,17 +424,21 @@
    6,
    6
   ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/LocalCleanup.cs": [
+   96,
+   97
+  ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/LocalIndexCache.cs": [
    24,
    25
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/LocalPackageIndex.cs": [
-   74,
-   76
+   79,
+   81
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/LocalSourceSettings.cs": [
-   46,
-   46
+   56,
+   56
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/PackageFetcher.cs": [
    96,
