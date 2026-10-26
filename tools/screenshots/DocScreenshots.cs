@@ -49,6 +49,7 @@ public partial class DocScreenshots : Node
             await Manager();
             await Licenses();
             await Welcome();
+            await CleanupSuggestion();
             await UpdateFailure();
             await UpdateReview();
             await Attention();
@@ -117,7 +118,15 @@ public partial class DocScreenshots : Node
             await Shot("eplugin-update-site-editor", editor);
             editor.Hide();
 
-            tabs.CurrentTab = 2;
+            // The local directory with the example releases, cleaned up by keeping only the latest version.
+            settings.Hide();
+            manager.OpenSettings(_releases);
+            var rule = settings.GetNode<OptionButton>("%CleanupVersionRule");
+            rule.Select(rule.GetItemIndex((int)CleanupRule.LatestVersion));
+            rule.EmitSignal(OptionButton.SignalName.ItemSelected, rule.Selected);
+            await Shot("eplugin-tools", settings);
+
+            tabs.CurrentTab = 3;
             await Shot("eplugin-about", settings);
             settings.Hide();
         }
@@ -156,6 +165,15 @@ public partial class DocScreenshots : Node
         var dialog = WelcomeDialog.Create([Read("sample_dependant_plugin", "Sample Dependant Plugin"), Read("sample_plugin", "SamplePlugin")]);
         dialog.Open();
         await Shot("plugin-welcome", dialog);
+        EditorWindows.Release(dialog);
+        await Seconds(0.5);
+    }
+
+    private async Task CleanupSuggestion()
+    {
+        var dialog = CleanupSuggestionDialog.Create(new(_releases, 6L * LocalCleanup.Gigabyte + (300L << 20), 5 * LocalCleanup.Gigabyte), _ => { });
+        dialog.Open();
+        await Shot("local-cleanup-suggestion", dialog);
         EditorWindows.Release(dialog);
         await Seconds(0.5);
     }

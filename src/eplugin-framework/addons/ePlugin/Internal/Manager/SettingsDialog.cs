@@ -5,7 +5,8 @@ using Godot;
 namespace Enaweg.Plugin.Internal.Manager;
 
 /// <summary>
-/// ePlugin's settings in tabs: the project settings, the update sources (update sites and local directories) and About.
+/// ePlugin's settings in tabs: the project settings, the update sources (update sites and local directories), Tools
+/// (cleaning up a local directory) and About.
 /// The layout lives in SettingsDialog.tscn; each tab has its own script, this one owns the window and the windows the
 /// tabs open.
 /// </summary>
@@ -16,6 +17,7 @@ internal sealed partial class SettingsDialog : AcceptDialog, ISerializationListe
     private TabContainer _tabs = null!;
     private GeneralSettingsTab _general = null!;
     private UpdateSourcesTab _updateSources = null!;
+    private ToolsTab _tools = null!;
     private AboutTab _about = null!;
     private Window[] _windows = [];
 
@@ -31,19 +33,21 @@ internal sealed partial class SettingsDialog : AcceptDialog, ISerializationListe
         // The tab titles are the names of these nodes: TabContainer reads no other title from a scene in Godot 4.4.
         _general = GetNode<GeneralSettingsTab>("%SettingsTabs/General"); _general.Initialize();
         _updateSources = GetNode<UpdateSourcesTab>("%SettingsTabs/Update sources"); _updateSources.Initialize(global);
+        _tools = GetNode<ToolsTab>("%SettingsTabs/Tools"); _tools.Initialize(global);
         _about = GetNode<AboutTab>("%SettingsTabs/About"); _about.Initialize();
-        _windows = [this, GetNode<Window>("%AutoAcceptConfirm"), GetNode<Window>("%SiteEditor"), GetNode<Window>("%LocalSourceFolderDialog")];
+        _windows = [this, GetNode<Window>("%AutoAcceptConfirm"), GetNode<Window>("%CleanupConfirm"), GetNode<Window>("%SiteEditor"), GetNode<Window>("%LocalSourceFolderDialog")];
         foreach (var window in _windows) EditorWindows.Prepare(window, _signals, this, nameof(QueueWindowIcons));
     }
 
     /// <summary>
     /// Opens on the General tab with every tab read again; <paramref name="framework"/> is the manager's entry for the
-    /// framework, which About shows.
+    /// framework, which About shows. With <paramref name="cleanupDirectory"/>, opens on Tools with that local directory.
     /// </summary>
-    public void Open(PluginInfo? framework)
+    public void Open(PluginInfo? framework, string? cleanupDirectory = null)
     {
-        _general.Open(); _updateSources.Open(); _about.Open(framework);
-        _tabs.CurrentTab = 0;
+        // Update sources reads the local directories again, which Tools then shows.
+        _general.Open(); _updateSources.Open(); _tools.Open(cleanupDirectory); _about.Open(framework);
+        _tabs.CurrentTab = cleanupDirectory is null ? 0 : _tools.GetIndex();
         PopupCentered();
     }
 

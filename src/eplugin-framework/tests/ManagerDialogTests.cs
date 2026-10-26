@@ -168,6 +168,24 @@ public class ManagerDialogTests
     }
 
     [TestCase]
+    public static void TheCleanupSuggestionNamesTheDirectoryAndDecidesOnce()
+    {
+        var decisions = new List<bool>();
+        var suggestion = new CleanupSuggestion("/home/user/plugins", 6 * LocalCleanup.Gigabyte + 300L * 1024 * 1024, 5 * LocalCleanup.Gigabyte);
+        var dialog = CleanupSuggestionDialog.Create(suggestion, decisions.Add);
+        try
+        {
+            Assertions.AssertString(dialog.GetNode<Label>("%CleanupMessage").Text).IsEqual(
+                "The plugin packages in your local directory /home/user/plugins take 6.3 GB, more than the 5 GB above which you want to clean it up. Clean it up now?");
+            Assertions.AssertString(dialog.OkButtonText).IsEqual("Clean up...");
+            dialog.EmitSignal(AcceptDialog.SignalName.Canceled);
+            dialog.EmitSignal(AcceptDialog.SignalName.Confirmed);
+            Assertions.AssertThat(decisions.ToArray()).ContainsExactly(false);
+        }
+        finally { Free(dialog); }
+    }
+
+    [TestCase]
     public static void TheLicenseDialogAsksForEachLicenseInTurn()
     {
         var review = new LicenseReview([License("dep"), License("main")],

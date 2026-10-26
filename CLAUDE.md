@@ -345,10 +345,13 @@ when pending updates, failed attempts, enabled plugins, their states or unloaded
 expires after an hour); the start that requests no further restart wraps `Initialize` in one `ActivationProgress` scope,
 reopens the manager and closes that progress window a few frames later. Every dialog is its own scene (`EPluginManagerDialog.tscn`,
 `SettingsDialog.tscn`, `AttentionDialog.tscn`, `UpdateReviewDialog.tscn`, `UpdateFailureDialog.tscn`, `LicenseDialog.tscn`,
-`WelcomeDialog.tscn`); scripts only bind
+`WelcomeDialog.tscn`, `CleanupSuggestionDialog.tscn`); scripts only bind
 `%`-unique nodes and set what a scene cannot store (e.g. Tree column titles/widths). Keep layout changes in the scenes.
-The manager's Settings button opens `SettingsDialog`, a `TabContainer` whose tabs (General, Update sources, About) each
-have their own script (`GeneralSettingsTab`, `UpdateSourcesTab`, `AboutTab`); the dialog owns the windows the tabs open.
+The manager's Settings button opens `SettingsDialog`, a `TabContainer` whose tabs (General, Update sources, Tools, About)
+each have their own script (`GeneralSettingsTab`, `UpdateSourcesTab`, `ToolsTab`, `AboutTab`); the dialog owns the windows
+the tabs open. Tools cleans up a local directory (pure `LocalCleanup`, see the update system internals); when the
+scheduled check runs, `EPluginPlugin` suggests it with `CleanupSuggestionDialog` for a directory above the user's size,
+which opens the tab through `EPluginManagerDialog.OpenSettings`.
 Update sources lists the project's update sites, the user's local directories (each with the packages the index found in
 it; a local directory is one update source for any number of plugins) and the built-in list in one tree. Tab titles are the tab nodes' names, because Godot 4.4 ignores
 `metadata/_tab_name`. The General tab shows every `eplugin/*` project setting: a control names its setting in its

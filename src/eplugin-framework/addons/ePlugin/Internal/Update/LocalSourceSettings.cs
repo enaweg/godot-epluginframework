@@ -12,6 +12,11 @@ internal sealed class LocalSourceConfig
     public const int CurrentSchema = 1;
     public int Schema { get; set; } = CurrentSchema;
     public List<string> Directories { get; set; } = [];
+    /// <summary>
+    /// The size of a directory's plugin packages above which a cleanup is suggested, in gigabytes (2^30 bytes); 0 never
+    /// suggests one. Files written before it existed read as the default.
+    /// </summary>
+    public double CleanupWarningGigabytes { get; set; } = LocalSourceSettings.DefaultCleanupWarningGigabytes;
 }
 
 /// <summary>
@@ -26,9 +31,12 @@ internal sealed class LocalSourceConfig
 /// </remarks>
 internal sealed class LocalSourceSettings(string path)
 {
+    public const double DefaultCleanupWarningGigabytes = 5, MaximumCleanupWarningGigabytes = 100_000;
     private LocalSourceConfig _config = new();
     public string FilePath { get; } = path;
     public IReadOnlyList<string> Directories => _config.Directories;
+    /// <inheritdoc cref="LocalSourceConfig.CleanupWarningGigabytes"/>
+    public double CleanupWarningGigabytes => _config.CleanupWarningGigabytes;
     /// <summary>Why the list cannot be changed right now; null when it can.</summary>
     public string? Problem { get; private set; }
 
@@ -41,6 +49,8 @@ internal sealed class LocalSourceSettings(string path)
             var config = JsonSerializer.Deserialize<LocalSourceConfig>(File.ReadAllText(FilePath), UpdateStateStore.JsonOptions);
             if (config?.Directories is null) throw new JsonException("The file has no directory list.");
             config.Directories = config.Directories.Where(d => !string.IsNullOrWhiteSpace(d)).Distinct(PackageFiles.PathComparer).ToList();
+            if (!double.IsFinite(config.CleanupWarningGigabytes) || config.CleanupWarningGigabytes < 0)
+                config.CleanupWarningGigabytes = DefaultCleanupWarningGigabytes;
             _config = config;
             if (config.Schema > LocalSourceConfig.CurrentSchema)
                 Problem = $"{FilePath} was written by a newer ePlugin version (schema {config.Schema}); update ePlugin to change the list.";
@@ -57,22 +67,34 @@ internal sealed class LocalSourceSettings(string path)
     public bool Add(string directory)
     {
         var normalized = Normalize(directory);
-        return Change(directories => directories.Contains(normalized, PackageFiles.PathComparer) ? null : [.. directories, normalized]);
+        return Change(config => config.Directories.Contains(normalized, PackageFiles.PathComparer) ? null
+            : With(config, [.. config.Directories, normalized], config.CleanupWarningGigabytes));
     }
 
     /// <inheritdoc cref="Add"/>
     public bool Remove(string directory) =>
-        Change(directories => directories.Any(d => PackageFiles.PathComparer.Equals(d, directory))
-            ? directories.Where(d => !PackageFiles.PathComparer.Equals(d, directory)).ToList()
+        Change(config => config.Directories.Any(d => PackageFiles.PathComparer.Equals(d, directory))
+            ? With(config, config.Directories.Where(d => !PackageFiles.PathComparer.Equals(d, directory)).ToList(), config.CleanupWarningGigabytes)
             : null);
 
+    /// <summary>Sets <see cref="CleanupWarningGigabytes"/>; false when it has that value already.</summary>
+    /// <inheritdoc cref="Add"/>
+    public bool SetCleanupWarning(double gigabytes)
+    {
+        if (!double.IsFinite(gigabytes) || gigabytes < 0 || gigabytes > MaximumCleanupWarningGigabytes)
+            throw new ArgumentOutOfRangeException(nameof(gigabytes), gigabytes, $"Choose a size from 0 to {MaximumCleanupWarningGigabytes} GB.");
+        return Change(config => config.CleanupWarningGigabytes == gigabytes ? null : With(config, config.Directories, gigabytes));
+    }
+
+    private static LocalSourceConfig With(LocalSourceConfig config, List<string> directories, double cleanupWarning) =>
+        new() { Schema = LocalSourceConfig.CurrentSchema, Directories = directories, CleanupWarningGigabytes = cleanupWarning };
+
     /// <summary>Reads the file again, applies the change and saves; the list in memory changes only once saving worked.</summary>
-    private bool Change(Func<List<string>, List<string>?> change)
+    private bool Change(Func<LocalSourceConfig, LocalSourceConfig?> change)
     {
         Load();
         if (Problem is not null) throw new InvalidOperationException(Problem);
-        if (change(_config.Directories) is not { } directories) return false;
-        var next = new LocalSourceConfig { Directories = directories };
+        if (change(_config) is not { } next) return false;
         AtomicJson.Write(FilePath, next);
         _config = next;
         return true;

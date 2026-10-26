@@ -12,7 +12,8 @@ namespace Enaweg.Plugin.Internal.Update;
 /// <summary>The plugin inside a ZIP file of a local directory, read from its root plugin.cfg.</summary>
 /// <param name="Root">The plugin root inside the archive, e.g. <c>addons/my_plugin/</c>, see <see cref="SafeZipExtractor.PluginRoot"/>.</param>
 /// <param name="Slug">The name of the root folder, which is the slug of the plugin the package belongs to.</param>
-internal sealed record LocalPackage(string ZipPath, string Root, string Slug, string Version, DateTime ModifiedUtc);
+/// <param name="Length">The size of the ZIP file in bytes, taken from the file when it is indexed rather than from the archive.</param>
+internal sealed record LocalPackage(string ZipPath, string Root, string Slug, string Version, DateTime ModifiedUtc, long Length = 0);
 /// <param name="Packages">The plugin packages below the directory, also those another listed directory contains too.</param>
 internal sealed record LocalDirectoryState(string Path, bool Exists, int Packages);
 /// <param name="Cached">Known from an earlier indexing, as the archive did not change since.</param>
@@ -26,6 +27,14 @@ internal sealed record LocalPackageIndex(IReadOnlyList<LocalPackage> Packages, I
     public IEnumerable<LocalPackage> Matching(string slug) => Packages.Where(p => p.Slug == slug);
     /// <summary>What the last indexing found for a listed directory; null when it was added since.</summary>
     public LocalDirectoryState? StateOf(string directory) => Directories.FirstOrDefault(d => PackageFiles.PathComparer.Equals(d.Path, directory));
+    /// <summary>The packages below a directory, also those another listed directory contains too.</summary>
+    public IEnumerable<LocalPackage> In(string directory) => Packages.Where(p => IsInside(directory, p.ZipPath));
+
+    internal static bool IsInside(string directory, string path)
+    {
+        var relative = Path.GetRelativePath(directory, path);
+        return relative != path && !relative.StartsWith("..", StringComparison.Ordinal) && !Path.IsPathRooted(relative);
+    }
 }
 
 internal static class LocalPackageIndexer
@@ -67,7 +76,8 @@ internal static class LocalPackageIndexer
                     if (!read.TryGetValue(path, out var entry))
                     {
                         read[path] = entry = Inspect(path, cached, out var known);
-                        if (entry.Package is not null) packages.Add(entry.Package);
+                        // The size Inspect read to validate the cache; older caches, which never stored it in the package, still have it.
+                        if (entry.Package is not null) packages.Add(entry.Package with { Length = entry.Length });
                         if (entry.Failure is not null) failures.Add(new(path, entry.Failure, known));
                     }
                     if (entry.Package is not null) count++;

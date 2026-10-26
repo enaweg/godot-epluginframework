@@ -138,8 +138,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _detailsText.AddThemeConstantOverride("line_separation", (int)(_detailsText.GetThemeConstant("line_separation") * scale));
 
         _signals.Connect(_check, BaseButton.SignalName.Pressed, Callable.From(CheckNow));
-        _signals.Connect(GetNode<Button>("%SettingsButton"), BaseButton.SignalName.Pressed,
-            Callable.From(() => _settings.Open(_model.Plugins.FirstOrDefault(r => r.Plugin.Kind == PluginKind.Framework)?.Plugin)));
+        _signals.Connect(GetNode<Button>("%SettingsButton"), BaseButton.SignalName.Pressed, Callable.From(() => OpenSettings(null)));
         _signals.Connect(_attentionButton, BaseButton.SignalName.Pressed, Callable.From(() => OpenAttention(null)));
         _signals.Connect(_release, BaseButton.SignalName.Pressed, Callable.From(OpenRelease));
         _signals.Connect(_locationLink, BaseButton.SignalName.Pressed, Callable.From(() => { if (_selectedSlug is not null) EditorWindows.SelectFile(PluginDirectory(_selectedSlug)); }));
@@ -203,6 +202,16 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _tree.GrabFocus();
         // Problems shown already in this editor session wait for the button; new ones open the list on top.
         if (_attentionItems.Any(i => !_global.ShownAttention.Contains(i.Key))) CallDeferred(MethodName.OpenAttention, "");
+    }
+
+    /// <summary>
+    /// Opens the settings; with <paramref name="cleanupDirectory"/>, on the Tools tab cleaning up that local directory.
+    /// Nothing opens while the manager is busy, as its Settings button is disabled then.
+    /// </summary>
+    public void OpenSettings(string? cleanupDirectory)
+    {
+        if (Busy) return;
+        _settings.Open(_model.Plugins.FirstOrDefault(r => r.Plugin.Kind == PluginKind.Framework)?.Plugin, cleanupDirectory);
     }
 
     /// <summary>Opens the Needs attention dialog at <paramref name="slug"/>, or at its first plugin when null or empty.</summary>

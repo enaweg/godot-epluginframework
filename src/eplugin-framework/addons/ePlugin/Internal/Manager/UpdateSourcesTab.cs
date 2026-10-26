@@ -157,7 +157,7 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
                 ? "This directory was not found when it was indexed. It stays in the list and is indexed again when it reappears."
                 : "Offers its packages as updates and versions of any plugin.");
             if (state is { Exists: false }) item.SetCustomColor(PluginColumn, EditorIcons.DisabledColor);
-            foreach (var package in index.Packages.Where(p => IsInside(directory, p.ZipPath)).OrderBy(p => p.Slug, StringComparer.OrdinalIgnoreCase))
+            foreach (var package in index.In(directory).OrderBy(p => p.Slug, StringComparer.OrdinalIgnoreCase))
             {
                 var child = _tree.CreateItem(item);
                 var plugin = plugins.GetValueOrDefault(package.Slug);
@@ -174,12 +174,6 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
             item.Collapsed = _collapsedDirectories.Contains(directory);
             if (PackageFiles.PathComparer.Equals(directory, selected)) item.Select(SourceColumn);
         }
-    }
-
-    private static bool IsInside(string directory, string path)
-    {
-        var relative = Path.GetRelativePath(directory, path);
-        return relative != path && !relative.StartsWith("..", StringComparison.Ordinal) && !Path.IsPathRooted(relative);
     }
 
     private void DirectoryCollapsed(TreeItem item)
