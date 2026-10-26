@@ -235,6 +235,21 @@ public class UpdateSiteTests
     }
 
     [TestCase]
+    public static void ASiteRepeatsTheBuiltInListOnlyWhenRemovingItChangesNoSiteThatIsTried()
+    {
+        Assertions.AssertBool(UpdateSiteSettings.RepeatsBuiltIn(Site, null, Site)).IsTrue();
+        Assertions.AssertBool(UpdateSiteSettings.RepeatsBuiltIn(Site, Site, Site)).IsTrue();
+        // it comes before another plugin.cfg update_url, which the built-in one comes after
+        Assertions.AssertBool(UpdateSiteSettings.RepeatsBuiltIn(Site, Config, Site)).IsFalse();
+        Assertions.AssertBool(UpdateSiteSettings.RepeatsBuiltIn(Site, null, Config)).IsFalse();
+        // the built-in list is turned off
+        Assertions.AssertBool(UpdateSiteSettings.RepeatsBuiltIn(Site, null, null)).IsFalse();
+        foreach (var site in new[] { Target(config: null), Target(config: Site) })
+            Assertions.AssertArray((site with { KnownUrl = Site }).UpdateUrls.ToArray())
+                .IsEqual((site with { KnownUrl = Site, OverrideUrl = null }).UpdateUrls.ToArray());
+    }
+
+    [TestCase]
     public static void BuiltInEntriesAreUniqueAndUsable()
     {
         Assertions.AssertInt(KnownPlugins.All.Count).IsGreater(0);

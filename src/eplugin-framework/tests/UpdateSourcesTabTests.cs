@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Enaweg.Plugin.Internal;
 using Enaweg.Plugin.Internal.Manager;
+using Enaweg.Plugin.Internal.Update;
 using GdUnit4;
 using Godot;
 
@@ -134,6 +135,32 @@ public class UpdateSourcesTabTests : IDisposable
         Assertions.AssertString(row.GetText(0)).IsEqual("gone");
         Assertions.AssertString(row.GetTooltipText(0)).IsEqual("gone is not in res://addons.");
     }
+
+    [TestCase]
+    public void ASiteThatRepeatsTheBuiltInListIsMarked()
+    {
+        var (known, configured) = (KnownPlugins.All[0], KnownPlugins.All[1]);
+        _fixture.AddPlainPlugin(known.Slug);
+        _fixture.AddPlainPlugin(configured.Slug, extraConfig: "update_url=\"https://github.com/owner/configured/releases\"");
+        Assertions.AssertBool(_fixture.Global.SetUpdateSite(known.Slug, known.UpdateUrl)).IsTrue();
+        Assertions.AssertBool(_fixture.Global.SetUpdateSite(configured.Slug, configured.UpdateUrl)).IsTrue();
+        // the built-in site of another plugin
+        Assertions.AssertBool(_fixture.Global.SetUpdateSite("tool", known.UpdateUrl)).IsTrue();
+
+        Tab.Open();
+
+        Assertions.AssertThat(_fixture.Global.UpdateSitesRepeatingBuiltIn().ToArray()).ContainsExactly(known.Slug);
+        Assertions.AssertString(Group(0).GetText(1)).IsEqual("1 site only repeats the built-in list");
+        var row = Row(known.Slug);
+        Assertions.AssertString(row.GetText(1)).IsEqual($"{known.UpdateUrl}  (also in the built-in list)");
+        Assertions.AssertString(row.GetTooltipText(1)).Contains("this one changes nothing and can be removed");
+        // it comes before the plugin.cfg update_url, which the built-in site comes after
+        Assertions.AssertString(Row(configured.Slug).GetText(1)).IsEqual($"{configured.UpdateUrl}  (also in the built-in list)");
+        Assertions.AssertString(Row(configured.Slug).GetTooltipText(1)).Contains("this one is still used");
+        Assertions.AssertString(Row("tool").GetText(1)).IsEqual(known.UpdateUrl);
+    }
+
+    private TreeItem Row(string slug) => Group(0).GetChildren().Single(r => r.GetMetadata(0).AsString() == slug);
 
     /// <summary>Opens the settings on the Update sources tab, which follows the local index only while it is shown.</summary>
     private void ShowTab()

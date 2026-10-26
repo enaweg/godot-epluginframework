@@ -41,6 +41,15 @@ internal sealed class UpdateSiteSettings(string path)
 
     public string? UrlOf(string slug) => _config.Sites.FirstOrDefault(s => s.Slug == slug)?.Url;
 
+    /// <summary>
+    /// Whether a project's update site only repeats the built-in list's site of its plugin (<paramref name="builtInUrl"/>,
+    /// null while the list is turned off), so removing it leaves the sites that are tried as they are: the plugin.cfg
+    /// update_url it would come before is none or the same site. Sites set before the built-in list named their plugin
+    /// are often like that.
+    /// </summary>
+    public static bool RepeatsBuiltIn(string site, string? updateUrl, string? builtInUrl) =>
+        builtInUrl is not null && site == builtInUrl && (string.IsNullOrWhiteSpace(updateUrl) || updateUrl == site);
+
     public void Load()
     {
         Problem = null;

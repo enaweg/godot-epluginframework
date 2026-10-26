@@ -96,7 +96,10 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
         var plugins = _global.CollectPlugins().ToDictionary(p => p.Slug, StringComparer.Ordinal);
         _tree.Clear();
         var root = _tree.CreateItem();
-        var project = Group(root, "Set by this project", _global.UpdateSites.Count == 0 ? "No update sites set yet. Use Add site... to set one." : null);
+        var repeating = _global.UpdateSitesRepeatingBuiltIn();
+        var project = Group(root, "Set by this project", _global.UpdateSites.Count == 0 ? "No update sites set yet. Use Add site... to set one."
+            : repeating.Count == 0 ? null
+            : $"{repeating.Count} site{(repeating.Count == 1 ? " only repeats" : "s only repeat")} the built-in list");
         foreach (var site in _global.UpdateSites)
         {
             var item = _tree.CreateItem(project);
@@ -105,11 +108,17 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
             item.SetText(PluginColumn, plugin?.Name ?? site.Slug);
             item.SetTooltipText(PluginColumn, plugin is null ? $"{site.Slug} is not in res://addons." : $"{plugin.Name} (res://addons/{site.Slug})");
             if (plugin is null) item.SetCustomColor(PluginColumn, EditorIcons.DisabledColor);
-            item.SetText(SourceColumn, site.Url);
+            var builtIn = KnownPlugins.Find(site.Slug)?.UpdateUrl == site.Url;
+            item.SetText(SourceColumn, builtIn ? $"{site.Url}  (also in the built-in list)" : site.Url);
             var fallback = plugin?.UpdateUrl is { } url ? $"When it does not work, plugin.cfg's update_url is used: {url}" : "plugin.cfg sets no update_url.";
             var supported = UpdateSourceFactory.IsSupported(site.Url);
-            item.SetTooltipText(SourceColumn, supported ? $"{site.Url}\n{fallback}" : $"{site.Url}\nThis is not a supported update site, so the plugin.cfg update_url is used.");
+            var tooltip = supported ? $"{site.Url}\n{fallback}" : $"{site.Url}\nThis is not a supported update site, so the plugin.cfg update_url is used.";
+            item.SetTooltipText(SourceColumn, !builtIn ? tooltip : tooltip + "\n" + (repeating.Contains(site.Slug)
+                ? "ePlugin's built-in list has the same update site, so this one changes nothing and can be removed. It was probably set before the list named the plugin."
+                : !EGlobal.UseKnownPlugins ? "ePlugin's built-in list has the same update site, but it is turned off on the General tab, so this one is still used."
+                : "ePlugin's built-in list has the same update site, but this one is still used: it comes before plugin.cfg's update_url, the built-in one after it."));
             if (!supported) item.SetCustomColor(SourceColumn, EditorIcons.ErrorColor);
+            else if (repeating.Contains(site.Slug)) item.SetCustomColor(SourceColumn, EditorIcons.DisabledColor);
             if (site.Slug == selectedSlug) item.Select(PluginColumn);
         }
         RenderLocalDirectories(root, plugins, selectedDirectory);
