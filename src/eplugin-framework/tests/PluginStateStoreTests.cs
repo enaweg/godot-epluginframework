@@ -392,7 +392,7 @@ public class PluginStateStoreTests
     }
 
     [TestCase]
-    public void FieldsOfANewerVersionAreReadAndKeptWhenTheFilesAreWritten()
+    public void FieldsOfANewerVersionAreSkippedAndNotWrittenAgain()
     {
         var (_, path) = NewStore();
         File.WriteAllText(path, """
@@ -417,18 +417,20 @@ public class PluginStateStoreTests
 
         var shared = File.ReadAllText(path);
         Assertions.AssertString(shared).Contains("\"state\": \"activated\"");
-        Assertions.AssertString(shared).Contains("\"pinned\": true");
-        Assertions.AssertString(shared).Contains("\"reviewer\": \"someone\"");
-        Assertions.AssertString(shared).Contains("\"future\"");
+        Assertions.AssertBool(store.IsLicenseAccepted("sample_plugin", "LICENSE")).IsTrue();
+        Assertions.AssertString(shared).NotContains("pinned");
+        Assertions.AssertString(shared).NotContains("reviewer");
+        Assertions.AssertString(shared).NotContains("future");
         var local = File.ReadAllText(path + ".user");
-        Assertions.AssertString(local).Contains("\"host\": \"pc-1\"");
-        Assertions.AssertString(local).Contains("\"note\": 3");
+        Assertions.AssertString(local).Contains("\"slug\": \"other\"");
+        Assertions.AssertString(local).NotContains("host");
+        Assertions.AssertString(local).NotContains("note");
     }
 
     [TestCase]
-    public void FilesOf090AreReadAndWrittenBackInAFormItCanRead()
+    public void OlderFilesWithoutNewerFieldsAreReadWithoutLosingState()
     {
-        // 0.9.0 rejects every field it does not know, and a self-update to a broken version rolls back to it
+        // a file of 0.9.0, the first version with plugin state; an upgrade must not lose any of it
         var (_, path) = NewStore();
         var lifecycle = Guid.NewGuid();
         File.WriteAllText(path, $$"""
@@ -455,20 +457,12 @@ public class PluginStateStoreTests
         store.TryBeginAttempt("b", "2.0", PersistedPluginState.Activated, out var id);
         Assertions.AssertBool(store.TryComplete(id, [new("b", "2.0", PersistedPluginState.Activated)])).IsTrue();
 
-        static IEnumerable<string> Names(JsonElement element) => element.ValueKind switch
-        {
-            JsonValueKind.Object => element.EnumerateObject().SelectMany(p => Names(p.Value).Prepend(p.Name)),
-            JsonValueKind.Array => element.EnumerateArray().SelectMany(Names),
-            _ => []
-        };
-        string[] known090 = ["schemaVersion", "lastCompletedAttemptId", "plugins", "slug", "version", "state", "licenses",
-            "license", "acceptedUtc", "automatic", "welcomes", "shownUtc", "attempts", "attemptId", "installedVersion",
-            "targetState", "reason"];
-        foreach (var file in new[] { path, path + ".user" })
-        {
-            using var document = JsonDocument.Parse(File.ReadAllText(file));
-            Assertions.AssertArray(Names(document.RootElement).Except(known090).ToArray()).IsEmpty();
-        }
+        var upgraded = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(upgraded.Load()).IsTrue();
+        Assertions.AssertObject(upgraded.GetShared("a")).IsEqual(new SharedPluginState("a", "1.0", PersistedPluginState.Activated));
+        Assertions.AssertObject(upgraded.GetShared("b")).IsEqual(new SharedPluginState("b", "2.0", PersistedPluginState.Activated));
+        Assertions.AssertObject(upgraded.LastCompletedAttemptId).IsEqual(lifecycle);
+        Assertions.AssertBool(upgraded.IsLicenseAccepted("a", "LICENSE") && upgraded.IsWelcomeShown("a") && upgraded.IsBlocked("c")).IsTrue();
     }
 
     [TestCase]
@@ -627,6 +621,68 @@ public class PluginStateStoreTests
         Assertions.AssertBool(reloaded.IsReadOnly).IsTrue();
         Assertions.AssertBool(reloaded.TryComplete(Guid.NewGuid(), [])).IsFalse();
         Assertions.AssertString(File.ReadAllText(path + ".user")).IsEqual(local);
+    }
+
+    [TestCase]
+    public void MissingPluginsAreMarkedThenForgottenButKeepTheirLicense()
+    {
+        var (store, path) = NewStore();
+        Assertions.AssertBool(store.TryCreateBaseline([
+            new SharedPluginState("gone", "1.0", PersistedPluginState.Activated),
+            new SharedPluginState("back", "1.0", PersistedPluginState.Activated)
+        ])).IsTrue();
+        Assertions.AssertBool(store.TryRecordLicenses([new AcceptedLicense("gone", "LICENSE", "1.0", DateTimeOffset.UnixEpoch, false)])).IsTrue();
+
+        Assertions.AssertBool(store.TryUpdateMissing([], ["gone", "back"], [])).IsTrue();
+        Assertions.AssertString(File.ReadAllText(path)).Contains("\"missing\": true");
+        var reloaded = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(reloaded.Load()).IsTrue();
+        Assertions.AssertBool(reloaded.GetShared("gone")!.Missing && reloaded.GetShared("back")!.Missing).IsTrue();
+
+        Assertions.AssertBool(reloaded.TryUpdateMissing(["gone"], [], ["back"])).IsTrue();
+
+        var again = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(again.Load()).IsTrue();
+        Assertions.AssertObject(again.GetShared("gone")).IsNull();
+        Assertions.AssertObject(again.GetShared("back")).IsEqual(new SharedPluginState("back", "1.0", PersistedPluginState.Activated));
+        Assertions.AssertBool(again.IsLicenseAccepted("gone", "LICENSE")).IsTrue();
+        // named only while it is set
+        Assertions.AssertString(File.ReadAllText(path)).NotContains("missing");
+    }
+
+    [TestCase]
+    public void CompletingAnAttemptClearsTheMissingMark()
+    {
+        var (store, _) = NewStore();
+        Assertions.AssertBool(store.TryCreateBaseline([new SharedPluginState("back", "1.0", PersistedPluginState.Activated)])).IsTrue();
+        Assertions.AssertBool(store.TryUpdateMissing([], ["back"], [])).IsTrue();
+
+        Assertions.AssertBool(store.TryBeginAttempt("back", "1.0", PersistedPluginState.Deactivated, out var id)).IsTrue();
+        Assertions.AssertBool(store.TryComplete(id, [new SharedPluginState("back", "1.0", PersistedPluginState.Deactivated)])).IsTrue();
+
+        Assertions.AssertBool(store.GetShared("back")!.Missing).IsFalse();
+    }
+
+    [TestCase]
+    public void APluginWithALocalAttemptOrChangedByATeammateIsNotForgotten()
+    {
+        var (store, path) = NewStore();
+        Assertions.AssertBool(store.TryCreateBaseline([
+            new SharedPluginState("blocked", "1.5", PersistedPluginState.Activated),
+            new SharedPluginState("updated", "1.0", PersistedPluginState.Activated)
+        ])).IsTrue();
+        Assertions.AssertBool(store.TryBeginAttempt("blocked", "1.5", PersistedPluginState.Activated, out _)).IsTrue();
+        Assertions.AssertBool(store.TryUpdateMissing(["blocked"], [], [])).IsFalse();
+        Assertions.AssertBool(store.TryUpdateMissing([], ["blocked"], [])).IsFalse();
+
+        // a teammate installed a new version of it meanwhile
+        File.WriteAllText(path, File.ReadAllText(path).Replace("\"1.0\"", "\"2.0\""));
+        Assertions.AssertBool(store.TryUpdateMissing(["updated"], [], [])).IsFalse();
+
+        var reloaded = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(reloaded.Load()).IsTrue();
+        Assertions.AssertBool(reloaded.GetShared("blocked")!.Missing).IsFalse();
+        Assertions.AssertString(reloaded.GetShared("updated")!.Version).IsEqual("2.0");
     }
 }
 #endif

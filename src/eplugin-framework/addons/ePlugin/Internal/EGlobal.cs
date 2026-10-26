@@ -157,12 +157,15 @@ internal sealed partial class EGlobal
         ReloadContexts(_loggerFactory);
         CreateStateBaseline();
         RecordFrameworkEnabled(plugin);
+        ReviewMissingPluginsOncePerStart();
         _plainPluginObserver = new PlainPluginObserver(_stateStore, GetEnabledPluginSlugs,
             InstalledVersion,
             IsManagedPlugin,
             // a GDExtension add-on is recorded as activated, but never enabled
             slug => _updateJournals?.OwnedSlugs.Contains(slug) == true || IsExtensionAddon(slug),
-            plugin.Logger);
+            plugin.Logger,
+            // reported by ReviewMissingPlugins
+            IsMissingPlugin);
         RefreshPlainPlugins();
         InitializePluginToggles();
         ResumeWaitingPlugins();

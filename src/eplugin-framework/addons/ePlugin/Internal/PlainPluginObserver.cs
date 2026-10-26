@@ -13,7 +13,8 @@ internal sealed class PlainPluginObserver(
     Func<string, string?> installedVersion,
     Func<string, bool> isManaged,
     Func<string, bool> isOwned,
-    ILogger? logger)
+    ILogger? logger,
+    Func<string, bool>? isMissing = null)
 {
     private HashSet<string>? _previous;
     private readonly Dictionary<string, Guid> _failedWrites = new(StringComparer.Ordinal);
@@ -24,7 +25,8 @@ internal sealed class PlainPluginObserver(
         if (_previous is null)
         {
             foreach (var saved in store.SharedStates.Where(s => s.State == PersistedPluginState.Activated &&
-                         !enabled.Contains(s.Slug) && !isManaged(s.Slug) && !isOwned(s.Slug)))
+                         !enabled.Contains(s.Slug) && !isManaged(s.Slug) && !isOwned(s.Slug) &&
+                         isMissing?.Invoke(s.Slug) != true))
             {
                 logger?.Warn($"Plugin {saved.Slug} is disabled or missing but recorded as activated; persisted state was preserved.");
             }
