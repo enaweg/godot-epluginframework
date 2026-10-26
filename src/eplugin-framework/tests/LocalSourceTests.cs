@@ -247,6 +247,34 @@ public class LocalSourceTests
         Assertions.AssertBool(first.Add(two)).IsTrue();
     }
 
+    [TestCase]
+    public void TheCleanupSizeIsKeptWithTheDirectoriesAndOlderFilesReadTheDefault()
+    {
+        var file = Path.Combine(_root, "config", "local-sources.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        // written before the size existed
+        File.WriteAllText(file, "{\"schema\":1,\"directories\":[]}");
+        var settings = new LocalSourceSettings(file);
+        settings.Load();
+        Assertions.AssertFloat(settings.CleanupWarningGigabytes).IsEqual(LocalSourceSettings.DefaultCleanupWarningGigabytes);
+
+        Assertions.AssertBool(settings.SetCleanupWarning(2.5)).IsTrue();
+        Assertions.AssertBool(settings.SetCleanupWarning(2.5)).IsFalse();
+        // changing the directories keeps it
+        var directory = Path.Combine(_root, "packages");
+        Assertions.AssertBool(settings.Add(directory)).IsTrue();
+        Assertions.AssertBool(settings.Remove(directory)).IsTrue();
+        var other = new LocalSourceSettings(file);
+        other.Load();
+        Assertions.AssertFloat(other.CleanupWarningGigabytes).IsEqual(2.5);
+        Assertions.AssertThrown(() => settings.SetCleanupWarning(-1)).IsInstanceOf<ArgumentOutOfRangeException>();
+
+        File.WriteAllText(file, "{\"schema\":1,\"directories\":[],\"cleanupWarningGigabytes\":-3}");
+        other.Load();
+        Assertions.AssertFloat(other.CleanupWarningGigabytes).IsEqual(LocalSourceSettings.DefaultCleanupWarningGigabytes);
+        Assertions.AssertString(other.Problem).IsNull();
+    }
+
     private static PluginUpdateTarget Target(string slug = "plugin") => new(slug, "Plugin", "1.0.0", null, "/unused");
     private static LocalPackage Package(string zip, string root, string version) =>
         new(zip, root, SafeZipExtractor.RootSlug(root)!, version, DateTime.UtcNow);

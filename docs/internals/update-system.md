@@ -28,6 +28,14 @@ The index is rebuilt on every start and assembly reload by `EGlobal.LocalSources
 being opened again; bump `IndexerVersion` whenever `LocalPackageIndexer.Read` changes what it extracts. Missing
 directories are skipped but kept in the list. `PendingUpdates` merges remote and local candidates.
 
+`LocalCleanup` (pure) gives a directory's statistics from the index (`LocalPackageIndex.In`, which also counts packages
+another listed directory holds) and which packages a `CleanupRule` deletes; every rule keeps each plugin's latest version
+and the versions installed in the project. `LocalCleanup.Delete` deletes only indexed files inside the directory whose
+size and modification time are unchanged. `EGlobal.LocalCleanup.cs` deletes off the editor thread and indexes again.
+The size above which a cleanup is suggested is `CleanupWarningGigabytes` in `local-sources.json` (optional; older files
+read the default). `IndexThenCheckAsync` decides before the startup check whether that check is due and, if so, lets
+`TakeCleanupSuggestion` hand `EPluginPlugin` the first directory above the size once (`CleanupSuggestionDialog`).
+
 ### Project update sites
 
 Project update sites (`UpdateSiteSettings`, the committed `res://addons/eplugin-update-sites.json`,

@@ -1,0 +1,33 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/ePlugin/Internal/Manager/CleanupSuggestionDialog.cs" id="1_script"]
+
+[node name="CleanupSuggestionDialog" type="ConfirmationDialog"]
+auto_translate_mode = 2
+title = "ePlugin — Clean up a local directory"
+initial_position = 2
+size = Vector2i(580, 200)
+ok_button_text = "Clean up..."
+cancel_button_text = "Not now"
+script = ExtResource("1_script")
+
+[node name="Content" type="VBoxContainer" parent="."]
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 572.0
+offset_bottom = 151.0
+theme_override_constants/separation = 8
+
+[node name="CleanupMessage" type="Label" parent="Content"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(540, 0)
+layout_mode = 2
+text = "The local directory holds more plugin packages than you set."
+autowrap_mode = 3
+
+[node name="CleanupHint" type="Label" parent="Content"]
+custom_minimum_size = Vector2(540, 0)
+modulate = Color(1, 1, 1, 0.7)
+layout_mode = 2
+text = "Clean up... opens the Tools tab of the ePlugin settings, which shows what each cleanup deletes before it does. Set the size there; 0 turns these suggestions off."
+autowrap_mode = 3

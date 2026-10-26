@@ -1,8 +1,9 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" uid="uid://btbbeg8tiqrrb" path="res://addons/ePlugin/Internal/Manager/SettingsDialog.cs" id="1_script"]
 [ext_resource type="Script" uid="uid://chsb1rf38my4n" path="res://addons/ePlugin/Internal/Manager/GeneralSettingsTab.cs" id="2_general"]
 [ext_resource type="Script" uid="uid://d036s5wngeej2" path="res://addons/ePlugin/Internal/Manager/UpdateSourcesTab.cs" id="3_sources"]
+[ext_resource type="Script" uid="uid://aveiispxu086n" path="res://addons/ePlugin/Internal/Manager/ToolsTab.cs" id="4_tools"]
 [ext_resource type="Script" uid="uid://dkwm775uwm5gt" path="res://addons/ePlugin/Internal/Manager/AboutTab.cs" id="5_about"]
 
 [node name="SettingsDialog" type="AcceptDialog"]
@@ -317,6 +318,150 @@ layout_mode = 2
 tooltip_text = "Remove the update sites that only repeat ePlugin's built-in list, often set before the list named their plugins. The plugins keep using the same update sites."
 text = "Remove duplicates"
 
+[node name="Tools" type="VBoxContainer" parent="SettingsTabs"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+script = ExtResource("4_tools")
+
+[node name="CleanupHeader" type="Label" parent="SettingsTabs/Tools"]
+layout_mode = 2
+theme_type_variation = &"HeaderSmall"
+text = "Clean up a local directory"
+
+[node name="CleanupHelp" type="Label" parent="SettingsTabs/Tools"]
+custom_minimum_size = Vector2(540, 0)
+layout_mode = 2
+text = "Deletes old plugin packages (ZIP files) from one of your local directories. Whatever you choose, every plugin keeps its latest version and the versions installed in this project. Of several files of one version only the newest is kept. The files are deleted, not moved to the trash."
+autowrap_mode = 3
+
+[node name="CleanupDirectoryLine" type="HBoxContainer" parent="SettingsTabs/Tools"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="CleanupDirectoryLabel" type="Label" parent="SettingsTabs/Tools/CleanupDirectoryLine"]
+custom_minimum_size = Vector2(160, 0)
+layout_mode = 2
+text = "Local directory"
+
+[node name="CleanupDirectory" type="OptionButton" parent="SettingsTabs/Tools/CleanupDirectoryLine"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "The local directory to clean up. Add directories on the Update sources tab."
+fit_to_longest_item = false
+
+[node name="CleanupStatistics" type="Label" parent="SettingsTabs/Tools"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(540, 0)
+layout_mode = 2
+text = "No local directory yet. Add one on the Update sources tab."
+autowrap_mode = 3
+
+[node name="CleanupTree" type="Tree" parent="SettingsTabs/Tools"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+tooltip_text = "The plugin packages of the directory per plugin, those taking the most space first."
+columns = 5
+column_titles_visible = true
+hide_root = true
+
+[node name="CleanupGrid" type="GridContainer" parent="SettingsTabs/Tools"]
+layout_mode = 2
+theme_override_constants/h_separation = 16
+theme_override_constants/v_separation = 6
+columns = 4
+
+[node name="CleanupVersionLabel" type="Label" parent="SettingsTabs/Tools/CleanupGrid"]
+custom_minimum_size = Vector2(160, 0)
+layout_mode = 2
+text = "Keep by version"
+
+[node name="CleanupVersionRule" type="OptionButton" parent="SettingsTabs/Tools/CleanupGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(280, 0)
+layout_mode = 2
+tooltip_text = "Which versions of each plugin to keep. Stable versions deletes the prereleases; the latest version is kept even when it is one."
+
+[node name="CleanupVersionButton" type="Button" parent="SettingsTabs/Tools/CleanupGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+tooltip_text = "Delete the other plugin packages of the directory, after confirmation."
+text = "Clean up..."
+
+[node name="CleanupVersionPreview" type="Label" parent="SettingsTabs/Tools/CleanupGrid"]
+unique_name_in_owner = true
+modulate = Color(1, 1, 1, 0.7)
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 1
+text_overrun_behavior = 3
+
+[node name="CleanupDateLabel" type="Label" parent="SettingsTabs/Tools/CleanupGrid"]
+layout_mode = 2
+text = "Keep by date"
+
+[node name="CleanupDateRule" type="OptionButton" parent="SettingsTabs/Tools/CleanupGrid"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(280, 0)
+layout_mode = 2
+tooltip_text = "Which ZIP files to keep by when they were last changed, usually when they were downloaded."
+
+[node name="CleanupDateButton" type="Button" parent="SettingsTabs/Tools/CleanupGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+tooltip_text = "Delete the older plugin packages of the directory, after confirmation."
+text = "Clean up..."
+
+[node name="CleanupDatePreview" type="Label" parent="SettingsTabs/Tools/CleanupGrid"]
+unique_name_in_owner = true
+modulate = Color(1, 1, 1, 0.7)
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 1
+text_overrun_behavior = 3
+
+[node name="CleanupSeparator" type="HSeparator" parent="SettingsTabs/Tools"]
+layout_mode = 2
+
+[node name="CleanupWarningGrid" type="GridContainer" parent="SettingsTabs/Tools"]
+layout_mode = 2
+theme_override_constants/h_separation = 16
+theme_override_constants/v_separation = 6
+columns = 3
+
+[node name="CleanupWarningLabel" type="Label" parent="SettingsTabs/Tools/CleanupWarningGrid"]
+custom_minimum_size = Vector2(160, 0)
+layout_mode = 2
+text = "Suggest a cleanup above"
+
+[node name="CleanupWarningSpin" type="SpinBox" parent="SettingsTabs/Tools/CleanupWarningGrid"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 0
+tooltip_text = "When a local directory's plugin packages take more space than this, ePlugin asks whether to clean it up. 0 never asks."
+max_value = 100000.0
+step = 0.5
+value = 5.0
+suffix = "GB"
+
+[node name="CleanupWarningNote" type="Label" parent="SettingsTabs/Tools/CleanupWarningGrid"]
+custom_minimum_size = Vector2(300, 0)
+modulate = Color(1, 1, 1, 0.7)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Checked for each local directory when the scheduled update check runs. Saved with your local directories, for all projects."
+autowrap_mode = 3
+
+[node name="CleanupStatus" type="Label" parent="SettingsTabs/Tools"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 1
+text_overrun_behavior = 3
+
 [node name="About" type="VBoxContainer" parent="SettingsTabs"]
 visible = false
 layout_mode = 2
@@ -425,6 +570,15 @@ ok_button_text = "Accept every license"
 dialog_text = "Plugins will be enabled and updated without showing their licenses, for everyone working on this project: they all agree to license terms nobody read.
 
 Turn this on only for headless editors, such as exports in CI."
+dialog_autowrap = true
+
+[node name="CleanupConfirm" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+auto_translate_mode = 2
+title = "Delete plugin packages"
+initial_position = 2
+size = Vector2i(560, 220)
+ok_button_text = "Delete"
 dialog_autowrap = true
 
 [node name="SiteEditor" type="ConfirmationDialog" parent="."]

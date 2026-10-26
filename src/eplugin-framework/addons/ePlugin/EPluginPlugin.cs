@@ -28,6 +28,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
     private UpdateFailureDialog? _failureDialog;
     private LicenseDialog? _licenseDialog;
     private WelcomeDialog? _welcomeDialog;
+    private CleanupSuggestionDialog? _cleanupDialog;
     private EGlobal? _updateOwner;
     // A resumed update keeps its progress window until startup finishes and the manager has a few frames to draw.
     private bool _reopenManager;
@@ -83,6 +84,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         ReopenManager();
         ShowLicenseReview();
         ShowWelcomes();
+        ShowCleanupSuggestion();
     }
 
     private static ManagerReopenMarker ManagerReopen => new(Path.Combine(EGlobal.Instance.Host.ProjectRoot, ".godot/eplugin/manager-open"));
@@ -134,11 +136,12 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         }
     }
 
+    private static bool IsOpen(Window? dialog) => dialog is not null && GodotObject.IsInstanceValid(dialog);
+
     /// <summary>Shows the welcome pages of newly installed plugins once no other ePlugin dialog asks for a decision.</summary>
     private void ShowWelcomes()
     {
-        static bool Open(Window? dialog) => dialog is not null && GodotObject.IsInstanceValid(dialog);
-        if (!EGlobal.Instance.IsValid() || Open(_welcomeDialog) || Open(_licenseDialog) || Open(_failureDialog)) return;
+        if (!EGlobal.Instance.IsValid() || IsOpen(_welcomeDialog) || IsOpen(_licenseDialog) || IsOpen(_failureDialog)) return;
         if (EGlobal.Instance.TakeWelcomes() is not { Count: > 0 } welcomes) return;
         try
         {
@@ -150,6 +153,38 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
             Logger.Error($"Cannot show the welcome dialog: {ex.Message}");
             _welcomeDialog = null;
         }
+    }
+
+    /// <summary>
+    /// Suggests cleaning up a local directory that holds more than the user set, after the scheduled update check and
+    /// once no other ePlugin dialog is open.
+    /// </summary>
+    private void ShowCleanupSuggestion()
+    {
+        if (!EGlobal.Instance.IsValid() || IsOpen(_cleanupDialog) || IsOpen(_welcomeDialog) || IsOpen(_licenseDialog) || IsOpen(_failureDialog)) return;
+        if (EGlobal.Instance.TakeCleanupSuggestion() is not { } suggestion) return;
+        try
+        {
+            _cleanupDialog = CleanupSuggestionDialog.Create(suggestion, cleanUp =>
+            {
+                _cleanupDialog = null;
+                // Opened once this dialog is gone; a method callable, which Godot resolves after an assembly reload too.
+                if (cleanUp) CallDeferred(MethodName.OpenLocalCleanup, suggestion.Directory);
+            });
+            _cleanupDialog.Open();
+        }
+        catch (Exception ex)
+        {
+            Logger.Error($"Cannot show the cleanup suggestion: {ex.Message}");
+            _cleanupDialog = null;
+        }
+    }
+
+    /// <summary>Opens the ePlugin Manager and its settings on the Tools tab, cleaning up <paramref name="directory"/>.</summary>
+    private void OpenLocalCleanup(string directory)
+    {
+        OpenManager();
+        if (_managerDialog is not null && GodotObject.IsInstanceValid(_managerDialog)) _managerDialog.OpenSettings(directory);
     }
 
     public override void _DisablePlugin()
@@ -310,9 +345,9 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
             _updateOwner.RestartRequested -= RememberManagerForRestart;
         }
         ReleaseReopenProgress();
-        foreach (var dialog in new Window?[] { _managerDialog, _failureDialog, _licenseDialog, _welcomeDialog })
+        foreach (var dialog in new Window?[] { _managerDialog, _failureDialog, _licenseDialog, _welcomeDialog, _cleanupDialog })
             if (dialog is not null) EditorWindows.Release(dialog);
-        _managerDialog = null; _failureDialog = null; _licenseDialog = null; _welcomeDialog = null;
+        _managerDialog = null; _failureDialog = null; _licenseDialog = null; _welcomeDialog = null; _cleanupDialog = null;
     }
 
     private static void RestoreEarlyUpdateSettings()

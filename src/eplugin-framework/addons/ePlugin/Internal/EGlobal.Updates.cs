@@ -49,8 +49,11 @@ internal sealed partial class EGlobal
 
     private async Task IndexThenCheckAsync(bool check)
     {
+        // The sizes of the local directories are checked when the update check is due, decided before it records its run.
+        var cleanup = check && UpdateScheduler.ShouldCheck(DateTimeOffset.UtcNow, LastUpdateCheck, ScheduledChecksEnabled, CheckIntervalHours);
         await RebuildLocalIndexAsync();
         if (check) await CheckForUpdatesAsync();
+        if (cleanup) ScheduleCleanupCheck();
     }
 
     /// <summary>Re-reads installed versions after an update so neither source keeps offering what is installed now.</summary>

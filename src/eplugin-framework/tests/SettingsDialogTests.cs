@@ -15,7 +15,7 @@ namespace Enaweg.Plugin.Tests;
 public class SettingsDialogTests
 {
     private const string ScenePath = "res://addons/ePlugin/Internal/Manager/SettingsDialog.tscn";
-    private static readonly string[] TabTitles = ["General", "Update sources", "About"];
+    private static readonly string[] TabTitles = ["General", "Update sources", "Tools", "About"];
 
     [TestCase]
     public static void TheSettingsAreTabsWithTheNodesTheirScriptsBind()
@@ -29,12 +29,15 @@ public class SettingsDialogTests
                 .IsEqual(TabTitles);
             Assertions.AssertObject(tabs.GetChild(0)).IsInstanceOf<GeneralSettingsTab>();
             Assertions.AssertObject(tabs.GetChild(1)).IsInstanceOf<UpdateSourcesTab>();
-            Assertions.AssertObject(tabs.GetChild(2)).IsInstanceOf<AboutTab>();
+            Assertions.AssertObject(tabs.GetChild(2)).IsInstanceOf<ToolsTab>();
+            Assertions.AssertObject(tabs.GetChild(3)).IsInstanceOf<AboutTab>();
             foreach (var name in new[]
                      {
                          "%AutoAcceptCheck", "%AutoAcceptWarning", "%AutoAcceptConfirm", "%GeneralStatus",
                          "%SourceTree", "%SourceStatus", "%RescanLocalSourcesButton", "%AddSiteButton", "%AddLocalSourceButton", "%EditSiteButton", "%RemoveSourceButton",
                          "%SiteEditor", "%SiteSlug", "%SiteUrl", "%SiteHint", "%LocalSourceFolderDialog",
+                         "%CleanupDirectory", "%CleanupStatistics", "%CleanupTree", "%CleanupVersionRule", "%CleanupVersionButton", "%CleanupVersionPreview",
+                         "%CleanupDateRule", "%CleanupDateButton", "%CleanupDatePreview", "%CleanupWarningSpin", "%CleanupStatus", "%CleanupConfirm",
                          "%AboutLogo", "%AboutVersion", "%AboutDescription", "%AuthorLink", "%StoreLink", "%SourceLink", "%DocumentationLink", "%StarNote", "%StarLink"
                      })
                 Assertions.AssertObject(dialog.GetNodeOrNull(name)).IsNotNull();
