@@ -50,6 +50,12 @@ public class UpdateSiteTests
         // the file goes with its last site, so a project without update sites has none
         Assertions.AssertBool(reloaded.Remove("zeta")).IsTrue();
         Assertions.AssertBool(File.Exists(SitesFile)).IsFalse();
+
+        // several at once, in one change
+        foreach (var slug in new[] { "a", "b", "c" }) settings.Set(slug, Site);
+        Assertions.AssertBool(settings.Remove(["a", "c", "missing"])).IsTrue();
+        Assertions.AssertBool(settings.Remove(["a", "missing"])).IsFalse();
+        Assertions.AssertArray(settings.Sites.Select(s => s.Slug).ToArray()).ContainsExactly("b");
     }
 
     [TestCase]

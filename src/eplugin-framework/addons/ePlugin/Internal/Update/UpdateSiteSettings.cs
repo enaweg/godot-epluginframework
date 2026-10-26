@@ -89,8 +89,12 @@ internal sealed class UpdateSiteSettings(string path)
 
     /// <summary>Removes the update site of a plugin; false when it has none.</summary>
     /// <exception cref="InvalidOperationException">The file cannot be changed, see <see cref="Problem"/>.</exception>
-    public bool Remove(string slug) =>
-        Change(sites => sites.Any(s => s.Slug == slug) ? sites.Where(s => s.Slug != slug).ToList() : null);
+    public bool Remove(string slug) => Remove([slug]);
+
+    /// <summary>Removes the update sites of several plugins in one change; false when none of them has one.</summary>
+    /// <exception cref="InvalidOperationException">The file cannot be changed, see <see cref="Problem"/>.</exception>
+    public bool Remove(IReadOnlyCollection<string> slugs) =>
+        Change(sites => sites.Any(s => slugs.Contains(s.Slug)) ? sites.Where(s => !slugs.Contains(s.Slug)).ToList() : null);
 
     /// <summary>
     /// Reads the file again, applies the change and saves; the sites in memory change only once saving worked. The

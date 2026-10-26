@@ -28,12 +28,15 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
     private Button _addDirectory = null!;
     private Button _edit = null!;
     private Button _remove = null!;
+    private Button _removeRepeated = null!;
     private ConfirmationDialog _editor = null!;
     private OptionButton _slug = null!;
     private LineEdit _url = null!;
     private Label _hint = null!;
     private FileDialog _folderDialog = null!;
     private string? _error;
+    // Slugs whose site only repeats the built-in list, as last rendered
+    private IReadOnlySet<string> _repeating = new HashSet<string>();
     // plugin.cfg update_url per slug, read when the editor opens rather than on every keystroke
     private Dictionary<string, string?> _configuredUrls = [];
     // Local directories whose packages the user folded away; rendering keeps them that way.
@@ -50,6 +53,7 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
         _tree = GetNode<Tree>("%SourceTree"); _status = GetNode<Label>("%SourceStatus");
         _rescan = GetNode<Button>("%RescanLocalSourcesButton"); _addSite = GetNode<Button>("%AddSiteButton");
         _addDirectory = GetNode<Button>("%AddLocalSourceButton"); _edit = GetNode<Button>("%EditSiteButton"); _remove = GetNode<Button>("%RemoveSourceButton");
+        _removeRepeated = GetNode<Button>("%RemoveRepeatedSitesButton");
         _editor = GetNode<ConfirmationDialog>("%SiteEditor"); _slug = GetNode<OptionButton>("%SiteSlug");
         _url = GetNode<LineEdit>("%SiteUrl"); _hint = GetNode<Label>("%SiteHint");
         _folderDialog = GetNode<FileDialog>("%LocalSourceFolderDialog");
@@ -65,6 +69,7 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
         _signals.Connect(_addDirectory, BaseButton.SignalName.Pressed, Callable.From(() => _folderDialog.PopupCentered()));
         _signals.Connect(_edit, BaseButton.SignalName.Pressed, Callable.From(() => OpenEditor(SelectedSlug())));
         _signals.Connect(_remove, BaseButton.SignalName.Pressed, Callable.From(RemoveSelected));
+        _signals.Connect(_removeRepeated, BaseButton.SignalName.Pressed, Callable.From(RemoveRepeated));
         _signals.Connect(_tree, Tree.SignalName.ItemSelected, Callable.From(Buttons));
         _signals.Connect(_tree, Tree.SignalName.ItemActivated, Callable.From(() => { if (SelectedSlug() is { } slug) OpenEditor(slug); }));
         _signals.Connect(_tree, Tree.SignalName.ItemCollapsed, Callable.From<TreeItem>(DirectoryCollapsed));
@@ -96,7 +101,7 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
         var plugins = _global.CollectPlugins().ToDictionary(p => p.Slug, StringComparer.Ordinal);
         _tree.Clear();
         var root = _tree.CreateItem();
-        var repeating = _global.UpdateSitesRepeatingBuiltIn();
+        var repeating = _repeating = _global.UpdateSitesRepeatingBuiltIn();
         var project = Group(root, "Set by this project", _global.UpdateSites.Count == 0 ? "No update sites set yet. Use Add site... to set one."
             : repeating.Count == 0 ? null
             : $"{repeating.Count} site{(repeating.Count == 1 ? " only repeats" : "s only repeat")} the built-in list");
@@ -114,7 +119,7 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
             var supported = UpdateSourceFactory.IsSupported(site.Url);
             var tooltip = supported ? $"{site.Url}\n{fallback}" : $"{site.Url}\nThis is not a supported update site, so the plugin.cfg update_url is used.";
             item.SetTooltipText(SourceColumn, !builtIn ? tooltip : tooltip + "\n" + (repeating.Contains(site.Slug)
-                ? "ePlugin's built-in list has the same update site, so this one changes nothing and can be removed. It was probably set before the list named the plugin."
+                ? "ePlugin's built-in list has the same update site, so this one changes nothing and Remove duplicates removes it. It was probably set before the list named the plugin."
                 : !EGlobal.UseKnownPlugins ? "ePlugin's built-in list has the same update site, but it is turned off on the General tab, so this one is still used."
                 : "ePlugin's built-in list has the same update site, but this one is still used: it comes before plugin.cfg's update_url, the built-in one after it."));
             if (!supported) item.SetCustomColor(SourceColumn, EditorIcons.ErrorColor);
@@ -254,6 +259,7 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
         _addDirectory.Disabled = directoriesProblem;
         _edit.Disabled = sitesProblem || SelectedSlug() is null;
         _remove.Disabled = !((SelectedSlug() is not null && !sitesProblem) || (SelectedDirectory() is not null && !directoriesProblem));
+        _removeRepeated.Visible = _repeating.Count > 0 && !sitesProblem;
     }
 
     private string? SelectedSlug() => SelectedMetadata(PluginColumn);
@@ -349,6 +355,14 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
             try { _global.RemoveLocalDirectory(directory); }
             catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException) { _error = "Cannot remove the directory: " + ex.Message; }
         }
+        Render();
+    }
+
+    private void RemoveRepeated()
+    {
+        _error = null;
+        try { if (_global.RemoveUpdateSitesRepeatingBuiltIn()) Changed?.Invoke(); }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException) { _error = "Cannot remove the update sites: " + ex.Message; }
         Render();
     }
 

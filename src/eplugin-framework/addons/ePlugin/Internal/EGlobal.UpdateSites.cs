@@ -57,6 +57,19 @@ internal sealed partial class EGlobal
     /// <inheritdoc cref="SetUpdateSite"/>
     internal bool RemoveUpdateSite(string slug) => ChangeUpdateSites(sites => sites.Remove(slug));
 
+    /// <summary>
+    /// Removes the update sites that only repeat the built-in list (<see cref="UpdateSitesRepeatingBuiltIn"/>), which
+    /// leaves the sites that are tried as they are; false when there are none.
+    /// </summary>
+    /// <inheritdoc cref="SetUpdateSite" path="/exception"/>
+    internal bool RemoveUpdateSitesRepeatingBuiltIn()
+    {
+        // A pull may have changed the sites since they were shown.
+        ReloadUpdateSites();
+        var slugs = UpdateSitesRepeatingBuiltIn();
+        return slugs.Count > 0 && ChangeUpdateSites(sites => sites.Remove(slugs));
+    }
+
     private bool ChangeUpdateSites(Func<UpdateSiteSettings, bool> change)
     {
         if (_updateSites is null) return false;

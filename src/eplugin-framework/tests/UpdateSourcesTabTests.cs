@@ -153,11 +153,20 @@ public class UpdateSourcesTabTests : IDisposable
         Assertions.AssertString(Group(0).GetText(1)).IsEqual("1 site only repeats the built-in list");
         var row = Row(known.Slug);
         Assertions.AssertString(row.GetText(1)).IsEqual($"{known.UpdateUrl}  (also in the built-in list)");
-        Assertions.AssertString(row.GetTooltipText(1)).Contains("this one changes nothing and can be removed");
+        Assertions.AssertString(row.GetTooltipText(1)).Contains("this one changes nothing and Remove duplicates removes it");
         // it comes before the plugin.cfg update_url, which the built-in site comes after
         Assertions.AssertString(Row(configured.Slug).GetText(1)).IsEqual($"{configured.UpdateUrl}  (also in the built-in list)");
         Assertions.AssertString(Row(configured.Slug).GetTooltipText(1)).Contains("this one is still used");
         Assertions.AssertString(Row("tool").GetText(1)).IsEqual(known.UpdateUrl);
+
+        var removeRepeated = _dialog.GetNode<Button>("%RemoveRepeatedSitesButton");
+        Assertions.AssertBool(removeRepeated.Visible).IsTrue();
+        Press("%RemoveRepeatedSitesButton");
+        Assertions.AssertObject(_fixture.Global.UpdateSiteOf(known.Slug)).IsNull();
+        Assertions.AssertArray(_fixture.Global.UpdateSites.Select(s => s.Slug).ToArray()).ContainsExactlyInAnyOrder(configured.Slug, "tool");
+        Assertions.AssertInt(_changes).IsEqual(1);
+        Assertions.AssertString(Group(0).GetText(1)).IsEmpty();
+        Assertions.AssertBool(removeRepeated.Visible).IsFalse();
     }
 
     private TreeItem Row(string slug) => Group(0).GetChildren().Single(r => r.GetMetadata(0).AsString() == slug);
