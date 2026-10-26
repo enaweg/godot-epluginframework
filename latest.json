@@ -1,8 +1,8 @@
 {
- "commit": "15bd724bedf34f9f33929ba566dc188b53f4e2c5",
- "date": "2026-10-26T11:25:57Z",
- "covered": 11030,
- "coverable": 12108,
+ "commit": "a44cb963be80bead366f40c51dec50fc41c9e911",
+ "date": "2026-10-26T12:13:40Z",
+ "covered": 11060,
+ "coverable": 12139,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -149,8 +149,8 @@
    189
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateSites.cs": [
-   19,
-   19
+   28,
+   28
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateWorkflow.cs": [
    7,
@@ -329,8 +329,8 @@
    95
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateSourcesTab.cs": [
-   253,
-   290
+   272,
+   310
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/WelcomeDialog.cs": [
    54,
@@ -493,8 +493,8 @@
    18
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateSiteSettings.cs": [
-   50,
-   50
+   52,
+   52
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateStateStore.cs": [
    43,
