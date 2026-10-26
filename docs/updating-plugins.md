@@ -43,6 +43,7 @@ A project can set the update site of a plugin itself, on the **Update sources** 
 - **Add site...** chooses a plugin in `res://addons` from a list and asks for the update site URL.
 - **Edit...** (or double-clicking an entry) changes the URL of the selected plugin.
 - **Remove** deletes the selected site; the plugin uses its `update_url` again.
+- **Remove duplicates** appears when sites only repeat the [built-in list](#built-in-update-sites), and removes them.
 
 ![Update sources tab of the settings with a project update site for gdUnit4, a local directory with six packages, and the expanded built-in list, installed add-ons first](images/eplugin-update-sources.png)
 
@@ -51,6 +52,8 @@ A project can set the update site of a plugin itself, on the **Update sources** 
 The URL can be any [supported source](#configure-an-update-source): GitHub, GitLab or Forgejo releases, or a Git repository. Other URLs are refused when you save them. The editor shows the plugin's `plugin.cfg` `update_url`, which stays the fallback; so does the site's tooltip in the list.
 
 The project's update site is always tried first. When it does not work, the plugin's `update_url` is checked instead, and then its [built-in update site](#built-in-update-sites): for example when the site does not respond, returns an error, or is not a supported URL because the file was edited by hand. The output log and the manager's status line say when this happened. A plugin with no other site reports the failed check.
+
+A site that is the same as the plugin's [built-in update site](#built-in-update-sites) is marked *(also in the built-in list)*. When the plugin's `plugin.cfg` has no `update_url` (or the same one) and the built-in list is turned on, the site changes nothing: removing it leaves the sites that are tried as they are. The heading of the project's sites counts these, and **Remove duplicates** removes them all. They are usually left from an ePlugin version whose built-in list did not name the plugin yet. A site that is the same as the built-in one but comes before a different `update_url`, or is needed because the built-in list is turned off, is marked too, but kept; its tooltip says why it is still used.
 
 The update sites are saved in `res://addons/eplugin-update-sites.json`. Commit the file, so everyone working on the project uses the same sites. The file is removed again with its last entry. A file that cannot be read, or that a newer ePlugin version wrote, is never overwritten: the sites can only be changed again once it is repaired or deleted.
 

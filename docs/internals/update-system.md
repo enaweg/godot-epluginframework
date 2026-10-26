@@ -43,7 +43,9 @@ reviewed again; without one, the built-in site of the slug follows), R25 when th
 project's site nor the `plugin.cfg` repository, i.e. the built-in site of a plugin that has its own. Both set
 `RequiresTrust`, which leaves the review entry unchecked. `CollectUpdateTargets` and `CollectPlugins` reload the file.
 Like `LocalSourceSettings`, it is never overwritten when it is unreadable or was written by a newer version, and it is
-deleted with its last entry.
+deleted with its last entry. `UpdateSiteSettings.RepeatsBuiltIn` tells a site that only repeats the slug's `KnownPlugins`
+entry (same URL, `plugin.cfg` without another `update_url`, list turned on), so `UpdateUrls` is the same without it;
+`EGlobal.RemoveUpdateSitesRepeatingBuiltIn` removes those in one change (the tab's **Remove duplicates**).
 
 ### Built-in update sites
 

@@ -310,6 +310,13 @@ disabled = true
 tooltip_text = "Remove the selected update site, so the plugin uses its plugin.cfg update_url again, or the selected local directory. Its files are not touched."
 text = "Remove"
 
+[node name="RemoveRepeatedSitesButton" type="Button" parent="SettingsTabs/Update sources/SourceButtons"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+tooltip_text = "Remove the update sites that only repeat ePlugin's built-in list, often set before the list named their plugins. The plugins keep using the same update sites."
+text = "Remove duplicates"
+
 [node name="About" type="VBoxContainer" parent="SettingsTabs"]
 visible = false
 layout_mode = 2

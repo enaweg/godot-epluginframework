@@ -50,6 +50,12 @@ public class UpdateSiteTests
         // the file goes with its last site, so a project without update sites has none
         Assertions.AssertBool(reloaded.Remove("zeta")).IsTrue();
         Assertions.AssertBool(File.Exists(SitesFile)).IsFalse();
+
+        // several at once, in one change
+        foreach (var slug in new[] { "a", "b", "c" }) settings.Set(slug, Site);
+        Assertions.AssertBool(settings.Remove(["a", "c", "missing"])).IsTrue();
+        Assertions.AssertBool(settings.Remove(["a", "missing"])).IsFalse();
+        Assertions.AssertArray(settings.Sites.Select(s => s.Slug).ToArray()).ContainsExactly("b");
     }
 
     [TestCase]
@@ -232,6 +238,21 @@ public class UpdateSiteTests
         Assertions.AssertString(configured).Contains("[b]Built-in update site:[/b] [url=https://github.com/known/plugin/releases]");
         Assertions.AssertString(configured).Contains("[b]Documentation:[/b] [url=https://own.example/docs]");
         Assertions.AssertString(configured).NotContains("comes from ePlugin's built-in list");
+    }
+
+    [TestCase]
+    public static void ASiteRepeatsTheBuiltInListOnlyWhenRemovingItChangesNoSiteThatIsTried()
+    {
+        Assertions.AssertBool(UpdateSiteSettings.RepeatsBuiltIn(Site, null, Site)).IsTrue();
+        Assertions.AssertBool(UpdateSiteSettings.RepeatsBuiltIn(Site, Site, Site)).IsTrue();
+        // it comes before another plugin.cfg update_url, which the built-in one comes after
+        Assertions.AssertBool(UpdateSiteSettings.RepeatsBuiltIn(Site, Config, Site)).IsFalse();
+        Assertions.AssertBool(UpdateSiteSettings.RepeatsBuiltIn(Site, null, Config)).IsFalse();
+        // the built-in list is turned off
+        Assertions.AssertBool(UpdateSiteSettings.RepeatsBuiltIn(Site, null, null)).IsFalse();
+        foreach (var site in new[] { Target(config: null), Target(config: Site) })
+            Assertions.AssertArray((site with { KnownUrl = Site }).UpdateUrls.ToArray())
+                .IsEqual((site with { KnownUrl = Site, OverrideUrl = null }).UpdateUrls.ToArray());
     }
 
     [TestCase]

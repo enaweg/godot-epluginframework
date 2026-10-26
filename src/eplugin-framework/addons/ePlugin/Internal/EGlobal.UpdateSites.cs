@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Enaweg.Plugin.Internal.Update;
 using Godot;
 
@@ -39,6 +40,15 @@ internal sealed partial class EGlobal
     /// <summary>The update site the project sets for a plugin; null when it uses its plugin.cfg update_url.</summary>
     internal string? UpdateSiteOf(string slug) => _updateSites?.UrlOf(slug);
 
+    /// <summary>
+    /// The plugins whose update site only repeats the one of the built-in list, see
+    /// <see cref="UpdateSiteSettings.RepeatsBuiltIn"/>.
+    /// </summary>
+    internal IReadOnlySet<string> UpdateSitesRepeatingBuiltIn() => UpdateSites
+        .Where(site => UpdateSiteSettings.RepeatsBuiltIn(site.Url,
+            EditorPluginExtensions.ReadMetadata(_host.PluginDirectory(site.Slug) + "/plugin.cfg")?.UpdateUrl, KnownPluginOf(site.Slug)?.UpdateUrl))
+        .Select(site => site.Slug).ToHashSet(StringComparer.Ordinal);
+
     /// <summary>Adds or replaces the update site of a plugin; false when nothing changed.</summary>
     /// <exception cref="ArgumentException">The URL is not a supported update site.</exception>
     /// <exception cref="InvalidOperationException">The file cannot be changed, see <see cref="UpdateSitesProblem"/>.</exception>
@@ -46,6 +56,19 @@ internal sealed partial class EGlobal
 
     /// <inheritdoc cref="SetUpdateSite"/>
     internal bool RemoveUpdateSite(string slug) => ChangeUpdateSites(sites => sites.Remove(slug));
+
+    /// <summary>
+    /// Removes the update sites that only repeat the built-in list (<see cref="UpdateSitesRepeatingBuiltIn"/>), which
+    /// leaves the sites that are tried as they are; false when there are none.
+    /// </summary>
+    /// <inheritdoc cref="SetUpdateSite" path="/exception"/>
+    internal bool RemoveUpdateSitesRepeatingBuiltIn()
+    {
+        // A pull may have changed the sites since they were shown.
+        ReloadUpdateSites();
+        var slugs = UpdateSitesRepeatingBuiltIn();
+        return slugs.Count > 0 && ChangeUpdateSites(sites => sites.Remove(slugs));
+    }
 
     private bool ChangeUpdateSites(Func<UpdateSiteSettings, bool> change)
     {
