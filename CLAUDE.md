@@ -438,16 +438,20 @@ acceptance, because that has to be known without running plugin code (e.g. for s
 is pure and unit-tested: `PluginLicense` resolves/reads it and gives it a *source* (relative file, `res://` path, or
 `text:<hash>` for recipe text; file contents are never compared), and `LicenseReview` holds per-license decisions
 (declining a dependency's license cancels and skips its dependants). Acceptances live in the optional `licenses` list
-of the shared `eplugin-state.json` (`PluginStateStore.TryRecordLicenses`), omitted while empty. The 0.9.0 reader
-disallows unmapped members, and a failed self-update rolls back to it, so never write a field 0.9.0 does not know
-without raising `schemaVersion` (`PluginStateStoreTests.FilesOf090AreReadAndWrittenBackInAFormItCanRead` lists them).
-Later readers skip unknown fields and write them back (`JsonExtensionData`); a missing `plugins`/`attempts` list or
-another `schemaVersion` still makes the store read-only. A shared file that changed on disk since it was read (a git pull) is read again before a write
+of the shared `eplugin-state.json` (`PluginStateStore.TryRecordLicenses`), omitted while empty. Compatibility of the
+state files goes one way: an upgrade must never lose state, so every newer version reads every older file (a new field
+is optional and reads as its default when absent; `PluginStateStoreTests.OlderFilesWithoutNewerFieldsAreReadWithoutLosingState`).
+Readers skip fields they do not know, so a file written by a newer version does not fail to load, and write only the
+fields they know: what an older version cannot represent is lost after a downgrade, and rolling the state back is not
+supported. A missing `plugins`/`attempts` list or another `schemaVersion` still makes the store read-only. A shared file that changed on disk since it was read (a git pull) is read again before a write
 (`PluginStateStore.Rebase`), which refuses only when the same entries changed there too, to other values than this write's. Licenses and welcome pages
 recorded while the file could not be written stay recorded for the session, also when it is read again, and the next
 write that succeeds saves them. Only an update's acknowledgement sets `lastCompletedAttemptId` (recovery and rollback compare
 it with the journal); lifecycle completions keep it and skip writing the shared file when no entry changed, because
-the file is committed and shared by the team.
+the file is committed and shared by the team. An activated entry whose plugin folder is gone gets `missing` (written
+only while true) at the first initialization of an editor start
+(`EGlobal.MissingPlugins.cs`; Engine metadata keeps assembly reloads from counting as starts) and is removed by
+`PluginStateStore.TryUpdateMissing` at the next start if it is still missing.
 `EGlobal.Licenses.cs` gates `EnableEPlugin` before `JoinTransition` (skipped for manual retries and update reconciles)
 over the plugin and every disabled hard dependency it would enable; a disabled ePlugin's recipe comes from a
 throw-away instance of its compiled script type. With pending licenses the plugin is disabled again (deferred: Godot is

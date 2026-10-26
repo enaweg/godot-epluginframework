@@ -295,5 +295,42 @@ public class EGlobalEditorStateTests : IDisposable
         Assertions.AssertThat(_fixture.Operations).ContainsExactly("add-nuget ZLogger", "build", "remove-nuget ZLogger", "build");
         Assertions.AssertObject(EGlobal.Instance).IsNotSame(_fixture.Global);
     }
+
+    [TestCase]
+    public void AnActivatedPluginStillMissingAtTheNextStartIsForgotten()
+    {
+        foreach (var (slug, state) in new[]
+                 {
+                     ("gone", PersistedPluginState.Activated), ("back", PersistedPluginState.Activated),
+                     ("ext", PersistedPluginState.Activated), ("disabled", PersistedPluginState.Deactivated),
+                     ("failed", PersistedPluginState.Activated)
+                 })
+        {
+            Assertions.AssertBool(_fixture.Store.TryBeginAttempt(slug, "1.0", state, out var id)).IsTrue();
+            Assertions.AssertBool(_fixture.Store.TryComplete(id, [new SharedPluginState(slug, "1.0", state)])).IsTrue();
+        }
+
+        FailAttempt("failed");
+        // a GDExtension add-on has no plugin.cfg
+        Directory.CreateDirectory(_fixture.Addon("ext"));
+        File.WriteAllText(Path.Combine(_fixture.Addon("ext"), "ext.gdextension"), "[configuration]\n");
+
+        _fixture.Global.ReviewMissingPlugins();
+
+        Assertions.AssertThat(_fixture.Store.SharedStates.Where(s => s.Missing).Select(s => s.Slug).Order(StringComparer.Ordinal).ToArray())
+            .ContainsExactly("back", "gone");
+        Assertions.AssertBool(_fixture.Log.Any(l => l.StartsWith("warn", StringComparison.Ordinal) && l.Contains("Plugin gone", StringComparison.Ordinal))).IsTrue();
+
+        // the next start
+        _fixture.AddPlainPlugin("back");
+        _fixture.Global.ReviewMissingPlugins();
+
+        Assertions.AssertObject(_fixture.Store.GetShared("gone")).IsNull();
+        Assertions.AssertBool(_fixture.Store.GetShared("back")!.Missing).IsFalse();
+        Assertions.AssertObject(_fixture.Store.GetShared("ext")).IsNotNull();
+        Assertions.AssertObject(_fixture.Store.GetShared("disabled")).IsNotNull();
+        Assertions.AssertObject(_fixture.Store.GetShared("failed")).IsNotNull();
+        Assertions.AssertBool(_fixture.Store.SharedStates.Any(s => s.Missing)).IsFalse();
+    }
 }
 #endif
