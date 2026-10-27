@@ -168,15 +168,19 @@ internal static class ReleaseAssets
     }
 }
 
-internal sealed class GitHubReleaseSource(UpdateHttp http, string owner, string repository, bool pinned = false) : IUpdateSource, IVersionListSource
+/// <param name="token">
+/// The GitHub token of the environment, if any. With one, packages are downloaded through the API as well: the download
+/// links on github.com take no token, so those of a private repository could not be downloaded.
+/// </param>
+internal sealed class GitHubReleaseSource(UpdateHttp http, string owner, string repository, bool pinned = false, string? token = null)
+    : IUpdateSource, IVersionListSource
 {
     // A check reads up to two pages of 50, as many releases as the version list reads at once.
     private const int CheckPageSize = 50;
-    private static string? Token => ForgeTokens.GitHub(new Uri("https://api.github.com"));
     public async Task<IReadOnlyList<UpdateCandidate>> ListAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct)
     {
         if (pinned) return [];
-        using var document = JsonDocument.Parse(await http.ReadTextAsync($"https://api.github.com/repos/{owner}/{repository}/releases?per_page=100", ct, Token).ConfigureAwait(false));
+        using var document = JsonDocument.Parse(await http.ReadTextAsync($"https://api.github.com/repos/{owner}/{repository}/releases?per_page=100", ct, token).ConfigureAwait(false));
         return ReleaseAssets.ByVersion(document.RootElement.EnumerateArray().Where(r => !ReleaseAssets.Flag(r, "draft")))
             .Select(r => Candidate(target, r)).ToArray();
     }
@@ -193,9 +197,12 @@ internal sealed class GitHubReleaseSource(UpdateHttp http, string owner, string 
 
         string[] Download(JsonElement r)
         {
-            var assets = ReleaseAssets.Array(r, "assets").Select(a => (ReleaseAssets.String(a, "name") ?? "", ReleaseAssets.String(a, "browser_download_url") ?? "")).Where(a => a.Item2.Length > 0);
+            var api = token is not null;
+            var assets = ReleaseAssets.Array(r, "assets").Select(a => (ReleaseAssets.String(a, "name") ?? "",
+                ReleaseAssets.String(a, api ? "url" : "browser_download_url") ?? "")).Where(a => a.Item2.Length > 0);
+            var tag = Uri.EscapeDataString(ReleaseAssets.String(r, "tag_name")!);
             return ReleaseAssets.WithArchive(ReleaseAssets.Select(assets, target.Slug),
-                $"{root}/archive/refs/tags/{Uri.EscapeDataString(ReleaseAssets.String(r, "tag_name")!)}.zip");
+                api ? $"https://api.github.com/repos/{owner}/{repository}/zipball/{tag}" : $"{root}/archive/refs/tags/{tag}.zip");
         }
     }
     public async Task<UpdateCandidate?> CheckAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct)
@@ -207,7 +214,7 @@ internal sealed class GitHubReleaseSource(UpdateHttp http, string owner, string 
             var releases = await ReleaseAssets.NewestAsync(async page =>
             {
                 using var document = JsonDocument.Parse(await http.ReadTextAsync(
-                    $"https://api.github.com/repos/{owner}/{repository}/releases?per_page={CheckPageSize}&page={page}", ct, Token).ConfigureAwait(false));
+                    $"https://api.github.com/repos/{owner}/{repository}/releases?per_page={CheckPageSize}&page={page}", ct, token).ConfigureAwait(false));
                 var list = document.RootElement.EnumerateArray().Select(r => r.Clone()).ToArray();
                 return (list.Where(r => !ReleaseAssets.Flag(r, "draft")).ToArray(), list.Length == CheckPageSize);
             }, 2, target).ConfigureAwait(false);

@@ -174,6 +174,23 @@ public class EGlobalUpdateRecipeTests : IDisposable
     }
 
     [TestCase]
+    public void ANugetAnotherPluginNamesInOtherCaseIsKept()
+    {
+        // NuGet package ids ignore case
+        _fixture.AddEPlugin("app", b => b.AddNuget("Shared.Package", "1.0"));
+        _fixture.AddEPlugin("other", b => b.AddNuget("shared.package", "1.0"));
+        _fixture.Enable("app");
+        _fixture.Enable("other");
+        var journal = BeginUpdate("app");
+        ReloadRecipe("app", _ => { });
+        _fixture.Operations.Clear();
+
+        _fixture.Global.ReconcileUpdateRecipes(journal, false);
+
+        Assertions.AssertThat(_fixture.Operations).IsEmpty();
+    }
+
+    [TestCase]
     public void RemovingOneOwnersProjectAndAutoloadKeepsThemForAnotherPlugin()
     {
         var shared = Path.Combine(_fixture.Root, "shared", "Lib.csproj");

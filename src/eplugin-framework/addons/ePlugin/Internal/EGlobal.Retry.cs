@@ -108,9 +108,14 @@ internal sealed partial class EGlobal
     {
         if (_stateStore is null) return;
         var retriedUpdates = new HashSet<Guid>();
-        foreach (var failed in OrderRetries(attempts))
+        var ordered = OrderRetries(attempts)
+            .Select(failed => disable?.Contains(failed.Slug) == true ? failed with { TargetState = PersistedPluginState.Deactivated } : failed)
+            .ToArray();
+        // Deactivations first and in reverse, a plugin's dependants before it: removing a dependency first would leave
+        // the code that needs it installed and fail the build. Activations follow, dependencies first.
+        foreach (var attempt in ordered.Where(a => a.TargetState == PersistedPluginState.Deactivated).Reverse()
+                     .Concat(ordered.Where(a => a.TargetState != PersistedPluginState.Deactivated)))
         {
-            var attempt = disable?.Contains(failed.Slug) == true ? failed with { TargetState = PersistedPluginState.Deactivated } : failed;
             var updateJournal = _updateJournals?.Read().FirstOrDefault(j => j.AttemptId == attempt.AttemptId);
             if (updateJournal is not null || attempt.Reason.StartsWith("update_", StringComparison.Ordinal))
             {

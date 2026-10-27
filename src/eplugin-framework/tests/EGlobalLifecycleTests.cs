@@ -143,6 +143,28 @@ public class EGlobalLifecycleTests : IDisposable
     }
 
     [TestCase]
+    public void ARetryThatGodotRefusesToEnableInstallsNothing()
+    {
+        _fixture.AddPlainPlugin("tool", "1.1");
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package").AddPluginDependency("tool", ">=1.2"));
+        _fixture.Enable("app");
+        EGlobal.RunPosted();
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsFalse();
+        var start = _fixture.Operations.Count;
+
+        // the dependency is fixed, but the plugin's own script no longer loads
+        _fixture.AddPlainPlugin("tool", "1.4");
+        _fixture.Host.Broken.Add("app");
+        _fixture.Global.RetryFailedPlugins();
+
+        Assertions.AssertThat(OperationsSince(start)).IsEmpty();
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsFalse();
+        Assertions.AssertString(_fixture.Store.GetLocal("app")!.Reason).IsEqual("plugin_enable_refused");
+        Assertions.AssertObject(_fixture.Store.GetShared("app")?.State).IsNotEqual(PersistedPluginState.Activated);
+        Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsFalse();
+    }
+
+    [TestCase]
     public void ADependencyThatCannotBeEnabledFailsTheActivation()
     {
         _fixture.AddEPlugin("app", b => b.AddPluginDependency("missing"));
@@ -170,6 +192,27 @@ public class EGlobalLifecycleTests : IDisposable
         Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsFalse();
         Assertions.AssertBool(_fixture.Operations.Any(o => o.StartsWith("add-", StringComparison.Ordinal))).IsFalse();
         Assertions.AssertBool(_fixture.Log.Any(l => l.Contains("base cannot be enabled"))).IsTrue();
+    }
+
+    [TestCase]
+    public void ADependencyWhoseFreedInstanceLeftAnActivatedContextFailsTheActivationInsteadOfWaiting()
+    {
+        _fixture.AddEPlugin("base", b => b.AddNuget("Base.Package"));
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package").AddPluginDependency("base"));
+        _fixture.Enable("base");
+        // its _DisablePlugin threw before DisableEPlugin, and Godot freed the instance; enabled again, it throws as well
+        _fixture.Silent.Add("base");
+        var stale = _fixture.Context("base")!;
+        _fixture.Disable("base");
+        stale.PluginBase!.Free();
+        Assertions.AssertObject(stale.State).IsEqual(EEditorPluginState.Activated);
+
+        _fixture.Enable("app");
+        EGlobal.RunPosted();
+
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Error);
+        Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsFalse();
+        Assertions.AssertBool(_fixture.Log.Any(l => l.Contains("base was enabled but did not start its activation"))).IsTrue();
     }
 
     [TestCase]
@@ -945,6 +988,27 @@ public class EGlobalLifecycleTests : IDisposable
             Assertions.AssertObject(_fixture.Store.GetLocal(slug)).IsNull();
             Assertions.AssertObject(_fixture.Store.GetShared(slug)!.State).IsEqual(PersistedPluginState.Deactivated);
         }
+    }
+
+    [TestCase]
+    public void DisablingAFailedPluginRemovesItsDependantsRecipesBeforeItsOwn()
+    {
+        _fixture.AddEPlugin("lib", b => b.AddNuget("Lib.Package"));
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package").AddPluginDependency("lib"));
+        _fixture.AddEPlugin("tool", b => b.AddNuget("Tool.Package").AddPluginDependency("app"));
+        // only the build failed, so every recipe is installed
+        _fixture.Cli.BuildFails = true;
+        _fixture.Enable("tool");
+        EGlobal.RunPosted();
+        Assertions.AssertThat(_fixture.Operations).Contains("add-nuget Lib.Package", "add-nuget App.Package", "add-nuget Tool.Package");
+        _fixture.Cli.BuildFails = false;
+        var start = _fixture.Operations.Count;
+
+        Assertions.AssertBool(_fixture.Global.DisableFailedPlugin("lib")).IsTrue();
+
+        Assertions.AssertThat(OperationsSince(start).Where(o => o.StartsWith("remove-nuget", StringComparison.Ordinal)).ToArray())
+            .ContainsExactly("remove-nuget Tool.Package", "remove-nuget App.Package", "remove-nuget Lib.Package");
+        foreach (var slug in new[] { "lib", "app", "tool" }) Assertions.AssertObject(_fixture.Store.GetLocal(slug)).IsNull();
     }
 
     [TestCase]

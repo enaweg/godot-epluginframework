@@ -115,7 +115,7 @@ internal sealed partial class EGlobal
                 else record.Target = new();
             }
             var snapshots = journal.Recipes.ToDictionary(p => p.Key, p => p.Value.Target!);
-            var conflicts = snapshots.Values.SelectMany(s => s.Nugets).GroupBy(n => n.Name).Any(g => g.Select(n => (n.Version, n.Source)).Distinct().Count() > 1);
+            var conflicts = snapshots.Values.SelectMany(s => s.Nugets).GroupBy(n => n.Name, StringComparer.OrdinalIgnoreCase).Any(g => g.Select(n => (n.Version, n.Source)).Distinct().Count() > 1);
             if (!rollback && conflicts) throw new InvalidOperationException("Updated recipes declare conflicting versions or sources for a shared NuGet package.");
             journal.Save();
             var order = RecipeReconciler.DependencyOrder(snapshots);
@@ -158,7 +158,7 @@ internal sealed partial class EGlobal
                     if (updated) context.AppliedOptionalDependencies = null;
                     entry.Value.Target = Snapshot(context, updated ? null : entry.Value.Old.AppliedOptionals);
                 }
-                if (journal.Recipes.Values.SelectMany(r => r.Target!.Nugets).GroupBy(n => n.Name).Any(g => g.Select(n => (n.Version, n.Source)).Distinct().Count() > 1))
+                if (journal.Recipes.Values.SelectMany(r => r.Target!.Nugets).GroupBy(n => n.Name, StringComparer.OrdinalIgnoreCase).Any(g => g.Select(n => (n.Version, n.Source)).Distinct().Count() > 1))
                     throw new InvalidOperationException("Newly enabled dependencies declare conflicting versions or sources for a shared NuGet package.");
                 journal.Save();
                 foreach (var slug in RecipeReconciler.DependencyOrder(journal.Recipes.ToDictionary(p => p.Key, p => p.Value.Target!)))

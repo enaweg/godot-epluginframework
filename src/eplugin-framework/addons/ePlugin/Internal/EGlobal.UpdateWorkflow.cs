@@ -26,7 +26,6 @@ internal sealed partial class EGlobal : IUpdateWorkflowHost
 
     LicenseReview? IUpdateWorkflowHost.ReviewUpdateLicenses(IEnumerable<ValidatedPackage> packages) => ReviewUpdateLicenses(packages);
 
-    void IUpdateWorkflowHost.RecordLicenses(LicenseReview review) => RecordLicenses(review);
 
     Task<IReadOnlyList<UpdateGroupResult>> IUpdateWorkflowHost.ApplyUpdatesAsync(IReadOnlyList<ValidatedPackage> packages,
         string directory, bool trustChangedSources, bool askOnBuildFailure) =>

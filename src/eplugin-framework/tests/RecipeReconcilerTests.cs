@@ -72,6 +72,25 @@ public class RecipeReconcilerTests
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
     [TestCase]
+    public static void ADeclaredDirectoryThatNeverExistedIsNotBridged()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "bridge-missing-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var backup = Path.Combine(root, "backup"); var installed = Path.Combine(root, "installed");
+            Directory.CreateDirectory(backup); Directory.CreateDirectory(installed);
+            // activation only warned about it
+            var old = new RecipeSnapshot { Directories = ["res://addons/plugin/.missing"] };
+
+            Assertions.AssertThat(InterimBridge.Restore("plugin", old, backup, installed)).IsEmpty();
+            // a missing project still means the backup is incomplete
+            var project = new RecipeSnapshot { Projects = [new("addons/plugin/src/Missing.csproj", null, true)] };
+            Assertions.AssertThrown(() => InterimBridge.Restore("plugin", project, backup, installed)).IsInstanceOf<InvalidDataException>();
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [TestCase]
     public static void RelativeProjectBridgePreservesMissingNeighborsWithoutOverwritingNewCode()
     {
         var root = Path.Combine(Path.GetTempPath(), "project-bridge-" + Guid.NewGuid().ToString("N"));

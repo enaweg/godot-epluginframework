@@ -59,7 +59,7 @@ When enabling a plugin also enables disabled dependencies that ask for a license
 
 In this example, enabling Sample Dependant Plugin also enables SamplePlugin, its dependency. SamplePlugin's license was accepted already, so the dialog shows the plugin's own license next. The sample plugins do not ask for a license themselves; the screenshot uses the framework's MIT license as an example.
 
-A license is accepted once per project. Disabling and enabling the plugin again does not ask again. In a headless editor no dialog can be shown, so a plugin that needs a license is not enabled unless licenses are accepted automatically.
+A license is accepted once per project. Disabling and enabling the plugin again does not ask again. If `addons/eplugin-state.json` cannot be written, for example while it has a merge conflict, an accepted license still counts until the editor restarts, also after C# assembly reloads, and is saved once the file can be written again. In a headless editor no dialog can be shown, so a plugin that needs a license is not enabled unless licenses are accepted automatically.
 
 ## When a license counts as accepted
 
@@ -69,7 +69,7 @@ At startup and after C# assembly reloads, the framework also checks the enabled 
 
 ## Updates
 
-An update whose license is unchanged is installed without asking again. When the new version names a different license file, or asks for a license for the first time, the license is shown before installation. If you decline the license of one update in a batch, that update is skipped and the remaining updates are installed.
+An update whose license is unchanged is installed without asking again. When the new version names a different license file, or asks for a license for the first time, the license is shown before installation. If you decline the license of one update in a batch, that update is skipped and the remaining updates are installed. An accepted license is recorded once the update is installed: if you cancel the installation or the update is rolled back, the license of the version you keep stays accepted, and the new one is asked for again the next time.
 
 A license set by a recipe is only known once the new code is compiled. Such a license is checked after the update instead: if it changed, the dialog asks for it, and declining disables the plugin.
 

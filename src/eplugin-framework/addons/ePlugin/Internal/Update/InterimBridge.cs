@@ -18,6 +18,8 @@ internal static class InterimBridge
             .Select(p => p.StartsWith("res://", StringComparison.Ordinal) ? p[6..] : p)
             .Where(p => p.StartsWith(prefix, StringComparison.Ordinal)).Select(p => p[prefix.Length..])
             .OrderBy(p => p.Count(c => c == '/')).ToArray();
+        var directories = old.Directories.Select(RecipeReconciler.VisibleDirectory)
+            .Select(p => p.StartsWith("res://", StringComparison.Ordinal) ? p[6..] : p).ToHashSet(StringComparer.Ordinal);
         foreach (var relative in paths)
         {
             var target = PackageFiles.Inside(installed, relative);
@@ -43,6 +45,8 @@ internal static class InterimBridge
                 else { Directory.CreateDirectory(Path.GetDirectoryName(target)!); File.Copy(source, target, false); preserved.Add(relative); }
             }
             else if (Directory.Exists(source)) { PackageFiles.Copy(source, target, CancellationToken.None); preserved.Add(relative); }
+            // Activation only warns about a declared directory that exists in neither form, so there is nothing to keep.
+            else if (directories.Contains(prefix + relative)) continue;
             else throw new InvalidDataException("Installed recipe path is missing from its backup: " + relative);
         }
         return preserved;

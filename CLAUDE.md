@@ -449,7 +449,7 @@ fields they know: what an older version cannot represent is lost after a downgra
 supported. A missing `plugins`/`attempts` list or another `schemaVersion` still makes the store read-only. A shared file that changed on disk since it was read (a git pull) is read again before a write
 (`PluginStateStore.Rebase`), which refuses only when the same entries changed there too, to other values than this write's. Licenses and welcome pages
 recorded while the file could not be written stay recorded for the session, also when it is read again, and the next
-write that succeeds saves them. Only an update's acknowledgement sets `lastCompletedAttemptId` (recovery and rollback compare
+write that succeeds saves them; Engine metadata keeps them across assembly reloads (`RestoreUnsavedState`). Only an update's acknowledgement sets `lastCompletedAttemptId` (recovery and rollback compare
 it with the journal); lifecycle completions keep it and skip writing the shared file when no entry changed, because
 the file is committed and shared by the team. An activated entry whose plugin folder is gone gets `missing` (written
 only while true) at the first initialization of an editor start
@@ -459,9 +459,11 @@ only while true) at the first initialization of an editor start
 over the plugin and every disabled hard dependency it would enable; a disabled ePlugin's recipe comes from a
 throw-away instance of its compiled script type. With pending licenses the plugin is disabled again (deferred: Godot is
 still inside its `_EnablePlugin`), the review is queued, and `EPluginPlugin._Process` shows `LicenseDialog` a frame
-later; accepting re-enables it. `ReviewEnabledLicenses` (end of `Initialize`) asks about enabled plugins whose license
+later; accepting re-enables it (the toggles wait in Engine metadata for a pending reload, `ResumeLicenseDecisions`).
+`ReviewEnabledLicenses` (end of `Initialize`) asks about enabled plugins whose license
 source is not accepted, e.g. a recipe license an update changed; declining disables them. The ePlugin Manager asks
-before `SetPluginEnabled` and before installing staged updates (skipping recipe-licensed plugins; a disabled dependency a
+before `SetPluginEnabled` and before installing staged updates (recorded when the update commits,
+`UpdatePluginJournal.AcceptedLicense`; skipping recipe-licensed plugins; a disabled dependency a
 new recipe adds is enabled by `EnsureUpdateDependency` only with its licenses accepted, otherwise the update fails), and its details link
 the license to `LicenseDialog.CreateViewer`. The `eplugin/licenses/auto_accept` project setting (on the settings' General tab, which confirms turning it on; logged)
 skips the dialog.

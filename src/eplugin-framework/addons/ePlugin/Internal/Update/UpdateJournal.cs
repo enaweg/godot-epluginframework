@@ -40,6 +40,11 @@ internal sealed class UpdatePluginJournal
     public bool ReloadedInPlace { get; set; }
     /// <summary>The editor process <see cref="RestartRequired"/> and <see cref="ReloadedInPlace"/> refer to.</summary>
     public string? NativeSession { get; set; }
+    /// <summary>
+    /// The source of the new version's license the user accepted, recorded when the update commits: until then the
+    /// installed version's accepted license stays, also when the update is rolled back. Null when none was asked about.
+    /// </summary>
+    public string? AcceptedLicense { get; set; }
 }
 internal sealed record JournalBuild(string Name, int ExitCode, string LogFile);
 internal sealed class UpdateJournal

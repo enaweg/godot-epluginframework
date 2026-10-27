@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Enaweg.Plugin.Internal.Update;
 using Enaweg.Plugin.Logging;
+using Godot;
 
 namespace Enaweg.Plugin.Internal;
 
@@ -109,6 +110,15 @@ internal sealed partial class EGlobal
         if (!_host.IsPluginEnabled(context.Slug))
         {
             _host.SetPluginEnabled(context.Slug, true);
+            // Godot refused it (e.g. its script does not load): installing its recipe would record a plugin as activated
+            // that the editor has disabled.
+            if (!_host.IsPluginEnabled(context.Slug))
+            {
+                context.Logger?.Error($"{context.Slug} cannot be enabled again; Godot did not enable it.");
+                FailTransition("plugin_enable_refused");
+                return;
+            }
+
             // A plugin disabled by its failed activation has no editor instance left: Godot created a new one, whose
             // EnableEPlugin did this activation in its place. This context's instance is freed; it must not go on.
             if (_contexts.LastOrDefault(c => c.Slug == context.Slug && c.Plugin is not null) is { } current && current != context)
@@ -224,8 +234,9 @@ internal sealed partial class EGlobal
                 if (_host.IsPluginEnabled(slug))
                 {
                     // Godot runs the dependency's _EnablePlugin inside the toggle, which resumes this plugin once it is
-                    // activated. One that never called EnableEPlugin (e.g. it threw first) neither activated nor waits.
-                    var started = _contexts.LastOrDefault(c => c.Slug == slug && c.Plugin is not null);
+                    // activated. One that never called EnableEPlugin (e.g. it threw first) neither activated nor waits; the
+                    // context of an earlier instance, freed without DisableEPlugin, does not count as started.
+                    var started = _contexts.LastOrDefault(c => c.Slug == slug && c.Plugin is not null && GodotObject.IsInstanceValid(c.PluginBase));
                     if (!_toCheckEnable.Contains(context) || started is not null &&
                         (started.State == EEditorPluginState.Activated || _toCheckEnable.Contains(started)))
                     {

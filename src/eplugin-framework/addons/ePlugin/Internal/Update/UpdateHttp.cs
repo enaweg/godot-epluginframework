@@ -60,8 +60,9 @@ internal sealed class UpdateHttp
     /// </summary>
     internal TimeSpan StallTimeout { get; init; } = TimeSpan.FromSeconds(60);
 
+    /// <param name="accept">The media type asked for; GitHub's API sends a release asset's file only for application/octet-stream.</param>
     public async Task<HttpResponseMessage> SendAsync(Uri uri, HttpMethod method, CancellationToken ct,
-        string? token = null, bool gitlab = false)
+        string? token = null, bool gitlab = false, string accept = "application/json")
     {
         var origin = uri;
         for (var i = 0; i <= 5; i++)
@@ -69,7 +70,7 @@ internal sealed class UpdateHttp
             if (uri.Scheme != Uri.UriSchemeHttps || !string.IsNullOrEmpty(uri.UserInfo)) throw new IOException("Only HTTPS update downloads without URL credentials are supported.");
             using var request = new HttpRequestMessage(method, uri);
             request.Headers.UserAgent.ParseAdd("ePlugin-Updater/1.0");
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(accept));
             if (token is not null && uri.Host == origin.Host)
             {
                 if (gitlab) request.Headers.Add("PRIVATE-TOKEN", token);
@@ -111,14 +112,22 @@ internal sealed class UpdateHttp
     {
         string? token = null;
         var gitlab = false;
-        if (Uri.TryCreate(sourceUrl, UriKind.Absolute, out var source) && new Uri(url).Host == source.Host)
+        var accept = "application/json";
+        var target = new Uri(url);
+        if (target.Host == "api.github.com")
+        {
+            // A release asset or archive through GitHub's API (GitHubReleaseSource uses it with a token): its own host.
+            token = ForgeTokens.GitHub(target);
+            accept = "application/octet-stream";
+        }
+        else if (Uri.TryCreate(sourceUrl, UriKind.Absolute, out var source) && target.Host == source.Host)
         {
             gitlab = source.AbsolutePath.Contains("/-/", StringComparison.Ordinal);
             if (source.Host == "github.com") token = ForgeTokens.GitHub(source);
             else if (gitlab) token = ForgeTokens.GitLab(source);
             else if (source.AbsolutePath.Contains("/releases", StringComparison.Ordinal)) token = ForgeTokens.Forgejo(source);
         }
-        using var response = await SendAsync(new Uri(url), HttpMethod.Get, ct, token, gitlab).ConfigureAwait(false);
+        using var response = await SendAsync(target, HttpMethod.Get, ct, token, gitlab, accept).ConfigureAwait(false);
         await using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true);
         await CopyBounded(response, output, MaximumDownload, progress, ct, StallTimeout).ConfigureAwait(false);
     }

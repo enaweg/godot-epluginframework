@@ -32,6 +32,8 @@ internal sealed partial class AttentionDialog : AcceptDialog, ISerializationList
     private Button _retryAll = null!;
     private ConfirmationDialog _rollbackConfirm = null!;
     private string? _selected;
+    // The plugin and kept update the rollback confirmation names; the list may change while it is open.
+    private (string Slug, string Journal)? _confirming;
     private bool _busy;
 
     /// <summary>Raised for a decision; the item is null for <see cref="AttentionAction.RetryAll"/>.</summary>
@@ -56,7 +58,7 @@ internal sealed partial class AttentionDialog : AcceptDialog, ISerializationList
         _signals.Connect(_retry, BaseButton.SignalName.Pressed, Callable.From(() => Request(AttentionAction.Retry)));
         _signals.Connect(_disable, BaseButton.SignalName.Pressed, Callable.From(() => Request(AttentionAction.Disable)));
         _signals.Connect(_rollback, BaseButton.SignalName.Pressed, Callable.From(ConfirmRollback));
-        _signals.Connect(_rollbackConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(() => Request(AttentionAction.Rollback)));
+        _signals.Connect(_rollbackConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(RollbackConfirmed));
         _signals.Connect(_log, BaseButton.SignalName.Pressed, Callable.From(() => { if (Selected?.Log is { } log) OS.ShellOpen(log); }));
         _signals.Connect(_folder, BaseButton.SignalName.Pressed, Callable.From(() =>
         {
@@ -142,7 +144,8 @@ internal sealed partial class AttentionDialog : AcceptDialog, ISerializationList
 
     private void ConfirmRollback()
     {
-        if (_busy || Selected?.Kept is not { } kept) return;
+        if (_busy || Selected is not { Kept: { } kept } item) return;
+        _confirming = (item.Slug, kept.Id);
         var versions = string.Join(", ", kept.Plugins.Select(p => $"{p.Slug} {p.OldVersion}"));
         _rollbackConfirm.DialogText = $"Restore {versions}?\n\nOpen scenes are saved first. Changes made inside the plugin's folder since the update are lost. " +
             (kept.BeforeReconcile
@@ -150,6 +153,14 @@ internal sealed partial class AttentionDialog : AcceptDialog, ISerializationList
                 : "Project files (.csproj, .sln, nuget.config) stay as they are; only the changes of the new version's recipe are undone. ") +
             "If you already adapted the project's code to the new version, it will not build with the old one.";
         _rollbackConfirm.PopupCentered();
+    }
+
+    /// <summary>Rolls back the update the confirmation named, if it is still the one selected and still kept.</summary>
+    internal void RollbackConfirmed()
+    {
+        var confirmed = _confirming;
+        _confirming = null;
+        if (Selected is { Kept: { } kept } item && confirmed == (item.Slug, kept.Id)) Request(AttentionAction.Rollback);
     }
 
     private void QueueWindowIcons() => CallDeferred(nameof(RefreshWindowIcons));

@@ -168,6 +168,9 @@ internal sealed partial class EGlobal
     /// <summary>Runs <paramref name="action"/> on the editor thread in a later frame. Callable from any thread.</summary>
     internal static void Post(Action action) => Posted.Enqueue(action);
 
+    /// <summary>Drops the work posted so far, as an assembly reload does.</summary>
+    internal static void DiscardPosted() => Posted.Clear();
+
     /// <summary>Runs the work posted so far; called once per frame on the editor thread.</summary>
     internal static void RunPosted()
     {

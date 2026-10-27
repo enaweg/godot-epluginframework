@@ -24,7 +24,6 @@ internal interface IUpdateWorkflowHost
         CancellationToken ct);
 
     LicenseReview? ReviewUpdateLicenses(IEnumerable<ValidatedPackage> packages);
-    void RecordLicenses(LicenseReview review);
 
     Task<IReadOnlyList<UpdateGroupResult>> ApplyUpdatesAsync(IReadOnlyList<ValidatedPackage> packages, string directory,
         bool trustChangedSources, bool askOnBuildFailure);
@@ -100,9 +99,6 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
     public IReadOnlyDictionary<string, string> RemoteVersionErrors => _remoteVersionErrors;
 
     public bool IsLoadingVersions(string slug) => _loadingVersions.Contains(slug);
-
-    /// <summary>The batch being installed; null when none is.</summary>
-    public InstallRequest? Request { get; private set; }
 
     /// <summary>The validated packages of the batch being installed; null before they are staged.</summary>
     public IReadOnlyList<ValidatedPackage>? Staged { get; private set; }
@@ -187,7 +183,6 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
     /// </summary>
     public async Task<InstallOutcome> InstallAsync(InstallRequest request, InstallView view, CancellationToken ct)
     {
-        Request = request;
         try
         {
             var first = request.Batch[0];
@@ -254,9 +249,11 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
             {
                 view.Status("Review the licenses of the updates.");
                 var decided = await reviewLicenses(licenses);
-                host.RecordLicenses(decided);
                 var declined = decided.Canceled.Select(a => a.Slug).ToHashSet(StringComparer.Ordinal);
-                selected = selected.Where(p => !declined.Contains(p.Candidate.Slug)).ToArray();
+                // Recorded when the update commits: a canceled or rolled back update keeps the installed version's license.
+                var accepted = decided.Accepted.ToDictionary(e => e.Slug, e => e.Source, StringComparer.Ordinal);
+                selected = selected.Where(p => !declined.Contains(p.Candidate.Slug))
+                    .Select(p => accepted.TryGetValue(p.Candidate.Slug, out var source) ? p with { AcceptedLicense = source } : p).ToArray();
                 if (!view.Alive())
                 {
                     Clear();
@@ -392,7 +389,6 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
         Staged = null;
         StagedAddon = null;
         Refused = [];
-        Request = null;
     }
 }
 #endif

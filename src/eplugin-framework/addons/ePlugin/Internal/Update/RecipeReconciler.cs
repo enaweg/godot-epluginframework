@@ -28,7 +28,7 @@ internal static class RecipeReconciler
         if (prepareTree) operations.Add(new(RecipeOperationKind.PrepareTree));
         foreach (var item in old.Directories.Where(d => !next.Directories.Any(n => VisibleDirectory(n) == VisibleDirectory(d)))) operations.Add(new(RecipeOperationKind.HideDirectory, Directory: item));
         foreach (var item in next.Directories.Where(d => prepareTree || !old.Directories.Any(n => VisibleDirectory(n) == VisibleDirectory(d))).OrderBy(d => d.Count(c => c == '/'))) operations.Add(new(RecipeOperationKind.ShowDirectory, Directory: item));
-        foreach (var item in old.Nugets.Where(n => !next.Nugets.Any(p => p.Name == n.Name))) operations.Add(new(RecipeOperationKind.RemoveNuget, Nuget: item));
+        foreach (var item in old.Nugets.Where(n => !next.Nugets.Any(p => string.Equals(p.Name, n.Name, StringComparison.OrdinalIgnoreCase)))) operations.Add(new(RecipeOperationKind.RemoveNuget, Nuget: item));
         foreach (var item in next.Nugets.Where(n => !old.Nugets.Contains(n))) operations.Add(new(RecipeOperationKind.AddNuget, Nuget: item));
         foreach (var item in next.Projects.Where(p => !old.Projects.Contains(p))) operations.Add(new(RecipeOperationKind.AddProject, Project: item));
         foreach (var item in next.Autoloads.Where(a => !old.Autoloads.Contains(a))) operations.Add(new(RecipeOperationKind.AddAutoload, Autoload: item));
@@ -41,7 +41,7 @@ internal static class RecipeReconciler
         !old.Directories.Select(VisibleDirectory).ToHashSet(StringComparer.Ordinal).SetEquals(next.Directories.Select(VisibleDirectory));
     public static void Validate(RecipeSnapshot snapshot)
     {
-        if (snapshot.SchemaVersion != 1 || snapshot.Nugets.GroupBy(n => n.Name).Any(g => g.Count() > 1) ||
+        if (snapshot.SchemaVersion != 1 || snapshot.Nugets.GroupBy(n => n.Name, StringComparer.OrdinalIgnoreCase).Any(g => g.Count() > 1) ||
             snapshot.Projects.GroupBy(p => p.Path).Any(g => g.Count() > 1) || snapshot.Autoloads.GroupBy(a => a.Name).Any(g => g.Count() > 1))
             throw new InvalidDataException("Recipe snapshot has incompatible schema or conflicting declarations.");
     }
@@ -55,8 +55,8 @@ internal static class RecipeReconciler
             case RecipeOperationKind.AddProject: applied.Projects.RemoveAll(p => p.Path == op.Project!.Path); applied.Projects.Add(op.Project!); break;
             case RecipeOperationKind.HideDirectory: applied.Directories.RemoveAll(d => VisibleDirectory(d) == VisibleDirectory(op.Directory!)); break;
             case RecipeOperationKind.ShowDirectory: applied.Directories.RemoveAll(d => VisibleDirectory(d) == VisibleDirectory(op.Directory!)); applied.Directories.Add(op.Directory!); break;
-            case RecipeOperationKind.RemoveNuget: applied.Nugets.RemoveAll(n => n.Name == op.Nuget!.Name); break;
-            case RecipeOperationKind.AddNuget: applied.Nugets.RemoveAll(n => n.Name == op.Nuget!.Name); applied.Nugets.Add(op.Nuget!); break;
+            case RecipeOperationKind.RemoveNuget: applied.Nugets.RemoveAll(n => string.Equals(n.Name, op.Nuget!.Name, StringComparison.OrdinalIgnoreCase)); break;
+            case RecipeOperationKind.AddNuget: applied.Nugets.RemoveAll(n => string.Equals(n.Name, op.Nuget!.Name, StringComparison.OrdinalIgnoreCase)); applied.Nugets.Add(op.Nuget!); break;
             case RecipeOperationKind.EnsureDependency: applied.PluginDependencies.RemoveAll(p => p.Slug == op.Dependency!.Slug); applied.PluginDependencies.Add(op.Dependency!); break;
         }
     }

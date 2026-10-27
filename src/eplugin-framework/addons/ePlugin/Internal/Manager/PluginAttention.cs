@@ -112,6 +112,7 @@ internal sealed record AttentionItem(PluginRow Row, UpdateJournal? Journal, Upda
             "participant_blocked" => $"{verb} failed: a plugin changed together with it is blocked by an earlier failure.",
             "cannot_record_participant" or "state_commit_failed" => $"{verb} failed: its state could not be saved in eplugin-state.json.",
             "deactivation_failed" => "Disabling the plugin failed.",
+            "plugin_enable_refused" => "Enabling failed: Godot did not enable the plugin, for example because its script does not load.",
             "update_kept_build_failed" => "The update was kept although the project does not build with it.",
             "update_commit_failed" => "The update was installed, but recording its new version failed.",
             "update_rollback_failed" => "Rolling back a failed update did not finish.",

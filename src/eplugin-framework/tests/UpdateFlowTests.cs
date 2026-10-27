@@ -93,7 +93,6 @@ public class UpdateFlowTests : IDisposable
             "Downloading and validating selected addons... 50%", "Downloading and validating selected addons... 100%", "end");
         Assertions.AssertThat(_status).ContainsExactly("Downloading and validating selected addons...", "Installing selected addons...");
         Assertions.AssertObject(flow.Staged).IsNull();
-        Assertions.AssertObject(flow.Request).IsNull();
         Assertions.AssertObject(_askedReview).IsNull();
     }
 
@@ -178,7 +177,8 @@ public class UpdateFlowTests : IDisposable
 
         Assertions.AssertObject(outcome.Step).IsEqual(InstallStep.Installed);
         Assertions.AssertThat(_host.Applied.Single().Packages.Select(p => p.Candidate.Slug).ToArray()).ContainsExactly("a");
-        Assertions.AssertThat(_host.Recorded.Single().Accepted.Select(e => e.Slug).ToArray()).ContainsExactly("a");
+        // recorded when the update commits, not before it is installed
+        Assertions.AssertString(_host.Applied.Single().Packages.Single().AcceptedLicense).IsEqual(PluginLicense.FromText("a", "a", "2.0.0", "Terms").Source);
 
         _decide = review => review.DeclineRemaining();
         var canceled = await Flow().InstallAsync(new([Candidate("a"), Candidate("b")]), View(), CancellationToken.None);
@@ -290,8 +290,7 @@ public class UpdateFlowTests : IDisposable
         var license = await Flow().InstallAsync(new([Candidate("a")]), View(), CancellationToken.None);
 
         Assertions.AssertObject(license.Step).IsEqual(InstallStep.Abandoned);
-        // the decision is kept, as the dialog recorded it before the manager was found closed
-        Assertions.AssertInt(_host.Recorded.Count).IsEqual(1);
+        // nothing is installed, so the installed versions' licenses stay as they were accepted
         Assertions.AssertInt(_host.Applied.Count).IsEqual(0);
         Assertions.AssertBool(Directory.Exists(_host.StagingDirectory)).IsFalse();
     }
@@ -643,7 +642,6 @@ public class UpdateFlowTests : IDisposable
         public IReadOnlyList<UpdateCheckFailure>? Fallbacks { get; set; }
         public Task<IReadOnlyList<UpdateCandidate>> Versions { get; set; } = Task.FromResult<IReadOnlyList<UpdateCandidate>>([]);
         public List<(IReadOnlyList<ValidatedPackage> Packages, bool Trust, bool AskOnBuildFailure)> Applied { get; } = [];
-        public List<LicenseReview> Recorded { get; } = [];
         public int Stagings { get; private set; }
         public bool AllowDowngrade { get; private set; }
         public string StagingDirectory { get; private set; } = "";
@@ -682,8 +680,6 @@ public class UpdateFlowTests : IDisposable
             return entries.Length == 0 ? null
                 : new LicenseReview(entries, entries.Select(e => new LicenseActivation(e.Slug, e.Name, [e.Slug])).ToArray(), isUpdate: true);
         }
-
-        public void RecordLicenses(LicenseReview review) => Recorded.Add(review);
 
         public Task<IReadOnlyList<UpdateGroupResult>> ApplyUpdatesAsync(IReadOnlyList<ValidatedPackage> packages, string directory,
             bool trustChangedSources, bool askOnBuildFailure)

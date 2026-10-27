@@ -153,6 +153,7 @@ internal sealed partial class EGlobal
 
         _stateStore = new PluginStateStore(StateFilePath, plugin.Logger);
         _stateStore.Load();
+        RestoreUnsavedState();
         InitializeUpdateJournals();
         ReloadContexts(_loggerFactory);
         CreateStateBaseline();
@@ -171,6 +172,7 @@ internal sealed partial class EGlobal
         ResumeWaitingPlugins();
         ResumeUpdates();
         ReviewEnabledLicenses();
+        ResumeLicenseDecisions();
         InitializeUpdates(plugin);
     }
 
