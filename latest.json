@@ -1,8 +1,8 @@
 {
- "commit": "5055ec0f97aa79d17390a792f963b84ae4c7f299",
- "date": "2026-10-26T13:35:31Z",
- "covered": 11438,
- "coverable": 12550,
+ "commit": "49f00479647b1966cbfc9ffa28a3936f5cd5bce4",
+ "date": "2026-10-27T10:21:22Z",
+ "covered": 11463,
+ "coverable": 12576,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -137,20 +137,20 @@
    124
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Retry.cs": [
-   144,
-   156
+   134,
+   146
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Transitions.cs": [
    100,
    132
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateApply.cs": [
-   181,
-   282
+   187,
+   288
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateRecipes.cs": [
-   187,
-   189
+   188,
+   190
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateSites.cs": [
    28,
@@ -321,8 +321,8 @@
    11
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/ToolsTab.cs": [
-   200,
-   219
+   206,
+   229
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateFailureDialog.cs": [
    53,
@@ -353,8 +353,8 @@
    45
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PlainPluginObserver.cs": [
-   69,
-   71
+   74,
+   74
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PluginContext.cs": [
    14,
@@ -425,16 +425,16 @@
    6
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/LocalCleanup.cs": [
-   96,
-   97
+   98,
+   99
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/LocalIndexCache.cs": [
    24,
    25
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/LocalPackageIndex.cs": [
-   79,
-   81
+   92,
+   94
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/LocalSourceSettings.cs": [
    56,
@@ -457,8 +457,8 @@
    51
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/RecipeSnapshot.cs": [
-   25,
-   26
+   27,
+   27
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/ReleaseSources.cs": [
    189,
