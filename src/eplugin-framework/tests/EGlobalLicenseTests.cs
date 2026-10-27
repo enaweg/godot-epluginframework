@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Enaweg.Plugin.Internal;
 using Enaweg.Plugin.Internal.Licenses;
 using Enaweg.Plugin.Internal.Update;
+using Enaweg.Plugin.Internal.Welcomes;
 using GdUnit4;
 using Godot;
 
@@ -68,6 +69,31 @@ public class EGlobalLicenseTests : IDisposable
         Assertions.AssertBool(_fixture.Store.IsLicenseAccepted("base", "LICENSE")).IsFalse();
         Assertions.AssertBool(_fixture.Log.Any(l => l.StartsWith("warn:", StringComparison.Ordinal) &&
                                                     l.Contains("was not enabled: the license of base was declined"))).IsTrue();
+    }
+
+    [TestCase]
+    public void LicenseDecisionsAnAssemblyReloadInterruptedAreAppliedAfterIt()
+    {
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"), extraConfig: "license_required=true");
+        RequireLicense("app");
+        _fixture.Host.Dialogs = true;
+        _fixture.Enable("app");
+        EGlobal.RunPosted();
+        var review = _fixture.Global.PendingLicenseReview!;
+        review.Accept("app");
+
+        _fixture.Global.CompleteLicenseReview(review);
+        // the reload of another plugin's build was due, and discarded the posted work
+        EGlobal.DiscardPosted();
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsFalse();
+        _fixture.Global.ResumeLicenseDecisions();
+        EGlobal.RunPosted();
+
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Activated);
+        // applied once
+        _fixture.Global.ResumeLicenseDecisions();
+        EGlobal.RunPosted();
+        Assertions.AssertInt(_fixture.Operations.Count(o => o == "add-nuget App.Package")).IsEqual(1);
     }
 
     [TestCase]
@@ -152,6 +178,36 @@ public class EGlobalLicenseTests : IDisposable
         Assertions.AssertBool(_fixture.Log.Any(l => l.StartsWith("error:", StringComparison.Ordinal) &&
                                                     l.Contains("could not be saved"))).IsTrue();
         Assertions.AssertBool(store.IsLicenseAccepted("tool", "LICENSE")).IsTrue();
+    }
+
+    [TestCase]
+    public void LicensesAndWelcomesThatCouldNotBeSavedSurviveAnAssemblyReload()
+    {
+        _fixture.AddPlainPlugin("tool", extraConfig: "license_required=true");
+        RequireLicense("tool");
+        var path = Path.Combine(_fixture.Root, "addons", "eplugin-state.json");
+        var resolved = File.ReadAllText(path);
+        // a git pull left a merge conflict, so nothing can be written
+        File.WriteAllText(path, "<<<<<<< HEAD\n" + resolved + "=======\n>>>>>>> origin/main\n");
+        var review = _fixture.Global.ReviewActivationLicenses("tool", "Tool")!;
+        review.AcceptAll();
+        _fixture.Global.RecordLicenses(review);
+        _fixture.Global.CompleteWelcomes([new WelcomeEntry("tool", "Tool", "1.0.0", "README.md", "Welcome")]);
+        Assertions.AssertBool(_fixture.Store.IsLicenseAccepted("tool", "LICENSE")).IsTrue();
+
+        // the conflict is resolved, and the build of an activation reloads the assembly, which creates the store anew
+        File.WriteAllText(path, resolved);
+        var reloaded = new PluginStateStore(path, new RecordingLogger(_fixture.Log, "store"));
+        reloaded.Load();
+        _fixture.Global.StateStore = reloaded;
+        _fixture.Global.RestoreUnsavedState();
+
+        Assertions.AssertBool(reloaded.IsLicenseAccepted("tool", "LICENSE")).IsTrue();
+        Assertions.AssertBool(reloaded.IsWelcomeShown("tool")).IsTrue();
+        var saved = new PluginStateStore(path, new RecordingLogger(_fixture.Log, "store"));
+        saved.Load();
+        Assertions.AssertBool(saved.IsLicenseAccepted("tool", "LICENSE")).IsTrue();
+        Assertions.AssertBool(saved.IsWelcomeShown("tool")).IsTrue();
     }
 
     [TestCase]

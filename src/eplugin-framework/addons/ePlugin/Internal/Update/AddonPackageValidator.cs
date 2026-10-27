@@ -23,8 +23,13 @@ internal sealed record ValidationContext(PluginUpdateTarget Installed, UpdateCan
     bool AllowReinstall = false, bool NewInstall = false);
 internal interface IAddonRule { IEnumerable<Finding> Check(ValidationContext context); }
 /// <param name="Kind">The kind whose workflow installs the package, see <see cref="PluginKinds.ForPackage"/>.</param>
+/// <param name="AcceptedLicense">
+/// The source of the new version's license the user accepted before installing it, recorded once the update commits;
+/// null when none was asked about.
+/// </param>
 internal sealed record ValidatedPackage(UpdateCandidate Candidate, string StagingDir, SemVer NewVersion,
-    string? NewUpdateUrl, bool ContainsCSharp, IReadOnlyList<Finding> Findings, PluginKind Kind = PluginKind.Unknown)
+    string? NewUpdateUrl, bool ContainsCSharp, IReadOnlyList<Finding> Findings, PluginKind Kind = PluginKind.Unknown,
+    string? AcceptedLicense = null)
 {
     public bool IsValid => Findings.All(f => f.Severity != FindingSeverity.Error);
 }

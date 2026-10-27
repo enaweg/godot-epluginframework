@@ -200,7 +200,14 @@ public class NugetConfigManagerTests
             Assertions.AssertInt(CountOccurrences(content, "<add key=\"ePlugin-")).IsEqual(1);
             Assertions.AssertThat(content).Contains("used-by=\"plugin_b\"");
             Assertions.AssertThat(content).NotContains("plugin_a");
+            // a comment of the team's own is kept, the marker goes next to it
+            if (replacement.Length > 0) Assertions.AssertThat(content).Contains(replacement);
         }
+
+        NugetConfigManager.UnregisterSource(Root, "plugin_b", url, new NullLogger());
+        var left = File.ReadAllText(ConfigPath);
+        Assertions.AssertThat(left).Contains("<!-- reviewed by the team -->");
+        Assertions.AssertThat(left).NotContains("ePlugin-");
     }
 
     [TestCase]

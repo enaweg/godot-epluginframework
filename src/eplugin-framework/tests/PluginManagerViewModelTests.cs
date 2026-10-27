@@ -264,10 +264,10 @@ public class PluginManagerViewModelTests
     [TestCase]
     public static void VersionOptionsMarkInstalledAndDowngrades()
     {
-        var options = PluginManagerViewModel.VersionOptions("1.5.0", [Version("1.0.0"), Version("2.0.0"), Version("1.5.0")]);
+        var options = PluginManagerViewModel.VersionOptions("1.5.0", [Version("1.0.0"), Version("2.0.0"), Version("1.5.0")], PluginKind.EPlugin);
         Assertions.AssertArray(options.Select(o => o.Version).ToArray()).ContainsExactly("2.0.0", "1.5.0", "1.0.0");
         Assertions.AssertBool(options[1].Installed && !options[0].IsDowngrade && options[2].IsDowngrade).IsTrue();
-        var unlisted = PluginManagerViewModel.VersionOptions("1.7.0", [Version("2.0.0"), Version("1.0.0")]);
+        var unlisted = PluginManagerViewModel.VersionOptions("1.7.0", [Version("2.0.0"), Version("1.0.0")], PluginKind.EPlugin);
         Assertions.AssertArray(unlisted.Select(o => o.Version).ToArray()).ContainsExactly("2.0.0", "1.7.0", "1.0.0");
         Assertions.AssertObject(unlisted[1].Candidate).IsNull();
 
@@ -286,7 +286,7 @@ public class PluginManagerViewModelTests
         var plugin = new PluginRow(Plugin("beta", PluginKind.EPlugin, "https://example.org/repo.git#main"), null);
         // e.g. the head of a pinned git branch whose plugin.cfg version did not change
         var head = Version("1.5.0") with { Package = new GitPackageRef("https://example.org/repo.git", "", "0123456789abcdef0123456789abcdef01234567") };
-        var listed = PluginManagerViewModel.VersionOptions("1.5.0", [head]).Single();
+        var listed = PluginManagerViewModel.VersionOptions("1.5.0", [head], PluginKind.EPlugin).Single();
         Assertions.AssertBool(listed.Installed && listed.IsReinstall).IsTrue();
         Assertions.AssertString(listed.Action).IsEqual("Reinstall");
         Assertions.AssertObject(PluginManagerViewModel.VersionChangeBlocked(plugin, listed)).IsNull();
@@ -294,7 +294,7 @@ public class PluginManagerViewModelTests
         var framework = new PluginRow(Plugin("ePlugin", PluginKind.Framework, "https://example.org/repo.git#main"), null);
         Assertions.AssertObject(PluginManagerViewModel.VersionChangeBlocked(framework, listed)).IsNull();
 
-        var unlisted = PluginManagerViewModel.VersionOptions("1.5.0", []).Single();
+        var unlisted = PluginManagerViewModel.VersionOptions("1.5.0", [], PluginKind.EPlugin).Single();
         Assertions.AssertBool(unlisted.IsReinstall).IsFalse();
         Assertions.AssertString(PluginManagerViewModel.VersionChangeBlocked(plugin, unlisted)).Contains("installed");
         var disabled = new PluginRow(Plugin("gamma", PluginKind.EPlugin, "https://example.org/repo.git#main", enabled: false), null);
@@ -304,20 +304,22 @@ public class PluginManagerViewModelTests
     public static void AnUnknownInstalledVersionIsReplacedByInstallingAnyVersion()
     {
         // a GDExtension add-on ePlugin did not install
-        var options = PluginManagerViewModel.VersionOptions("", [Version("1.0.0"), Version("2.0.0")]);
+        var options = PluginManagerViewModel.VersionOptions("", [Version("1.0.0"), Version("2.0.0")], PluginKind.GDExtensionAddon);
         Assertions.AssertArray(options.Select(o => o.Version).ToArray()).ContainsExactly("2.0.0", "1.0.0");
         Assertions.AssertBool(options.All(o => o.ReplacesUnknown && !o.Installed && !o.IsDowngrade && !o.IsReinstall)).IsTrue();
         Assertions.AssertArray(options.Select(o => o.Action).ToArray()).ContainsExactly("Install", "Install");
         Assertions.AssertString(PluginManagerViewModel.VersionLabel(options[0], latest: true)).IsEqual("2.0.0 (latest)");
         var addon = new PluginRow(new PluginInfo("beta", "Beta", PluginKind.GDExtensionAddon, true) { UpdateSite = "https://example.org/releases" }, null);
         Assertions.AssertObject(PluginManagerViewModel.VersionChangeBlocked(addon, options[0])).IsNull();
-        Assertions.AssertBool(PluginManagerViewModel.VersionOptions("1.5.0", [Version("2.0.0")]).Any(o => o.ReplacesUnknown)).IsFalse();
+        Assertions.AssertBool(PluginManagerViewModel.VersionOptions("1.5.0", [Version("2.0.0")], PluginKind.GDExtensionAddon).Any(o => o.ReplacesUnknown)).IsFalse();
+        // another plugin without a version has a plugin.cfg to repair; ePlugin did not lose track of what it installed
+        Assertions.AssertBool(PluginManagerViewModel.VersionOptions("", [Version("2.0.0")], PluginKind.GDScript).Any(o => o.ReplacesUnknown)).IsFalse();
     }
     [TestCase]
     public static void VersionLabelsMarkLatestInstalledAndLocalVersions()
     {
         var local = Version("2.1.0") with { SourceUrl = null, Package = new LocalZipPackageRef("/packages/beta.zip") };
-        var options = PluginManagerViewModel.VersionOptions("1.5.0", [local, Version("2.0.0"), Version("1.5.0")]);
+        var options = PluginManagerViewModel.VersionOptions("1.5.0", [local, Version("2.0.0"), Version("1.5.0")], PluginKind.EPlugin);
         Assertions.AssertString(PluginManagerViewModel.VersionLabel(options[0], latest: true)).IsEqual("2.1.0 (latest, local)");
         Assertions.AssertString(PluginManagerViewModel.VersionLabel(options[1], latest: false)).IsEqual("2.0.0");
         Assertions.AssertString(PluginManagerViewModel.VersionLabel(options[2], latest: false)).IsEqual("1.5.0 (installed)");

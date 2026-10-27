@@ -117,7 +117,11 @@ internal sealed class PluginManagerViewModel
         : row.IsUpdatable ? "Updatable" : null;
 
     /// <summary>The published versions plus the installed one, newest first.</summary>
-    public static IReadOnlyList<VersionOption> VersionOptions(string installedVersion, IReadOnlyList<UpdateCandidate> versions)
+    /// <param name="kind">
+    /// Only a GDExtension add-on ePlugin did not install has no version, which installing any version replaces; another
+    /// plugin without one has a plugin.cfg to repair.
+    /// </param>
+    public static IReadOnlyList<VersionOption> VersionOptions(string installedVersion, IReadOnlyList<UpdateCandidate> versions, PluginKind kind)
     {
         var known = SemVer.TryParse(installedVersion, out var installed);
         var options = versions.Select(candidate =>
@@ -125,7 +129,7 @@ internal sealed class PluginManagerViewModel
             var valid = SemVer.TryParse(candidate.NewVersion, out var version);
             var current = known && valid && version.CompareTo(installed) == 0;
             return new VersionOption(candidate.NewVersion, candidate, current, known && valid && version.CompareTo(installed) < 0,
-                installedVersion.Length == 0);
+                installedVersion.Length == 0 && kind == PluginKind.GDExtensionAddon);
         }).ToList();
         // A GDExtension add-on ePlugin did not install has no known version to list.
         if (!options.Any(o => o.Installed) && installedVersion.Length > 0) options.Add(new(installedVersion, null, true, false));

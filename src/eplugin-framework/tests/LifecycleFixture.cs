@@ -125,6 +125,8 @@ internal sealed class LifecycleFixture : IDisposable
         // work a test left posted must not run in the next one
         EGlobal.RunPosted();
         EGlobal.ForgetPluginToggles();
+        EGlobal.ForgetLicenseDecisions();
+        EGlobal.ForgetUnsavedState();
         foreach (var obj in _objects.Where(GodotObject.IsInstanceValid)) obj.Free();
         if (Directory.Exists(Root)) Directory.Delete(Root, true);
     }

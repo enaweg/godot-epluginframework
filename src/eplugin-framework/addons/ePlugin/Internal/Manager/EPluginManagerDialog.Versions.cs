@@ -43,7 +43,7 @@ internal sealed partial class EPluginManagerDialog
             }
             else
             {
-                _versionOptions = PluginManagerViewModel.VersionOptions(row.Plugin.Version, UpdateService.MergeVersions(local, remote));
+                _versionOptions = PluginManagerViewModel.VersionOptions(row.Plugin.Version, UpdateService.MergeVersions(local, remote), row.Plugin.Kind);
                 var latest = _versionOptions.FirstOrDefault(o => !o.Installed && o.Candidate is not null && !o.IsDowngrade);
                 for (var i = 0; i < _versionOptions.Count; i++)
                 {

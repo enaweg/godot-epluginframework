@@ -110,13 +110,16 @@ internal sealed partial class EPluginManagerDialog
     /// </param>
     private void CompletePluginOperation(bool refresh = true)
     {
-        // A dependency's deferred callback can keep the activation open after SetPluginEnabled returns.
+        // A dependency's deferred callback can keep the activation open after SetPluginEnabled returns. _Process completes
+        // the operation once it is done, as asked here.
         if (_global.IsChangingPlugins)
         {
+            _refreshOnCompletion = refresh;
             _working = false;
             Buttons();
             return;
         }
+        _refreshOnCompletion = true;
         _reloadPending = AssemblyReload.IsPending;
         _pluginOperation.Complete(_reloadPending);
         _working = false;
@@ -144,6 +147,16 @@ internal sealed partial class EPluginManagerDialog
         }
         if (review is null) { SetPluginEnabled(slug, name, true); return; }
         _status.Text = $"Review the license to enable {name}.";
+        try { OpenLicenseDialog(slug, name, review); }
+        catch (Exception ex)
+        {
+            GD.PushError($"Cannot show the license of {slug}: {ex.Message}");
+            CompletePluginOperation();
+        }
+    }
+
+    private void OpenLicenseDialog(string slug, string name, LicenseReview review)
+    {
         LicenseDialog.Create(review, decided =>
         {
             try { _global.RecordLicenses(decided); }
@@ -164,7 +177,7 @@ internal sealed partial class EPluginManagerDialog
 
     private void SetPluginEnabled(string slug, string name, bool enable)
     {
-        if (!IsInitialized || !_pluginOperation.IsRunning) return;
+        if (!IsInitialized || !_pluginOperation.IsRunning || EndedByPendingReload()) return;
         // Also covers plain plugins; an ePlugin's own activation shares this window.
         using var progress = ActivationProgress.Begin((enable ? "Enabling " : "Disabling ") + name + "...");
         try
@@ -194,7 +207,26 @@ internal sealed partial class EPluginManagerDialog
     private void DisableFrameworkNow(string slug)
     {
         // An assembly reload replaced this dialog since the click; nothing is disabled without asking again.
-        if (IsInitialized) _global.SetPluginEnabled(slug, false);
+        if (!IsInitialized) return;
+        try { _global.SetPluginEnabled(slug, false); }
+        catch (Exception ex)
+        {
+            // still enabled, so this dialog stays and must not stay locked
+            GD.PushError($"Cannot disable {slug}: {ex.Message}");
+            CompletePluginOperation();
+        }
+    }
+
+    /// <summary>
+    /// Whether the operation ends without starting because a reload became due since it began, e.g. while a license
+    /// dialog waited for the user: it would run on the old code. The manager then waits for the reload.
+    /// </summary>
+    private bool EndedByPendingReload()
+    {
+        if (!AssemblyReload.IsPending) return false;
+        CompletePluginOperation(refresh: false);
+        if (GodotObject.IsInstanceValid(this)) _status.Text = ReloadNotice;
+        return true;
     }
 
     /// <param name="slugs">The plugins to retry with what they need; null retries every failed attempt.</param>

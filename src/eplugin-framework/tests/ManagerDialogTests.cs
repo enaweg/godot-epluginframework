@@ -186,6 +186,22 @@ public class ManagerDialogTests
     }
 
     [TestCase]
+    public static void TheCleanupSuggestionGoesWithAnAssemblyReloadWithoutDeciding()
+    {
+        var decisions = new List<bool>();
+        var dialog = CleanupSuggestionDialog.Create(new CleanupSuggestion("/home/user/plugins", 6 * LocalCleanup.Gigabyte, 5 * LocalCleanup.Gigabyte), decisions.Add);
+        try
+        {
+            // its buttons would do nothing after the reload
+            dialog.OnBeforeSerialize();
+
+            Assertions.AssertBool(dialog.IsQueuedForDeletion()).IsTrue();
+            Assertions.AssertThat(decisions).IsEmpty();
+        }
+        finally { Free(dialog); }
+    }
+
+    [TestCase]
     public static void TheLicenseDialogAsksForEachLicenseInTurn()
     {
         var review = new LicenseReview([License("dep"), License("main")],
@@ -345,6 +361,8 @@ public class ManagerDialogTests
     public static void TheAttentionDialogOffersTheDecisionsOfTheSelectedPlugin()
     {
         var dialog = GD.Load<PackedScene>(AttentionDialog.ScenePath).Instantiate<AttentionDialog>();
+        // in the tree, so the rollback confirmation can pop up
+        ((SceneTree)Engine.GetMainLoop()).Root.AddChild(dialog);
         try
         {
             dialog.Initialize();
@@ -373,8 +391,23 @@ public class ManagerDialogTests
 
             list.EmitSignal(ItemList.SignalName.ItemSelected, 1);
             Assertions.AssertString(Visible(dialog)).IsEqual("retry,rollback,log,folder");
-            dialog.GetNode<ConfirmationDialog>("%RollbackConfirm").EmitSignal(AcceptDialog.SignalName.Confirmed);
+            var confirm = dialog.GetNode<ConfirmationDialog>("%RollbackConfirm");
+            // confirmed without being asked, it rolls back nothing
+            confirm.EmitSignal(AcceptDialog.SignalName.Confirmed);
+            dialog.GetNode<Button>("%RollbackButton").EmitSignal(BaseButton.SignalName.Pressed);
+            confirm.EmitSignal(AcceptDialog.SignalName.Confirmed);
             Assertions.AssertThat(requested).ContainsExactly("Retry failed", "Disable failed", "RetryAll ", "Rollback kept");
+
+            // the list changed while the confirmation was open: the update it named is no longer the one selected
+            requested.Clear();
+            var other = new UpdateJournal { Id = "other", Directory = "/updates/other" };
+            other.Plugins.Add(new() { Slug = "other", OldVersion = "1.0.0", NewVersion = "2.0.0" });
+            dialog.GetNode<Button>("%RollbackButton").EmitSignal(BaseButton.SignalName.Pressed);
+            dialog.Update([new AttentionItem(Row(Plugin("other") with { FailedAttempt = Attempt("other", "update_kept_build_failed") }), other, other, [])]);
+            confirm.EmitSignal(AcceptDialog.SignalName.Confirmed);
+            Assertions.AssertThat(requested).IsEmpty();
+            dialog.Update(items);
+            list.EmitSignal(ItemList.SignalName.ItemSelected, 1);
 
             // while the manager carries out a decision, nothing else can be decided
             requested.Clear();

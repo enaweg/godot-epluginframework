@@ -126,6 +126,46 @@ public class UpdateSourceTests
     }
 
     [TestCase]
+    public static async Task WithATokenGitHubPackagesAreDownloadedThroughTheApi()
+    {
+        // github.com's download links take no token, so a private repository's packages are only reachable this way
+        using var client = new HttpClient(new Handler(_ => Json("""
+            [{"tag_name":"v1.2.0","draft":false,"prerelease":false,"assets":[{"name":"plugin.zip","url":"https://api.github.com/repos/owner/repo/releases/assets/7","browser_download_url":"https://github.com/owner/repo/releases/download/v1.2.0/plugin.zip"}]},
+             {"tag_name":"v1.1.0","draft":false,"prerelease":false,"assets":[]}]
+            """)));
+        var source = new GitHubReleaseSource(new(client), "owner", "repo", token: "secret");
+
+        var versions = await source.ListAsync(Target(), new(), CancellationToken.None);
+
+        Assertions.AssertString(((ZipPackageRef)versions[0].Package).Url).IsEqual("https://api.github.com/repos/owner/repo/releases/assets/7");
+        Assertions.AssertString(((ZipPackageRef)versions[1].Package).Url).IsEqual("https://api.github.com/repos/owner/repo/zipball/v1.1.0");
+
+        var requests = new List<(string Url, string? Authorization, string Accept)>();
+        using var downloads = new HttpClient(new Handler(request =>
+        {
+            requests.Add((request.RequestUri!.ToString(), request.Headers.Authorization?.ToString(), string.Join(",", request.Headers.Accept)));
+            return requests.Count == 1 ? Redirect("https://objects.githubusercontent.com/signed/plugin.zip") : new(HttpStatusCode.OK) { Content = new ByteArrayContent([1, 2]) };
+        }));
+        var file = Path.Combine(Path.GetTempPath(), "eplugin-api-download-" + Guid.NewGuid().ToString("N"));
+        var previous = Environment.GetEnvironmentVariable("EPLUGIN_GITHUB_TOKEN");
+        Environment.SetEnvironmentVariable("EPLUGIN_GITHUB_TOKEN", "secret");
+        try
+        {
+            await new UpdateHttp(downloads).DownloadAsync("https://api.github.com/repos/owner/repo/releases/assets/7", file, null, CancellationToken.None,
+                "https://github.com/owner/repo/releases");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("EPLUGIN_GITHUB_TOKEN", previous);
+            if (File.Exists(file)) File.Delete(file);
+        }
+        // the file, with the token; the storage it redirects to gets no token
+        Assertions.AssertThat(requests.Select(r => $"{r.Url} {r.Authorization ?? "-"} {r.Accept}").ToArray()).ContainsExactly(
+            "https://api.github.com/repos/owner/repo/releases/assets/7 Bearer secret application/octet-stream",
+            "https://objects.githubusercontent.com/signed/plugin.zip - application/octet-stream");
+    }
+
+    [TestCase]
     public static void ForgeTokensGoOnlyToTheHostsTheyBelongTo()
     {
         // an update_url comes from a plugin's plugin.cfg: a host it names must not receive a token meant for another

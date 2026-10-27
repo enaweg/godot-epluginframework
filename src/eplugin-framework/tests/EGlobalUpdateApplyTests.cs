@@ -116,6 +116,29 @@ public class EGlobalUpdateApplyTests : IDisposable
     }
 
     [TestCase]
+    public async Task ALicenseAcceptedForAnUpdateIsRecordedWhenItCommits()
+    {
+        PluginWithNewerPackage("tool");
+        // its build fails, so it is rolled back
+        PluginWithNewerPackage("broken", csharp: true);
+        _updates.BuildFails = () => Installed("broken").Contains("2.0.0");
+        _fixture.Store.TryRecordLicenses([new AcceptedLicense("tool", "LICENSE", "1.0.0", DateTimeOffset.UtcNow, false),
+            new AcceptedLicense("broken", "LICENSE", "1.0.0", DateTimeOffset.UtcNow, false)]);
+        await Index();
+        var staged = await _fixture.Global.StageUpdatesAsync(_fixture.Global.PendingUpdates, null, CancellationToken.None);
+
+        var results = await _fixture.Global.ApplyUpdatesAsync(staged.Packages.Select(p => p with { AcceptedLicense = "LICENSE.md" }).ToArray(),
+            staged.Directory, false);
+
+        Assertions.AssertObject(results.Single(r => r.Packages.Any(p => p.Candidate.Slug == "tool")).Outcome).IsEqual(UpdateOutcome.Completed);
+        Assertions.AssertObject(results.Single(r => r.Packages.Any(p => p.Candidate.Slug == "broken")).Outcome).IsEqual(UpdateOutcome.RolledBack);
+        Assertions.AssertBool(_fixture.Store.IsLicenseAccepted("tool", "LICENSE.md")).IsTrue();
+        Assertions.AssertString(_fixture.Store.GetLicense("tool")!.Version).IsEqual("2.0.0");
+        // the installed version's license stays accepted
+        Assertions.AssertBool(_fixture.Store.IsLicenseAccepted("broken", "LICENSE")).IsTrue();
+    }
+
+    [TestCase]
     public async Task ALocalPackageIsStagedInstalledAndNoLongerOffered()
     {
         PluginWithNewerPackage("tool");

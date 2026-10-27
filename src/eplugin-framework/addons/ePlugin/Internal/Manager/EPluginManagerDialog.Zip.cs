@@ -117,7 +117,7 @@ internal sealed partial class EPluginManagerDialog
     private void InstallAddon()
     {
         // An assembly reload replaced this dialog since the click; the staged add-on is gone with it.
-        if (!IsInitialized || !_pluginOperation.IsRunning) return;
+        if (!IsInitialized || !_pluginOperation.IsRunning || EndedByPendingReload()) return;
         var slug = _updates.StagedAddon?.Candidate.Slug;
         InstallOutcome outcome;
         try { outcome = _updates.StagedAddon is null ? new(InstallStep.Canceled) : _updates.InstallAddon(); }

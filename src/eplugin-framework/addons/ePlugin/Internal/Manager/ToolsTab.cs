@@ -42,6 +42,9 @@ internal sealed partial class ToolsTab : VBoxContainer, ISerializationListener
     private string? _message, _messageDetails;
     // The local index changed while the tab was hidden or plugins were changing; it is rendered once it is shown again.
     private bool _stale;
+    // The project's plugins, read when the tab is opened or the index changed rather than for every rule or size change:
+    // reading them is slow and records plain plugins in the shared state file.
+    private IReadOnlyList<PluginInfo>? _plugins;
 
     public void Initialize(EGlobal global)
     {
@@ -97,6 +100,7 @@ internal sealed partial class ToolsTab : VBoxContainer, ISerializationListener
     {
         _message = null; _messageDetails = null;
         if (directory is not null) _selected = directory;
+        _plugins = null;
         Render();
     }
 
@@ -120,7 +124,7 @@ internal sealed partial class ToolsTab : VBoxContainer, ISerializationListener
 
         var packages = _selected is null ? [] : _global.LocalIndex.In(_selected).ToArray();
         _statistics.Text = Statistics(packages);
-        var plugins = _global.CollectPlugins();
+        var plugins = _plugins ??= _global.CollectPlugins();
         var names = plugins.ToDictionary(p => p.Slug, p => p.Name, StringComparer.Ordinal);
         RenderTree(packages, names);
         var installed = Installed(plugins);
@@ -215,14 +219,16 @@ internal sealed partial class ToolsTab : VBoxContainer, ISerializationListener
         _pending = null;
         if (_global.IsChangingPlugins)
         {
+            // not rendered now, which would read the plugins while they change
             _message = "Plugins are being changed; try again once they are done.";
-            Render();
+            _status.Text = _message;
+            _stale = true;
             return;
         }
         // The index or the installed plugins may have changed while the confirmation was open, so the cleanup is planned
         // again: it deletes only what was confirmed and the rule still removes.
         var current = LocalCleanup.Plan(_global.LocalIndex.In(pending.Directory), pending.Rule, DateTime.UtcNow,
-            Installed(_global.CollectPlugins())).Remove.ToHashSet();
+            Installed(_plugins = _global.CollectPlugins())).Remove.ToHashSet();
         var remove = pending.Plan.Remove.Where(current.Contains).ToArray();
         if (remove.Length == 0)
         {
@@ -253,7 +259,9 @@ internal sealed partial class ToolsTab : VBoxContainer, ISerializationListener
         finally
         {
             _cleaning = false;
-            if (GodotObject.IsInstanceValid(this)) Render();
+            // Plugins may be changing by now, e.g. when the settings were closed while files were deleted.
+            if (CanRender) Render();
+            else _stale = true;
         }
     }
 
@@ -277,6 +285,7 @@ internal sealed partial class ToolsTab : VBoxContainer, ISerializationListener
     /// </summary>
     private void LocalIndexChanged()
     {
+        _plugins = null;
         if (CanRender) Render();
         else _stale = true;
     }

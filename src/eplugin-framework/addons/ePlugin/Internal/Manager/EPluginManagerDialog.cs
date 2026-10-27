@@ -71,6 +71,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private Texture2D? _logo;
     private Texture2D? _updateIcon;
     private PluginManagerViewModel _model = null!;
+    // Whether the operation that ended while plugins were still changing reads the list again once they are done.
+    private bool _refreshOnCompletion = true;
     private string? _selectedSlug;
     private bool _working;
     // Only an installation can be cancelled; the dialog has no Close button otherwise.
@@ -197,7 +199,10 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     {
         if (!_keepNotice) _operationNotice = null;
         _keepNotice = false;
-        Refresh();
+        // Reading the plugins while they change would record plain plugins in the middle of the operation, e.g. when the
+        // manager was closed during it; the list shown last is read again once the operation is done.
+        if (_model is not null && (_global.IsChangingPlugins || AssemblyReload.IsPending)) { _refreshWhenIdle = true; Render(); }
+        else Refresh();
         PopupCenteredClamped(Size, 0.9f);
         _tree.GrabFocus();
         // Problems shown already in this editor session wait for the button; new ones open the list on top.
@@ -465,7 +470,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         base._Process(delta);
         if (!IsInitialized || !Visible || (_reloadPoll += delta) < ReloadPollSeconds) return;
         _reloadPoll = 0;
-        if (_pluginOperation.IsRunning && !_working && !_global.IsChangingPlugins) CompletePluginOperation();
+        if (_pluginOperation.IsRunning && !_working && !_global.IsChangingPlugins) CompletePluginOperation(_refreshOnCompletion);
         var pending = AssemblyReload.IsPending;
         var locked = _pluginOperation.IsBusy || _global.IsChangingPlugins || pending;
         if (_refreshWhenIdle && !locked && !_working)

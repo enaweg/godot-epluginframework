@@ -55,8 +55,14 @@ internal sealed partial class CleanupSuggestionDialog : ConfirmationDialog, ISer
     private void QueueWindowIcon() => CallDeferred(nameof(RefreshWindowIcon));
     private void RefreshWindowIcon() => EditorWindows.ApplyIcon(this);
 
-    // Reload serializes every script before disposing any of them, so callback targets are still valid here.
-    public void OnBeforeSerialize() => _signals.Dispose();
+    // Reload serializes every script before disposing any of them, so callback targets are still valid here. The dialog
+    // closes without a decision, as its buttons would do nothing after the reload.
+    public void OnBeforeSerialize()
+    {
+        _signals.Dispose();
+        if (_done) return;
+        _done = true; EditorWindows.Release(this);
+    }
     public void OnAfterDeserialize() { }
 
     protected override void Dispose(bool disposing)

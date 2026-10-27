@@ -425,6 +425,10 @@ internal static partial class NugetConfigManager
     }
 
     /// <summary>The comment before an entry, skipping the line break between them.</summary>
+    /// <summary>
+    /// The used-by comment ePlugin wrote before a managed entry; null when there is none, also when another comment is
+    /// there (e.g. one the team wrote after removing ePlugin's by hand), which is never changed or removed.
+    /// </summary>
     private static XComment? CommentBefore(XElement add)
     {
         var node = add.PreviousNode;
@@ -433,7 +437,7 @@ internal static partial class NugetConfigManager
             node = node.PreviousNode;
         }
 
-        return node as XComment;
+        return node is XComment comment && comment.Value.Trim().StartsWith(UsedByCommentPrefix, StringComparison.Ordinal) ? comment : null;
     }
 
     private static bool IsWhitespace(XNode node) => node is XText text && string.IsNullOrWhiteSpace(text.Value);

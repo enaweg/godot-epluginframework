@@ -123,7 +123,8 @@ internal sealed class UpdateSourceFactory(UpdateHttp? http = null, IGitRunner? g
         {
             var segments = uri.AbsolutePath.Trim('/').Split('/');
             if (uri.Host == "github.com" && segments.Length >= 3 && segments[2] == "releases")
-                return new GitHubReleaseSource(transport, segments[0], WithoutGit(segments[1]), segments.Length > 3 && segments[3] == "tag");
+                return new GitHubReleaseSource(transport, segments[0], WithoutGit(segments[1]), segments.Length > 3 && segments[3] == "tag",
+                    ForgeTokens.GitHub(new Uri("https://api.github.com")));
             var index = Array.IndexOf(segments, "-");
             if (index > 0 && segments.Length > index + 1 && segments[index + 1] == "releases")
                 return new GitLabReleaseSource(transport, uri.Authority, string.Join("/", segments[..index]), segments.Length > index + 2);

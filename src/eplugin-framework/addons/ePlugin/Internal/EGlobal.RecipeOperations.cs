@@ -15,7 +15,7 @@ internal sealed partial class EGlobal
 
     private void ApplyNuget(PluginContext context, EEditorPluginRecipe.Nuget nuget)
     {
-        var previous = _recipeUpdateJournal?.Recipes.GetValueOrDefault(context.Slug)?.Applied.Nugets.FirstOrDefault(n => n.Name == nuget.Name);
+        var previous = _recipeUpdateJournal?.Recipes.GetValueOrDefault(context.Slug)?.Applied.Nugets.FirstOrDefault(n => string.Equals(n.Name, nuget.Name, StringComparison.OrdinalIgnoreCase));
         if (context.Cli?.AddNugetToProject(nuget.Name, nuget.Version, nuget.Source) != true)
             throw new InvalidOperationException($"Adding NuGet {nuget.Name} to the project failed.");
         if (nuget.Source is not null && !NugetConfigManager.RegisterSource(_host.ProjectRoot, context.Slug, nuget.Source, context.Logger))
@@ -34,7 +34,7 @@ internal sealed partial class EGlobal
         IReadOnlyList<EEditorPluginRecipe>? ownRemaining = null)
     {
         var shared = _recipeUpdateJournal?.Recipes.Any(r => r.Key != context.Slug &&
-            (r.Value.Target ?? r.Value.Applied).Nugets.Any(n => n.Name == nuget.Name)) == true;
+            (r.Value.Target ?? r.Value.Applied).Nugets.Any(n => string.Equals(n.Name, nuget.Name, StringComparison.OrdinalIgnoreCase))) == true;
         if (remaining?.Any(r => r.Nugets.Any(n => string.Equals(n.Name, nuget.Name, StringComparison.OrdinalIgnoreCase))) == true)
         {
             context.Logger?.Log($"Keeping NuGet {nuget.Name}, another installed recipe still uses it.");
@@ -63,7 +63,7 @@ internal sealed partial class EGlobal
     {
         if (context.Cli is not ICheckedDotnetCli cli) throw new InvalidOperationException("Checked dotnet CLI is unavailable.");
         var path = ProjectPath(project.Path);
-        var kept = remaining?.SelectMany(r => r.Projects).Where(p => ProjectPath(p.Path) == path).ToArray() ?? [];
+        var kept = remaining?.SelectMany(r => r.Projects).Where(p => PackageFiles.PathComparer.Equals(ProjectPath(p.Path), path)).ToArray() ?? [];
         if (kept.Length > 0) context.Logger?.Log($"Keeping project {project.Path}, another installed recipe still uses it.");
         if (project.Reference && !kept.Any(p => p.Reference) && !cli.TryRemoveProjectReference(project.Path))
             throw new InvalidOperationException($"Removing project reference {project.Path} failed.");

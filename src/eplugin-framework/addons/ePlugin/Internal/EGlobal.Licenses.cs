@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.Json;
 using Enaweg.Plugin.Internal.Licenses;
 using Enaweg.Plugin.Internal.Manager;
 using Enaweg.Plugin.Internal.Update;
@@ -241,8 +242,46 @@ internal sealed partial class EGlobal
             return;
         }
 
+        Stash(UnsavedLicensesMeta, accepted);
         _ePluginContext?.Logger.Error(
-            "Accepted licenses could not be saved to addons/eplugin-state.json; they are asked for again after the editor restarts or reloads its C# assemblies.");
+            "Accepted licenses could not be saved to addons/eplugin-state.json; they are asked for again after the editor restarts.");
+    }
+
+    // Licenses and welcome pages the state file could not save, kept in Engine metadata until it can: the store is
+    // created anew by every assembly reload, which follows right after the build of an activation.
+    private const string UnsavedLicensesMeta = "eplugin_unsaved_licenses";
+    private const string UnsavedWelcomesMeta = "eplugin_unsaved_welcomes";
+
+    private static void Stash<T>(string key, IEnumerable<T> entries) =>
+        Engine.Singleton.SetMeta(key, JsonSerializer.Serialize(Unstash<T>(key).Concat(entries).ToArray()));
+
+    private static T[] Unstash<T>(string key)
+    {
+        if (!Engine.Singleton.HasMeta(key)) return [];
+        try { return JsonSerializer.Deserialize<T[]>(Engine.Singleton.GetMeta(key).AsString()) ?? []; }
+        catch (JsonException) { return []; }
+    }
+
+    /// <summary>
+    /// Records the licenses and welcome pages an earlier load of this assembly could not save, unless the file holds newer
+    /// ones; those it still cannot save stay stashed. Called by Initialize, after the store is loaded.
+    /// </summary>
+    internal void RestoreUnsavedState()
+    {
+        if (_stateStore is not { } store) return;
+        var licenses = Unstash<AcceptedLicense>(UnsavedLicensesMeta)
+            .Where(l => store.GetLicense(l.Slug) is not { } current || current.AcceptedUtc < l.AcceptedUtc).ToArray();
+        var welcomes = Unstash<ShownWelcome>(UnsavedWelcomesMeta).Where(w => !store.IsWelcomeShown(w.Slug)).ToArray();
+        ForgetUnsavedState();
+        if (licenses.Length > 0 && !store.TryRecordLicenses(licenses)) Stash(UnsavedLicensesMeta, licenses);
+        if (welcomes.Length > 0 && !store.TryRecordWelcomes(welcomes)) Stash(UnsavedWelcomesMeta, welcomes);
+    }
+
+    /// <summary>Drops the stashed licenses and welcome pages, e.g. when the framework is disabled.</summary>
+    internal static void ForgetUnsavedState()
+    {
+        foreach (var key in new[] { UnsavedLicensesMeta, UnsavedWelcomesMeta })
+            if (Engine.Singleton.HasMeta(key)) Engine.Singleton.RemoveMeta(key);
     }
 
     /// <summary>
@@ -389,22 +428,53 @@ internal sealed partial class EGlobal
             .Concat(review.Canceled.Where(a => a.Enabled).Select(a => (a.Slug, Enable: false))).ToArray();
         if (toggles.Length > 0)
         {
-            Post(() => ApplyLicenseDecisions(toggles));
+            RememberLicenseDecisions(toggles);
+            Post(ApplyLicenseDecisions);
         }
+    }
+
+    // The toggles a license review decided, kept in Engine metadata until they are applied: they wait for a pending
+    // assembly reload, which discards the posted work with the rest of the old assembly.
+    private const string LicenseDecisionsMeta = "eplugin_license_decisions";
+
+    private static void RememberLicenseDecisions(IEnumerable<(string Slug, bool Enable)> toggles)
+    {
+        var remembered = RememberedLicenseDecisions().Where(t => toggles.All(n => n.Slug != t.Slug)).Concat(toggles);
+        Engine.Singleton.SetMeta(LicenseDecisionsMeta, remembered.Select(t => (t.Enable ? "+" : "-") + t.Slug).ToArray());
+    }
+
+    private static (string Slug, bool Enable)[] RememberedLicenseDecisions() =>
+        Engine.Singleton.HasMeta(LicenseDecisionsMeta)
+            ? Engine.Singleton.GetMeta(LicenseDecisionsMeta).AsStringArray().Where(t => t.Length > 1).Select(t => (t[1..], t[0] == '+')).ToArray()
+            : [];
+
+    /// <summary>Drops the decisions not applied yet, e.g. when the framework is disabled.</summary>
+    internal static void ForgetLicenseDecisions()
+    {
+        if (Engine.Singleton.HasMeta(LicenseDecisionsMeta)) Engine.Singleton.RemoveMeta(LicenseDecisionsMeta);
+    }
+
+    /// <summary>Applies the decisions of a license review that an assembly reload interrupted; called by Initialize.</summary>
+    internal void ResumeLicenseDecisions()
+    {
+        if (Engine.Singleton.HasMeta(LicenseDecisionsMeta)) Post(ApplyLicenseDecisions);
     }
 
     /// <summary>
     /// Toggles the plugins of a license review in one transition, so the project is built once, after the last of them,
     /// and none of them starts while that build's assembly reload is due.
     /// </summary>
-    private void ApplyLicenseDecisions((string Slug, bool Enable)[] toggles)
+    private void ApplyLicenseDecisions()
     {
         if (AssemblyReload.IsPending)
         {
-            Post(() => ApplyLicenseDecisions(toggles));
+            Post(ApplyLicenseDecisions);
             return;
         }
 
+        var toggles = RememberedLicenseDecisions();
+        ForgetLicenseDecisions();
+        if (toggles.Length == 0) return;
         _transitionHold++;
         try
         {

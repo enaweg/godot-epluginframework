@@ -199,7 +199,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             journal.Plugins.Add(new() { Slug = slug, OldVersion = old!, NewVersion = next, IsEPlugin = managed,
                 Kind = PluginKinds.ForJournal(slug, managed, package.Kind).ToString(), WasEnabled = true,
                 NativeExtension = PluginKinds.HasNativeExtension(package.StagingDir) || PluginKinds.HasNativeExtension(Installed(slug)), ContainsCSharp = package.ContainsCSharp, SourceUrl = package.Candidate.Origin, Revision = package.Candidate.ResolvedRevision,
-                Uids = UidMap.Collect(Installed(slug)) });
+                Uids = UidMap.Collect(Installed(slug)), AcceptedLicense = package.AcceptedLicense });
         }
         host.PrepareJournal(journal);
         BackupProject(journal);
@@ -254,6 +254,9 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                     journal.Failure = journal.KeptForProjectCode ? ProjectCodeFailure(journal)
                         : (managed ? "Interim build failed" : "Plain C# addon build failed") + "; the assembly cannot reload until the project compiles.";
                     if (decision == "ask") { journal.Save(UpdatePhase.AwaitingDecision); return UpdateOutcome.AwaitingDecision; }
+                    // Saved before Keep marks it kept: a Retry of a kept update the editor stopped between the two then still
+                    // reconciles its recipes, rather than committing it without them.
+                    journal.Save();
                     return Keep(journal);
                 }
                 journal.Save(UpdatePhase.InterimBuilt);
@@ -329,6 +332,9 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         // Updates never show a welcome page, also not one the plugin did not have or show before.
         var unseen = journal.Plugins.Where(p => !store.IsWelcomeShown(p.Slug)).Select(p => new ShownWelcome(p.Slug, p.NewVersion, DateTimeOffset.UtcNow)).ToArray();
         if (unseen.Length > 0 && !store.TryRecordWelcomes(unseen)) host.Log("The updated plugins' welcome pages could not be marked as shown; they may be shown after the editor restarts.");
+        var licenses = journal.Plugins.Where(p => p.AcceptedLicense is not null)
+            .Select(p => new AcceptedLicense(p.Slug, p.AcceptedLicense!, p.NewVersion, DateTimeOffset.UtcNow, false)).ToArray();
+        if (licenses.Length > 0 && !store.TryRecordLicenses(licenses)) host.Log("The accepted licenses of the updated plugins could not be saved; they are asked for again after the editor restarts.");
         foreach (var plugin in journal.Plugins)
         {
             host.Log(plugin.OldVersion == plugin.NewVersion ? $"Reinstalled {plugin.Slug} {plugin.NewVersion}."
