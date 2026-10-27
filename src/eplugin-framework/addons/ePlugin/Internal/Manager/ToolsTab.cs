@@ -37,7 +37,7 @@ internal sealed partial class ToolsTab : VBoxContainer, ISerializationListener
     private string? _selected;
     private CleanupPlan _versionPlan = CleanupPlan.Empty, _datePlan = CleanupPlan.Empty;
     // The cleanup the confirmation asks for, planned for the directory it names.
-    private (string Directory, CleanupPlan Plan)? _pending;
+    private (string Directory, CleanupRule Rule, CleanupPlan Plan)? _pending;
     private bool _cleaning;
     private string? _message, _messageDetails;
     // The local index changed while the tab was hidden or plugins were changing; it is rendered once it is shown again.
@@ -123,8 +123,7 @@ internal sealed partial class ToolsTab : VBoxContainer, ISerializationListener
         var plugins = _global.CollectPlugins();
         var names = plugins.ToDictionary(p => p.Slug, p => p.Name, StringComparer.Ordinal);
         RenderTree(packages, names);
-        // The versions this project has installed are kept, whatever the rule.
-        var installed = plugins.Where(p => !p.Missing && p.Version.Length > 0).Select(p => (p.Slug, p.Version)).ToArray();
+        var installed = Installed(plugins);
         var now = DateTime.UtcNow;
         _versionPlan = LocalCleanup.Plan(packages, Rule(_versionRule), now, installed);
         _datePlan = LocalCleanup.Plan(packages, Rule(_dateRule), now, installed);
@@ -135,6 +134,10 @@ internal sealed partial class ToolsTab : VBoxContainer, ISerializationListener
         _dateButton.Disabled = busy || _datePlan.Remove.Count == 0;
         RenderStatus(packages.Sum(p => p.Length));
     }
+
+    /// <summary>The versions this project has installed, which are kept whatever the rule.</summary>
+    private static (string Slug, string Version)[] Installed(IEnumerable<PluginInfo> plugins) =>
+        plugins.Where(p => !p.Missing && p.Version.Length > 0).Select(p => (p.Slug, p.Version)).ToArray();
 
     private string Statistics(LocalPackage[] packages)
     {
@@ -199,7 +202,7 @@ internal sealed partial class ToolsTab : VBoxContainer, ISerializationListener
     private void Confirm(CleanupPlan plan, CleanupRule rule)
     {
         if (_selected is null || plan.Remove.Count == 0) return;
-        _pending = (_selected, plan);
+        _pending = (_selected, rule, plan);
         _confirm.DialogText = $"Delete {Count(plan.Remove.Count, "plugin package")} ({LocalCleanup.FormatSize(plan.Bytes)}) from {_selected}?\n\n" +
                               $"Kept: {LocalCleanup.Describe(rule).ToLowerInvariant()}, the latest version of every plugin and the versions " +
                               "installed in this project. The files are deleted, not moved to the trash.";
@@ -216,10 +219,22 @@ internal sealed partial class ToolsTab : VBoxContainer, ISerializationListener
             Render();
             return;
         }
+        // The index or the installed plugins may have changed while the confirmation was open, so the cleanup is planned
+        // again: it deletes only what was confirmed and the rule still removes.
+        var current = LocalCleanup.Plan(_global.LocalIndex.In(pending.Directory), pending.Rule, DateTime.UtcNow,
+            Installed(_global.CollectPlugins())).Remove.ToHashSet();
+        var remove = pending.Plan.Remove.Where(current.Contains).ToArray();
+        if (remove.Length == 0)
+        {
+            _message = "The directory changed; nothing it holds now is to be deleted.";
+            Render();
+            return;
+        }
         _cleaning = true;
         _message = null; _messageDetails = null;
         Render();
-        ObservedTask.Run(CleanUpAsync(pending.Directory, pending.Plan), ex => GD.PushError($"Cleaning up {pending.Directory} failed: {ex.Message}"));
+        var plan = new CleanupPlan(remove, remove.Sum(p => p.Length));
+        ObservedTask.Run(CleanUpAsync(pending.Directory, plan), ex => GD.PushError($"Cleaning up {pending.Directory} failed: {ex.Message}"));
     }
 
     private async Task CleanUpAsync(string directory, CleanupPlan plan)

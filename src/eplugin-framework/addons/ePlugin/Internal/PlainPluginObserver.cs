@@ -32,7 +32,7 @@ internal sealed class PlainPluginObserver(
             }
         }
 
-        var candidates = enabled.Concat(_previous ?? []).Distinct(StringComparer.Ordinal).ToArray();
+        var candidates = enabled.Concat(_previous ?? []).Concat(_failedWrites.Keys).Distinct(StringComparer.Ordinal).ToArray();
         foreach (var slug in candidates)
         {
             if (isManaged(slug) || isOwned(slug) || (store.IsBlocked(slug) && !OwnsFailedWrite(slug)) || store.IsReadOnly)
@@ -48,25 +48,34 @@ internal sealed class PlainPluginObserver(
                 continue;
             }
 
+            // A write of this session that failed is tried again, also when the plugin was not toggled since, as its
+            // marker blocks the plugin until it succeeds.
+            var failedWrite = OwnsFailedWrite(slug);
             // Startup discrepancies are reported by ReloadContexts, never reconciled here.
-            if ((_previous is null && saved is not null) ||
+            if (!failedWrite && ((_previous is null && saved is not null) ||
                 (_previous is not null && _previous.Contains(slug) == active) ||
-                (!active && saved is null))
+                (!active && saved is null)))
             {
                 continue;
             }
 
-            if (saved?.State == (active ? PersistedPluginState.Activated : PersistedPluginState.Deactivated)) continue;
-            Record(slug, active, manualRetry: OwnsFailedWrite(slug));
+            if (!failedWrite && saved?.State == (active ? PersistedPluginState.Activated : PersistedPluginState.Deactivated)) continue;
+            Record(slug, active, manualRetry: failedWrite);
         }
 
         _previous = new HashSet<string>(enabled, StringComparer.Ordinal);
     }
 
-    public bool RetryInvalid(string slug)
+    /// <summary>
+    /// Records <paramref name="slug"/> as it is enabled now when its own write failed: its version was invalid, or the
+    /// shared file could not be written (the marker of the attempt stays, also after a restart). An attempt it shares
+    /// with other plugins is theirs to retry.
+    /// </summary>
+    public bool Retry(string slug)
     {
-        if (isManaged(slug) || isOwned(slug) ||
-            store.GetLocal(slug) is not { Reason: "invalid_plugin_version" })
+        if (isManaged(slug) || isOwned(slug) || store.GetLocal(slug) is not { } attempt ||
+            attempt.Reason != "invalid_plugin_version" && (attempt.Reason != "state_commit_failed" ||
+                store.LocalAttempts.Any(a => a.AttemptId == attempt.AttemptId && a.Slug != slug)))
         {
             return false;
         }
@@ -100,6 +109,7 @@ internal sealed class PlainPluginObserver(
             }
 
             _failedWrites[slug] = id;
+            store.TryFail(id, PersistedPluginState.Failed, "state_commit_failed");
         }
 
         logger?.Error($"Cannot record observed state for plain plugin {slug}; persisted state was preserved.");

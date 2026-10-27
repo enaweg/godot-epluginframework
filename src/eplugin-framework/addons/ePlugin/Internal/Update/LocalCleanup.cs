@@ -79,8 +79,11 @@ internal static class LocalCleanup
 
     /// <summary>
     /// The packages <paramref name="rule"/> removes. Each plugin keeps its latest version and the versions in
-    /// <paramref name="installed"/> (the project's plugins). Of several files of one version only the newest is kept,
-    /// the only one updates offer; an older copy is removed whatever the rule.
+    /// <paramref name="installed"/> (the project's plugins). Of several files of one version that hold the same plugin
+    /// (<see cref="LocalPackage.Contents"/>) only the newest is kept, the only one updates offer; an older copy is removed
+    /// whatever the rule. Files of one version that differ, such as builds for different platforms, are each kept or
+    /// removed like their version, by their own date for the date rules. An archive holding more than the plugin
+    /// (<see cref="LocalPackage.Bundled"/>) is never removed.
     /// </summary>
     /// <param name="installed">Slug and version of the plugins installed in the project.</param>
     public static CleanupPlan Plan(IEnumerable<LocalPackage> packages, CleanupRule rule, DateTime nowUtc,
@@ -104,18 +107,21 @@ internal static class LocalCleanup
             for (var i = 0; i < versions.Length; i++)
             {
                 var (version, files) = versions[i];
-                remove.AddRange(files.Skip(1));
+                // a file whose plugin is not known is no copy of another
+                var distinct = files.DistinctBy(p => p.Contents ?? p.ZipPath, StringComparer.Ordinal).ToArray();
+                remove.AddRange(files.Except(distinct));
                 // A version that cannot be compared is not the index's; keep it rather than guess.
-                var keep = i == 0 || version is null || keepVersions.Contains((plugin.Key, version.Value.Key)) || rule switch
+                bool? keep = i == 0 || version is null || keepVersions.Contains((plugin.Key, version.Value.Key)) ? true : rule switch
                 {
                     CleanupRule.StableVersions => version.Value.Prerelease is null,
                     CleanupRule.LastThreeVersions => i < 3,
                     CleanupRule.LatestVersion => false,
-                    _ => files[0].ModifiedUtc >= cutoff
+                    _ => null
                 };
-                if (!keep) remove.Add(files[0]);
+                remove.AddRange(distinct.Where(p => !(keep ?? p.ModifiedUtc >= cutoff)));
             }
         }
+        remove.RemoveAll(p => p.Bundled);
         return new(remove, remove.Sum(p => p.Length));
     }
 

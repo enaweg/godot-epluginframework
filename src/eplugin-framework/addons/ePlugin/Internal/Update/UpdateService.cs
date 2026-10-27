@@ -33,7 +33,8 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
     public static bool Offers(PluginUpdateTarget target, SemVer version) =>
         Offers(SemVer.TryParse(target.InstalledVersion, out var installed) ? installed : default, version);
 
-    private static bool Offers(SemVer installed, SemVer version) => version.Prerelease is null || installed.Prerelease is not null;
+    // A suffix that names no stage (9.8.0-4, 1.2.0-assetlib) marks a stable install, which moves only to stable releases.
+    private static bool Offers(SemVer installed, SemVer version) => version.Prerelease is null || installed.NamesStage;
 
     /// <summary>
     /// Checks the update site of every target that has one and caches the result. A project update site is tried first,

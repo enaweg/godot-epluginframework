@@ -389,6 +389,53 @@ public class UpdateFlowTests : IDisposable
     }
 
     [TestCase]
+    public static async Task AManualCheckThatWaitedChecksOnTheContextItWasStartedFrom()
+    {
+        var gate = new UpdateCheckGate();
+        var scheduled = new TaskCompletionSource<UpdateCheckResult>();
+        var editor = new QueuedContext();
+        SynchronizationContext? checkedOn = null;
+        Task<UpdateCheckResult> Check(bool force)
+        {
+            if (!force) return scheduled.Task;
+            checkedOn = SynchronizationContext.Current;
+            return Task.FromResult(CheckResult("manual"));
+        }
+
+        var running = gate.RunAsync(false, Check, () => CheckResult("known"));
+        var previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(editor);
+        Task<UpdateCheckResult> manual;
+        try { manual = gate.RunAsync(true, Check, () => CheckResult("known")); }
+        finally { SynchronizationContext.SetSynchronizationContext(previous); }
+
+        // the scheduled check ends on a thread-pool thread, the manual check calls into Godot on the editor thread
+        await Task.Run(() => scheduled.SetResult(CheckResult("scheduled")));
+        await running;
+        for (var frame = 0; frame < 500 && !manual.IsCompleted; frame++)
+        {
+            editor.RunQueued();
+            await Task.Delay(10);
+        }
+        Assertions.AssertString((await manual).Updates.Single().Slug).IsEqual("manual");
+        Assertions.AssertBool(ReferenceEquals(checkedOn, editor)).IsTrue();
+    }
+
+    /// <summary>A context like the editor thread's: work posted to it runs only when the test runs it.</summary>
+    private sealed class QueuedContext : SynchronizationContext
+    {
+        private readonly System.Collections.Concurrent.ConcurrentQueue<(SendOrPostCallback Callback, object? State)> _queue = new();
+        public override void Post(SendOrPostCallback d, object? state) => _queue.Enqueue((d, state));
+        public void RunQueued()
+        {
+            var previous = Current;
+            SetSynchronizationContext(this);
+            try { while (_queue.TryDequeue(out var work)) work.Callback(work.State); }
+            finally { SetSynchronizationContext(previous); }
+        }
+    }
+
+    [TestCase]
     public static async Task AManualCheckStartedWhileAnotherRunsReturnsItsResultOrFailure()
     {
         var gate = new UpdateCheckGate();

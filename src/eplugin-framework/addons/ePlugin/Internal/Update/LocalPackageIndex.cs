@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 
@@ -13,7 +15,16 @@ namespace Enaweg.Plugin.Internal.Update;
 /// <param name="Root">The plugin root inside the archive, e.g. <c>addons/my_plugin/</c>, see <see cref="SafeZipExtractor.PluginRoot"/>.</param>
 /// <param name="Slug">The name of the root folder, which is the slug of the plugin the package belongs to.</param>
 /// <param name="Length">The size of the ZIP file in bytes, taken from the file when it is indexed rather than from the archive.</param>
-internal sealed record LocalPackage(string ZipPath, string Root, string Slug, string Version, DateTime ModifiedUtc, long Length = 0);
+/// <param name="Contents">
+/// Identifies the plugin's files (their paths, CRC-32 and sizes below <paramref name="Root"/>), so two ZIP files of one
+/// version are known to be copies only when they hold the same plugin; null when unknown.
+/// </param>
+/// <param name="Bundled">
+/// The archive holds more than the plugin: a Godot project, or folders beside the plugin's, as in a project backup or a
+/// repository with a demo project. It is offered as a version of the plugin, but a cleanup never deletes it.
+/// </param>
+internal sealed record LocalPackage(string ZipPath, string Root, string Slug, string Version, DateTime ModifiedUtc, long Length = 0,
+    string? Contents = null, bool Bundled = false);
 /// <param name="Packages">The plugin packages below the directory, also those another listed directory contains too.</param>
 internal sealed record LocalDirectoryState(string Path, bool Exists, int Packages);
 /// <param name="Cached">Known from an earlier indexing, as the archive did not change since.</param>
@@ -123,7 +134,25 @@ internal static class LocalPackageIndexer
         using (var reader = new StreamReader(entry.Open())) text = reader.ReadToEnd();
         if (!SemVer.TryParse(PluginIni.Parse(text).GetValueOrDefault("version"), out var version))
             throw new InvalidDataException($"{root}plugin.cfg has no comparable version.");
-        return new(file, root, slug, version.ToString(), File.GetLastWriteTimeUtc(file));
+        var files = entries.Where(e => !e.Entry.FullName.EndsWith('/') && !e.Entry.FullName.EndsWith('\\')).ToArray();
+        var plugin = files.Where(e => e.Path.StartsWith(root, StringComparison.Ordinal) && !PackageFiles.Skip(e.Path))
+            .OrderBy(e => e.Path, StringComparer.Ordinal)
+            .Select(e => $"{e.Path[root.Length..]}\0{e.Entry.Crc32:x8}\0{e.Entry.Length}");
+        var contents = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n', plugin))));
+        var bundled = files.Any(e => !e.Path.StartsWith(root, StringComparison.Ordinal) && !BesidePlugin(e.Path, root));
+        return new(file, root, slug, version.ToString(), File.GetLastWriteTimeUtc(file), Contents: contents, Bundled: bundled);
+    }
+
+    /// <summary>
+    /// Whether a file outside the plugin root still belongs to a plugin package: it lies in a folder holding the root, as a
+    /// LICENSE or README next to <c>addons/</c> or in a wrapper folder does, and is no Godot project.
+    /// </summary>
+    private static bool BesidePlugin(string path, string root)
+    {
+        var slash = path.LastIndexOf('/');
+        var folder = slash < 0 ? "" : path[..(slash + 1)];
+        return root.StartsWith(folder, StringComparison.Ordinal) &&
+               !path[(slash + 1)..].Equals("project.godot", StringComparison.OrdinalIgnoreCase);
     }
 }
 

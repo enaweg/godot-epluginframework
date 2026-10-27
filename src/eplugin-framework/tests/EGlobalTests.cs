@@ -242,5 +242,19 @@ public class EGlobalTests : IDisposable
         // ordering must not leave a recipe behind; the retry itself creates it
         Assertions.AssertBool(contexts.Single(c => c.Slug == "a_dependant").IsRecipeCreated).IsFalse();
     }
+
+    [TestCase]
+    public void OrderRetriesReadsTheDependenciesOfPluginsWithoutAnEditorInstance()
+    {
+        // after an editor restart the dependant that failed with its dependency is disabled, so it has no context
+        _fixture.AddEPlugin("a_dependant", b => b.AddPluginDependency("b_dependency"));
+        _fixture.AddEPlugin("b_dependency", _ => { });
+        LocalPluginAttempt Attempt(string slug) => new(Guid.NewGuid(), slug, "1.0", PersistedPluginState.Activated,
+            PersistedPluginState.Failed, "recipe_operation_failed");
+
+        var ordered = _fixture.Global.OrderRetries([Attempt("a_dependant"), Attempt("b_dependency")]);
+
+        Assertions.AssertString(string.Join(",", ordered.Select(a => a.Slug))).IsEqual("b_dependency,a_dependant");
+    }
 }
 #endif

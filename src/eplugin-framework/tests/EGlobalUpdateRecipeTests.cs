@@ -174,6 +174,41 @@ public class EGlobalUpdateRecipeTests : IDisposable
     }
 
     [TestCase]
+    public void RemovingOneOwnersProjectAndAutoloadKeepsThemForAnotherPlugin()
+    {
+        var shared = Path.Combine(_fixture.Root, "shared", "Lib.csproj");
+        _fixture.AddEPlugin("app", b => b.AddProject(shared).AddAutoload("Shared", "res://shared/shared.gd"));
+        _fixture.AddEPlugin("other", b => b.AddProject(shared).AddAutoload("Shared", "res://shared/shared.gd"));
+        _fixture.Enable("app");
+        _fixture.Enable("other");
+        var journal = BeginUpdate("app");
+        ReloadRecipe("app", _ => { });
+        _fixture.Operations.Clear();
+
+        _fixture.Global.ReconcileUpdateRecipes(journal, false);
+
+        Assertions.AssertThat(_fixture.Operations).IsEmpty();
+        Assertions.AssertString(_fixture.Host.Autoloads["Shared"]).IsEqual("res://shared/shared.gd");
+        Assertions.AssertThat(journal.Recipes["app"].Applied.Projects).IsEmpty();
+        Assertions.AssertThat(journal.Recipes["app"].Applied.Autoloads).IsEmpty();
+    }
+
+    [TestCase]
+    public void AnUpdatedAutoloadThatAnotherPluginInstalledWithAnotherPathFailsTheUpdate()
+    {
+        _fixture.AddEPlugin("app", _ => { });
+        _fixture.AddEPlugin("other", b => b.AddAutoload("Shared", "res://other/shared.gd"));
+        _fixture.Enable("app");
+        _fixture.Enable("other");
+        var journal = BeginUpdate("app");
+        ReloadRecipe("app", b => b.AddAutoload("Shared", "res://app/shared.gd"));
+
+        Assertions.AssertThrown(() => _fixture.Global.ReconcileUpdateRecipes(journal, false)).IsInstanceOf<InvalidOperationException>();
+
+        Assertions.AssertString(_fixture.Host.Autoloads["Shared"]).IsEqual("res://other/shared.gd");
+    }
+
+    [TestCase]
     public void ConflictingSharedNugetVersionsFailBeforeAnyResourceChanges()
     {
         _fixture.AddEPlugin("app", b => b.AddNuget("Shared.Package", "1.0"));

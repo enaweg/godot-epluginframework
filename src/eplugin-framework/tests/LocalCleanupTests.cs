@@ -19,8 +19,9 @@ public class LocalCleanupTests
     [BeforeTest] public void Setup() { _root = Path.Combine(Path.GetTempPath(), "local-cleanup-test-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(_root); }
     [AfterTest] public void Cleanup() { Directory.Delete(_root, true); }
 
-    private static LocalPackage Package(string slug, string version, DateTime modified, long length = 100, string? file = null) =>
-        new(Path.Combine("/packages", file ?? $"{slug}-{version}.zip"), $"addons/{slug}/", slug, version, modified, length);
+    private static LocalPackage Package(string slug, string version, DateTime modified, long length = 100, string? file = null,
+        string? contents = null, bool bundled = false) =>
+        new(Path.Combine("/packages", file ?? $"{slug}-{version}.zip"), $"addons/{slug}/", slug, version, modified, length, contents, bundled);
 
     private static string[] Removed(CleanupPlan plan) => plan.Remove.Select(p => Path.GetFileName(p.ZipPath)).Order(StringComparer.Ordinal).ToArray();
 
@@ -66,9 +67,10 @@ public class LocalCleanupTests
     {
         LocalPackage[] packages =
         [
-            Package("tool", "1.0.0", Now.AddYears(-2)), Package("tool", "1.1.0", Now.AddYears(-1)), Package("tool", "1.2.0", Now.AddMonths(-1)),
+            Package("tool", "1.0.0", Now.AddYears(-2)), Package("tool", "1.1.0", Now.AddYears(-1)),
+            Package("tool", "1.2.0", Now.AddMonths(-1), contents: "tool 1.2"),
             // copies of one version, written differently: only the newest file is offered, so the older one goes
-            Package("tool", "v1.2", Now.AddMonths(-3), file: "tool-1.2.0-old.zip"),
+            Package("tool", "v1.2", Now.AddMonths(-3), file: "tool-1.2.0-old.zip", contents: "tool 1.2"),
             Package("other", "1.0.0", Now.AddYears(-1))
         ];
 
@@ -77,6 +79,44 @@ public class LocalCleanupTests
         Assertions.AssertThat(Removed(plan)).ContainsExactly("tool-1.0.0.zip", "tool-1.2.0-old.zip");
         Assertions.AssertThat(Removed(LocalCleanup.Plan(packages, CleanupRule.StableVersions, Now))).ContainsExactly("tool-1.2.0-old.zip");
         Assertions.AssertThat(Removed(LocalCleanup.Plan([], CleanupRule.LatestVersion, Now))).IsEmpty();
+    }
+
+    [TestCase]
+    public static void FilesOfOneVersionThatHoldDifferentPluginsAreKeptOrRemovedLikeTheirVersion()
+    {
+        LocalPackage[] packages =
+        [
+            // one release, built per platform
+            Package("native", "1.0.0", Now.AddYears(-2), file: "native-1.0.0-windows.zip", contents: "windows 1.0"),
+            // downloaded again this year
+            Package("native", "1.0.0", Now.AddMonths(-1), file: "native-1.0.0-linux.zip", contents: "linux 1.0"),
+            Package("native", "2.0.0", Now.AddDays(-2), file: "native-2.0.0-windows.zip", contents: "windows 2.0"),
+            Package("native", "2.0.0", Now.AddDays(-1), file: "native-2.0.0-linux.zip", contents: "linux 2.0"),
+            // the files of an older index, whose contents are unknown, are no copies either
+            Package("old", "1.0.0", Now.AddYears(-1), file: "old-a.zip"), Package("old", "1.0.0", Now.AddYears(-1).AddDays(1), file: "old-b.zip")
+        ];
+
+        Assertions.AssertThat(Removed(LocalCleanup.Plan(packages, CleanupRule.StableVersions, Now))).IsEmpty();
+        // each file by its own date
+        Assertions.AssertThat(Removed(LocalCleanup.Plan(packages, CleanupRule.ThisYear, Now))).ContainsExactly("native-1.0.0-windows.zip");
+        Assertions.AssertThat(Removed(LocalCleanup.Plan(packages, CleanupRule.LatestVersion, Now)))
+            .ContainsExactly("native-1.0.0-linux.zip", "native-1.0.0-windows.zip");
+    }
+
+    [TestCase]
+    public static void ArchivesHoldingMoreThanThePluginAreNeverRemoved()
+    {
+        LocalPackage[] packages =
+        [
+            Package("tool", "1.0.0", Now.AddYears(-2)),
+            // a project backup that holds the plugin
+            Package("tool", "1.1.0", Now.AddYears(-1), file: "game-backup.zip", bundled: true),
+            Package("tool", "1.1.0", Now.AddYears(-1).AddDays(-1), file: "tool-1.1.0.zip", contents: "tool 1.1"),
+            Package("tool", "2.0.0", Now)
+        ];
+
+        Assertions.AssertThat(Removed(LocalCleanup.Plan(packages, CleanupRule.LatestVersion, Now)))
+            .ContainsExactly("tool-1.0.0.zip", "tool-1.1.0.zip");
     }
 
     [TestCase]
@@ -145,6 +185,37 @@ public class LocalCleanupTests
         Assertions.AssertString(LocalCleanup.FormatSize(1536)).IsEqual("1.5 KB");
         Assertions.AssertString(LocalCleanup.FormatSize(25L << 20)).IsEqual("25 MB");
         Assertions.AssertString(LocalCleanup.FormatSize(5 * LocalCleanup.Gigabyte + (LocalCleanup.Gigabyte / 5))).IsEqual("5.2 GB");
+    }
+
+    [TestCase]
+    public void IndexingTellsCopiesOfAPluginAndArchivesHoldingMoreThanIt()
+    {
+        var plugin = new (string, string)[] { ("addons/tool/plugin.cfg", "[plugin]\nname=\"Tool\"\nversion=\"1.0.0\"\nscript=\"plugin.gd\"\n"), ("addons/tool/plugin.gd", "extends EditorPlugin") };
+        var release = Zip(Path.Combine(_root, "tool-1.0.0.zip"), [.. plugin, ("LICENSE", "MIT"), ("addons/README.md", "readme")]);
+        var renamed = Zip(Path.Combine(_root, "tool (1).zip"), plugin);
+        var linux = Zip(Path.Combine(_root, "tool-1.0.0-linux.zip"), [.. plugin, ("addons/tool/bin/tool.so", "native")]);
+        var backup = Zip(Path.Combine(_root, "game-backup.zip"), [.. plugin.Select(e => ("game/" + e.Item1, e.Item2)), ("game/project.godot", ""), ("game/main.tscn", "")]);
+        var demo = Zip(Path.Combine(_root, "tool-demo.zip"), [.. plugin.Select(e => ("tool-1.0.0/" + e.Item1, e.Item2)), ("tool-1.0.0/demo/scene.tscn", "")]);
+
+        Assertions.AssertString(release.Contents).IsEqual(renamed.Contents!);
+        Assertions.AssertString(release.Contents).IsNotEqual(linux.Contents!);
+        Assertions.AssertString(release.Contents).IsEqual(backup.Contents!);
+        Assertions.AssertBool(release.Bundled || renamed.Bundled || linux.Bundled).IsFalse();
+        Assertions.AssertBool(backup.Bundled).IsTrue();
+        Assertions.AssertBool(demo.Bundled).IsTrue();
+    }
+
+    private static LocalPackage Zip(string path, (string Path, string Text)[] entries)
+    {
+        using (var zip = ZipFile.Open(path, ZipArchiveMode.Create))
+        {
+            foreach (var (name, text) in entries)
+            {
+                using var writer = new StreamWriter(zip.CreateEntry(name).Open());
+                writer.Write(text);
+            }
+        }
+        return LocalPackageIndexer.Read(path)!;
     }
 
     private static void Zip(string path, string version)

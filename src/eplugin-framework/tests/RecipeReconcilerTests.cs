@@ -107,5 +107,28 @@ public class RecipeReconcilerTests
         var loaded = System.Text.Json.JsonSerializer.Deserialize<RecipeSnapshot>(json, UpdateStateStore.JsonOptions)!;
         Assertions.AssertInt(RecipeReconciler.Plan(snapshot, loaded).Count).IsEqual(0);
     }
+
+    [TestCase]
+    public static void AnOptionalRecipeDeclaringTheMainRecipesResourcesDifferentlyIsMergedAsInstalled()
+    {
+        var root = new EEditorPluginRecipe
+        {
+            Nugets = [new("Shared.Package", "1.0", null)],
+            Projects = [new("res://shared/Lib.csproj", "Libraries", false)]
+        };
+        var optional = new EEditorPluginRecipe.OptionalPlugin("optional", null, new()
+        {
+            Nugets = [new("shared.package", null, null)],
+            Projects = [new("res://shared/Lib.csproj", null, true)]
+        });
+
+        var snapshot = RecipeSnapshot.Capture(root, [optional]);
+
+        // validates, so updates are not refused while the plugin is activated
+        RecipeReconciler.Validate(snapshot);
+        // the optional recipe is installed after the main one, so its package declaration is the installed one
+        Assertions.AssertObject(snapshot.Nugets.Single()).IsEqual(new EEditorPluginRecipe.Nuget("shared.package", null, null));
+        Assertions.AssertObject(snapshot.Projects.Single()).IsEqual(new EEditorPluginRecipe.Project("res://shared/Lib.csproj", "Libraries", true));
+    }
 }
 #endif

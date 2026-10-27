@@ -16,14 +16,22 @@ internal sealed class RecipeSnapshot
     public List<EEditorPluginRecipe.Plugin> PluginDependencies { get; set; } = [];
     public List<OptionalRecipeSnapshot> AppliedOptionals { get; set; } = [];
 
+    /// <summary>
+    /// What <paramref name="root"/> and its applied <paramref name="optionals"/> installed. Each recipe is checked on its
+    /// own (<see cref="RecipeEntries"/>), so an optional recipe may declare a package or project of the main recipe
+    /// differently: they are merged as activation installs them, optional recipes after the main one. The last
+    /// declaration of a package sets its version and source; a project is referenced when one declaration references it,
+    /// and its solution folder is the first one's.
+    /// </summary>
     public static RecipeSnapshot Capture(EEditorPluginRecipe root, IEnumerable<EEditorPluginRecipe.OptionalPlugin> optionals)
     {
         var applied = optionals.ToArray();
         var resources = new[] { root }.Concat(applied.Select(p => p.Recipe)).ToArray();
         return new()
         {
-            Nugets = resources.SelectMany(r => r.Nugets).Distinct().ToList(),
-            Projects = resources.SelectMany(r => r.Projects).Distinct().ToList(),
+            Nugets = resources.SelectMany(r => r.Nugets).GroupBy(n => n.Name, StringComparer.OrdinalIgnoreCase).Select(g => g.Last()).ToList(),
+            Projects = resources.SelectMany(r => r.Projects).GroupBy(p => p.Path, StringComparer.Ordinal)
+                .Select(g => g.First() with { Reference = g.Any(p => p.Reference) }).ToList(),
             Autoloads = resources.SelectMany(r => r.Autoloads).Distinct().ToList(),
             Directories = resources.SelectMany(r => r.Directories).Distinct(StringComparer.Ordinal).ToList(),
             PluginDependencies = root.PluginDependencies.ToList(),
