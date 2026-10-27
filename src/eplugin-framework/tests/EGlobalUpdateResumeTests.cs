@@ -89,6 +89,25 @@ public class EGlobalUpdateResumeTests : IDisposable
     }
 
     [TestCase]
+    public void UpdatesAreNotResumedWhileTheStateFilesCannotBeRead()
+    {
+        var journal = Journal(UpdatePhase.InterimBuilt, Attempt());
+        // a git pull left a merge conflict in the shared file, so the markers cannot be read either
+        var shared = Path.Combine(_fixture.Root, "addons", "eplugin-state.json");
+        File.WriteAllText(shared, "<<<<<<< HEAD\n{}\n=======\n{}\n>>>>>>> origin/main\n");
+        var store = new PluginStateStore(shared, new RecordingLogger(_fixture.Log, "store"));
+        store.Load();
+        _fixture.Global.StateStore = store;
+
+        _fixture.Global.ResumeUpdates();
+
+        Assertions.AssertBool(store.IsReadOnly).IsTrue();
+        Assertions.AssertObject(UpdateJournal.Load(journal.Directory).State).IsEqual(UpdatePhase.InterimBuilt);
+        Assertions.AssertString(Installed).Contains("2.0.0");
+        Assertions.AssertThat(_updates.Toggles).IsEmpty();
+    }
+
+    [TestCase]
     public void UpdatesResumedAtStartupScanTheFilesystemOnce()
     {
         // the editor's own update host, whose scans the editor drops while one runs
@@ -183,6 +202,23 @@ public class EGlobalUpdateResumeTests : IDisposable
         Assertions.AssertBool(journals.Read().Any(j => j.IsActive)).IsFalse();
         Assertions.AssertString(Installed).Contains("2.0.0");
         Assertions.AssertBool(_fixture.Log.Any(l => l.Contains("Update marker is missing"))).IsFalse();
+    }
+
+    [TestCase]
+    public void AnUpdateTheEditorStoppedRightAfterAcknowledgingFinishesItsCommit()
+    {
+        var attempt = Attempt();
+        var acknowledged = Journal(UpdatePhase.Verified, attempt);
+        Assertions.AssertBool(_fixture.Store.TryAcknowledgeVersions(attempt, new Dictionary<string, string> { ["tool"] = "2.0.0" })).IsTrue();
+        Assertions.AssertObject(_fixture.Store.LastCompletedAttemptId).IsEqual(attempt);
+
+        _fixture.Global.ResumeUpdates();
+
+        Assertions.AssertBool(Directory.Exists(acknowledged.Directory)).IsFalse();
+        Assertions.AssertString(Installed).Contains("2.0.0");
+        Assertions.AssertThat(_updates.Toggles).IsEmpty();
+        // the rest of the commit ran: the installed revision is recorded, so the update is no longer offered
+        Assertions.AssertString(_fixture.Global.UpdateCache!.Revisions["tool"].Version).IsEqual("2.0.0");
     }
 
     [TestCase]

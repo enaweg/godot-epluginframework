@@ -215,18 +215,25 @@ internal sealed partial class EGlobal
         journal is { State: UpdatePhase.CommittedWithErrors, BeforeReconcile: true } &&
         _stateStore?.LocalAttempts.Any(a => a.AttemptId == journal.AttemptId) == true;
 
+    /// <summary>
+    /// The recipes of the journal's other plugins, every activated one, as they are reconciled to: like
+    /// <see cref="RemainingRecipes"/> when disabling, a project or autoload one of them declares stays installed.
+    /// </summary>
+    private static List<EEditorPluginRecipe> OtherUpdateRecipes(PluginContext context, UpdateJournal journal) =>
+        journal.Recipes.Where(r => r.Key != context.Slug).Select(r => (r.Value.Target ?? r.Value.Applied).ToRecipe()).ToList();
+
     private void ExecuteUpdateOperation(PluginContext context, RecipeOperation operation, UpdateJournal journal, UpdatePluginJournal? plugin)
     {
         switch (operation.Kind)
         {
-            case RecipeOperationKind.RemoveAutoload: ReverseAutoload(context, operation.Autoload!); break;
-            case RecipeOperationKind.RemoveProject: ReverseProject(context, operation.Project!); break;
+            case RecipeOperationKind.RemoveAutoload: ReverseAutoload(context, operation.Autoload!, OtherUpdateRecipes(context, journal)); break;
+            case RecipeOperationKind.RemoveProject: ReverseProject(context, operation.Project!, OtherUpdateRecipes(context, journal)); break;
             case RecipeOperationKind.HideDirectory: ShowHideHelper.HideDirectory(context, operation.Directory!, _host); break;
             case RecipeOperationKind.ShowDirectory: ShowHideHelper.ShowDirectory(context, operation.Directory!, _host); break;
             case RecipeOperationKind.RemoveNuget: ReverseNuget(context, operation.Nuget!); break;
             case RecipeOperationKind.AddNuget: ApplyNuget(context, operation.Nuget!); break;
             case RecipeOperationKind.AddProject: ApplyProject(context, operation.Project!); break;
-            case RecipeOperationKind.AddAutoload: ApplyAutoload(context, operation.Autoload!); break;
+            case RecipeOperationKind.AddAutoload: ApplyAutoload(context, operation.Autoload!, OtherUpdateRecipes(context, journal)); break;
             case RecipeOperationKind.EnsureDependency: EnsureUpdateDependency(operation.Dependency!); break;
             case RecipeOperationKind.PrepareTree:
                 if (plugin is not null)

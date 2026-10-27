@@ -30,8 +30,11 @@ directories are skipped but kept in the list. `PendingUpdates` merges remote and
 
 `LocalCleanup` (pure) gives a directory's statistics from the index (`LocalPackageIndex.In`, which also counts packages
 another listed directory holds) and which packages a `CleanupRule` deletes; every rule keeps each plugin's latest version
-and the versions installed in the project. `LocalCleanup.Delete` deletes only indexed files inside the directory whose
-size and modification time are unchanged. `EGlobal.LocalCleanup.cs` deletes off the editor thread and indexes again.
+and the versions installed in the project. Files of one version are copies only with the same `LocalPackage.Contents`
+(a hash of the plugin's paths, CRC-32 and sizes from the central directory); archives with more than the plugin
+(`LocalPackage.Bundled`: a `project.godot`, or files in folders that do not hold the plugin root) are never deleted. The
+Tools tab plans again on confirmation and deletes only what both plans remove. `LocalCleanup.Delete` deletes only
+indexed files inside the directory whose size and modification time are unchanged. `EGlobal.LocalCleanup.cs` deletes off the editor thread and indexes again.
 The size above which a cleanup is suggested is `CleanupWarningGigabytes` in `local-sources.json` (optional; older files
 read the default). `IndexThenCheckAsync` decides before the startup check whether that check is due and, if so, lets
 `TakeCleanupSuggestion` hand `EPluginPlugin` the first directory above the size once (`CleanupSuggestionDialog`).

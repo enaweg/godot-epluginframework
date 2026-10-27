@@ -206,6 +206,14 @@ internal sealed partial class EGlobal
                 _ePluginContext?.Logger.Warn($"Cannot delete the abandoned update download {folder} yet; it is tried again at the next start: {ex.Message}");
             }
         }
+        // Without the state files the markers cannot be read, so every journal would look as if its marker was lost and
+        // be rolled back, also an update that built fine.
+        if (_stateStore.IsReadOnly)
+        {
+            if (_updateJournals.Read().Any())
+                _ePluginContext?.Logger.Warn("Interrupted updates are resumed once the plugin state files can be read again.");
+            return;
+        }
         // Groups of one batch restart the editor once, after the last of them, and scan once: the editor drops a scan
         // requested while one runs.
         using var restarts = DeferRestarts();
@@ -227,7 +235,10 @@ internal sealed partial class EGlobal
         var journal = UpdateJournal.Load(listed.Directory);
         if (_stateStore!.LastCompletedAttemptId == journal.AttemptId)
         {
-            DeleteJournal(journal);
+            // Acknowledged, but the editor stopped before the rest of its commit (the other groups' backups among it)
+            // was done: finished now, never rolled back.
+            if (journal.State == UpdatePhase.Verified) HandleUpdateOutcome(journal.Directory, Applier().FinishCommit(journal));
+            else DeleteJournal(journal);
             return;
         }
         var attempts = _stateStore.LocalAttempts.Where(a => a.AttemptId == journal.AttemptId).ToArray();

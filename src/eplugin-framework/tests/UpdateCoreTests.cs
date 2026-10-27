@@ -276,6 +276,10 @@ public class UpdateCoreTests
         Assertions.AssertBool(IsUpdate("9.8.0-4", "9.8.0")).IsFalse();
         Assertions.AssertBool(IsUpdate("9.8.0-4", "9.9.0")).IsTrue();
         Assertions.AssertBool(IsUpdate("9.8.0-beta", "9.8.0")).IsTrue();
+        // such a suffix marks a stable install, which is offered no prerelease
+        Assertions.AssertBool(IsUpdate("9.8.0-4", "10.0.0-beta")).IsFalse();
+        Assertions.AssertBool(IsUpdate("1.2.0-assetlib", "1.3.0-rc.1")).IsFalse();
+        Assertions.AssertBool(IsUpdate("1.2.0-assetlib", "1.3.0")).IsTrue();
         // a pull request build (CI-PR-Build) to the release of its numbers, never a release to one
         Assertions.AssertBool(IsUpdate("0.12.0-pr.155", "0.12.0")).IsTrue();
         Assertions.AssertBool(IsUpdate("0.12.0-pr.155", "0.12.0-pr.156")).IsTrue();

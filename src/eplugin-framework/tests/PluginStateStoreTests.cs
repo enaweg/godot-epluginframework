@@ -159,6 +159,30 @@ public class PluginStateStoreTests
     }
 
     [TestCase]
+    public void ARetryAfterARefusedWriteBuildsOnTheFileOnDisk()
+    {
+        var (store, path) = NewStore();
+        Assertions.AssertBool(store.TryCreateBaseline([new SharedPluginState("sample_plugin", "1.0", PersistedPluginState.Activated)])).IsTrue();
+        // a teammate's update was pulled while the editor was open
+        Pull(path, other =>
+        {
+            Assertions.AssertBool(other.TryBeginAttempt("sample_plugin", "1.0", PersistedPluginState.Activated, out var update)).IsTrue();
+            Assertions.AssertBool(other.TryAcknowledgeVersions(update, new Dictionary<string, string> { ["sample_plugin"] = "1.1" })).IsTrue();
+        });
+        Assertions.AssertBool(store.TryBeginAttempt("sample_plugin", "1.0", PersistedPluginState.Deactivated, out var id)).IsTrue();
+        var disable = new SharedPluginState("sample_plugin", "1.0", PersistedPluginState.Deactivated);
+
+        // the disable keeps the version the store had read, which the teammate changed
+        Assertions.AssertBool(store.TryComplete(id, [disable])).IsFalse();
+        Assertions.AssertString(store.GetShared("sample_plugin")!.Version).IsEqual("1.1");
+
+        Assertions.AssertBool(store.TryComplete(id, [disable])).IsTrue();
+        var reloaded = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(reloaded.Load()).IsTrue();
+        Assertions.AssertObject(reloaded.GetShared("sample_plugin")).IsEqual(new SharedPluginState("sample_plugin", "1.1", PersistedPluginState.Deactivated));
+    }
+
+    [TestCase]
     public void AnExternalEditOfOtherEntriesIsKeptWhenAPluginIsFinalized()
     {
         var (store, path) = NewStore();

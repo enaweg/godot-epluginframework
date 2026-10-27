@@ -221,7 +221,7 @@ internal sealed class UpdateCheckGate
             var mine = new TaskCompletionSource<UpdateCheckResult>(TaskCreationOptions.RunContinuationsAsynchronously);
             Task<UpdateCheckResult>? running;
             bool runningForced;
-            // Checks may start and end on the editor thread or, after an await, on a thread-pool thread.
+            // The running check may end on a thread-pool thread while a waiting one is on the editor thread.
             lock (_gate)
             {
                 running = _running;
@@ -236,7 +236,8 @@ internal sealed class UpdateCheckGate
             if (running is not null)
             {
                 if (!force) return known();
-                var result = await running.ConfigureAwait(false);
+                // Back on the caller's context (the editor thread's), since the check run next calls into Godot.
+                var result = await running;
                 if (runningForced) return result;
                 continue;
             }

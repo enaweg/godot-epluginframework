@@ -655,8 +655,8 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
     /// <summary>
     /// Moves this store's changes onto a shared file that changed on disk since it was read, e.g. by a git pull: the file
     /// becomes the store's state, and the entries the changes set (and <paramref name="touched"/>) are set in it. Returns
-    /// false, leaving the store as it was, when the file is gone, cannot be read, or changed one of those entries to another
-    /// value.
+    /// false, leaving the store as it was, when the file is gone or cannot be read, and false with the file as the store's
+    /// state when it changed one of those entries to another value.
     /// </summary>
     private bool Rebase(byte[]? actual, IReadOnlyCollection<string> touched, ref Dictionary<string, SharedPluginState> states,
         ref Guid? completedAttemptId, ref Dictionary<string, AcceptedLicense> licenses, ref Dictionary<string, ShownWelcome> welcomes)
@@ -687,7 +687,9 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
         if (mergedStates is null || mergedLicenses is null || mergedWelcomes is null ||
             completedChanged && _lastCompletedAttemptId != baseCompleted && _lastCompletedAttemptId != completedAttemptId)
         {
-            (_shared, _licenses, _welcomes, _lastCompletedAttemptId) = (baseStates, baseLicenses, baseWelcomes, baseCompleted);
+            // This write is refused, but the store keeps what is on disk now: a retry builds its entries from it (e.g. the
+            // version a teammate's update recorded) instead of running into the same conflict again.
+            _sharedBytes = actual;
             return false;
         }
 

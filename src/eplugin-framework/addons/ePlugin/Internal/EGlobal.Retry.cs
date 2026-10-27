@@ -126,10 +126,17 @@ internal sealed partial class EGlobal
                 continue; // an earlier retry of this loop already completed it, e.g. as a dependency
             }
 
-            if (context is null && attempt.Reason == "invalid_plugin_version" &&
-                !IsManagedPlugin(attempt.Slug))
+            if (context is null && attempt.Reason is "invalid_plugin_version" or "state_commit_failed" &&
+                !IsManagedPlugin(attempt.Slug) && _plainPluginObserver is not null)
             {
-                if (_plainPluginObserver?.RetryInvalid(attempt.Slug) == true)
+                // a plain plugin is recorded as it is enabled, so one retried as a deactivation is disabled first
+                if (attempt.TargetState == PersistedPluginState.Deactivated && attempt.Reason == "state_commit_failed" &&
+                    _host.IsPluginEnabled(attempt.Slug))
+                {
+                    _host.SetPluginEnabled(attempt.Slug, false);
+                }
+
+                if (_plainPluginObserver.Retry(attempt.Slug))
                 {
                     var plain = _contexts.FirstOrDefault(c => c.Slug == attempt.Slug);
                     if (plain is not null)
@@ -220,30 +227,11 @@ internal sealed partial class EGlobal
         return ordered;
     }
 
-    private IEnumerable<string> GetHardDependencySlugs(string slug)
-    {
-        var context = ManagedContext(slug);
-        if (context is null)
-        {
-            return [];
-        }
-
-        if (context.IsRecipeCreated)
-        {
-            return context.Builder.PluginRecipe.PluginDependencies.Select(d => d.Slug);
-        }
-
-        try
-        {
-            // a throw-away builder: a failing CreateRecipe must not leave a half-filled recipe on the context
-            var builder = EEditorPluginBuilder.Create();
-            context.Plugin!.CreateRecipe(builder);
-            return builder.PluginRecipe.PluginDependencies.Select(d => d.Slug);
-        }
-        catch (Exception)
-        {
-            return []; // the retry itself reports the recipe failure
-        }
-    }
+    /// <summary>
+    /// The hard dependencies <paramref name="slug"/> declares, also when it has no editor instance (it was disabled, or
+    /// the editor restarted since it failed). A recipe that cannot be created has none; the retry reports it.
+    /// </summary>
+    private IEnumerable<string> GetHardDependencySlugs(string slug) =>
+        RecipeOf(slug)?.PluginDependencies.Select(d => d.Slug) ?? [];
 }
 #endif

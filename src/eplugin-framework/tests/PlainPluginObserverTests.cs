@@ -82,11 +82,66 @@ public class PlainPluginObserverTests
         _observer.Refresh();
         Assertions.AssertObject(_store.GetShared("plain")).IsNull();
         Assertions.AssertString(_store.GetLocal("plain")!.Reason).IsEqual("invalid_plugin_version");
-        Assertions.AssertBool(_observer.RetryInvalid("plain")).IsFalse();
+        Assertions.AssertBool(_observer.Retry("plain")).IsFalse();
         _version = "3.0.0";
-        Assertions.AssertBool(_observer.RetryInvalid("plain")).IsTrue();
+        Assertions.AssertBool(_observer.Retry("plain")).IsTrue();
         Assertions.AssertBool(_store.IsBlocked("plain")).IsFalse();
         Assertions.AssertString(_store.GetShared("plain")!.Version).IsEqual("3.0.0");
+    }
+
+    /// <summary>Disables plain, whose write is refused: a git pull left a merge conflict in the shared file.</summary>
+    private string DisableWhileTheFileHasAConflict()
+    {
+        _store.TryCreateBaseline([]);
+        _enabled.Add("plain");
+        _observer.Refresh();
+        var resolved = File.ReadAllText(_path);
+        File.WriteAllText(_path, "<<<<<<< HEAD\n" + resolved + "=======\n>>>>>>> origin/main\n");
+        _enabled.Clear();
+        _observer.Refresh();
+        Assertions.AssertString(_store.GetLocal("plain")!.Reason).IsEqual("state_commit_failed");
+        return resolved;
+    }
+
+    [TestCase]
+    public void AFailedWriteIsRetriedOnceTheFileCanBeWrittenAgain()
+    {
+        File.WriteAllText(_path, DisableWhileTheFileHasAConflict());
+
+        // not toggled since
+        _observer.Refresh();
+
+        Assertions.AssertBool(_store.IsBlocked("plain")).IsFalse();
+        Assertions.AssertObject(_store.GetShared("plain")!.State).IsEqual(PersistedPluginState.Deactivated);
+    }
+
+    [TestCase]
+    public void AFailedWriteIsRetriedOnRequestAfterARestart()
+    {
+        File.WriteAllText(_path, DisableWhileTheFileHasAConflict());
+        var store = new PluginStateStore(_path, new NullLogger());
+        store.Load();
+        var observer = new PlainPluginObserver(store, () => _enabled, _ => _version,
+            slug => slug is "managed" or "ePlugin", slug => _owned.Contains(slug), new NullLogger());
+
+        observer.Refresh();
+        Assertions.AssertBool(store.IsBlocked("plain")).IsTrue();
+        Assertions.AssertBool(observer.Retry("plain")).IsTrue();
+
+        Assertions.AssertBool(store.IsBlocked("plain")).IsFalse();
+        Assertions.AssertObject(store.GetShared("plain")!.State).IsEqual(PersistedPluginState.Deactivated);
+    }
+
+    [TestCase]
+    public void AnAttemptSharedWithOtherPluginsIsNotRetriedAsAPlainWrite()
+    {
+        _store.TryCreateBaseline([]);
+        Assertions.AssertBool(_store.TryBeginAttempt("app", "1.0", PersistedPluginState.Activated, out var id)).IsTrue();
+        Assertions.AssertBool(_store.TryAddParticipant(id, "plain", "1.0.0", PersistedPluginState.Activated)).IsTrue();
+        Assertions.AssertBool(_store.TryFail(id, PersistedPluginState.Failed, "state_commit_failed")).IsTrue();
+
+        Assertions.AssertBool(_observer.Retry("plain")).IsFalse();
+        Assertions.AssertBool(_store.IsBlocked("app")).IsTrue();
     }
 
     [TestCase]
