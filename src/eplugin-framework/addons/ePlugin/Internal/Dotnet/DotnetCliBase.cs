@@ -89,7 +89,7 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
     {
         if (!ProjectReferences.IsValidPackageId(nugetName))
         {
-            Logger?.Error($"Cannot remove NuGet '{nugetName}': it is not a valid package id.");
+            Logger?.Error(LastFailure = $"Cannot remove NuGet '{nugetName}': it is not a valid package id.");
             return false;
         }
 
@@ -103,7 +103,7 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
     {
         if (!ProjectReferences.IsValidProjectPath(projectReference))
         {
-            Logger?.Error($"Cannot remove project reference '{projectReference}': it is not a project file path.");
+            Logger?.Error(LastFailure = $"Cannot remove project reference '{projectReference}': it is not a project file path.");
             return false;
         }
 
@@ -117,7 +117,7 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
     {
         if (!ProjectReferences.IsValidProjectPath(projectPath))
         {
-            Logger?.Error($"Cannot remove '{projectPath}' from the solution: it is not a project file path.");
+            Logger?.Error(LastFailure = $"Cannot remove '{projectPath}' from the solution: it is not a project file path.");
             return false;
         }
 

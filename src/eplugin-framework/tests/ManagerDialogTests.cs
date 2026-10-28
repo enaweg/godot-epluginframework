@@ -202,6 +202,31 @@ public class ManagerDialogTests
     }
 
     [TestCase]
+    public static void TheStartupFailureShowsTheErrorAndRetriesOnlyWhenAsked()
+    {
+        var retries = 0;
+        var dialog = StartupFailureDialog.Create("The state file is locked.", "ePlugin Framework 1.0\n\nSystem.IO.IOException: The state file is locked.", () => retries++);
+        try
+        {
+            Assertions.AssertString(dialog.GetNode<Label>("%StartupMessage").Text).IsEqual("ePlugin could not start: The state file is locked.");
+            Assertions.AssertString(dialog.GetNode<TextEdit>("%StartupDetails").Text).Contains("System.IO.IOException");
+            Assertions.AssertBool(dialog.GetNode<TextEdit>("%StartupDetails").Editable).IsFalse();
+            dialog.EmitSignal(AcceptDialog.SignalName.CustomAction, "retry");
+            dialog.EmitSignal(AcceptDialog.SignalName.CustomAction, "retry");
+            Assertions.AssertInt(retries).IsEqual(1);
+        }
+        finally { Free(dialog); }
+
+        var closed = StartupFailureDialog.Create("x", "x", () => retries++);
+        try
+        {
+            closed.EmitSignal(AcceptDialog.SignalName.Confirmed);
+            Assertions.AssertInt(retries).IsEqual(1);
+        }
+        finally { Free(closed); }
+    }
+
+    [TestCase]
     public static void TheLicenseDialogAsksForEachLicenseInTurn()
     {
         var review = new LicenseReview([License("dep"), License("main")],

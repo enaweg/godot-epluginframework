@@ -23,6 +23,7 @@ internal sealed partial class EGlobal
         RefreshPlainPlugins();
         if (_stateStore is null || _stateStore.IsReadOnly)
         {
+            LogUnreadableState("retried");
             return;
         }
 
@@ -38,7 +39,13 @@ internal sealed partial class EGlobal
     public bool DisableFailedPlugin(string slug)
     {
         RefreshPlainPlugins();
-        if (_stateStore is null || _stateStore.IsReadOnly || _stateStore.GetLocal(slug) is not { } attempt || IsUpdateAttempt(attempt))
+        if (_stateStore is null || _stateStore.IsReadOnly)
+        {
+            LogUnreadableState("disabled");
+            return false;
+        }
+
+        if (_stateStore.GetLocal(slug) is not { } attempt || IsUpdateAttempt(attempt))
         {
             return false;
         }
@@ -238,5 +245,14 @@ internal sealed partial class EGlobal
     /// </summary>
     private IEnumerable<string> GetHardDependencySlugs(string slug) =>
         RecipeOf(slug)?.PluginDependencies.Select(d => d.Slug) ?? [];
+
+    /// <summary>Tells why nothing happened: a plugin is neither retried nor disabled while its state cannot be recorded.</summary>
+    private void LogUnreadableState(string action)
+    {
+        var problem = _stateStore?.LoadProblem;
+        _ePluginContext?.Logger?.Error(problem is null
+            ? $"No plugin can be {action}: ePlugin's plugin state is not available."
+            : $"No plugin can be {action} while ePlugin cannot read {problem.File}: {problem.Message} {problem.Hint}");
+    }
 }
 #endif

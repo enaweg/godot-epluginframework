@@ -29,7 +29,12 @@ internal sealed record PluginInfo(string Slug, string Name, PluginKind Kind, boo
     public string? Script { get; init; }
     /// <summary>Lifecycle state of an ePlugin that has an editor instance; null for every other plugin.</summary>
     public EEditorPluginState? State { get; init; }
+    /// <summary>What went wrong: the plugin's error in this session, else the detail its failed attempt recorded.</summary>
     public string? Error { get; init; }
+    /// <summary>Why ePlugin's state files cannot be read; while set, ePlugin changes no plugin.</summary>
+    public StateFileProblem? StateProblem { get; init; }
+    /// <summary>Why plugin.cfg cannot be read; the plugin is listed with what its folder name tells.</summary>
+    public string? ConfigProblem { get; init; }
     /// <summary>A local attempt that failed or was interrupted and is retried, rolled back or given up on under Needs attention.</summary>
     public LocalPluginAttempt? FailedAttempt { get; init; }
     /// <summary>The recipe, when the plugin already created it in this session.</summary>

@@ -174,7 +174,9 @@ public class EGlobalLifecycleTests : IDisposable
 
         Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Error);
         Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsFalse();
-        Assertions.AssertBool(_fixture.Log.Any(l => l.Contains("missing cannot be enabled"))).IsTrue();
+        // not "cannot be enabled": it is not there, and the user has to install it
+        Assertions.AssertBool(_fixture.Log.Any(l => l.Contains("Plugin dependency missing is not installed: app requires it"))).IsTrue();
+        Assertions.AssertString(_fixture.Store.GetLocal("app")!.Detail).Contains("Install missing");
     }
 
     [TestCase]
@@ -778,6 +780,9 @@ public class EGlobalLifecycleTests : IDisposable
 
         Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Error);
         Assertions.AssertString(_fixture.Store.GetLocal("app")!.Reason).IsEqual("recipe_operation_failed");
+        // the entry that failed and what dotnet reported, kept for the Needs attention dialog after a restart
+        Assertions.AssertString(_fixture.Store.GetLocal("app")!.Detail).Contains("Adding NuGet Broken.Package to the project failed.");
+        Assertions.AssertString(_fixture.Store.GetLocal("app")!.Detail).Contains("NU1101: Unable to find package Broken.Package");
         Assertions.AssertObject(_fixture.Store.GetShared("app")).IsNull();
         Assertions.AssertBool(_fixture.Operations.Contains("build")).IsFalse();
 
@@ -1069,11 +1074,17 @@ public class EGlobalLifecycleTests : IDisposable
     {
         _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"));
         _fixture.Cli.BuildFails = true;
+        _fixture.Cli.BuildOutput = [$"{_fixture.Root}/Scripts/Player.cs(3,5): error CS0246: The type or namespace name 'Foo' could not be found [{_fixture.Root}/Game.csproj]"];
 
         _fixture.Enable("app");
 
         Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Error);
-        Assertions.AssertString(_fixture.Store.GetLocal("app")!.Reason).IsEqual("solution_build_failed");
+        var attempt = _fixture.Store.GetLocal("app")!;
+        Assertions.AssertString(attempt.Reason).IsEqual("solution_build_failed");
+        // the compiler's error, relative to the project, and the whole output in a log the dialog opens
+        Assertions.AssertString(attempt.Detail).Contains("Scripts/Player.cs(3,5): CS0246 The type or namespace name 'Foo' could not be found");
+        Assertions.AssertString(System.IO.File.ReadAllText(attempt.Log!)).Contains("error CS0246");
+        Assertions.AssertString(_fixture.Context("app")!.ErrorDetail!.Message).Contains("CS0246");
     }
 
     [TestCase]

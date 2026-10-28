@@ -188,6 +188,81 @@ public class DecisionDialogTests
         Assertions.AssertString(PluginAttention.ButtonText(3)).IsEqual("3 plugins need attention");
     }
 
+    [TestCase]
+    public static void EveryReasonALifecycleFailureRecordsHasItsOwnExplanation()
+    {
+        // the reasons EGlobal passes to FailTransition and TryRecordInvalid
+        string[] reasons =
+        [
+            "attempt_in_progress", "dependency_resolution_failed", "recipe_creation_failed", "dependent_recipe_creation_failed",
+            "recipe_operation_failed", "solution_build_failed", "optional_recipe_failed", "invalid_plugin_version",
+            "participant_blocked", "cannot_record_participant", "state_commit_failed", "deactivation_failed",
+            "plugin_enable_refused", "retry_not_continued", "dotnet_unavailable"
+        ];
+        foreach (var reason in reasons)
+        {
+            var summary = new AttentionItem(new PluginRow(Plugin("a") with { FailedAttempt = Attempt("a", reason) }, null), null, null, []).Summary;
+            Assertions.AssertString(summary).NotContains(reason);
+        }
+    }
+
+    [TestCase]
+    public static void TheRecordedDetailAndBuildLogExplainAFailureAfterARestart()
+    {
+        // after a restart the plugin has no context, so only its attempt tells what went wrong
+        var attempt = Attempt("a", "solution_build_failed") with
+        {
+            Detail = "The project did not build afterwards (1 error):\nScripts/Player.cs(3,5): CS0246 The type 'Foo' could not be found",
+            Log = "/project/.godot/eplugin/logs/build-1.log"
+        };
+        var item = new AttentionItem(new PluginRow(Plugin("a") with { FailedAttempt = attempt }, null), null, null, []);
+
+        Assertions.AssertString(item.Describe()).Contains("CS0246 The type 'Foo' could not be found");
+        Assertions.AssertString(item.Log).IsEqual("/project/.godot/eplugin/logs/build-1.log");
+        Assertions.AssertString(item.Describe()).Contains("• [b]Open log[/b]: shows the output of the build that failed.");
+        // an error of this session wins over the recorded one
+        var current = new AttentionItem(new PluginRow(Plugin("a") with { FailedAttempt = attempt, Error = "now" }, null), null, null, []);
+        Assertions.AssertString(current.Describe()).NotContains("CS0246");
+    }
+
+    [TestCase]
+    public static void AFailingCreateRecipeIsReportedAsABugOfThePluginWithWhereToReportIt()
+    {
+        var plugin = Plugin("a") with
+        {
+            Author = "Jane", SourceUrl = "https://example.org/a", Error = "Invalid NuGet id 'x y'.",
+            FailedAttempt = Attempt("a", "recipe_creation_failed")
+        };
+        var text = new AttentionItem(new PluginRow(plugin, null), null, null, []).Describe();
+
+        Assertions.AssertString(text).Contains("This is a bug in the plugin, not in your project. Report the error above to Jane at [url=https://example.org/a]");
+        Assertions.AssertString(text).Contains("after you updated it to a version that fixes the error");
+    }
+
+    [TestCase]
+    public static void AnUnreadableStateFileIsExplainedAndOffersNoDecisionThatCouldNotBeCarriedOut()
+    {
+        var problem = new StateFileProblem("/project/addons/eplugin-state.json", "It contains git merge conflict markers.", "Resolve the conflict. Then restart the editor.");
+        var plugin = Plugin("a") with { State = EEditorPluginState.Error, StateProblem = problem, FailedAttempt = Attempt("a", "recipe_operation_failed") };
+        var item = new AttentionItem(new PluginRow(plugin, null), null, null, []);
+
+        Assertions.AssertString(item.Summary).StartsWith("ePlugin cannot read its plugin state file");
+        Assertions.AssertString(item.Describe()).Contains("/project/addons/eplugin-state.json: It contains git merge conflict markers.");
+        Assertions.AssertString(item.Describe()).Contains("Resolve the conflict. Then restart the editor.");
+        Assertions.AssertBool(item.CanRetry).IsFalse();
+        Assertions.AssertBool(item.CanDisable).IsFalse();
+    }
+
+    [TestCase]
+    public static void APluginWhosePluginCfgCannotBeReadNeedsAttention()
+    {
+        var row = new PluginRow(new PluginInfo("broken", "broken", PluginKind.Unknown, false) { ConfigProblem = "Its plugin.cfg cannot be read (Godot reports ParseError)." }, null);
+        Assertions.AssertBool(row.NeedsAttention).IsTrue();
+        var item = new AttentionItem(row, null, null, []);
+        Assertions.AssertString(item.Summary).IsEqual("Its plugin.cfg cannot be read (Godot reports ParseError).");
+        Assertions.AssertString(item.Describe()).Contains("Repair or replace the plugin's plugin.cfg");
+    }
+
     private static PluginManagerViewModel Model(params PluginInfo[] plugins) => new(plugins, [], [], null, _ => []);
 
     private static LocalPluginAttempt Attempt(string slug, string reason, PersistedPluginState target = PersistedPluginState.Activated) =>

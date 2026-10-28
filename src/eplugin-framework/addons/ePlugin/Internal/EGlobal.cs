@@ -453,6 +453,8 @@ internal sealed partial class EGlobal
                 if (_stateStore?.IsReadOnly == true || (_stateStore?.IsBlocked(context.Slug) == true && !updateOwned))
                 {
                     context.State = EEditorPluginState.Error;
+                    if (_stateStore.LoadProblem is { } problem)
+                        context.ErrorDetail = new InvalidOperationException($"ePlugin cannot read {problem.File}: {problem.Message}");
                     context.Logger?.Error(
                         $"Plugin {context.Slug} has unresolved local state ({DescribeLocalState(context.Slug)}); use the manual retry action after recovery.");
                 }

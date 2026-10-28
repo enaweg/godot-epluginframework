@@ -109,7 +109,15 @@ internal sealed partial class EGlobal
             var directory = _host.PluginDirectory(slug);
             if (!FileAccess.FileExists(directory + "/plugin.cfg")) continue;
             using var config = new ConfigFile();
-            if (config.Load(directory + "/plugin.cfg") != Error.Ok) continue;
+            if (config.Load(directory + "/plugin.cfg") is var loaded and not Error.Ok)
+            {
+                // listed, so the user sees why a plugin is missing from the list instead of wondering
+                plugins.Add(new PluginInfo(slug, slug, PluginKind.Unknown, enabled.Contains(slug))
+                {
+                    ConfigProblem = $"Its plugin.cfg cannot be read (Godot reports {loaded}).", FailedAttempt = _stateStore?.GetLocal(slug)
+                });
+                continue;
+            }
             string Value(string key) => config.GetValue("plugin", key, "").AsString().Trim();
             var script = PluginCatalog.ResolveScript(directory, Value("script"));
             var context = ManagedContext(slug);
@@ -122,6 +130,7 @@ internal sealed partial class EGlobal
                 DocumentationUrl = Value("documentation_url") is { Length: > 0 } documentation ? documentation : null,
                 SourceUrl = Value("source_url") is { Length: > 0 } source ? source : null,
                 State = context?.State, Error = context?.ErrorDetail?.Message,
+                StateProblem = context?.State == EEditorPluginState.Error ? _stateStore?.LoadProblem : null,
                 FailedAttempt = _stateStore?.GetLocal(slug),
                 Recipe = context is { IsRecipeCreated: true } ? context.Builder.PluginRecipe : null,
                 LocalPackages = LocalIndex.Matching(slug).Count(),

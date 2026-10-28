@@ -53,7 +53,7 @@ public partial class EGlobalEdgeCaseTests : IDisposable
         _fixture.Enable("app");
 
         Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Error);
-        Assertions.AssertBool(Logged("warn", "Plugin tool not found!")).IsTrue();
+        Assertions.AssertBool(Logged("warn", "Plugin dependency tool >=1.0 is not installed")).IsTrue();
         Assertions.AssertBool(_fixture.Operations.Any(o => o.StartsWith("add-", StringComparison.Ordinal))).IsFalse();
         Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsFalse();
     }

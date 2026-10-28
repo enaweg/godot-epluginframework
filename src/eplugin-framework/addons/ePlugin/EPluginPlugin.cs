@@ -36,7 +36,11 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
     private int _reopenFrames;
     private CancellationTokenSource _updateLifetime = new();
     private static readonly TimeSpan InitializeRetryDelay = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan MaxInitializeRetryDelay = TimeSpan.FromMinutes(5);
     private DateTime _nextInitializeAttempt;
+    // Why the last start failed and how often in a row; the toolbar button shows it until a start succeeds.
+    private Exception? _startupError;
+    private int _startupFailures;
     private bool _unloadingObserved;
     // Set when a project setting changed, e.g. the enabled plugins: reading them every frame would cost for nothing.
     private bool _pluginTogglesDue = true;
@@ -70,7 +74,8 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
             InitializeInternals();
         }
 
-        if (!_managerUiAdded && EGlobal.Instance.IsValid())
+        // a failed start keeps the button, which opens what went wrong instead of the manager
+        if (!_managerUiAdded && (EGlobal.Instance.IsValid() || _startupError is not null))
         {
             AddManagerUi();
         }
@@ -283,7 +288,9 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         RefreshManagerIcon();
     }
 
-    private static string ManagerTooltip(ManagerStatus status) => status switch
+    private string ManagerTooltip(ManagerStatus status) => _startupError is not null && !EGlobal.Instance.IsValid()
+        ? "ePlugin could not start.\nClick to see why and to try again."
+        : status switch
     {
         ManagerStatus.UpdatesAvailable => "ePlugin Manager\nPlugin updates are available.",
         ManagerStatus.NeedsAttention => "ePlugin Manager\nA plugin needs attention.",
@@ -318,7 +325,11 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
     }
     private void OpenManager()
     {
-        if (!EGlobal.Instance.IsValid()) return;
+        if (!EGlobal.Instance.IsValid())
+        {
+            if (_startupError is not null) ShowStartupFailure();
+            return;
+        }
         if (_managerDialog is null || !GodotObject.IsInstanceValid(_managerDialog) || !_managerDialog.IsInitialized)
         {
             RemoveStaleManagerDialog();
@@ -327,6 +338,20 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         }
         _managerDialog.Open();
     }
+    private StartupFailureDialog? _startupDialog;
+
+    /// <summary>Shows why ePlugin could not start; Retry now starts it again on the next frame.</summary>
+    private void ShowStartupFailure()
+    {
+        if (_startupError is not { } error || IsOpen(_startupDialog)) return;
+        var details = $"ePlugin Framework {this.ReadMetadata()?.Version ?? "unknown version"}, Godot {Engine.GetVersionInfo()["string"]}, " +
+                      $".NET {System.Environment.Version}, {System.Runtime.InteropServices.RuntimeInformation.OSDescription}\n" +
+                      $"Failed starts in a row: {_startupFailures}\n\n{error}";
+        _startupDialog = StartupFailureDialog.Create(error.Message, details, () => _nextInitializeAttempt = DateTime.MinValue);
+        EditorInterface.Singleton.GetBaseControl().AddChild(_startupDialog);
+        _startupDialog.Open();
+    }
+
     private void ShowUpdateFailure(UpdateJournal journal)
     {
         try
@@ -418,12 +443,24 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         try { EGlobal.Instance.Initialize(this, new GenericLoggerFactory(category => new GodotConsoleLogger(category))); }
         catch (Exception ex)
         {
-            // EGlobal stays invalid; trying again every frame would only repeat the error.
+            // EGlobal stays invalid; trying again every frame would only repeat the error, and so would a full stack trace
+            // every few seconds: it is logged when the error changes, and the attempts back off.
             progress?.Dispose();
-            _nextInitializeAttempt = DateTime.UtcNow + InitializeRetryDelay;
-            Logger.Error($"ePlugin could not start and tries again in {InitializeRetryDelay.TotalSeconds:0} seconds: {ex}");
+            var repeated = _startupError?.ToString() == ex.ToString();
+            _startupError = ex;
+            _startupFailures++;
+            var delay = TimeSpan.FromTicks(Math.Min(MaxInitializeRetryDelay.Ticks, InitializeRetryDelay.Ticks << Math.Min(_startupFailures - 1, 10)));
+            _nextInitializeAttempt = DateTime.UtcNow + delay;
+            if (repeated)
+                Logger.Error($"ePlugin still cannot start ({ex.Message}); it tries again in {delay.TotalSeconds:0} seconds.");
+            else
+                Logger.Error($"ePlugin could not start and tries again in {delay.TotalSeconds:0} seconds. Its toolbar button shows this error. {ex}");
+            _managerStatus = ManagerStatus.NeedsAttention;
+            AddManagerUi();
             return;
         }
+        _startupError = null;
+        _startupFailures = 0;
         if (progress is null) return;
         // Another restart follows, e.g. after the interim build: the manager opens after that one.
         if (EGlobal.Instance.IsRestartPending) { progress.Dispose(); return; }

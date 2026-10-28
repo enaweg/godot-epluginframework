@@ -17,7 +17,7 @@ internal sealed partial class EGlobal
     {
         var previous = _recipeUpdateJournal?.Recipes.GetValueOrDefault(context.Slug)?.Applied.Nugets.FirstOrDefault(n => string.Equals(n.Name, nuget.Name, StringComparison.OrdinalIgnoreCase));
         if (context.Cli?.AddNugetToProject(nuget.Name, nuget.Version, nuget.Source) != true)
-            throw new InvalidOperationException($"Adding NuGet {nuget.Name} to the project failed.");
+            throw CliFailed(context, $"Adding NuGet {nuget.Name}{(nuget.Version is null ? "" : " " + nuget.Version)} to the project failed.");
         if (nuget.Source is not null && !NugetConfigManager.RegisterSource(_host.ProjectRoot, context.Slug, nuget.Source, context.Logger))
             throw new InvalidOperationException($"Registering NuGet source for {nuget.Name} failed.");
         if (previous?.Source is not null && !SameSource(previous.Source, nuget.Source) &&
@@ -41,7 +41,7 @@ internal sealed partial class EGlobal
             shared = true;
         }
         if (!shared && (context.Cli is not ICheckedDotnetCli cli || !cli.TryRemoveNugetFromProject(nuget.Name)))
-            throw new InvalidOperationException($"Removing NuGet {nuget.Name} failed.");
+            throw CliFailed(context, $"Removing NuGet {nuget.Name} failed.");
         var keepsSource = _recipeUpdateJournal?.Recipes.GetValueOrDefault(context.Slug)?.Target?.Nugets.Any(n => SameSource(n.Source, nuget.Source)) == true;
         if (nuget.Source is not null && !keepsSource && ownRemaining?.Any(r => r.Nugets.Any(n => SameSource(n.Source, nuget.Source))) == true)
         {
@@ -51,12 +51,18 @@ internal sealed partial class EGlobal
         if (nuget.Source is not null && !keepsSource && !NugetConfigManager.UnregisterSource(_host.ProjectRoot, context.Slug, nuget.Source, context.Logger))
             throw new InvalidOperationException($"Unregistering NuGet source for {nuget.Name} failed.");
     }
+    /// <summary>
+    /// A failed dotnet operation, with the cause dotnet reported (<see cref="ExecuteCliBase.LastFailure"/>), so the Needs
+    /// attention dialog tells what went wrong instead of only which entry failed.
+    /// </summary>
+    private static InvalidOperationException CliFailed(PluginContext context, string message) =>
+        new((context.Cli as ICheckedDotnetCli)?.LastFailure is { Length: > 0 } cause ? $"{message}\n{cause}" : message);
     private bool SameSource(string? a, string? b) => NugetConfigManager.SameSource(_host.ProjectRoot, a, b);
     private static void ApplyProject(PluginContext context, EEditorPluginRecipe.Project project)
     {
         if (context.Cli is not ICheckedDotnetCli cli || !cli.TryAddProjectToSolution(project.Path, project.FolderName))
-            throw new InvalidOperationException($"Adding project {project.Path} to the solution failed.");
-        if (project.Reference && !cli.TryAddProjectReference(project.Path)) throw new InvalidOperationException($"Adding project reference {project.Path} failed.");
+            throw CliFailed(context, $"Adding project {project.Path} to the solution failed.");
+        if (project.Reference && !cli.TryAddProjectReference(project.Path)) throw CliFailed(context, $"Adding project reference {project.Path} failed.");
     }
     /// <param name="remaining">The recipes that stay installed (<see cref="RemainingRecipes"/>); the solution entry or reference one of them declares is kept.</param>
     private void ReverseProject(PluginContext context, EEditorPluginRecipe.Project project, IReadOnlyList<EEditorPluginRecipe>? remaining = null)
@@ -66,8 +72,8 @@ internal sealed partial class EGlobal
         var kept = remaining?.SelectMany(r => r.Projects).Where(p => PackageFiles.PathComparer.Equals(ProjectPath(p.Path), path)).ToArray() ?? [];
         if (kept.Length > 0) context.Logger?.Log($"Keeping project {project.Path}, another installed recipe still uses it.");
         if (project.Reference && !kept.Any(p => p.Reference) && !cli.TryRemoveProjectReference(project.Path))
-            throw new InvalidOperationException($"Removing project reference {project.Path} failed.");
-        if (kept.Length == 0 && !cli.TryRemoveProjectFromSolution(project.Path)) throw new InvalidOperationException($"Removing project {project.Path} from the solution failed.");
+            throw CliFailed(context, $"Removing project reference {project.Path} failed.");
+        if (kept.Length == 0 && !cli.TryRemoveProjectFromSolution(project.Path)) throw CliFailed(context, $"Removing project {project.Path} from the solution failed.");
     }
 
     /// <summary>A recipe's project path made absolute, like <see cref="DotnetCliBase.ProjectFile"/>, so recipes naming it differently compare equal.</summary>

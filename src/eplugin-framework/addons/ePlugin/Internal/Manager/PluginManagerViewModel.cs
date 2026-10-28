@@ -35,7 +35,7 @@ internal sealed class PluginRow(PluginInfo plugin, UpdateRow? update)
     /// although it should.
     /// </summary>
     public bool NeedsAttention => Plugin.FailedAttempt is not null || Plugin.State == EEditorPluginState.Error ||
-                                  Plugin.Extensions.Any(e => e.Problem is not null);
+                                  Plugin.ConfigProblem is not null || Plugin.Extensions.Any(e => e.Problem is not null);
 }
 /// <summary>What the toolbar button of the ePlugin Manager shows with the color of its puzzle piece.</summary>
 internal enum ManagerStatus { Normal, UpdatesAvailable, NeedsAttention }
