@@ -1,8 +1,8 @@
 {
- "commit": "35f1ab2b2803c044388d06ccaa0fad748622ec2b",
- "date": "2026-10-27T11:44:42Z",
- "covered": 11560,
- "coverable": 12682,
+ "commit": "1011c5a46a3ee8845656bab79350b5ef2bcf26ec",
+ "date": "2026-10-28T10:30:46Z",
+ "covered": 11757,
+ "coverable": 12980,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -13,8 +13,8 @@
    12
   ],
   "src/eplugin-framework/addons/ePlugin/EPluginPlugin.cs": [
-   180,
-   299
+   184,
+   324
   ],
   "src/eplugin-framework/addons/ePlugin/EditorPluginExtensions.cs": [
    62,
@@ -52,13 +52,17 @@
    70,
    70
   ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetFailure.cs": [
+   36,
+   43
+  ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetVersionManager.cs": [
-   41,
-   41
+   39,
+   39
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/ExecuteCliBase.cs": [
-   34,
-   35
+   36,
+   37
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/ICheckedDotnetCli.cs": [
    1,
@@ -89,8 +93,8 @@
    35
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Activation.cs": [
-   295,
-   315
+   299,
+   334
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.AddonInstall.cs": [
    28,
@@ -129,20 +133,20 @@
    143
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.PluginManager.cs": [
-   75,
-   82
+   76,
+   89
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.RecipeOperations.cs": [
-   111,
-   124
+   112,
+   125
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Retry.cs": [
-   137,
-   149
+   138,
+   160
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Transitions.cs": [
-   100,
-   132
+   146,
+   189
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateApply.cs": [
    187,
@@ -169,8 +173,8 @@
    75
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.cs": [
-   266,
-   307
+   267,
+   309
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EPluginProgress.cs": [
    1,
@@ -301,8 +305,8 @@
    4
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/PluginAttention.cs": [
-   79,
-   82
+   103,
+   106
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/PluginCatalog.cs": [
    11,
@@ -315,6 +319,10 @@
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/SettingsDialog.cs": [
    46,
    52
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Manager/StartupFailureDialog.cs": [
+   32,
+   45
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/TextColors.cs": [
    11,
@@ -361,8 +369,8 @@
    14
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PluginStateStore.cs": [
-   456,
-   468
+   498,
+   519
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PluginToggles.cs": [
    13,
@@ -370,7 +378,7 @@
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PluginTypes.cs": [
    15,
-   18
+   21
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/ProgressSession.cs": [
    171,
@@ -385,8 +393,8 @@
    69
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/ShowHideHelper.cs": [
-   98,
-   100
+   103,
+   110
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/AddonArchive.cs": [
    48,
