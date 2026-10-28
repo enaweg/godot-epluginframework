@@ -51,9 +51,7 @@ internal sealed class DotnetVersionManager : ExecuteCliBase
 
         if (!IsDotnetAvailable)
         {
-            logger?.Error(
-                "The dotnet command line tool could not be executed, make sure it is installed and accessible." +
-                (_probe.Output.Length > 0 ? $" It reported: {_probe.Output}" : ""));
+            logger?.Error(DotnetFailure.DotnetMissingHint + (_probe.Output.Length > 0 ? $" It reported: {_probe.Output}" : ""));
         }
     }
 

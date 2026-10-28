@@ -16,5 +16,7 @@ internal interface ICheckedDotnetCli
     bool TryAddProjectReference(string projectReference);
     bool TryRemoveProjectReference(string projectReference);
     bool TryRemoveNugetFromProject(string nugetName);
+    /// <summary>Why the last command failed, see <see cref="ExecuteCliBase.LastFailure"/>; null when it succeeded.</summary>
+    string? LastFailure { get; }
 }
 #endif

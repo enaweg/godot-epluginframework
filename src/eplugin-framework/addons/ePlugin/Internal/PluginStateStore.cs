@@ -40,13 +40,26 @@ internal sealed record AcceptedLicense(string Slug, string License, string Versi
 /// <param name="Version">The plugin version whose welcome page was shown.</param>
 internal sealed record ShownWelcome(string Slug, string Version, DateTimeOffset ShownUtc);
 
+/// <param name="Detail">
+/// What went wrong for this plugin, e.g. the dependency that is missing or the errors dotnet reported, so the Needs
+/// attention dialog explains it also after an editor restart. Optional: older files have none.
+/// </param>
+/// <param name="Log">The output of the build that failed, when the attempt failed there.</param>
 internal sealed record LocalPluginAttempt(
     Guid AttemptId,
     string Slug,
     string? InstalledVersion,
     PersistedPluginState TargetState,
     PersistedPluginState State,
-    string Reason);
+    string Reason,
+    string? Detail = null,
+    string? Log = null);
+
+/// <summary>Why the plugin state files cannot be read, and what the user can do about it.</summary>
+/// <param name="File">The file that failed.</param>
+/// <param name="Message">What is wrong with it.</param>
+/// <param name="Hint">What to do, ending with the restart that reads it again.</param>
+internal sealed record StateFileProblem(string File, string Message, string Hint);
 
 /// <summary>
 /// The committed file contains only completed states, the accepted plugin licenses and the shown welcome pages. The
@@ -90,6 +103,9 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
     public Guid? LastCompletedAttemptId => _lastCompletedAttemptId;
     public Guid? GetAttemptId(string slug) => GetLocal(slug)?.AttemptId;
     public bool IsReadOnly { get; private set; }
+
+    /// <summary>Why <see cref="Load"/> failed and left the store read-only; null when it was read.</summary>
+    public StateFileProblem? LoadProblem { get; private set; }
     public bool HasSharedFile => _sharedBytes is not null;
     public IReadOnlyCollection<SharedPluginState> SharedStates => _shared.Values;
     public IReadOnlyCollection<LocalPluginAttempt> LocalAttempts => _local.Values;
@@ -170,26 +186,33 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
 
     public bool Load()
     {
+        // Left-over temporary files of an interrupted write are only clutter: one that cannot be deleted (e.g. locked on
+        // Windows) must not make the state unreadable.
+        CleanTemporaryFiles(_sharedPath);
+        CleanTemporaryFiles(_localPath);
+        // the file being read, for the error
+        var file = _sharedPath;
         try
         {
-            CleanTemporaryFiles(_sharedPath);
-            CleanTemporaryFiles(_localPath);
             _sharedBytes = File.Exists(_sharedPath) ? File.ReadAllBytes(_sharedPath) : null;
-            var localBytes = File.Exists(_localPath) ? File.ReadAllBytes(_localPath) : null;
             var shared = _sharedBytes is null
                 ? new SharedDocument { SchemaVersion = SchemaVersion, Plugins = [] }
                 : JsonSerializer.Deserialize<SharedDocument>(_sharedBytes, JsonOptions)
-                  ?? throw new InvalidDataException("Shared plugin state is null.");
+                  ?? throw new InvalidDataException("The file contains no plugin state.");
+            ValidateShared(shared);
+            file = _localPath;
+            var localBytes = File.Exists(_localPath) ? File.ReadAllBytes(_localPath) : null;
             var local = localBytes is null
                 ? new LocalDocument { SchemaVersion = SchemaVersion, Attempts = [] }
                 : JsonSerializer.Deserialize<LocalDocument>(localBytes, JsonOptions)
-                  ?? throw new InvalidDataException("Local plugin state is null.");
-            Validate(shared, local);
+                  ?? throw new InvalidDataException("The file contains no plugin state.");
+            ValidateLocal(local);
             UseShared(shared);
             _local = local.Attempts!.ToDictionary(x => x.Slug!, x =>
                 new LocalPluginAttempt(x.AttemptId!.Value, x.Slug!, x.InstalledVersion,
-                    x.TargetState!.Value, x.State!.Value, x.Reason!), StringComparer.Ordinal);
+                    x.TargetState!.Value, x.State!.Value, x.Reason!, x.Detail, x.Log), StringComparer.Ordinal);
             IsReadOnly = false;
+            LoadProblem = null;
 
             if (_lastCompletedAttemptId is Guid completed)
             {
@@ -213,9 +236,51 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
         catch (Exception ex)
         {
             IsReadOnly = true;
-            logger?.Error($"Cannot load plugin state at {_sharedPath} or {_localPath}: {ex.Message}. Files were preserved.");
+            LoadProblem = DescribeLoadProblem(file, file == _sharedPath, ex);
+            logger?.Error($"Cannot read the plugin state file {LoadProblem.File}: {LoadProblem.Message} {LoadProblem.Hint} " +
+                          "ePlugin changes no plugin until then; the files were left as they are.");
             return false;
         }
+    }
+
+    /// <summary>What is wrong with a state file that cannot be read, in words a user can act on.</summary>
+    /// <param name="shared">The committed file, rather than the local <c>.user</c> one.</param>
+    internal static StateFileProblem DescribeLoadProblem(string file, bool shared, Exception ex)
+    {
+        const string restart = " Then restart the editor, which reads it again.";
+        string? text = null;
+        try { text = File.Exists(file) ? File.ReadAllText(file) : null; }
+        catch (Exception read) when (read is IOException or UnauthorizedAccessException) { /* the exception below tells */ }
+
+        if (text is not null && HasConflictMarkers(text))
+            return new(file, "It contains git merge conflict markers (<<<<<<<, =======, >>>>>>>).",
+                "Resolve the conflict: keep the entries of both sides inside \"plugins\" (and \"licenses\", \"welcomes\"), " +
+                "each plugin once, and remove the markers." + restart);
+        if (ex is UnsupportedSchemaException schema)
+            return new(file, $"It has schemaVersion {(schema.Found == 0 ? "(none)" : schema.Found.ToString(System.Globalization.CultureInfo.InvariantCulture))}, " +
+                             $"this version of ePlugin reads schemaVersion {SchemaVersion}.",
+                schema.Found > SchemaVersion
+                    ? "A newer ePlugin Framework wrote it: update the framework in addons/ePlugin to the version your team uses." + restart
+                    : "Restore the file from version control." + restart);
+        if (ex is JsonException json)
+            return new(file, $"It is not valid JSON{(json.LineNumber is { } line ? $" (line {line + 1})" : "")}: {json.Message}",
+                (shared ? "Restore it from version control or fix the JSON." : "Fix the JSON, or delete the file: it only blocks retries of failed plugin operations on this machine.") + restart);
+        if (ex is InvalidDataException)
+            return new(file, ex.Message,
+                (shared ? "Restore it from version control or fix the entry." : "Fix the entry, or delete the file: it only blocks retries of failed plugin operations on this machine.") + restart);
+        if (ex is UnauthorizedAccessException)
+            return new(file, $"It cannot be read: {ex.Message}", "Check the file's permissions." + restart);
+        return new(file, $"It cannot be read: {ex.Message}",
+            "Close programs that may lock it (another editor, a git client) and check its permissions." + restart);
+    }
+
+    private static bool HasConflictMarkers(string text) =>
+        text.Split('\n').Any(l => l.StartsWith("<<<<<<<", StringComparison.Ordinal) || l.StartsWith(">>>>>>>", StringComparison.Ordinal));
+
+    /// <summary>A state file of a schema this version cannot read.</summary>
+    private sealed class UnsupportedSchemaException(int found) : IOException("Unsupported plugin state schema.")
+    {
+        public int Found { get; } = found;
     }
 
     /// <summary>Takes the entries of a read shared document as this store's own.</summary>
@@ -334,7 +399,10 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
         return true;
     }
 
-    public bool TryFail(Guid attemptId, PersistedPluginState failureState, string reason)
+    /// <param name="details">What went wrong for each participant, see <see cref="LocalPluginAttempt.Detail"/>.</param>
+    /// <param name="log">The output of the build that failed, see <see cref="LocalPluginAttempt.Log"/>.</param>
+    public bool TryFail(Guid attemptId, PersistedPluginState failureState, string reason,
+        IReadOnlyDictionary<string, string>? details = null, string? log = null)
     {
         if (IsReadOnly || failureState is not (PersistedPluginState.Failed or PersistedPluginState.Invalid) ||
             string.IsNullOrWhiteSpace(reason))
@@ -346,7 +414,10 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
         var found = false;
         foreach (var attempt in _local.Values.Where(x => x.AttemptId == attemptId))
         {
-            next[attempt.Slug] = attempt with { State = failureState, Reason = reason };
+            next[attempt.Slug] = attempt with
+            {
+                State = failureState, Reason = reason, Detail = details?.GetValueOrDefault(attempt.Slug), Log = log
+            };
             found = true;
         }
 
@@ -552,7 +623,9 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
                         InstalledVersion = x.InstalledVersion,
                         TargetState = x.TargetState,
                         State = x.State,
-                        Reason = x.Reason
+                        Reason = x.Reason,
+                        Detail = x.Detail,
+                        Log = x.Log
                     }).ToList()
             };
             AtomicFile.Write(_localPath, Serialize(document));
@@ -576,20 +649,29 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
             return;
         }
 
-        foreach (var temporaryPath in Directory.EnumerateFiles(directory, Path.GetFileName(path) + ".tmp-*"))
+        try
         {
-            File.Delete(temporaryPath);
+            foreach (var temporaryPath in Directory.EnumerateFiles(directory, Path.GetFileName(path) + ".tmp-*"))
+            {
+                try { File.Delete(temporaryPath); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* removed at a later start */ }
+            }
         }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* removed at a later start */ }
     }
 
-    private static void Validate(SharedDocument shared, LocalDocument local)
+    private static void ValidateLocal(LocalDocument local)
     {
-        if (local.SchemaVersion != SchemaVersion || local.Attempts is null)
+        if (local.SchemaVersion != SchemaVersion)
         {
-            throw new InvalidDataException("Unsupported or incomplete plugin state schema.");
+            throw new UnsupportedSchemaException(local.SchemaVersion);
         }
 
-        ValidateShared(shared);
+        if (local.Attempts is null)
+        {
+            throw new InvalidDataException("It has no \"attempts\" list.");
+        }
+
         var slugs = new HashSet<string>(StringComparer.Ordinal);
         foreach (var entry in local.Attempts)
         {
@@ -598,16 +680,21 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
                 entry.State is not (PersistedPluginState.Failed or PersistedPluginState.Invalid) ||
                 string.IsNullOrWhiteSpace(entry.Reason) || !slugs.Add(entry.Slug!))
             {
-                throw new InvalidDataException("Local plugin state has an invalid or duplicate attempt.");
+                throw new InvalidDataException($"It has an invalid or duplicate attempt{(ValidSlug(entry.Slug) ? $" for {entry.Slug}" : "")}.");
             }
         }
     }
 
     private static void ValidateShared(SharedDocument shared)
     {
-        if (shared.SchemaVersion != SchemaVersion || shared.Plugins is null)
+        if (shared.SchemaVersion != SchemaVersion)
         {
-            throw new InvalidDataException("Unsupported or incomplete plugin state schema.");
+            throw new UnsupportedSchemaException(shared.SchemaVersion);
+        }
+
+        if (shared.Plugins is null)
+        {
+            throw new InvalidDataException("It has no \"plugins\" list.");
         }
 
         var slugs = new HashSet<string>(StringComparer.Ordinal);
@@ -616,7 +703,7 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
             if (!ValidSlug(entry.Slug) || string.IsNullOrWhiteSpace(entry.Version) ||
                 entry.State is null || !IsCompleted(entry.State.Value) || !slugs.Add(entry.Slug!))
             {
-                throw new InvalidDataException("Shared plugin state has an invalid or duplicate entry.");
+                throw new InvalidDataException($"It has an invalid or duplicate entry in \"plugins\"{(ValidSlug(entry.Slug) ? $" for {entry.Slug}" : "")}.");
             }
         }
 
@@ -625,7 +712,7 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
         {
             if (!ValidSlug(entry.Slug) || string.IsNullOrWhiteSpace(entry.License) || !slugs.Add(entry.Slug!))
             {
-                throw new InvalidDataException("Shared plugin state has an invalid or duplicate license.");
+                throw new InvalidDataException($"It has an invalid or duplicate entry in \"licenses\"{(ValidSlug(entry.Slug) ? $" for {entry.Slug}" : "")}.");
             }
         }
 
@@ -634,7 +721,7 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
         {
             if (!ValidSlug(entry.Slug) || !slugs.Add(entry.Slug!))
             {
-                throw new InvalidDataException("Shared plugin state has an invalid or duplicate welcome page.");
+                throw new InvalidDataException($"It has an invalid or duplicate entry in \"welcomes\"{(ValidSlug(entry.Slug) ? $" for {entry.Slug}" : "")}.");
             }
         }
     }
@@ -672,7 +759,7 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
             disk = JsonSerializer.Deserialize<SharedDocument>(actual, JsonOptions) ?? throw new InvalidDataException("Shared plugin state is null.");
             ValidateShared(disk);
         }
-        catch (Exception ex) when (ex is JsonException or InvalidDataException)
+        catch (Exception ex) when (ex is JsonException or InvalidDataException or UnsupportedSchemaException)
         {
             logger?.Warn($"Plugin state at {_sharedPath} changed on disk and cannot be read: {ex.Message}");
             return false;
@@ -786,6 +873,12 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
         public PersistedPluginState? TargetState { get; set; }
         public PersistedPluginState? State { get; set; }
         public string? Reason { get; set; }
+
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Detail { get; set; }
+
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Log { get; set; }
     }
 }
 #endif

@@ -1,0 +1,41 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/ePlugin/Internal/Manager/StartupFailureDialog.cs" id="1_script"]
+
+[node name="StartupFailureDialog" type="AcceptDialog"]
+auto_translate_mode = 2
+title = "ePlugin — Could not start"
+initial_position = 2
+size = Vector2i(720, 420)
+ok_button_text = "Close"
+script = ExtResource("1_script")
+
+[node name="Content" type="VBoxContainer" parent="."]
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 712.0
+offset_bottom = 371.0
+theme_override_constants/separation = 8
+
+[node name="StartupMessage" type="Label" parent="Content"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(680, 0)
+layout_mode = 2
+text = "ePlugin could not start."
+autowrap_mode = 3
+
+[node name="StartupHint" type="Label" parent="Content"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(680, 0)
+modulate = Color(1, 1, 1, 0.7)
+layout_mode = 2
+text = "Until it starts, ePlugin enables, disables and updates no plugin. It tries again by itself; Retry now tries right away. Copy details copies the error, e.g. for a bug report."
+autowrap_mode = 3
+
+[node name="StartupDetails" type="TextEdit" parent="Content"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(680, 220)
+layout_mode = 2
+size_flags_vertical = 3
+editable = false
+wrap_mode = 1

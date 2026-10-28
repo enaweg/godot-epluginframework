@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Enaweg.Plugin.Internal.Dotnet;
+using Enaweg.Plugin.Internal.Update;
 
 namespace Enaweg.Plugin.Internal;
 
@@ -20,6 +21,9 @@ internal sealed partial class EGlobal
         public Guid AttemptId { get; } = attemptId;
         public Dictionary<PluginContext, PersistedPluginState> Participants { get; } = [];
     }
+
+    private string RecordFailedDetail =>
+        $"Recording the operation in {StateFilePath}.user failed. The Output panel shows why; check that the file is writable.";
 
     private string DescribeLocalState(string slug)
     {
@@ -64,7 +68,7 @@ internal sealed partial class EGlobal
             if (!_stateStore.TryAddParticipant(_transition.AttemptId, context.Slug, context.Metadata?.Version, target))
             {
                 context.State = EEditorPluginState.Error;
-                FailTransition("cannot_record_participant");
+                FailTransition("cannot_record_participant", RecordFailedDetail);
                 return false;
             }
 
@@ -78,6 +82,9 @@ internal sealed partial class EGlobal
             context.Logger?.Error(
                 $"Plugin {context.Slug} is blocked by local state ({DescribeLocalState(context.Slug)}). Use manual retry after recovery.");
             context.State = EEditorPluginState.Error;
+            context.ErrorDetail ??= new InvalidOperationException(_stateStore.LoadProblem is { } problem
+                ? $"ePlugin cannot read {problem.File}: {problem.Message}"
+                : $"An earlier operation of {context.Slug} failed ({DescribeLocalState(context.Slug)}) and has to be retried or given up on first.");
             FailTransition("participant_blocked");
             return false;
         }
@@ -85,10 +92,14 @@ internal sealed partial class EGlobal
         var version = context.Metadata?.Version;
         if (string.IsNullOrWhiteSpace(version))
         {
-            context.Logger?.Error(
-                $"Plugin {context.Slug} has no version in plugin.cfg. Add one and use manual retry.");
+            context.Logger?.Error(context.Metadata is null
+                ? $"Plugin {context.Slug}: {_host.PluginDirectory(context.Slug)}/plugin.cfg cannot be read. Repair it and use manual retry."
+                : $"Plugin {context.Slug} has no version in {_host.PluginDirectory(context.Slug)}/plugin.cfg. Add one (e.g. version=\"1.0.0\") and use manual retry.");
             _stateStore.TryRecordInvalid(context.Slug, version, "invalid_plugin_version", manualRetry, target);
             context.State = EEditorPluginState.Error;
+            context.ErrorDetail = new InvalidOperationException(context.Metadata is null
+                ? $"{_host.PluginDirectory(context.Slug)}/plugin.cfg cannot be read."
+                : $"{_host.PluginDirectory(context.Slug)}/plugin.cfg has no version. Add one, e.g. version=\"1.0.0\".");
             FailTransition("invalid_plugin_version");
             return false;
         }
@@ -98,6 +109,8 @@ internal sealed partial class EGlobal
             if (!_stateStore.TryBeginAttempt(context.Slug, version, target, out var id, manualRetry))
             {
                 context.State = EEditorPluginState.Error;
+                context.ErrorDetail = new InvalidOperationException(RecordFailedDetail);
+                context.Logger?.Error($"Cannot record the start of the operation on {context.Slug}; it was not started.");
                 return false;
             }
 
@@ -107,7 +120,7 @@ internal sealed partial class EGlobal
         else if (!_stateStore.TryAddParticipant(_transition.AttemptId, context.Slug, version, target))
         {
             context.State = EEditorPluginState.Error;
-            FailTransition("cannot_record_participant");
+            FailTransition("cannot_record_participant", RecordFailedDetail);
             return false;
         }
 
@@ -122,7 +135,9 @@ internal sealed partial class EGlobal
         return true;
     }
 
-    private void FailTransition(string reason)
+    /// <param name="detail">What went wrong, for the participants that have no error of their own, e.g. the build's errors.</param>
+    /// <param name="log">The output of the build that failed, which the Needs attention dialog opens.</param>
+    private void FailTransition(string reason, string? detail = null, string? log = null)
     {
         if (_recipeUpdateJournal is not null)
         {
@@ -136,17 +151,78 @@ internal sealed partial class EGlobal
             return;
         }
 
-        _stateStore?.TryFail(_transition.AttemptId, PersistedPluginState.Failed, reason);
-        foreach (var participant in _transition.Participants.Keys)
+        // A plugin without an error of its own failed because another one did: name that one, not the reason code.
+        var participants = _transition.Participants.Keys.ToArray();
+        var failed = participants.Where(p => p.ErrorDetail is not null).Select(p => p.Slug).Distinct(StringComparer.Ordinal).ToArray();
+        foreach (var participant in participants)
         {
             participant.State = EEditorPluginState.Error;
-            participant.ErrorDetail ??= new InvalidOperationException($"Plugin operation failed: {reason}");
+            if (participant.ErrorDetail is not null) continue;
+            var text = detail ?? (failed.Length > 0
+                ? $"Not completed, because {string.Join(", ", failed)} failed in the same plugin operation."
+                : null);
+            if (text is not null) participant.ErrorDetail = new InvalidOperationException(text);
         }
+
+        var details = participants.Where(p => p.ErrorDetail is not null)
+            .GroupBy(p => p.Slug, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Last().ErrorDetail!.Message, StringComparer.Ordinal);
+        _stateStore?.TryFail(_transition.AttemptId, PersistedPluginState.Failed, reason, details, log);
 
         _toCheckEnable.Clear();
         _toCheckDisable.Clear();
         _transition = null;
         _transitionFailed = true;
+    }
+
+    /// <summary>The errors of a failed build, where they are and what to do, as plain text for the Needs attention dialog.</summary>
+    private string BuildFailureDetail(int exitCode, IReadOnlyList<string> output)
+    {
+        var diagnosis = BuildDiagnostics.Classify(output, _host.ProjectRoot);
+        if (diagnosis.Errors.Count == 0)
+            return "The project did not build afterwards." + (DotnetFailure.Describe(exitCode, output) is { } described ? "\n" + described : "");
+        var shown = diagnosis.Errors.Take(DotnetFailure.MaxLines).Select(e => BuildDiagnostics.Format(e with { File = RelativeToProject(e.File) }));
+        var more = diagnosis.Errors.Count > DotnetFailure.MaxLines ? $"\n… and {diagnosis.Errors.Count - DotnetFailure.MaxLines} more, see the log." : "";
+        var where = diagnosis.Cause switch
+        {
+            BuildFailureCause.ProjectCode => "\nThe errors are in the project's own code: it may use something the plugin changed or removed. Fix it, then retry.",
+            BuildFailureCause.PluginCode => "\nThe errors are in plugin code. If a plugin does not build with your project's setup, report it to its author.",
+            BuildFailureCause.Transient => "\n" + (DotnetFailure.Hint(exitCode, output) ?? "Another attempt may succeed: retry."),
+            _ => ""
+        };
+        return $"The project did not build afterwards ({diagnosis.Errors.Count} error{(diagnosis.Errors.Count == 1 ? "" : "s")}):\n" +
+               string.Join("\n", shown) + more + where;
+    }
+
+    private string? RelativeToProject(string? file)
+    {
+        if (file is null || !System.IO.Path.IsPathRooted(file)) return file;
+        var relative = System.IO.Path.GetRelativePath(_host.ProjectRoot, file);
+        return relative.StartsWith("..", StringComparison.Ordinal) ? file : relative.Replace('\\', '/');
+    }
+
+    /// <summary>
+    /// Saves the output of a build an activation or deactivation failed in, below <c>.godot/eplugin/logs</c>, keeping the
+    /// newest few; null when it cannot be written, which only costs the dialog its Open log button.
+    /// </summary>
+    private string? WriteBuildLog(Guid attemptId, IReadOnlyList<string> output)
+    {
+        const int kept = 10;
+        try
+        {
+            var directory = System.IO.Path.Combine(_host.ProjectRoot, ".godot", "eplugin", "logs");
+            System.IO.Directory.CreateDirectory(directory);
+            var file = System.IO.Path.Combine(directory, $"build-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{attemptId:N}.log");
+            System.IO.File.WriteAllText(file, string.Join("\n", output) + "\n");
+            foreach (var old in new System.IO.DirectoryInfo(directory).GetFiles("build-*.log").OrderByDescending(f => f.Name, StringComparer.Ordinal).Skip(kept))
+                old.Delete();
+            return file;
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+        {
+            _ePluginContext?.Logger?.Warn($"Cannot save the build output: {ex.Message}");
+            return null;
+        }
     }
 
     internal bool FinishTransition()
@@ -180,9 +256,12 @@ internal sealed partial class EGlobal
         if (_ePluginContext is not null)
         {
             var cli = GetOrCreateContext(_ePluginContext).Cli as ICheckedDotnetCli;
-            if (cli is null || !cli.TryRebuildSolution())
+            var build = cli?.TryBuild();
+            if (build is not { ExitCode: 0 })
             {
-                FailTransition("solution_build_failed");
+                var output = build?.Output ?? ["The dotnet CLI is unavailable."];
+                FailTransition("solution_build_failed", BuildFailureDetail(build?.ExitCode ?? -1, output),
+                    WriteBuildLog(transition.AttemptId, output));
                 return false;
             }
         }
@@ -193,7 +272,7 @@ internal sealed partial class EGlobal
                 x.Value)).ToArray();
         if (_stateStore?.TryComplete(transition.AttemptId, completed) == false)
         {
-            FailTransition("state_commit_failed");
+            FailTransition("state_commit_failed", $"Saving the result in {StateFilePath} failed. The Output panel shows why; check that the file is writable and has no merge conflict.");
             return false;
         }
 

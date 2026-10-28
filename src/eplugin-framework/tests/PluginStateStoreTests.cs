@@ -135,6 +135,59 @@ public class PluginStateStoreTests
     }
 
     [TestCase]
+    public void TheDetailAndLogOfAFailureSurviveARestartAndOlderFilesWithoutThemStillLoad()
+    {
+        var (store, path) = NewStore();
+        Assertions.AssertBool(store.TryBeginAttempt("app", "1.0.0", PersistedPluginState.Activated, out var id)).IsTrue();
+        Assertions.AssertBool(store.TryAddParticipant(id, "lib", "1.0.0", PersistedPluginState.Activated)).IsTrue();
+        Assertions.AssertBool(store.TryFail(id, PersistedPluginState.Failed, "solution_build_failed",
+            new Dictionary<string, string> { ["app"] = "CS0246 missing type" }, "/logs/build.log")).IsTrue();
+
+        var reloaded = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(reloaded.Load()).IsTrue();
+        Assertions.AssertString(reloaded.GetLocal("app")!.Detail).IsEqual("CS0246 missing type");
+        Assertions.AssertString(reloaded.GetLocal("app")!.Log).IsEqual("/logs/build.log");
+        Assertions.AssertObject(reloaded.GetLocal("lib")!.Detail).IsNull();
+        // a file written before the fields existed
+        Assertions.AssertBool(File.ReadAllText(path + ".user").Contains("\"detail\"", StringComparison.Ordinal)).IsTrue();
+        File.WriteAllText(path + ".user",
+            $"{{\"schemaVersion\":1,\"attempts\":[{{\"attemptId\":\"{id}\",\"slug\":\"app\",\"targetState\":\"activated\",\"state\":\"failed\",\"reason\":\"x\"}}]}}");
+        var older = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(older.Load()).IsTrue();
+        Assertions.AssertObject(older.GetLocal("app")!.Detail).IsNull();
+    }
+
+    [TestCase]
+    public void AnUnreadableStateFileNamesTheFileTheCauseAndWhatToDo()
+    {
+        var (_, path) = NewStore();
+        File.WriteAllText(path, "{\n<<<<<<< HEAD\n  \"schemaVersion\": 1,\n=======\n  \"schemaVersion\": 1,\n>>>>>>> main\n  \"plugins\": []\n}\n");
+        var conflicted = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(conflicted.Load()).IsFalse();
+        Assertions.AssertString(conflicted.LoadProblem!.File).IsEqual(path);
+        Assertions.AssertString(conflicted.LoadProblem.Message).Contains("git merge conflict markers");
+        Assertions.AssertString(conflicted.LoadProblem.Hint).EndsWith("Then restart the editor, which reads it again.");
+
+        File.WriteAllText(path, "{\"schemaVersion\":2,\"plugins\":[]}");
+        var newer = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(newer.Load()).IsFalse();
+        Assertions.AssertString(newer.LoadProblem!.Message).Contains("schemaVersion 2");
+        Assertions.AssertString(newer.LoadProblem.Hint).StartsWith("A newer ePlugin Framework wrote it");
+
+        File.WriteAllText(path, "{\"schemaVersion\":1,\"plugins\":[]}");
+        File.WriteAllText(path + ".user", "{ not json");
+        var local = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(local.Load()).IsFalse();
+        Assertions.AssertString(local.LoadProblem!.File).IsEqual(path + ".user");
+        Assertions.AssertString(local.LoadProblem.Hint).Contains("delete the file");
+
+        File.Delete(path + ".user");
+        var repaired = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(repaired.Load()).IsTrue();
+        Assertions.AssertObject(repaired.LoadProblem).IsNull();
+    }
+
+    [TestCase]
     public void AnExternalEditOfTheSamePluginPreventsFinalization()
     {
         var (store, path) = NewStore();

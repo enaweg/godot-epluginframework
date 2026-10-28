@@ -49,7 +49,7 @@ internal static class ShowHideHelper
             RefuseFixedExtensions(hidden, baseDirectory);
             hidden.Attributes = FileAttributes.Normal;
             plugin.Logger?.Log($"Showing: <plugin>{Relative(hidden, baseDirectory)} (to <plugin>{Relative(shown, baseDirectory)})");
-            hidden.MoveTo(shown.FullName);
+            Move(hidden, shown.FullName);
             if (host is null) return;
             // The editor's next file system scan would load them too; loading them now lets the plugin use them at once.
             foreach (var (file, _) in Extensions(shown).Where(e => !host.IsExtensionLoaded(e.File)))
@@ -98,7 +98,7 @@ internal static class ShowHideHelper
             }
             shown.Attributes = FileAttributes.Hidden;
             plugin.Logger?.Log($"Hiding: <plugin>{Relative(shown, baseDirectory)} (to <plugin>{Relative(hidden, baseDirectory)})");
-            shown.MoveTo(hidden.FullName);
+            Move(shown, hidden.FullName);
         }
         else
         {
@@ -177,5 +177,20 @@ internal static class ShowHideHelper
 
     private static string Relative(FileSystemInfo directory, string? baseDirectory) =>
         baseDirectory is null ? directory.FullName : directory.FullName.Replace(baseDirectory, "");
+
+    /// <summary>Renames a managed directory, telling what usually keeps it from being renamed when that fails.</summary>
+    private static void Move(DirectoryInfo directory, string destination)
+    {
+        try
+        {
+            directory.MoveTo(destination);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new IOException($"Renaming {directory.FullName} to {Path.GetFileName(destination)} failed: {ex.Message} " +
+                                  "Close programs that use files in it (a file explorer, an IDE, a running game, a virus scanner) " +
+                                  "and check that it is writable, then retry.", ex);
+        }
+    }
 }
 #endif

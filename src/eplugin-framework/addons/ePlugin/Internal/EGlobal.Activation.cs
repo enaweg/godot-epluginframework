@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Enaweg.Plugin.Internal.Dotnet;
 using Enaweg.Plugin.Internal.Update;
 using Enaweg.Plugin.Logging;
 using Godot;
@@ -104,6 +105,15 @@ internal sealed partial class EGlobal
 
         if (!JoinTransition(context, PersistedPluginState.Activated, manualRetry))
         {
+            return;
+        }
+
+        // Every activation builds the project; without dotnet each step would fail with a less telling error.
+        if (CliService is { IsDotnetAvailable: false })
+        {
+            context.Logger?.Error($"{context.Slug} cannot be activated: the dotnet command could not be run.");
+            context.ErrorDetail = new InvalidOperationException(DotnetFailure.DotnetMissingHint);
+            FailTransition("dotnet_unavailable");
             return;
         }
 
@@ -227,6 +237,12 @@ internal sealed partial class EGlobal
 
         if (!IsDependencyAvailable(slug))
         {
+            // Godot cannot enable what is not there; saying so tells the user what to do.
+            if (!HasPluginConfig(slug))
+            {
+                return FailDependency(context, NotInstalled(context, dependency), NotInstalled(context, dependency));
+            }
+
             if (IsManagedPlugin(slug))
             {
                 _toCheckEnable.Push(context);
@@ -245,13 +261,13 @@ internal sealed partial class EGlobal
 
                     var silent = $"Plugin {slug} was enabled but did not start its activation; its _EnablePlugin has to call this.EnableEPlugin().";
                     context.Logger?.Warn(silent);
-                    FailAllUncheckedPluginsAndRefresh($"Plugin dependency {slug} did not activate!");
+                    FailAllUncheckedPluginsAndRefresh($"Plugin dependency {slug} did not activate: its _EnablePlugin does not call this.EnableEPlugin(). Report it to the author of {slug}.");
                     return DependencyReadiness.Failed;
                 }
 
                 // Godot refused it (e.g. its script does not load), so no activation callback would resume this plugin.
                 context.Logger?.Warn($"Plugin {slug} cannot be enabled!");
-                FailAllUncheckedPluginsAndRefresh($"Plugin dependency {slug} cannot be enabled!");
+                FailAllUncheckedPluginsAndRefresh(CannotEnable(context, slug));
                 return DependencyReadiness.Failed;
             }
 
@@ -272,21 +288,25 @@ internal sealed partial class EGlobal
             if (version is null)
             {
                 var unknown = $"The version of the GDExtension {slug} is unknown, so it cannot be checked against {dependency.Version}. Install a version of it in the ePlugin Manager.";
-                return IsExtensionAddon(slug)
-                    ? FailDependency(context, unknown, unknown)
-                    : FailDependency(context, $"Plugin {slug} not found!", $"Plugin dependency {slug} not found!");
+                if (IsExtensionAddon(slug)) return FailDependency(context, unknown, unknown);
+                if (!HasPluginConfig(slug)) return FailDependency(context, NotInstalled(context, dependency), NotInstalled(context, dependency));
+                var noVersion = $"Plugin dependency {slug} has no version in {_host.PluginDirectory(slug)}/plugin.cfg, so it cannot be checked " +
+                                $"against {dependency.Version}, which {context.Slug} requires. Install a released version of {slug}, then retry.";
+                return FailDependency(context, noVersion, noVersion);
             }
 
             if (!MatchesVersion(version, dependency.Version, context.Logger))
             {
-                var mismatch = $"Dependency {slug} {version} does not match needed {dependency.Version} of {context.Slug}!";
+                var mismatch = $"Dependency {slug} {version} does not match needed {dependency.Version} of {context.Slug}! " +
+                               $"Install a matching version of {slug} in the ePlugin Manager (its details offer every version), then retry.";
                 return FailDependency(context, mismatch, mismatch);
             }
         }
 
         if ((managed ?? plain)?.State == EEditorPluginState.Error)
         {
-            return FailDependency(context, $"Plugin dependency {slug} failed.", $"Plugin dependency {slug} failed.");
+            var failed = $"Plugin dependency {slug} failed. Fix {slug} under Needs attention first; retrying {context.Slug} retries it too.";
+            return FailDependency(context, failed, failed);
         }
 
         // A plain plugin is ready while the editor has it enabled; an ePlugin once its activation completed.
@@ -307,6 +327,18 @@ internal sealed partial class EGlobal
 
         return DependencyReadiness.Ready;
     }
+
+    /// <summary>Whether a plugin.cfg of <paramref name="slug"/> is below the addons folder.</summary>
+    private bool HasPluginConfig(string slug) => FileAccess.FileExists($"{_host.PluginDirectory(slug)}/plugin.cfg");
+
+    private string NotInstalled(PluginContext context, EEditorPluginRecipe.Plugin dependency) =>
+        $"Plugin dependency {dependency.Slug}{(dependency.Version is null ? "" : " " + dependency.Version)} is not installed: " +
+        $"{context.Slug} requires it, but {_host.PluginDirectory(dependency.Slug)}/plugin.cfg does not exist. Install {dependency.Slug} " +
+        "(from its project page, or with Install from ZIP in the ePlugin Manager), then retry.";
+
+    private static string CannotEnable(PluginContext context, string slug) =>
+        $"Plugin dependency {slug} cannot be enabled: Godot refused it, which {context.Slug} needs. The Output panel shows Godot's " +
+        $"error, usually a script of {slug} that does not load.";
 
     /// <summary>Fails the activation of <paramref name="context"/> and of every plugin waiting with it.</summary>
     private DependencyReadiness FailDependency(PluginContext context, string warning, string reason)
@@ -329,7 +361,7 @@ internal sealed partial class EGlobal
         {
             context.Logger?.Warn($"Plugin {slug} cannot be enabled!");
             _toCheckEnable.Push(context);
-            FailAllUncheckedPluginsAndRefresh($"Plugin dependency {slug} cannot be enabled!");
+            FailAllUncheckedPluginsAndRefresh(CannotEnable(context, slug));
             return false;
         }
 
@@ -460,7 +492,8 @@ internal sealed partial class EGlobal
 
             context.State = EEditorPluginState.Error;
             context.ErrorDetail = ex;
-            context.Logger?.Error($"Creating the recipe of {context.Slug} failed: {ex.Message}");
+            // a bug in the plugin: its author needs the stack trace
+            context.Logger?.Error($"Creating the recipe of {context.Slug} failed: {ex}");
             return false;
         }
     }

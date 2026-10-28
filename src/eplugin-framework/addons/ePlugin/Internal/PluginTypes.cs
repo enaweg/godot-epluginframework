@@ -42,6 +42,10 @@ internal static class PluginTypes
         }
         catch (ReflectionTypeLoadException ex)
         {
+            // An ePlugin among the types that failed would be taken for a plain plugin: say why.
+            var cause = ex.LoaderExceptions.FirstOrDefault(e => e is not null)?.Message ?? ex.Message;
+            GD.PushWarning($"ePlugin could not load {ex.Types.Count(type => type is null)} types of the project assembly ({cause}). " +
+                           "Plugins defined by them are treated as plain plugins until the project builds and loads completely.");
             return ex.Types.Where(type => type is not null).Cast<Type>().ToArray();
         }
     }

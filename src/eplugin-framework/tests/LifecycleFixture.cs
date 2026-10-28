@@ -253,14 +253,25 @@ internal sealed class RecordingCli(List<string> operations) : IDotnetCli, ICheck
 
     public bool BuildFails { get; set; }
 
+    /// <summary>What a failing build prints.</summary>
+    public string[] BuildOutput { get; set; } = [];
+
+    public string? LastFailure { get; private set; }
+
     private bool Record(string operation)
     {
         operations.Add(operation);
+        LastFailure = null;
         return true;
     }
 
-    public bool AddNugetToProject(string nugetName, string? version = null, string? source = null, bool prerelease = false) =>
-        Record($"add-nuget {nugetName}") && !FailingPackages.Contains(nugetName);
+    public bool AddNugetToProject(string nugetName, string? version = null, string? source = null, bool prerelease = false)
+    {
+        Record($"add-nuget {nugetName}");
+        if (!FailingPackages.Contains(nugetName)) return true;
+        LastFailure = $"error NU1101: Unable to find package {nugetName}.";
+        return false;
+    }
 
     public bool TryRemoveNugetFromProject(string nugetName) => Record($"remove-nuget {nugetName}");
     public bool TryAddProjectToSolution(string projectPath, string? virtualFolderName) => Record($"add-project {projectPath}");
@@ -268,7 +279,7 @@ internal sealed class RecordingCli(List<string> operations) : IDotnetCli, ICheck
     public bool TryAddProjectReference(string projectReference) => Record($"add-reference {projectReference}");
     public bool TryRemoveProjectReference(string projectReference) => Record($"remove-reference {projectReference}");
     public bool TryRebuildSolution() => Record("build") && !BuildFails;
-    public BuildOutcome TryBuild(bool keepNewAssembly = true) => new(TryRebuildSolution() ? 0 : 1, []);
+    public BuildOutcome TryBuild(bool keepNewAssembly = true) => TryRebuildSolution() ? new(0, []) : new(1, BuildOutput);
     public BuildOutcome TryBuildPluginsOnly(PluginsOnlyBuild build) => new(Record("build plugins-only") ? 0 : 1, []);
 
     public void RebuildSolution() => TryRebuildSolution();

@@ -158,8 +158,9 @@ before it was removed) is then disabled. When a manual retry re-enables a plugin
 `EnableEPlugin` replaces the stale participant, and the retry drops the old context instead of continuing with it. That includes the framework
 itself: its `_DisablePlugin` calls `EGlobal.Detach`, which drops the singleton, so the instance created when it is
 enabled again initializes like after an assembly reload instead of using the freed one. The compiled plugin types are read
-once per assembly load (`PluginTypes`). `Initialize` leaves `EGlobal` invalid when it throws; `EPluginPlugin` logs it
-and tries again after 10 s. One failing `IInitialize` does not stop the others.
+once per assembly load (`PluginTypes`). `Initialize` leaves `EGlobal` invalid when it throws; `EPluginPlugin` logs it (the full exception only when it changes),
+tries again after 10 s, doubling up to 5 minutes, and keeps its toolbar button, which opens `StartupFailureDialog` instead
+of the manager. One failing `IInitialize` does not stop the others.
 
 ### Authoring contract (public API surface)
 
@@ -272,7 +273,12 @@ abstract member on `DotnetCliBase`/`IDotnetCli` implemented in both `DotnetCli9`
 checked in `IDotnetCliTests`. Pass arguments one per element and unquoted (`OS.Execute` quotes them; outside Windows it runs them through `/bin/sh`
 in double quotes, so `GodotProcessRunner` escapes `\ " $` and backticks), and project
 paths through `ProjectFile`, which accepts `res://`, project-relative and absolute paths and returns an absolute one, so
-nothing depends on the editor's working directory. `IDotnetCli.Execute(command, args)` runs `dotnet <command> <args>`.
+nothing depends on the editor's working directory. `IDotnetCli.Execute(command, args)` runs `dotnet <command> <args>`. A
+failed command leaves `ExecuteCliBase.LastFailure` (its error lines and a hint, from the pure `DotnetFailure`), which recipe
+operations add to their exception, so the Needs attention dialog shows dotnet's cause rather than only the failed entry.
+`FailTransition` records each participant's error message as the attempt's `detail` in the `.user` file (and a failed
+build's output as `log`, below `.godot/eplugin/logs`), so the dialog explains failures after a restart; give a new reason
+code its text in `AttentionItem.Reason` (`DecisionDialogTests` checks every code).
 
 Removals are idempotent: the CLI fails to remove a package, project reference or solution entry that is already gone,
 although that is the state the caller wants. Both CLIs therefore first ask `DotnetCliBase.Check*Removal`, which reads
@@ -345,7 +351,7 @@ when pending updates, failed attempts, enabled plugins, their states or unloaded
 expires after an hour); the start that requests no further restart wraps `Initialize` in one `ActivationProgress` scope,
 reopens the manager and closes that progress window a few frames later. Every dialog is its own scene (`EPluginManagerDialog.tscn`,
 `SettingsDialog.tscn`, `AttentionDialog.tscn`, `UpdateReviewDialog.tscn`, `UpdateFailureDialog.tscn`, `LicenseDialog.tscn`,
-`WelcomeDialog.tscn`, `CleanupSuggestionDialog.tscn`); scripts only bind
+`WelcomeDialog.tscn`, `CleanupSuggestionDialog.tscn`, `StartupFailureDialog.tscn`); scripts only bind
 `%`-unique nodes and set what a scene cannot store (e.g. Tree column titles/widths). Keep layout changes in the scenes.
 The manager's Settings button opens `SettingsDialog`, a `TabContainer` whose tabs (General, Update sources, Tools, About)
 each have their own script (`GeneralSettingsTab`, `UpdateSourcesTab`, `ToolsTab`, `AboutTab`); the dialog owns the windows

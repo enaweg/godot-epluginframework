@@ -312,7 +312,10 @@ public class IDotnetCliTests
 
         Assertions.AssertInt(cli.Execute("restore", []).Item1).IsEqual(-1);
         Assertions.AssertBool(cli.TryRebuildSolution()).IsFalse();
-        Assertions.AssertBool(log.Contains("error: cli: dotnet is not installed")).IsTrue();
+        Assertions.AssertBool(log.Any(l => l.StartsWith("error: cli: Command dotnet could not be run", StringComparison.Ordinal) && l.Contains("dotnet is not installed"))).IsTrue();
+        // what the recipe operation reports: the cause and how to make dotnet available
+        Assertions.AssertString(cli.LastFailure).Contains("dotnet is not installed");
+        Assertions.AssertString(cli.LastFailure).Contains(DotnetFailure.DotnetMissingHint);
     }
 
     private sealed class ThrowingRunner : IProcessRunner
