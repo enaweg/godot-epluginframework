@@ -44,7 +44,7 @@ internal sealed partial class AddonPackageValidator(IEnumerable<IAddonRule>? ext
         var candidate = context.Candidate;
         var metadata = new Dictionary<string, string>();
         var files = Directory.Exists(stage) ? PackageFiles.Files(stage).ToArray() : [];
-        if (files.Length == 0) Add("R1", FindingSeverity.Error, "Staging folder is missing or empty.");
+        if (files.Length == 0) Add("R1", FindingSeverity.Error, "The package has no files for the plugin. " + ReportToAuthor);
         // A GDExtension add-on has no plugin.cfg: its version is the announced one, and it has no entry script.
         var addon = installed.Kind == PluginKind.GDExtensionAddon;
         var configless = addon && !File.Exists(Path.Combine(stage, "plugin.cfg"));
@@ -69,7 +69,7 @@ internal sealed partial class AddonPackageValidator(IEnumerable<IAddonRule>? ext
         try { if (!configless && !File.Exists(PackageFiles.Inside(stage, script))) Add("R4", FindingSeverity.Error, "Plugin script is missing."); }
         catch (InvalidDataException) { Add("R4", FindingSeverity.Error, "Plugin script must be a relative path inside the addon."); }
         if (candidate.Slug != installed.Slug || Path.GetFileName(stage) != installed.Slug)
-            Add("R5", FindingSeverity.Error, "Staged addon slug differs from the installed slug.");
+            Add("R5", FindingSeverity.Error, $"The package's plugin folder is not named '{installed.Slug}' like the installed plugin. " + ReportToAuthor);
         var packageVersion = configless ? candidate.NewVersion : metadata.GetValueOrDefault("version");
         var validNew = SemVer.TryParse(packageVersion, out var version);
         var versionProblem = configless
@@ -149,6 +149,8 @@ internal sealed partial class AddonPackageValidator(IEnumerable<IAddonRule>? ext
         // E.g. the Godot 3 build a project releases next to its Godot 4 one, under the same version.
         if (Godot3Evidence(stage, files) is { } godot3) Add("R27", FindingSeverity.Error, $"The package is made for Godot 3, which Godot 4 cannot load: {godot3}.");
         long bytes = 0;
+        var forbidden = new List<string>();
+        string? tooLarge = null;
         foreach (var file in files)
         {
             var relative = Path.GetRelativePath(stage, file);
@@ -156,12 +158,23 @@ internal sealed partial class AddonPackageValidator(IEnumerable<IAddonRule>? ext
             if (name.Equals("project.godot", StringComparison.OrdinalIgnoreCase) || name.Equals(".gitmodules", StringComparison.OrdinalIgnoreCase) ||
                 name.Equals("nuget.config", StringComparison.OrdinalIgnoreCase) ||
                 (name.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase)) && !File.Exists(Path.Combine(installed.Directory, relative)))
-                Add("R11", FindingSeverity.Error, "Package introduces a forbidden project/config file: " + relative);
+                forbidden.Add(relative.Replace('\\', '/'));
             var length = new FileInfo(file).Length;
-            if (length > PackageFiles.MaximumFile || (bytes += length) > PackageFiles.MaximumTotal)
-                Add("R12", FindingSeverity.Error, "Package exceeds size limits.");
+            if (length > PackageFiles.MaximumFile) tooLarge ??= $"{relative.Replace('\\', '/')} is larger than {Megabytes(PackageFiles.MaximumFile)}";
+            bytes += length;
         }
-        if (files.Length > PackageFiles.MaximumFiles) Add("R12", FindingSeverity.Error, "Package contains too many files.");
+        if (forbidden.Count > 0)
+            Add("R11", FindingSeverity.Error, $"The package brings project or configuration files that would change the whole project: {string.Join(", ", forbidden)}. " + ReportToAuthor);
+        // One finding for all limits, however many files exceed them.
+        var limits = new[]
+        {
+            tooLarge,
+            bytes > PackageFiles.MaximumTotal ? $"its files take {Megabytes(bytes)}, more than {Megabytes(PackageFiles.MaximumTotal)}" : null,
+            files.Length > PackageFiles.MaximumFiles ? $"it has {files.Length} files, more than {PackageFiles.MaximumFiles}" : null
+        }.OfType<string>().ToArray();
+        if (limits.Length > 0)
+            Add("R12", FindingSeverity.Error, $"The package exceeds the size limits of {PackageFiles.MaximumFiles} files, {Megabytes(PackageFiles.MaximumFile)} per file " +
+                                              $"and {Megabytes(PackageFiles.MaximumTotal)} in total: {string.Join("; ", limits)}. " + ReportToAuthor);
         try
         {
             var oldMetadata = PluginIni.Parse(File.ReadAllText(Path.Combine(installed.Directory, "plugin.cfg")));
@@ -176,6 +189,11 @@ internal sealed partial class AddonPackageValidator(IEnumerable<IAddonRule>? ext
         foreach (var rule in extraRules ?? []) findings.AddRange(rule.Check(context));
         return new(candidate, stage, version, newUrl, files.Concat(installedFiles).Any(f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)), findings, kind);
     }
+
+    /// <summary>Added to refusals that only the plugin's author can fix, as the package itself is faulty.</summary>
+    internal const string ReportToAuthor = "This is a packaging problem of the plugin; report it to the plugin's author.";
+
+    private static string Megabytes(long bytes) => $"{bytes / (1024.0 * 1024):0.#} MB";
 
     // GDScript that Godot 4 refuses to parse: a bare tool line and export and onready without the '@' of an annotation.
     [GeneratedRegex(@"^(?:tool[ \t]*\r?$|[ \t]*(?:export(?:\([^)\r\n]*\))?|onready)[ \t]+var\b)", RegexOptions.Multiline | RegexOptions.CultureInvariant)]

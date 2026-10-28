@@ -45,7 +45,8 @@ Project update sites (`UpdateSiteSettings`, the committed `res://addons/eplugin-
 `EGlobal.UpdateSites.cs`, `UpdateSourcesTab`) replace a plugin's `update_url`. `PluginUpdateTarget.UpdateUrl` stays the
 `plugin.cfg` value (the validator's R9 compares new packages against it) and `OverrideUrl` holds the project's site;
 `UpdateUrls` lists the override first. `UpdateService.FirstWorkingSiteAsync` tries them in order, so an unsupported or
-failing site falls back to `plugin.cfg` (reported in `UpdateCheckResult.Fallbacks`), and a candidate from either URL
+failing site falls back to `plugin.cfg` (reported in `UpdateCheckResult.Fallbacks`, whose `UsedSite` names the site
+used, `PluginUpdateTarget.SiteOf`), and a candidate from either URL
 belongs to the plugin (`CurrentCached`, `source_changed`). Trust compares repositories (`UpdateSourceFactory.Repository`:
 host and path, so another owner on the same host differs, and a release page, tag page or git URL of one repository is
 the same): R9 when the package's `update_url` names another repository than the installed one or removes it, also with a project
@@ -116,6 +117,15 @@ while another runs returns the known updates, and a manual check waits for the r
 it was manual too and otherwise runs its own (only a manual check re-indexes the local directories). Installing a batch
 takes the manager's plugin-operation gate once addon files are about to be replaced (downloading and the reviews before
 stay cancelable), so a reload the install left pending keeps the manager locked like after an activation.
+
+Failures carry an `UpdateProblem` so the manager can report one problem every site had once (`UpdateFlow.Describe`;
+`UpdateCheckResult.Checked` tells whether any plugin was checked). `UpdateErrors` turns them into messages with the host
+and what to do: `UpdateHttp` maps connection failures (`HttpRequestException.HttpRequestError` and inner socket or TLS
+errors) and its own timeout to `UpdateHttpException`, and error statuses through `UpdateErrors.Status`, which reads the
+end of a rate limit from `X-RateLimit-Reset`/`RateLimit-Reset` or `Retry-After` and names the token variable
+(`ForgeTokens.Hint`). `FirstWorkingSiteAsync` turns a site's timeout into one naming its host and keeps the problem when
+every site had the same. `GitRunner` reports a missing git (`Process.Start` throws `Win32Exception`) and its own time
+limits as `UpdateProblemException`s; `UpdateErrors.GitHint` adds a credentials or network hint to git's error output.
 
 ## Plugin kinds
 

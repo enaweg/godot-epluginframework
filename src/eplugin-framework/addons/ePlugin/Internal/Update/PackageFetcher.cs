@@ -43,7 +43,11 @@ internal sealed class PackageFetcher(UpdateHttp http, IGitRunner git)
                     if (reason is null) result.Add(validated);
                 }
                 // Only the user cancels the batch; a timeout of one download refuses that package.
-                catch (Exception ex) when (!ct.IsCancellationRequested) { reason = $"Cannot fetch the package for '{candidate.Slug}': {ex.Message}"; }
+                catch (Exception ex) when (!ct.IsCancellationRequested)
+                {
+                    reason = $"Cannot fetch the package for '{candidate.Slug}': " +
+                             (ex is OperationCanceledException ? "it did not arrive in time; check your network connection and try again." : ex.Message);
+                }
                 if (reason is not null)
                 {
                     refused.Add(new(candidate, reason));

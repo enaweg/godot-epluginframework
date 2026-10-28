@@ -20,8 +20,10 @@ theme_override_constants/separation = 8
 
 [node name="Summary" type="Label" parent="Content"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(500, 0)
 layout_mode = 2
 text = "The project does not compile with the installed version."
+autowrap_mode = 3
 
 [node name="BuildOutput" type="TextEdit" parent="Content"]
 unique_name_in_owner = true

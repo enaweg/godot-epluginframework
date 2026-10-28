@@ -31,9 +31,9 @@ internal sealed partial class EPluginManagerDialog
     internal async Task InstallZipAsync(string path)
     {
         if (Busy) return;
-        _operationNotice = null;
+        ClearNotice();
         var file = Path.GetFileName(path);
-        _working = true; Buttons(); _status.Text = $"Reading {file}...";
+        _working = true; RenderError(); Buttons(); _status.Text = $"Reading {file}...";
         try { await ReadZipAsync(path, file); }
         // whatever failed, the manager must not stay locked
         finally { _working = _installing = false; }
@@ -122,9 +122,7 @@ internal sealed partial class EPluginManagerDialog
         InstallOutcome outcome;
         try { outcome = _updates.StagedAddon is null ? new(InstallStep.Canceled) : _updates.InstallAddon(); }
         catch (Exception ex) { outcome = new(InstallStep.Failed, "Installing failed: " + ex.Message, true, true); }
-        _operationNotice = outcome.Notice;
-        _keepNotice = !Visible;
-        if (outcome.IsError) GD.PushError(outcome.Notice);
+        SetNotice(outcome.Notice, outcome.IsError, outcome.Log);
         // The new plugin is selected in the list read again, unless the build's assembly reload replaces this dialog.
         if (outcome.Step == InstallStep.Installed) _selectedSlug = slug;
         CompletePluginOperation();
@@ -132,9 +130,7 @@ internal sealed partial class EPluginManagerDialog
 
     private void ShowZipNotice(InstallOutcome outcome)
     {
-        _operationNotice = outcome.Notice;
-        _keepNotice = !Visible;
-        if (outcome.IsError) GD.PushError(outcome.Notice);
+        SetNotice(outcome.Notice, outcome.IsError, outcome.Log);
         Render();
     }
 }

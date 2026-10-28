@@ -44,6 +44,10 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private OptionButton _versionSelect = null!;
     private Button _installVersion = null!;
     private Label _versionHint = null!;
+    private LinkButton _retryVersions = null!;
+    private Control _errorBox = null!;
+    private RichTextLabel _errorText = null!;
+    private Button _openLog = null!;
     private ConfirmationDialog _versionConfirm = null!;
     private Button _installZip = null!;
     private FileDialog _zipDialog = null!;
@@ -87,6 +91,10 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private const string ReloadFailedNotice = "The editor has not finished loading the rebuilt C# code. Restart the editor to continue.";
     // Rendering runs after async operations and on theme changes; keep their result until the next update operation.
     private string? _operationNotice;
+    // The notice reports a failure: it is shown in the error area, where it wraps and can be selected and copied.
+    private bool _noticeIsError;
+    // The folder or file with the logs of the failure the notice reports; null when there are none.
+    private string? _noticeLog;
     // The notice of work that ended while the manager was closed: Escape and the window's close button hide it also
     // while its work goes on, so the next Open shows how it ended instead of dropping it.
     private bool _keepNotice;
@@ -121,6 +129,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _versionSeparator = GetNode<Control>("%VersionSeparator"); _versionRow = GetNode<Control>("%VersionRow");
         _versionSelect = GetNode<OptionButton>("%VersionSelect"); _installVersion = GetNode<Button>("%InstallVersionButton");
         _versionHint = GetNode<Label>("%VersionHint"); _versionConfirm = GetNode<ConfirmationDialog>("%VersionConfirm");
+        _retryVersions = GetNode<LinkButton>("%RetryVersionsButton");
+        _errorBox = GetNode<Control>("%ErrorBox"); _errorText = GetNode<RichTextLabel>("%ErrorText"); _openLog = GetNode<Button>("%OpenLogButton");
         _installZip = GetNode<Button>("%InstallZipButton"); _zipDialog = GetNode<FileDialog>("%InstallZipDialog");
         _installConfirm = GetNode<ConfirmationDialog>("%InstallConfirm"); _installText = GetNode<RichTextLabel>("%InstallText");
         _settings = GetNode<SettingsDialog>("%SettingsDialog"); _settings.Initialize(global);
@@ -150,6 +160,9 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _signals.Connect(_disableFrameworkConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(DisableFramework));
         _signals.Connect(_versionSelect, OptionButton.SignalName.ItemSelected, Callable.From<long>(_ => VersionButtons()));
         _signals.Connect(_installVersion, BaseButton.SignalName.Pressed, Callable.From(ConfirmVersion));
+        _signals.Connect(_retryVersions, BaseButton.SignalName.Pressed, Callable.From(RetryVersions));
+        _signals.Connect(GetNode<Button>("%CopyErrorButton"), BaseButton.SignalName.Pressed, Callable.From(() => DisplayServer.ClipboardSet(ErrorDetails())));
+        _signals.Connect(_openLog, BaseButton.SignalName.Pressed, Callable.From(OpenLog));
         _signals.Connect(_versionConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(() =>
         {
             if (_pendingVersion is { } version) Install(new([version], true, _pendingDowngrade, _pendingReinstall));
@@ -197,7 +210,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
 
     public void Open()
     {
-        if (!_keepNotice) _operationNotice = null;
+        if (!_keepNotice) ClearNotice();
         _keepNotice = false;
         // Reading the plugins while they change would record plain plugins in the middle of the operation, e.g. when the
         // manager was closed during it; the list shown last is read again once the operation is done.
@@ -298,13 +311,61 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         else ShowDetails(null);
         var count = _model.Updates.Count;
         var next = _global.NextUpdateCheck;
-        _status.Text = (_operationNotice ?? (count == 0 ? "" : $"{count} update{(count == 1 ? "" : "s")} available · ") +
-                       PluginManagerViewModel.CheckSchedule(_global.LastUpdateCheck, next, DateTimeOffset.UtcNow, CultureInfo.CurrentCulture) +
-                       (_global.IsIndexingLocalSources ? " · Indexing local directories..." : "")) +
+        // An error is shown in full in the error area; the status line keeps counting the updates, also those a check
+        // found while it failed for other plugins.
+        var notice = _noticeIsError ? null : _operationNotice;
+        var available = count == 0 ? null : $"{count} update{(count == 1 ? "" : "s")} available";
+        _status.Text = (notice is not null ? notice + (available is null ? "" : " · " + available)
+                           : (available is null ? "" : available + " · ") +
+                             PluginManagerViewModel.CheckSchedule(_global.LastUpdateCheck, next, DateTimeOffset.UtcNow, CultureInfo.CurrentCulture) +
+                             (_global.IsIndexingLocalSources ? " · Indexing local directories..." : "")) +
                        ((_reloadPending = AssemblyReload.IsPending) ? " · " + ReloadNotice
                            : _pluginOperation.IsAwaitingReload ? " · " + ReloadFailedNotice : "");
         _status.TooltipText = _status.Text + "\n" + PluginManagerViewModel.CheckScheduleHint(next);
+        RenderError();
         Buttons();
+    }
+
+    /// <summary>Shows an error notice in the error area, in the error color, where it wraps and can be selected.</summary>
+    private void RenderError()
+    {
+        var error = _noticeIsError ? _operationNotice : null;
+        _errorBox.Visible = error is not null;
+        _errorText.Text = error is null ? "" : $"[color={TextColors.Error}]{PluginManagerViewModel.Escape(error)}[/color]";
+        _openLog.Visible = _noticeLog is not null && (System.IO.Directory.Exists(_noticeLog) || System.IO.File.Exists(_noticeLog));
+    }
+
+    /// <summary>
+    /// Sets the outcome of an operation, shown until the next one; an error is logged too. The notice of work that ended
+    /// while the manager was closed is kept for the next <see cref="Open"/>.
+    /// </summary>
+    /// <param name="log">The folder or file with the failure's logs, which the error area offers to open.</param>
+    private void SetNotice(string? notice, bool isError, string? log = null)
+    {
+        _operationNotice = notice;
+        _noticeIsError = isError && notice is not null;
+        _noticeLog = _noticeIsError ? log : null;
+        _keepNotice = !Visible;
+        if (_noticeIsError) GD.PushError(notice);
+    }
+
+    private void ClearNotice()
+    {
+        _operationNotice = null;
+        _noticeIsError = false;
+        _noticeLog = null;
+    }
+
+    /// <summary>The error notice and where its logs are, for the clipboard.</summary>
+    private string ErrorDetails()
+    {
+        var error = _noticeIsError ? _operationNotice ?? "" : "";
+        return _noticeLog is not null && !error.Contains(_noticeLog, StringComparison.Ordinal) ? error + "\nLogs: " + _noticeLog : error;
+    }
+
+    private void OpenLog()
+    {
+        if (_noticeLog is not null) OS.ShellShowInFileManager(_noticeLog);
     }
 
     private static string PluginDirectory(string slug) => "res://addons/" + slug;
@@ -342,6 +403,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
 
     private void ShowDetails(string? slug)
     {
+        // Choosing another plugin and back loads the versions again that could not be loaded, e.g. while offline.
+        if (slug is not null && slug != _selectedSlug) _updates.ForgetVersionError(slug);
         _selectedSlug = slug;
         var row = slug is null ? null : _model.Find(slug);
         _detailsIcon.Texture = row?.IsEPlugin == true ? _logo : null;
@@ -395,8 +458,45 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     /// <summary>The dialog still exists in the editor; asynchronous work that finishes after it was closed shows nothing.</summary>
     private bool IsShown => GodotObject.IsInstanceValid(this) && IsInsideTree();
 
-    /// <summary>Starts asynchronous work from a signal; an unexpected failure is logged instead of crashing the editor.</summary>
-    private static void Run(Task task, string what) => ObservedTask.Run(task, ex => GD.PushError($"{what} failed: {ex.Message}"));
+    /// <summary>
+    /// Starts asynchronous work from a signal; an unexpected failure is shown as an error instead of crashing the editor.
+    /// </summary>
+    /// <param name="ownsWork">
+    /// The work marks the manager as working; its failure ends that, so the manager is not left locked with its progress
+    /// text. Work that runs beside an operation, such as loading versions, only reports its failure.
+    /// </param>
+    private void Run(Task task, string what, bool ownsWork = true) => ObservedTask.Run(task, ex => ReportFailure(what, ex, ownsWork));
+
+    /// <summary>Hands an unexpected failure to the editor thread, on whichever thread the failed work ended.</summary>
+    private void ReportFailure(string what, Exception ex, bool ownsWork)
+    {
+        try
+        {
+            // A method call rather than a delegate, which Godot resolves on the instance an assembly reload left.
+            if (GodotObject.IsInstanceValid(this))
+            {
+                CallDeferred(MethodName.WorkFailed, what, ex.Message, ownsWork);
+                return;
+            }
+        }
+        catch (ObjectDisposedException) { }
+        GD.PushError($"{what} failed: {ex.Message}");
+    }
+
+    internal void WorkFailed(string what, string message, bool ownsWork)
+    {
+        // An assembly reload dropped this dialog's state since, so the work went with the old one; or work beside an
+        // operation failed, whose status must not be replaced. Either is only logged.
+        if (!IsInitialized || (!ownsWork && _working))
+        {
+            GD.PushError($"{what} failed: {message}");
+            return;
+        }
+        // A plugin operation the work began is completed by _Process once nothing works any more.
+        if (ownsWork) _working = _installing = _swapping = false;
+        SetNotice($"{what} failed unexpectedly: {message}", true);
+        if (_model is not null) Render();
+    }
 
     private void Buttons()
     {

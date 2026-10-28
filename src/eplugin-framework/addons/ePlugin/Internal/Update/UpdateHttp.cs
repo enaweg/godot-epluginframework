@@ -10,11 +10,6 @@ using System.Threading.Tasks;
 
 namespace Enaweg.Plugin.Internal.Update;
 
-internal sealed class UpdateHttpException(string message, bool rateLimited = false) : IOException(message)
-{
-    public bool RateLimited { get; } = rateLimited;
-}
-
 /// <summary>
 /// The tokens for private release APIs, read from the editor's environment. Each goes only to the hosts it belongs to:
 /// an update_url comes from a plugin's plugin.cfg, so any installed add-on could otherwise name a host that receives it.
@@ -32,17 +27,43 @@ internal static class ForgeTokens
     /// <summary>The token of <paramref name="forge"/> for <paramref name="host"/>, or null when the host is not trusted with it.</summary>
     internal static string? For(Forge forge, string host, Func<string, string?> environment)
     {
-        var rule = forge switch
-        {
-            Forge.GitHub => new Rule(["github.com", "api.github.com", "raw.githubusercontent.com"], null, ["EPLUGIN_GITHUB_TOKEN", "GITHUB_TOKEN"]),
-            Forge.GitLab => new Rule(["gitlab.com"], "EPLUGIN_GITLAB_HOSTS", ["EPLUGIN_GITLAB_TOKEN", "GITLAB_TOKEN"]),
-            _ => new Rule(["codeberg.org"], "EPLUGIN_FORGEJO_HOSTS", ["EPLUGIN_FORGEJO_TOKEN", "FORGEJO_TOKEN", "GITEA_TOKEN"])
-        };
-        var trusted = rule.Hosts.Concat((rule.HostsVariable is null ? null : environment(rule.HostsVariable))?
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? []);
+        var rule = RuleOf(forge);
+        var trusted = rule.Hosts.Concat(Trusted(rule, environment));
         if (!trusted.Contains(host, StringComparer.OrdinalIgnoreCase)) return null;
         return rule.TokenVariables.Select(environment).FirstOrDefault(token => !string.IsNullOrEmpty(token));
     }
+
+    /// <summary>
+    /// What to set so a request to <paramref name="uri"/> is sent with a token, or, when one was sent, what to check; null
+    /// when the URL belongs to no forge ePlugin sends tokens to. Forges are told apart by host and API path.
+    /// </summary>
+    internal static string? Hint(Uri uri, bool tokenSent, Func<string, string?> environment)
+    {
+        Forge? forge = GitHubHosts.Contains(uri.Host, StringComparer.OrdinalIgnoreCase) ? Forge.GitHub
+            : uri.AbsolutePath.Contains("/api/v4/", StringComparison.Ordinal) || uri.AbsolutePath.Contains("/-/", StringComparison.Ordinal) ? Forge.GitLab
+            : uri.AbsolutePath.Contains("/api/v1/", StringComparison.Ordinal) || uri.AbsolutePath.Contains("/releases", StringComparison.Ordinal) ? Forge.Forgejo
+            : null;
+        if (forge is not { } known) return null;
+        var rule = RuleOf(known);
+        var variables = rule.TokenVariables[0] + " (or " + string.Join(", ", rule.TokenVariables.Skip(1)) + ")";
+        if (tokenSent) return $"Check that the token in {variables} can read this repository and has not expired.";
+        var trusted = rule.Hosts.Contains(uri.Host, StringComparer.OrdinalIgnoreCase) ||
+                      Trusted(rule, environment).Contains(uri.Host, StringComparer.OrdinalIgnoreCase);
+        return trusted ? $"set {variables} in the editor's environment, then restart the editor."
+            : $"set {variables} and add {uri.Host} to {rule.HostsVariable} in the editor's environment, then restart the editor.";
+    }
+
+    private static readonly string[] GitHubHosts = ["github.com", "api.github.com", "raw.githubusercontent.com"];
+
+    private static Rule RuleOf(Forge forge) => forge switch
+    {
+        Forge.GitHub => new Rule(GitHubHosts, null, ["EPLUGIN_GITHUB_TOKEN", "GITHUB_TOKEN"]),
+        Forge.GitLab => new Rule(["gitlab.com"], "EPLUGIN_GITLAB_HOSTS", ["EPLUGIN_GITLAB_TOKEN", "GITLAB_TOKEN"]),
+        _ => new Rule(["codeberg.org"], "EPLUGIN_FORGEJO_HOSTS", ["EPLUGIN_FORGEJO_TOKEN", "FORGEJO_TOKEN", "GITEA_TOKEN"])
+    };
+
+    private static string[] Trusted(Rule rule, Func<string, string?> environment) =>
+        (rule.HostsVariable is null ? null : environment(rule.HostsVariable))?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? [];
 
     private sealed record Rule(string[] Hosts, string? HostsVariable, string[] TokenVariables);
 }
@@ -76,7 +97,11 @@ internal sealed class UpdateHttp
                 if (gitlab) request.Headers.Add("PRIVATE-TOKEN", token);
                 else request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
             }
-            var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            HttpResponseMessage response;
+            try { response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false); }
+            catch (HttpRequestException ex) { throw UpdateErrors.Unreachable(ex, uri); }
+            // HttpClient's own timeout; the caller's token cancels the request otherwise.
+            catch (OperationCanceledException ex) when (!ct.IsCancellationRequested) { throw UpdateErrors.TimedOut(uri.Host, _client.Timeout, ex); }
             response.RequestMessage ??= request;
             if ((int)response.StatusCode is 301 or 302 or 303 or 307 or 308)
             {
@@ -88,17 +113,22 @@ internal sealed class UpdateHttp
             }
             if (!response.IsSuccessStatusCode)
             {
+                // GitHub answers a primary rate limit with 403 and no remaining requests, a secondary one with Retry-After.
                 var limited = response.StatusCode == HttpStatusCode.TooManyRequests ||
-                    response.StatusCode == HttpStatusCode.Forbidden && response.Headers.TryGetValues("X-RateLimit-Remaining", out var remaining) && string.Join("", remaining) == "0";
-                var reset = response.Headers.TryGetValues("X-RateLimit-Reset", out var values) ? string.Join(",", values) : response.Headers.RetryAfter?.ToString();
-                var status = (int)response.StatusCode;
+                    response.StatusCode == HttpStatusCode.Forbidden && (Header(response, "X-RateLimit-Remaining") == "0" || response.Headers.RetryAfter is not null);
+                var now = DateTimeOffset.UtcNow;
+                var reset = UpdateErrors.RateLimitReset(Header(response, "X-RateLimit-Reset") ?? Header(response, "RateLimit-Reset"), response.Headers.RetryAfter, now);
+                var status = response.StatusCode;
                 response.Dispose();
-                throw new UpdateHttpException(limited ? $"Rate limit reached (reset/retry: {reset ?? "unknown"})." : $"Update request failed with HTTP {status}.", limited);
+                throw UpdateErrors.Status(uri, status, limited, reset, token is not null && uri.Host == origin.Host, now, Environment.GetEnvironmentVariable);
             }
             return response;
         }
         throw new IOException("Update request exceeded five redirects.");
     }
+
+    private static string? Header(HttpResponseMessage response, string name) =>
+        response.Headers.TryGetValues(name, out var values) ? string.Join(",", values) : null;
 
     public async Task<string> ReadTextAsync(string url, CancellationToken ct, string? token = null, bool gitlab = false)
     {

@@ -81,9 +81,9 @@ internal static class SafeZipExtractor
         if (folders.Length == 0) throw new InvalidDataException("The package contains no plugin.cfg.");
         var depth = folders.Min(Depth);
         var roots = folders.Where(f => Depth(f) == depth).ToArray();
-        if (roots.Length > 1) throw new InvalidDataException("Ambiguous package, it has several plugin roots: " + string.Join(", ", roots));
+        if (roots.Length > 1) throw new InvalidDataException("Ambiguous package, it has several plugin roots: " + string.Join(", ", roots) + ". " + AddonPackageValidator.ReportToAuthor);
         var outside = folders.FirstOrDefault(f => !f.StartsWith(roots[0], StringComparison.Ordinal));
-        if (outside is not null) throw new InvalidDataException($"Ambiguous package, {outside}plugin.cfg is outside the plugin root {roots[0]}.");
+        if (outside is not null) throw new InvalidDataException($"Ambiguous package, {outside}plugin.cfg is outside the plugin root {roots[0]}. " + AddonPackageValidator.ReportToAuthor);
         return roots[0];
         static int Depth(string folder) => folder.Count(c => c == '/');
     }
@@ -106,12 +106,14 @@ internal static class SafeZipExtractor
         if (plugin is not null && (RootSlug(plugin) == slug || plugin.Count(c => c == '/') <= 1)) return plugin;
         var named = all.Where(IsPluginConfig).Select(p => p[..^"plugin.cfg".Length]).Where(f => RootSlug(f) == slug)
             .GroupBy(f => f.Count(c => c == '/')).MinBy(g => g.Key)?.ToArray() ?? [];
-        if (named.Length > 1) throw new InvalidDataException($"Ambiguous package, it has several plugin folders named '{slug}': " + string.Join(", ", named));
+        if (named.Length > 1) throw new InvalidDataException($"Ambiguous package, it has several plugin folders named '{slug}': " + string.Join(", ", named) + ". " + AddonPackageValidator.ReportToAuthor);
         if (named.Length == 1) return named[0];
         try { return ExtensionRoot(all, slug); }
         catch (InvalidDataException) when (all.Any(IsPluginConfig))
         {
-            throw plugin is null ? new InvalidDataException(ambiguous!.Message + $" None of them is named '{slug}'.")
+            throw plugin is null
+                ? new InvalidDataException(ambiguous!.Message.Replace(" " + AddonPackageValidator.ReportToAuthor, "", StringComparison.Ordinal) +
+                                           $" None of them is named '{slug}'. " + AddonPackageValidator.ReportToAuthor)
                 : new InvalidDataException($"The plugin root '{plugin}' of the package is not a folder named '{slug}'.");
         }
     }
@@ -128,7 +130,7 @@ internal static class SafeZipExtractor
         if (folders.Length == 0) throw new InvalidDataException($"The package contains no plugin.cfg and no folder named '{slug}' with a GDExtension.");
         var depth = folders.Min(f => f.Count(c => c == '/'));
         var roots = folders.Where(f => f.Count(c => c == '/') == depth).ToArray();
-        if (roots.Length > 1) throw new InvalidDataException($"Ambiguous package, it has several GDExtension folders named '{slug}': " + string.Join(", ", roots));
+        if (roots.Length > 1) throw new InvalidDataException($"Ambiguous package, it has several GDExtension folders named '{slug}': " + string.Join(", ", roots) + ". " + AddonPackageValidator.ReportToAuthor);
         return roots[0];
 
         // "a/b/c.gdextension" has the folders "a/" and "a/b/".

@@ -33,17 +33,15 @@ internal sealed partial class EPluginManagerDialog
     private async Task CheckAsync()
     {
         if (Busy) return;
-        _operationNotice = null;
-        _working = true; Buttons(); _status.Text = "Checking for updates...";
+        ClearNotice();
+        _working = true; RenderError(); Buttons(); _status.Text = "Checking for updates...";
         // Remote sites and local ZIPs can take a while; the scope ends after the list is read again.
         using var progress = ActivationProgress.Begin("Checking for updates...");
         CheckOutcome outcome;
         try { outcome = await _updates.CheckAsync(); }
         finally { _working = false; }
         if (!IsShown) return;
-        _operationNotice = outcome.Notice;
-        _keepNotice = !Visible;
-        if (outcome.IsError) GD.PushError(outcome.Notice);
+        SetNotice(outcome.Notice, outcome.IsError);
         Refresh();
     }
 
@@ -61,7 +59,7 @@ internal sealed partial class EPluginManagerDialog
     internal async Task InstallAsync(InstallRequest request)
     {
         if (Busy || request.Batch.Count == 0) return;
-        _operationNotice = null;
+        ClearNotice();
         _working = _installing = true; _cancel?.Dispose(); _cancel = CancellationTokenSource.CreateLinkedTokenSource(_lifetime);
         Render();
         InstallOutcome outcome;
@@ -79,12 +77,7 @@ internal sealed partial class EPluginManagerDialog
         // The build-failure dialog takes over the decision. Otherwise the manager stays open: an update that needs no
         // restart is finished here, and a restart reopens it.
         if (outcome.Step == InstallStep.AwaitingDecision) Hide();
-        else
-        {
-            _operationNotice = outcome.Notice;
-            _keepNotice = !Visible;
-            if (outcome.IsError) GD.PushError(outcome.Notice);
-        }
+        else SetNotice(outcome.Notice, outcome.IsError, outcome.Log);
         // A build the update left for the editor to load keeps the manager locked like a plugin operation's.
         if (_pluginOperation.IsRunning) CompletePluginOperation(outcome.Refresh);
         else if (outcome.Refresh) Refresh();

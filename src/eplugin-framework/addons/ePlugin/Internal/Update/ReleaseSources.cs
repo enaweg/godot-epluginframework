@@ -236,7 +236,9 @@ internal sealed class GitHubReleaseSource(UpdateHttp http, string owner, string 
         }
     }
 }
-internal sealed class GitLabReleaseSource(UpdateHttp http, string host, string project, bool pinned = false) : IUpdateSource, IVersionListSource
+/// <param name="log">Reports a release left out of the version list because it has no package to install.</param>
+internal sealed class GitLabReleaseSource(UpdateHttp http, string host, string project, bool pinned = false, Action<string>? log = null)
+    : IUpdateSource, IVersionListSource
 {
     /// <summary>One page of <paramref name="count"/> releases, and whether it was full.</summary>
     private async Task<(JsonElement[] Releases, bool Full)> Releases(int count, int page, CancellationToken ct)
@@ -260,7 +262,11 @@ internal sealed class GitLabReleaseSource(UpdateHttp http, string host, string p
         var candidates = new List<UpdateCandidate>();
         // A release without a ZIP cannot be installed; leave it out instead of failing the whole list.
         foreach (var releases in ReleaseAssets.ByVersion((await Releases(100, 1, ct).ConfigureAwait(false)).Releases))
-            try { candidates.Add(Candidate(target, releases)); } catch (IOException) { }
+            try { candidates.Add(Candidate(target, releases)); }
+            catch (IOException ex)
+            {
+                log?.Invoke($"Release {ReleaseAssets.String(releases[0], "tag_name")} of {host}/{project} is not listed for {target.Slug}: {ex.Message}");
+            }
         return candidates;
     }
     /// <param name="releases">The releases of one version; the first is announced, the others are alternatives.</param>

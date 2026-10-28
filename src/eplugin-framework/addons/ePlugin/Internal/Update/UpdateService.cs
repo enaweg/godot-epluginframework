@@ -59,20 +59,24 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
                 var installed = default(SemVer);
                 if (!target.VersionUnknown && !SemVer.TryParse(target.InstalledVersion, out installed))
                     throw new InvalidOperationException($"Installed version '{target.InstalledVersion}' cannot be compared.");
-                var (candidate, _, fallback) = await FirstWorkingSiteAsync(target, TimeSpan.FromSeconds(options.TimeoutSeconds),
+                var (candidate, url, fallback) = await FirstWorkingSiteAsync(target, TimeSpan.FromSeconds(options.TimeoutSeconds),
                     (source, site, token) => source.CheckAsync(site, options, token), ct).ConfigureAwait(false);
-                if (fallback is not null) fallbacks.Add(new(target.Slug, fallback));
+                if (fallback is not null) fallbacks.Add(new(target.Slug, fallback, UsedSite: target.SiteOf(url)));
                 if (candidate is null || !SemVer.TryParse(candidate.NewVersion, out var remote)) { }
                 else if (target.VersionUnknown) latest.Add(candidate);
                 else if (IsUpdate(installed, remote)) updates.Add(candidate);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-            catch (Exception ex) { failures.Add(new(target.Slug, ex is OperationCanceledException ? "Request timed out." : ex.Message)); }
+            catch (Exception ex)
+            {
+                failures.Add(ex is OperationCanceledException ? new(target.Slug, "The update site did not respond in time.", UpdateProblem.Timeout)
+                    : new(target.Slug, ex.Message, UpdateErrors.ProblemOf(ex)));
+            }
             finally { slots.Release(); }
         })).ConfigureAwait(false);
         var result = new UpdateCheckResult(updates.OrderBy(x => x.Slug, StringComparer.Ordinal).ToArray(),
             failures.OrderBy(x => x.Slug, StringComparer.Ordinal).ToArray(), clock.UtcNow,
-            fallbacks.OrderBy(x => x.Slug, StringComparer.Ordinal).ToArray());
+            fallbacks.OrderBy(x => x.Slug, StringComparer.Ordinal).ToArray(), targets.Count);
         // A plugin whose site failed this time keeps what earlier checks found for it, also when every site failed.
         var failed = failures.Select(f => f.Slug).ToHashSet(StringComparer.Ordinal);
         var failedTargets = targets.Where(t => failed.Contains(t.Slug)).ToArray();
@@ -151,14 +155,15 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
     /// it reads, so its candidates name that site as their SourceUrl.
     /// </summary>
     /// <exception cref="Exception">
-    /// Every site failed. With a single site its own exception, a timeout as <see cref="TimeoutException"/>; otherwise one
-    /// naming each failure.
+    /// Every site failed. With a single site its own exception, a timeout as an <see cref="UpdateHttpException"/> naming the
+    /// host; otherwise an <see cref="UpdateProblemException"/> naming each failure, of their problem when they share one.
     /// </exception>
     private async Task<(T Result, string Url, string? Fallback)> FirstWorkingSiteAsync<T>(PluginUpdateTarget target,
         TimeSpan timeoutAfter, Func<IUpdateSource, PluginUpdateTarget, CancellationToken, Task<T>> run, CancellationToken ct)
     {
         var urls = target.UpdateUrls;
         var errors = new List<string>();
+        var problems = new HashSet<UpdateProblem>();
         foreach (var url in urls)
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -170,14 +175,16 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
                 return (result, url, errors.Count == 0 ? null : $"{string.Join("; ", errors)}; used {url} instead");
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-            catch (Exception ex) when (urls.Count == 1)
+            catch (OperationCanceledException ex) when (urls.Count == 1) { throw UpdateErrors.TimedOut(UpdateErrors.HostOf(url), timeoutAfter, ex); }
+            catch (Exception) when (urls.Count == 1) { throw; }
+            catch (Exception ex)
             {
-                if (ex is OperationCanceledException) throw new TimeoutException("Request timed out.");
-                throw;
+                var failure = ex is OperationCanceledException ? UpdateErrors.TimedOut(UpdateErrors.HostOf(url), timeoutAfter, ex) : ex;
+                errors.Add($"{url}: {failure.Message}");
+                problems.Add(UpdateErrors.ProblemOf(failure));
             }
-            catch (Exception ex) { errors.Add($"{url}: {(ex is OperationCanceledException ? "Request timed out." : ex.Message)}"); }
         }
-        throw new InvalidOperationException(string.Join("; ", errors));
+        throw new UpdateProblemException(string.Join("; ", errors), problems.Count == 1 ? problems.Single() : UpdateProblem.Other);
     }
 
     /// <summary>

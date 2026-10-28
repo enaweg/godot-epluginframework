@@ -140,7 +140,11 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                 failure = journal.Failure;
                 projectCode = outcome == UpdateOutcome.KeptWithErrors && journal.KeptForProjectCode;
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException) { }
+            // The summary still names the outcome and the log folder; the reason says why it cannot tell more.
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
+            {
+                failure = $"why is unknown, as its journal cannot be read ({ex.Message.TrimEnd('.')})";
+            }
         }
         return new(packages, directory, outcome, failure, projectCode);
     }

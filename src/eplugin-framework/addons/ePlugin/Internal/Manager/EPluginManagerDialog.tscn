@@ -192,6 +192,45 @@ modulate = Color(1, 1, 1, 0.7)
 layout_mode = 2
 autowrap_mode = 3
 
+[node name="RetryVersionsButton" type="LinkButton" parent="Content/Split/Details/DetailsScroll/DetailsBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 0
+tooltip_text = "Load the versions published at the update site again."
+text = "Load versions again"
+
+[node name="ErrorBox" type="HBoxContainer" parent="Content"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="ErrorText" type="RichTextLabel" parent="Content/ErrorBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 64)
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 2
+bbcode_enabled = true
+context_menu_enabled = true
+selection_enabled = true
+
+[node name="ErrorButtons" type="VBoxContainer" parent="Content/ErrorBox"]
+layout_mode = 2
+
+[node name="CopyErrorButton" type="Button" parent="Content/ErrorBox/ErrorButtons"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Copy the error message and where its logs are, e.g. for a bug report."
+text = "Copy details"
+
+[node name="OpenLogButton" type="Button" parent="Content/ErrorBox/ErrorButtons"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+tooltip_text = "Show the logs of the failure in the system file manager."
+text = "Open log folder"
+
 [node name="Footer" type="HBoxContainer" parent="Content"]
 layout_mode = 2
 

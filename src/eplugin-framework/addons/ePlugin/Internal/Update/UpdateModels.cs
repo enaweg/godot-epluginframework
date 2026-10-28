@@ -48,6 +48,10 @@ internal sealed record PluginUpdateTarget(string Slug, string Name, string Insta
     /// but its latest release is still looked up so the ePlugin Manager can offer to install it.
     /// </summary>
     public bool VersionUnknown => Kind == PluginKind.GDExtensionAddon && InstalledVersion.Length == 0;
+
+    /// <summary>Which of the plugin's update sites <paramref name="url"/> is; the earliest when several are the same.</summary>
+    public UpdateSite SiteOf(string url) =>
+        url == OverrideUrl ? UpdateSite.Project : url == UpdateUrl ? UpdateSite.PluginConfig : UpdateSite.BuiltIn;
 }
 /// <param name="SourceUrl">The update_url the candidate was found at; null for a package of a local directory.</param>
 internal sealed record UpdateCandidate(string Slug, string PluginName, string InstalledVersion, string NewVersion,
@@ -56,10 +60,15 @@ internal sealed record UpdateCandidate(string Slug, string PluginName, string In
     /// <summary>Where the package comes from: the update_url, or the ZIP file of a local package.</summary>
     [JsonIgnore] public string Origin => SourceUrl ?? (Package as LocalZipPackageRef)?.Path ?? "";
 }
-internal sealed record UpdateCheckFailure(string Slug, string Message);
-/// <param name="Fallbacks">Plugins whose project update site failed, so their plugin.cfg update_url was used instead.</param>
+/// <summary>Which of a plugin's update sites (see <see cref="PluginUpdateTarget.UpdateUrls"/>) a URL is.</summary>
+internal enum UpdateSite { Project, PluginConfig, BuiltIn }
+/// <param name="Problem">Why it failed, so failures of one kind at every site are reported once.</param>
+/// <param name="UsedSite">Of a fallback: the update site that was used instead of the ones that failed.</param>
+internal sealed record UpdateCheckFailure(string Slug, string Message, UpdateProblem Problem = UpdateProblem.Other, UpdateSite? UsedSite = null);
+/// <param name="Fallbacks">Plugins whose first update sites failed, so a later one was used instead.</param>
+/// <param name="Checked">How many plugins' update sites were checked; 0 when unknown.</param>
 internal sealed record UpdateCheckResult(IReadOnlyList<UpdateCandidate> Updates,
-    IReadOnlyList<UpdateCheckFailure> Failures, DateTimeOffset CheckedAtUtc, IReadOnlyList<UpdateCheckFailure>? Fallbacks = null);
+    IReadOnlyList<UpdateCheckFailure> Failures, DateTimeOffset CheckedAtUtc, IReadOnlyList<UpdateCheckFailure>? Fallbacks = null, int Checked = 0);
 internal sealed record UpdateCheckOptions(int TimeoutSeconds = 15);
 internal interface IClock { DateTimeOffset UtcNow { get; } }
 internal sealed class SystemClock : IClock { public DateTimeOffset UtcNow => DateTimeOffset.UtcNow; }
@@ -79,7 +88,11 @@ internal sealed class UnsupportedUpdateSource(string url) : IUpdateSource
     public Task<UpdateCandidate?> CheckAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct) =>
         Task.FromException<UpdateCandidate?>(new NotSupportedException($"Unsupported update_url '{url}'."));
 }
-internal sealed class UpdateSourceFactory(UpdateHttp? http = null, IGitRunner? git = null) : IUpdateSourceFactory
+/// <param name="log">
+/// Reports what a source left out, e.g. a release it cannot install; called from the thread the source runs on, a thread-pool
+/// thread in the editor.
+/// </param>
+internal sealed class UpdateSourceFactory(UpdateHttp? http = null, IGitRunner? git = null, Action<string>? log = null) : IUpdateSourceFactory
 {
     /// <summary>Whether <paramref name="url"/> is an update site the updater can read; nothing is contacted.</summary>
     public static bool IsSupported(string? url) =>
@@ -127,7 +140,7 @@ internal sealed class UpdateSourceFactory(UpdateHttp? http = null, IGitRunner? g
                     ForgeTokens.GitHub(new Uri("https://api.github.com")));
             var index = Array.IndexOf(segments, "-");
             if (index > 0 && segments.Length > index + 1 && segments[index + 1] == "releases")
-                return new GitLabReleaseSource(transport, uri.Authority, string.Join("/", segments[..index]), segments.Length > index + 2);
+                return new GitLabReleaseSource(transport, uri.Authority, string.Join("/", segments[..index]), segments.Length > index + 2, log);
             // The same path as GitHub's on any other host: Forgejo and Gitea, e.g. Codeberg.
             if (uri.Host != "github.com" && index < 0 && segments.Length >= 3 && segments[2] == "releases" &&
                 segments[..2].All(s => s.Length > 0) && (segments.Length == 3 || segments.Length >= 5 && segments[3] == "tag"))

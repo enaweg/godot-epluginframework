@@ -91,20 +91,37 @@ public class ManagerDialogTests
             var journal = FailedJournal();
             journal.Directory = directory;
             journal.Builds.Add(new JournalBuild("final", 1, "final.log"));
+            // dotnet build repeats every error in its summary, after a count that is no error
+            string[] errors = [.. Enumerable.Range(1, 20).Select(i => $"Plugin.cs({i},1): error CS0103: missing {i}")];
             File.WriteAllLines(Path.Combine(directory, "final.log"),
-                ["Build started", .. Enumerable.Range(1, 20).Select(i => $"Plugin.cs({i},1): error CS0103: missing {i}"), "Build FAILED."]);
+                ["Build started", .. errors, "Build FAILED.", "    0 Warning(s)", "    20 Error(s)", .. errors]);
 
             var dialog = UpdateFailureDialog.Create(journal, _ => { });
             try
             {
                 var output = dialog.GetNode<TextEdit>("%BuildOutput").Text.Split('\n');
-                Assertions.AssertInt(output.Length).IsEqual(15);
-                Assertions.AssertString(output[0]).IsEqual("Plugin.cs(1,1): error CS0103: missing 1");
+                Assertions.AssertInt(output.Length).IsEqual(20);
+                Assertions.AssertString(output[0]).IsEqual("Plugin.cs(1,1): CS0103 missing 1");
+                Assertions.AssertString(dialog.GetNode<Label>("%Summary").Text).Contains("The errors are in plugin code.").EndsWith("Closing this dialog rolls back.");
                 Assertions.AssertString(dialog.GetNode<Label>("%LogLocation").TooltipText).IsEqual(Path.Combine(directory, "final.log"));
             }
             finally { Free(dialog); }
         }
         finally { Directory.Delete(directory, true); }
+    }
+
+    [TestCase]
+    public static void TheBuildFailureDialogSaysWhatToDoWhenNuGetWasUnreachable()
+    {
+        var journal = FailedJournal();
+        journal.FailureCause = BuildFailureCause.Transient;
+        var offline = UpdateFailureDialog.Summary(journal, [new BuildError("/project/Game.csproj", 0, 0, "NU1301", "Unable to load the service index")]);
+        Assertions.AssertString(offline).Contains("tool 1.0.0 → 2.0.0").Contains("NU1301").Contains("Check your network connection")
+            .EndsWith("Closing this dialog rolls back.");
+        var locked = UpdateFailureDialog.Summary(journal, [new BuildError(null, 0, 0, "MSB3027", "Could not copy")]);
+        Assertions.AssertString(locked).Contains("may pass on another attempt").NotContains("NU1301");
+        // without a log the journal's failure is shown
+        Assertions.AssertThat(UpdateFailureDialog.Errors(journal, null)).IsEmpty();
     }
 
     [TestCase]

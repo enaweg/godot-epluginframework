@@ -11,6 +11,10 @@ namespace Enaweg.Plugin.Internal.Manager;
 /// </summary>
 internal static class ObservedTask
 {
+    /// <param name="report">
+    /// Receives an unexpected exception, on whichever thread the work ended (it may be a thread-pool thread); hand anything
+    /// that touches Godot to the editor thread, e.g. with <c>CallDeferred(MethodName.X, ...)</c>.
+    /// </param>
     public static void Run(Task task, Action<Exception> report)
     {
         task.ContinueWith(t => report(t.Exception!.GetBaseException()), CancellationToken.None,
