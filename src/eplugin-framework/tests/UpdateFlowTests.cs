@@ -353,10 +353,80 @@ public class UpdateFlowTests : IDisposable
         _host.Failures = [new UpdateCheckFailure("b", "timed out")];
         var failed = await flow.CheckAsync();
         Assertions.AssertBool(failed.IsError).IsTrue();
-        Assertions.AssertString(failed.Notice).IsEqual("Update check failed: b: timed out");
+        // a failure does not hide that another site was used for a
+        Assertions.AssertString(failed.Notice).StartsWith("Update check failed for b. timed out.").Contains("The update site of a did not work");
 
         _host.CheckThrows = true;
         Assertions.AssertString((await flow.CheckAsync()).Notice).IsEqual("Update check failed: offline");
+    }
+
+    [TestCase]
+    public static void ACheckThatFailedEverywhereTheSameWayIsReportedOnce()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var offline = UpdateFlow.Describe(new([], [new("a", "Cannot find the host github.com: check your network connection.", UpdateProblem.Offline),
+            new("b", "Cannot connect to codeberg.org: check your network connection or proxy.", UpdateProblem.Offline)], now, null, 2));
+        Assertions.AssertBool(offline.IsError).IsTrue();
+        Assertions.AssertString(offline.Notice).IsEqual("No network connection: no update site could be reached. Check your connection or proxy.");
+
+        var timeouts = UpdateFlow.Describe(new([], [new("a", "github.com did not respond", UpdateProblem.Timeout),
+            new("b", "codeberg.org did not respond", UpdateProblem.Timeout)], now, null, 2));
+        Assertions.AssertString(timeouts.Notice).IsEqual("No update site responded in time. Check your connection or proxy.");
+
+        // While other plugins could be checked, every failure is named; plugins that failed the same way share it.
+        const string limit = "The rate limit of api.github.com was reached; try again after 14:05.";
+        var partial = UpdateFlow.Describe(new([], [new("a", limit, UpdateProblem.RateLimited), new("b", limit, UpdateProblem.RateLimited),
+            new("c", "Cannot find the host git.example.org", UpdateProblem.Offline)], now, null, 5));
+        Assertions.AssertString(partial.Notice).IsEqual($"Update check failed for 3 of 5 plugins. a, b: {limit} c: Cannot find the host git.example.org.");
+
+        // a single plugin that cannot be reached is no missing network connection
+        var single = UpdateFlow.Describe(new([], [new("a", "Cannot find the host git.example.org.", UpdateProblem.Offline)], now, null, 1));
+        Assertions.AssertString(single.Notice).IsEqual("Update check failed for a. Cannot find the host git.example.org.");
+    }
+
+    [TestCase]
+    public static void AFallbackNamesTheUpdateSiteThatWasUsed()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var one = UpdateFlow.Describe(new([], [], now, [new("a", "https://example.org/a.git: failed; used https://github.com/a/a/releases instead",
+            UsedSite: UpdateSite.BuiltIn)], 1));
+        Assertions.AssertBool(one.IsError).IsFalse();
+        Assertions.AssertString(one.Notice).IsEqual("The update site of a did not work, so its site in ePlugin's built-in list was used instead. " +
+                                                    "Godot's Output panel shows why.");
+        var two = UpdateFlow.Describe(new([], [], now, [new("a", "", UsedSite: UpdateSite.PluginConfig), new("b", "", UsedSite: UpdateSite.BuiltIn)], 2));
+        Assertions.AssertString(two.Notice).Contains("The update sites of a, b did not work")
+            .Contains("its plugin.cfg update_url for a; its site in ePlugin's built-in list for b.");
+    }
+
+    [TestCase]
+    public async Task VersionsThatCouldNotBeLoadedAreLoadedAgainOnceTheErrorIsForgotten()
+    {
+        var flow = Flow();
+        var target = new PluginUpdateTarget("a", "a", "1.0.0", "https://example.org/a/releases", "/unused");
+        _host.Versions = Task.FromException<IReadOnlyList<UpdateCandidate>>(
+            new UpdateHttpException("Cannot find the host example.org: check your network connection or proxy.", UpdateProblem.Offline));
+        await flow.LoadVersionsAsync(target, CancellationToken.None);
+        Assertions.AssertString(flow.RemoteVersionErrors["a"]).StartsWith("Cannot find the host example.org");
+
+        _host.Versions = Task.FromResult<IReadOnlyList<UpdateCandidate>>([Candidate("a")]);
+        Assertions.AssertBool(flow.ForgetVersionError("a")).IsTrue();
+        Assertions.AssertBool(flow.ForgetVersionError("a")).IsFalse();
+        await flow.LoadVersionsAsync(target, CancellationToken.None);
+        Assertions.AssertBool(flow.RemoteVersions.ContainsKey("a")).IsTrue();
+        Assertions.AssertBool(flow.RemoteVersionErrors.ContainsKey("a")).IsFalse();
+    }
+
+    [TestCase]
+    public async Task AnUpdateThatWasRolledBackNamesItsLogFolder()
+    {
+        _host.Packages["a"] = [];
+        _host.Outcome = UpdateOutcome.RolledBack;
+
+        var outcome = await Flow().InstallAsync(new([Candidate("a")]), View(), CancellationToken.None);
+
+        Assertions.AssertBool(outcome.IsError).IsTrue();
+        Assertions.AssertString(outcome.Log).IsEqual(_host.StagingDirectory);
+        Assertions.AssertString(outcome.Notice).Contains("Rolled back a 2.0.0").Contains(_host.StagingDirectory);
     }
 
     private static UpdateCheckResult CheckResult(string slug) => new([Candidate(slug)], [], DateTimeOffset.UtcNow);

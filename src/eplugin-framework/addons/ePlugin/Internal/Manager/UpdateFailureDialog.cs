@@ -1,7 +1,9 @@
 #if TOOLS
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using Enaweg.Plugin.Internal.Update;
 using Godot;
 
@@ -35,20 +37,11 @@ internal sealed partial class UpdateFailureDialog : AcceptDialog, ISerialization
         _decide = decide;
         EditorWindows.Prepare(this, _signals, this, nameof(QueueWindowIcon));
         _projectCode = journal.KeptForProjectCode;
-        GetNode<Label>("%Summary").Text = string.Join("\n", journal.Plugins.Select(p => $"{p.Slug} {p.OldVersion} → {p.NewVersion}")) +
-                                          (_projectCode
-                                              ? "\nOnly the project's own code does not compile with the installed version; the plugins compile on their own." +
-                                                "\nKeep it and adapt the project's code, then use Retry under Needs attention in the ePlugin Manager to finish the update."
-                                              : "\nThe project does not compile with the installed version." +
-                                                (journal.FailureCause == BuildFailureCause.PluginCode ? " The errors are in plugin code." : "") +
-                                                "\nKeep it to fix the errors yourself, then use Retry under Needs attention in the ePlugin Manager to finish the update.");
         var log = AttentionItem.FailedBuildLog(journal);
         _log = log;
-        GetNode<TextEdit>("%BuildOutput").Text = _projectCode && journal.ProjectErrors.Count > 0
-            ? string.Join("\n", journal.ProjectErrors.Select(BuildDiagnostics.Format))
-            : log is not null && File.Exists(log)
-                ? string.Join("\n", File.ReadLines(log).Where(line => line.Contains("error", StringComparison.OrdinalIgnoreCase)).Take(15))
-                : journal.Failure ?? "Build failed.";
+        var errors = Errors(journal, log);
+        GetNode<Label>("%Summary").Text = Summary(journal, errors);
+        GetNode<TextEdit>("%BuildOutput").Text = errors.Count > 0 ? string.Join("\n", errors.Select(BuildDiagnostics.Format)) : journal.Failure ?? "Build failed.";
         var location = GetNode<Label>("%LogLocation");
         location.Text = "Rolling back restores the previous addon files and rebuilds.\n" + (log ?? journal.Directory);
         location.TooltipText = log ?? journal.Directory;
@@ -57,6 +50,45 @@ internal sealed partial class UpdateFailureDialog : AcceptDialog, ISerialization
         _signals.Connect(this, SignalName.Canceled, Callable.From(Rollback));
         _signals.Connect(this, SignalName.CloseRequested, Callable.From(Rollback));
         _signals.Connect(this, SignalName.CustomAction, Callable.From<StringName>(HandleCustomAction));
+    }
+
+    /// <summary>
+    /// The errors of the failed build: the project's own when only they failed, otherwise those the build log names; empty
+    /// when it names none (then the journal's failure is shown).
+    /// </summary>
+    internal static IReadOnlyList<BuildError> Errors(UpdateJournal journal, string? log)
+    {
+        if (journal.KeptForProjectCode && journal.ProjectErrors.Count > 0) return journal.ProjectErrors;
+        if (log is null) return [];
+        try { return File.Exists(log) ? BuildDiagnostics.Parse(File.ReadLines(log)).Take(BuildDiagnostics.MaxProjectErrors).ToArray() : []; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return []; }
+    }
+
+    /// <summary>
+    /// The versions, where the errors are and what to do about them; closing the dialog rolls back, as Godot's close button
+    /// and Escape cannot keep a version that does not build.
+    /// </summary>
+    internal static string Summary(UpdateJournal journal, IReadOnlyList<BuildError> errors)
+    {
+        var text = new StringBuilder(string.Join("\n", journal.Plugins.Select(p => $"{p.Slug} {p.OldVersion} → {p.NewVersion}")));
+        if (journal.KeptForProjectCode)
+        {
+            text.Append("\nOnly the project's own code does not compile with the installed version; the plugins compile on their own.")
+                .Append("\nKeep it and adapt the project's code, then use Retry under Needs attention in the ePlugin Manager to finish the update.");
+        }
+        else
+        {
+            text.Append("\nThe project does not compile with the installed version.");
+            if (journal.FailureCause == BuildFailureCause.PluginCode) text.Append(" The errors are in plugin code.");
+            if (errors.Any(e => e.Code.Equals("NU1301", StringComparison.OrdinalIgnoreCase)))
+                text.Append("\nNuGet could not reach a package source (NU1301). Check your network connection, then retry: roll back and update again, " +
+                            "or keep it and use Retry under Needs attention in the ePlugin Manager.");
+            else if (journal.FailureCause == BuildFailureCause.Transient)
+                text.Append("\nThe errors may pass on another attempt, e.g. once another program releases a locked file. Retry: roll back and " +
+                            "update again, or keep it and use Retry under Needs attention in the ePlugin Manager.");
+            else text.Append("\nKeep it to fix the errors yourself, then use Retry under Needs attention in the ePlugin Manager to finish the update.");
+        }
+        return text.Append("\nClosing this dialog rolls back.").ToString();
     }
 
     private void Rollback() => Choose(false);

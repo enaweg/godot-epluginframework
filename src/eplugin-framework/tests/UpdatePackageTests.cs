@@ -55,7 +55,8 @@ public class UpdatePackageTests
         Assertions.AssertBool(Extracts(Zip(("repo/addons/other/plugin.cfg", Config("2.0.0"))))).IsFalse();
         Assertions.AssertBool(Extracts(Zip(("addons/other/plugin.cfg", Config("2.0.0")), ("addons/third/plugin.cfg", Config("2.0.0"))))).IsFalse();
         Assertions.AssertThrown(() => SafeZipExtractor.PackageRoot(["a/plugin/plugin.cfg", "b/plugin/plugin.cfg", "c/plugin.cfg"], "plugin"))
-            .IsInstanceOf<InvalidDataException>().HasMessage("Ambiguous package, it has several plugin folders named 'plugin': a/plugin/, b/plugin/");
+            .IsInstanceOf<InvalidDataException>().HasMessage("Ambiguous package, it has several plugin folders named 'plugin': a/plugin/, b/plugin/. " +
+                                                              AddonPackageValidator.ReportToAuthor);
         // A download may wrap the plugin in one folder of any name or have it at the archive root; a local package may not.
         foreach (var loose in new[] { Zip(("plugin-2.0/plugin.cfg", Config("2.0.0"))), Zip(("plugin.cfg", Config("2.0.0"))) })
         {
@@ -429,8 +430,17 @@ public class UpdatePackageTests
             Assertions.AssertBool(validator.Validate(new(target, candidate, stage)).Findings.Any(f => f.Code == "R11")).IsTrue();
             File.Delete(path);
         }
-        using (var sparse = File.Create(Path.Combine(stage, "oversized.bin"))) sparse.SetLength(PackageFiles.MaximumFile + 1);
-        Assertions.AssertBool(validator.Validate(new(target, candidate, stage)).Findings.Any(f => f.Code == "R12")).IsTrue();
+        // several forbidden files are one refusal naming them all
+        File.WriteAllText(Path.Combine(stage, "project.godot"), "forbidden"); File.WriteAllText(Path.Combine(stage, "nuget.config"), "forbidden");
+        var forbidden = validator.Validate(new(target, candidate, stage)).Findings.Single(f => f.Code == "R11");
+        Assertions.AssertString(forbidden.Message).Contains("nuget.config").Contains("project.godot").EndsWith(AddonPackageValidator.ReportToAuthor);
+        File.Delete(Path.Combine(stage, "project.godot")); File.Delete(Path.Combine(stage, "nuget.config"));
+        // however many files exceed them, the limits are stated once
+        for (var i = 0; i < 4; i++)
+            using (var sparse = File.Create(Path.Combine(stage, $"oversized{i}.bin"))) sparse.SetLength(PackageFiles.MaximumFile + 1);
+        var limits = validator.Validate(new(target, candidate, stage)).Findings.Single(f => f.Code == "R12");
+        Assertions.AssertString(limits.Message).Contains("20000 files, 256 MB per file and 1024 MB in total").Contains("oversized")
+            .Contains("more than 1024 MB").EndsWith(AddonPackageValidator.ReportToAuthor);
     }
 
     private string Zip(params (string Path, string Content)[] files)

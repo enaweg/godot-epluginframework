@@ -62,6 +62,9 @@ public class PluginManagerDialogTests : IDisposable
 
     private string Status => _dialog.GetNode<Label>("%Status").Text;
 
+    /// <summary>The error the manager shows in full below the list; empty when it shows none.</summary>
+    private string Error => _dialog.GetNode<Control>("%ErrorBox").Visible ? _dialog.GetNode<RichTextLabel>("%ErrorText").GetParsedText() : "";
+
     private TreeItem Row(string slug) => PluginTree.GetRoot().GetChildren().Single(i => i.GetMetadata(NameColumn).AsString() == slug);
 
     /// <summary>A click on a check box of the list, which Godot reports once the box changed.</summary>
@@ -345,6 +348,21 @@ public class PluginManagerDialogTests : IDisposable
     }
 
     [TestCase]
+    public void AnUnexpectedFailureOfWorkUnlocksTheManagerAndShowsTheError()
+    {
+        _dialog.Open();
+
+        _dialog.WorkFailed("Checking for updates", "Something broke.", true);
+
+        Assertions.AssertString(Error).IsEqual("Checking for updates failed unexpectedly: Something broke.");
+        Assertions.AssertBool(_dialog.GetNode<Button>("%CheckButton").Disabled).IsFalse();
+        Assertions.AssertBool(_dialog.GetNode<Button>("%OpenLogButton").Visible).IsFalse();
+        // the next operation clears it
+        _dialog.GetNode<Button>("%CheckButton").EmitSignal(BaseButton.SignalName.Pressed);
+        Assertions.AssertString(Error).IsEmpty();
+    }
+
+    [TestCase]
     public void ACheckForUpdatesWithoutAnUpdateSystemFindsNothingAndClosingHidesTheManager()
     {
         _dialog.Open();
@@ -454,19 +472,21 @@ public class PluginManagerDialogTests : IDisposable
         _dialog.Open();
 
         await _dialog.InstallZipAsync(Zip("other", "3.0.0"));
-        Assertions.AssertString(Status).StartsWith("Cannot install other-3.0.0.zip: other is installed in res://addons/other");
-        Assertions.AssertString(Status).Contains("Enable the plugin");
+        Assertions.AssertString(Error).StartsWith("Cannot install other-3.0.0.zip: other is installed in res://addons/other");
+        Assertions.AssertString(Error).Contains("Enable the plugin");
+        // the status line keeps its schedule, while the error is shown in full where it can be copied
+        Assertions.AssertString(Status).NotContains("Cannot install");
 
         var empty = Path.Combine(_fixture.Root, "empty.zip");
         using (var zip = ZipFile.Open(empty, ZipArchiveMode.Create))
         using (var writer = new StreamWriter(zip.CreateEntry("readme.txt").Open())) writer.Write("nothing");
         await _dialog.InstallZipAsync(empty);
-        Assertions.AssertString(Status).StartsWith("Cannot install empty.zip: The ZIP file contains neither a plugin.cfg nor a GDExtension");
+        Assertions.AssertString(Error).StartsWith("Cannot install empty.zip: The ZIP file contains neither a plugin.cfg nor a GDExtension");
         Assertions.AssertBool(_dialog.GetNode<Button>("%InstallZipButton").Disabled).IsFalse();
 
         // a path the file system refuses fails with another exception, which must not lock the manager either
         await _dialog.InstallZipAsync(Path.Combine(_fixture.Root, "bad\0name.zip"));
-        Assertions.AssertString(Status).StartsWith("Cannot install");
+        Assertions.AssertString(Error).StartsWith("Cannot install");
         Assertions.AssertBool(_dialog.GetNode<Button>("%InstallZipButton").Disabled).IsFalse();
     }
 }

@@ -1,6 +1,7 @@
 #if TOOLS
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -89,6 +90,12 @@ internal sealed class GitRunner(bool allowFileProtocol = false) : IGitRunner
         return (_customSsh = configured.ExitCode == 0 && configured.Output.Trim().Length > 0).Value;
     }
 
+    private const string GitMissing = "git is not installed or not on PATH: git update sites need git 2.25 or newer. Install it and restart " +
+                                      "the editor, or use a release or ZIP update site.";
+
+    /// <summary>The git command of <paramref name="arguments"/> for messages, such as "fetch".</summary>
+    internal static string Command(IReadOnlyList<string> arguments) => arguments.FirstOrDefault(a => !a.StartsWith('-')) ?? (arguments.Count > 0 ? arguments[0] : "");
+
     private async Task<GitOutcome> StartAsync(string directory, IReadOnlyList<string> arguments, int timeoutSeconds, bool batchSsh, bool trace,
         CancellationToken ct)
     {
@@ -99,10 +106,21 @@ internal sealed class GitRunner(bool allowFileProtocol = false) : IGitRunner
         start.Environment["GIT_TERMINAL_PROMPT"] = "0";
         if (batchSsh) start.Environment["GIT_SSH_COMMAND"] = "ssh -o BatchMode=yes";
         if (trace) start.Environment["GIT_TRACE_PACKET"] = "1";
-        using var process = Process.Start(start) ?? throw new IOException("Cannot start git; git >= 2.25 is required.");
+        Process? started;
+        // Process.Start throws rather than returning null when there is no git to run.
+        try { started = Process.Start(start); }
+        catch (Win32Exception ex) { throw new UpdateProblemException(GitMissing, UpdateProblem.GitMissing, ex); }
+        using var process = started ?? throw new UpdateProblemException(GitMissing, UpdateProblem.GitMissing);
         var output = process.StandardOutput.ReadToEndAsync(timeout.Token);
         var error = process.StandardError.ReadToEndAsync(timeout.Token);
         try { await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false); }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            // Our own limit rather than the caller's cancellation, which is the user's or an update site's timeout.
+            if (!process.HasExited) process.Kill(true);
+            throw new UpdateProblemException($"git {Command(arguments)} timed out after {timeoutSeconds} seconds: check your network connection, " +
+                                             "or whether the repository is very large.", UpdateProblem.Timeout, ex);
+        }
         catch { if (!process.HasExited) process.Kill(true); throw; }
         return new(process.ExitCode, await output.ConfigureAwait(false), await error.ConfigureAwait(false));
     }
@@ -153,14 +171,20 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
     private static async Task<GitOutcome> Checked(IGitRunner runner, string directory, string[] args, CancellationToken ct, bool trace = false)
     {
         var result = await runner.RunAsync(directory, args, ct, trace).ConfigureAwait(false);
-        if (result.ExitCode != 0) throw new IOException("git operation failed: " + result.Error);
+        if (result.ExitCode != 0)
+        {
+            var (hint, problem) = UpdateErrors.GitHint(result.Error);
+            throw new UpdateProblemException($"git {GitRunner.Command(args)} failed: {UpdateErrors.GitError(result.Error).TrimEnd('.')}.{hint}", problem);
+        }
         return result;
     }
     private async Task EnsureVersion(string work, CancellationToken ct)
     {
         var version = await Checked(git, work, ["--version"], ct).ConfigureAwait(false);
         var match = Regex.Match(version.Output, @"\d+\.\d+");
-        if (!Version.TryParse(match.Value, out var parsed) || parsed < new Version(2, 25)) throw new IOException("git >= 2.25 required.");
+        if (!Version.TryParse(match.Value, out var parsed) || parsed < new Version(2, 25))
+            throw new UpdateProblemException($"git {(match.Success ? match.Value + " " : "")}is too old: git update sites need git 2.25 or newer. " +
+                                             "Update git and restart the editor, or use a release or ZIP update site.", UpdateProblem.GitMissing);
     }
     private async Task<string[][]> Refs(string work, CancellationToken ct)
     {

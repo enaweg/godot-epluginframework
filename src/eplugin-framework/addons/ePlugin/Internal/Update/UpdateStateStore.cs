@@ -30,23 +30,40 @@ internal interface IUpdateStateStore
     UpdateCache State { get; }
     void Save();
 }
-internal sealed class UpdateStateStore(string path) : IUpdateStateStore
+/// <param name="warn">Reports a cache that cannot be read or written; it is a disposable local cache, so nothing fails.</param>
+internal sealed class UpdateStateStore(string path, Action<string>? warn = null) : IUpdateStateStore
 {
     internal static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
     public UpdateCache State { get; private set; } = new();
+
+    /// <summary>Why the last <see cref="Load"/> started with an empty cache although the file exists; null when it did not.</summary>
+    public string? LoadProblem { get; private set; }
+
     public void Load()
     {
+        LoadProblem = null;
         try
         {
             var state = JsonSerializer.Deserialize<UpdateCache>(File.ReadAllText(path), JsonOptions);
             State = state is { Schema: 1, Results: not null, Revisions: not null, FailedUpdates: not null } ? state : new();
         }
-        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException) { State = new(); }
+        // a missing cache is the normal first start
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) { State = new(); }
+        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+        {
+            State = new();
+            LoadProblem = $"Cannot read the update cache {path}, so known updates and failed versions are forgotten and checked again: {ex.Message}";
+            warn?.Invoke(LoadProblem);
+        }
     }
     public void Save()
     {
         try { AtomicJson.Write(path, State); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* disposable local cache */ }
+        // a disposable local cache: the next check finds the same updates again
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            warn?.Invoke($"Cannot write the update cache {path}; update check results are kept only until the editor closes: {ex.Message}");
+        }
     }
 }
 /// <summary>Replaces a file in one step, so nobody reads it half-written and a failure leaves the previous one.</summary>

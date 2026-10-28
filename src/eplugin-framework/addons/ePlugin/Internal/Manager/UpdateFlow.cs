@@ -57,7 +57,8 @@ internal enum InstallStep
 /// <param name="Notice">The status line to show; null for none.</param>
 /// <param name="IsError">The notice reports a failure and is logged as an error too.</param>
 /// <param name="Refresh">Installed versions changed, so the plugin list has to be read again.</param>
-internal sealed record InstallOutcome(InstallStep Step, string? Notice = null, bool IsError = false, bool Refresh = false);
+/// <param name="Log">The folder or file with the logs of a failure, which the manager offers to open; null for none.</param>
+internal sealed record InstallOutcome(InstallStep Step, string? Notice = null, bool IsError = false, bool Refresh = false, string? Log = null);
 
 /// <summary>The result of checking for updates: the status line, and whether it reports a failure.</summary>
 internal sealed record CheckOutcome(string? Notice, bool IsError);
@@ -120,21 +121,69 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
         ClearVersions();
         try
         {
-            var result = await host.CheckForUpdatesAsync(true);
-            if (result.Failures.Count > 0)
-            {
-                return new("Update check failed: " + string.Join("; ", result.Failures.Select(f => $"{f.Slug}: {f.Message}")), true);
-            }
-
-            return new(result.Fallbacks is { Count: > 0 } fallbacks
-                ? "The update site of " + string.Join(", ", fallbacks.Select(f => f.Slug)) +
-                  " did not work; plugin.cfg's update_url was used (see the output log)."
-                : null, false);
+            return Describe(await host.CheckForUpdatesAsync(true));
         }
         catch (Exception ex)
         {
             return new("Update check failed: " + ex.Message, true);
         }
+    }
+
+    /// <summary>
+    /// The notice of a check: which plugins could not be checked and why, once for a problem every update site had (such
+    /// as no network connection), and which plugins were checked at another of their update sites. The updates it found
+    /// are counted in the status line, also when some plugins failed.
+    /// </summary>
+    internal static CheckOutcome Describe(UpdateCheckResult result)
+    {
+        var fallback = FallbackNotice(result.Fallbacks);
+        var failures = result.Failures;
+        if (failures.Count == 0) return new(fallback, false);
+        var problems = failures.Select(f => f.Problem).Distinct().ToArray();
+        // Only when no plugin could be checked does one problem stand for all, e.g. a missing network connection.
+        var every = result.Checked == 0 ? failures.Count > 1 : failures.Count >= result.Checked;
+        string text;
+        if (every && failures.Count > 1 && problems is [var problem] && problem is UpdateProblem.Offline or UpdateProblem.Timeout or UpdateProblem.Tls)
+        {
+            text = problem switch
+            {
+                UpdateProblem.Offline => "No network connection: no update site could be reached. Check your connection or proxy.",
+                UpdateProblem.Timeout => "No update site responded in time. Check your connection or proxy.",
+                _ => "No secure connection to any update site could be made. Check the system's date and time, or a proxy or antivirus that intercepts HTTPS."
+            };
+        }
+        else
+        {
+            var count = result.Checked > failures.Count ? $"{failures.Count} of {result.Checked} plugins" : failures.Count == 1 ? failures[0].Slug : $"{failures.Count} plugins";
+            // Plugins that failed the same way, e.g. at one host's rate limit, share a line.
+            var reasons = failures.GroupBy(f => f.Message, StringComparer.Ordinal)
+                .Select(g => failures.Count == 1 ? Sentence(g.Key) : $"{string.Join(", ", g.Select(f => f.Slug))}: {Sentence(g.Key)}");
+            text = $"Update check failed for {count}. " + string.Join(" ", reasons);
+        }
+        return new(fallback is null ? text : text + " " + fallback, true);
+    }
+
+    private static string Sentence(string message)
+    {
+        var text = message.Trim();
+        return text.EndsWith('.') || text.EndsWith('?') || text.EndsWith('!') ? text : text + ".";
+    }
+
+    /// <summary>Which plugins were checked at a later update site because their first ones failed, and at which.</summary>
+    private static string? FallbackNotice(IReadOnlyList<UpdateCheckFailure>? fallbacks)
+    {
+        if (fallbacks is not { Count: > 0 }) return null;
+        static string Site(UpdateCheckFailure fallback) => fallback.UsedSite switch
+        {
+            UpdateSite.PluginConfig => "its plugin.cfg update_url",
+            UpdateSite.BuiltIn => "its site in ePlugin's built-in list",
+            UpdateSite.Project => "the project's update site",
+            _ => "another update site"
+        };
+        const string why = " Godot's Output panel shows why.";
+        if (fallbacks.Count == 1) return $"The update site of {fallbacks[0].Slug} did not work, so {Site(fallbacks[0])} was used instead.{why}";
+        return $"The update sites of {string.Join(", ", fallbacks.Select(f => f.Slug))} did not work, so other sites were used: " +
+               string.Join("; ", fallbacks.Select(f => $"{Site(f)} for {f.Slug}")) + "." + why;
     }
 
     /// <summary>
@@ -168,6 +217,12 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
 
         return true;
     }
+
+    /// <summary>
+    /// Forgets why a plugin's published versions could not be loaded, so showing them again loads them again; true when
+    /// there was such an error.
+    /// </summary>
+    public bool ForgetVersionError(string slug) => _remoteVersionErrors.Remove(slug);
 
     /// <summary>Forgets loaded versions, e.g. after a plugin's update site changed.</summary>
     public void ClearVersions()
@@ -289,8 +344,10 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
                 return new(InstallStep.AwaitingDecision, Refresh: refresh);
             }
 
+            // The logs of the first group that was not installed, which the manager offers to open.
+            var log = results.FirstOrDefault(r => r.Outcome is UpdateOutcome.RolledBack or UpdateOutcome.KeptWithErrors)?.Directory;
             return new(InstallStep.Installed, PluginManagerViewModel.UpdateSummary(results, host.IsRestartPending, skipped, leftOut),
-                PluginManagerViewModel.AnyUpdateFailed(results) || skipped.Count > 0, refresh);
+                PluginManagerViewModel.AnyUpdateFailed(results) || skipped.Count > 0, refresh, log);
         }
         catch (OperationCanceledException)
         {
@@ -361,7 +418,7 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
             // The staging folder holds the log of the failed build; the start that deletes abandoned ones removes it.
             if (result.BuildLog is not null) _directory = null;
             Clear();
-            if (!result.Installed) return new(InstallStep.Failed, result.Failure, true, true);
+            if (!result.Installed) return new(InstallStep.Failed, result.Failure, true, true, result.BuildLog);
             var version = candidate.NewVersion.Length == 0 ? "" : " " + candidate.NewVersion;
             return new(InstallStep.Installed, $"Installed {candidate.PluginName}{version} into res://addons/{candidate.Slug}." +
                 (package.Kind == PluginKind.GDExtensionAddon ? "" : " Enable it with its On check box."), Refresh: true);

@@ -180,7 +180,10 @@ internal sealed partial class EGlobal
         if (result == UpdateOutcome.RolledBack)
         {
             try { _rolledBackUpdates.UnionWith(UpdateJournal.Load(directory).Plugins.Select(p => p.Slug)); }
-            catch (Exception ex) when (ex is IOException or InvalidDataException or System.Text.Json.JsonException) { }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or System.Text.Json.JsonException)
+            {
+                _ePluginContext?.Logger?.Warn($"Cannot read which plugins the rolled back update {directory} held: {ex.Message}");
+            }
         }
         if (result is UpdateOutcome.Completed or UpdateOutcome.RolledBack) RefreshPendingUpdates();
     }
@@ -195,7 +198,7 @@ internal sealed partial class EGlobal
     {
         if (_updateJournals is null || _stateStore is null) return;
         // Cache is needed by recovery before the first scheduled check.
-        _updateCache ??= new UpdateStateStore(Path.Combine(UpdateProjectRoot, ".godot/eplugin/update-state.json"));
+        _updateCache ??= new UpdateStateStore(Path.Combine(UpdateProjectRoot, ".godot/eplugin/update-state.json"), m => _ePluginContext?.Logger?.Warn(m));
         _updateCache.Load();
         // A batch is staged within minutes, so a folder this old without a journal is no longer in use.
         foreach (var folder in _updateJournals.AbandonedStaging(DateTime.UtcNow - TimeSpan.FromHours(6)))

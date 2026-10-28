@@ -19,7 +19,7 @@ internal sealed partial class EPluginManagerDialog
     {
         var visible = row is { IsUpdatable: true, Plugin.Missing: false };
         _versionSeparator.Visible = _versionRow.Visible = visible;
-        _versionSelect.Clear(); _versionOptions = []; _versionNote = null;
+        _versionSelect.Clear(); _versionOptions = []; _versionNote = null; _retryVersions.Visible = false;
         var target = visible ? _targets.FirstOrDefault(t => t.Slug == row!.Plugin.Slug) : null;
         if (!visible) { }
         else if (!row!.Plugin.Enabled || target is null) SetVersionPlaceholder(PluginManagerViewModel.VersionText(row.Plugin) + " (installed)", "Enable the plugin to change its version.");
@@ -33,8 +33,12 @@ internal sealed partial class EPluginManagerDialog
             string? missing = null;
             if (target.UpdateUrls.Count > 0 && !_updates.RemoteVersions.ContainsKey(target.Slug))
             {
-                if (_updates.RemoteVersionErrors.TryGetValue(target.Slug, out var error)) missing = "Versions from the update site are unavailable: " + error;
-                else { missing = "Loading versions from the update site..."; Run(LoadVersionsAsync(target), "Loading versions"); }
+                if (_updates.RemoteVersionErrors.TryGetValue(target.Slug, out var error))
+                {
+                    missing = "Versions from the update site are unavailable: " + error;
+                    _retryVersions.Visible = true;
+                }
+                else { missing = "Loading versions from the update site..."; Run(LoadVersionsAsync(target), "Loading versions", ownsWork: false); }
             }
             if (local.Count == 0 && remote.Count == 0 && missing is not null)
             {
@@ -60,6 +64,12 @@ internal sealed partial class EPluginManagerDialog
             }
         }
         VersionButtons();
+    }
+
+    /// <summary>Loads the selected plugin's published versions again after they could not be loaded.</summary>
+    private void RetryVersions()
+    {
+        if (_selectedSlug is { } slug && _updates.ForgetVersionError(slug)) RenderVersions(_model.Find(slug));
     }
 
     private void SetVersionPlaceholder(string text, string? note)

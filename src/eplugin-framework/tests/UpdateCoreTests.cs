@@ -141,12 +141,18 @@ public class UpdateCoreTests
             var mixed = await service.CheckAsync([Target("broken"), Target("healthy")], new(), CancellationToken.None);
             Assertions.AssertInt(mixed.Updates.Count).IsEqual(1);
             Assertions.AssertInt(mixed.Failures.Count).IsEqual(1);
-            var loaded = new UpdateStateStore(Path.Combine(directory, "state.json"));
+            var warnings = new List<string>();
+            var loaded = new UpdateStateStore(Path.Combine(directory, "state.json"), warnings.Add);
             loaded.Load();
             Assertions.AssertString(loaded.State.Results[0].Slug).IsEqual("healthy");
             File.WriteAllText(Path.Combine(directory, "state.json"), "broken json");
             loaded.Load();
             Assertions.AssertObject(loaded.State.LastCheckUtc).IsNull();
+            // a broken cache is forgotten, but not silently; a missing one is the normal first start
+            Assertions.AssertString(loaded.LoadProblem).StartsWith("Cannot read the update cache");
+            Assertions.AssertThat(warnings).ContainsExactly(loaded.LoadProblem);
+            new UpdateStateStore(Path.Combine(directory, "missing.json"), warnings.Add).Load();
+            Assertions.AssertInt(warnings.Count).IsEqual(1);
         }
         finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
     }
@@ -175,7 +181,10 @@ public class UpdateCoreTests
         var store = new MemoryStore();
         var service = new UpdateService(new Factory(), new SystemClock(), store);
         var result = await service.CheckAsync([Target("slow")], new(TimeoutSeconds: 1), CancellationToken.None);
-        Assertions.AssertString(result.Failures[0].Message).IsEqual("Request timed out.");
+        // the host that did not respond, so the user knows which site to look at
+        Assertions.AssertString(result.Failures[0].Message).IsEqual("example.org did not respond within 1 second: check your network connection or proxy.");
+        Assertions.AssertObject(result.Failures[0].Problem).IsEqual(UpdateProblem.Timeout);
+        Assertions.AssertInt(result.Checked).IsEqual(1);
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
         var cancelled = false;
