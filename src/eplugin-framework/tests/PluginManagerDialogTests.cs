@@ -227,7 +227,7 @@ public class PluginManagerDialogTests : IDisposable
     }
 
     [TestCase]
-    public async Task AnUpdateFromALocalDirectoryIsListedAndCanBeLeftOutOrChosenAsAVersion()
+    public async Task AnUpdateFromALocalDirectoryIsListedAndCanBeInstalledOrChosenAsAVersion()
     {
         var packages = Path.Combine(_fixture.Root, "packages");
         Directory.CreateDirectory(packages);
@@ -248,14 +248,15 @@ public class PluginManagerDialogTests : IDisposable
         _dialog.Refresh();
 
         Assertions.AssertString(Row("tool").GetText(VersionColumn)).IsEqual("2.1.0 → 3.0.0");
-        Assertions.AssertBool(Row("tool").IsChecked(VersionColumn)).IsTrue();
+        // Update installs every listed update; there is nothing to check or uncheck next to the version change.
+        Assertions.AssertInt((int)Row("tool").GetCellMode(VersionColumn)).IsEqual((int)TreeItem.TreeCellMode.String);
+        Assertions.AssertBool(Row("tool").IsEditable(VersionColumn)).IsFalse();
         Assertions.AssertString(Status).StartsWith("1 update available");
+        Assertions.AssertString(_dialog.GetOkButton().Text).IsEqual("Update 1 plugin");
         Assertions.AssertBool(_dialog.GetOkButton().Disabled).IsFalse();
 
-        Click("tool", VersionColumn, false);
-        Assertions.AssertBool(_dialog.GetOkButton().Disabled).IsTrue();
-
         Select("tool");
+        Assertions.AssertString(_dialog.GetOkButton().Text).IsEqual("Update 1 plugin");
         var versions = _dialog.GetNode<OptionButton>("%VersionSelect");
         Assertions.AssertBool(_dialog.GetNode<Control>("%VersionRow").Visible).IsTrue();
         Assertions.AssertInt(versions.ItemCount).IsEqual(2);

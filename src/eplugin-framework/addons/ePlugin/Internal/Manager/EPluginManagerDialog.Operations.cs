@@ -57,8 +57,8 @@ internal sealed partial class EPluginManagerDialog
     private void ItemEdited() => CellEdited(_tree.GetEdited(), _tree.GetEditedColumn());
 
     /// <summary>
-    /// A check box of the list was clicked: selects an update for the batch, or enables or disables the plugin. Tests
-    /// call it directly, as only a click sets the tree's edited cell.
+    /// A check box of the list was clicked: enables or disables the plugin. Tests call it directly, as only a click sets
+    /// the tree's edited cell.
     /// </summary>
     internal void CellEdited(TreeItem? item, int column)
     {
@@ -72,12 +72,7 @@ internal sealed partial class EPluginManagerDialog
             CallDeferred(MethodName.Render);
             return;
         }
-        if (column == VersionColumn && row.Update is { } update)
-        {
-            update.Selected = item.IsChecked(VersionColumn);
-            Buttons();
-        }
-        else if (column == EnabledColumn)
+        if (column == EnabledColumn)
         {
             var enable = item.IsChecked(EnabledColumn);
             if (!enable && row.Plugin.Kind == PluginKind.Framework)

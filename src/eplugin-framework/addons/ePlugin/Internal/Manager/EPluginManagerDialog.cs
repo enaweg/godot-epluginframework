@@ -250,9 +250,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _licenses.Clear(); _welcomes.Clear();
         var plugins = _global.CollectPlugins();
         _targets = _global.CollectUpdateTargets();
-        var previous = _model;
         _model = new(plugins, _global.PendingUpdates, _targets, _global.UpdateCache, candidate => _global.UpdatePreflightFindings([candidate]));
-        _model.KeepUnselected(previous);
         _attentionItems = PluginAttention.Collect(_model, _global.FailedUpdateJournal, _global.KeptUpdate,
             slug => _global.RetryScope([slug], dependencies: true).Select(a => a.Slug).Where(s => s != slug).ToArray());
         // Update sites, local directories and retries change what the toolbar button shows, too.
@@ -291,13 +289,9 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             if (row.NeedsAttention) item.SetCustomColor(NameColumn, EditorIcons.ErrorColor);
             if (row.Update is { } update)
             {
-                // An available update is selected for the batch right where its version change is shown.
-                item.SetCellMode(VersionColumn, TreeItem.TreeCellMode.Check);
-                item.SetEditable(VersionColumn, !update.HasError && editable);
-                item.SetChecked(VersionColumn, update.Selected);
                 item.SetText(VersionColumn, $"{PluginManagerViewModel.VersionText(plugin)} → {update.Candidate.NewVersion}");
                 if (update.HasError) item.SetCustomColor(VersionColumn, EditorIcons.ErrorColor);
-                item.SetTooltipText(VersionColumn, update.HasError ? "This update cannot be installed, see details." : "Check to include this update in Update.");
+                item.SetTooltipText(VersionColumn, update.HasError ? "This update cannot be installed, see details." : "Update installs this update.");
             }
             else
             {
@@ -508,7 +502,6 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         {
             var row = SlugOf(item) is { } slug ? _model.Find(slug) : null;
             item.SetEditable(EnabledColumn, editable && row is { CanToggle: true });
-            if (row?.Update is { } update) item.SetEditable(VersionColumn, editable && !update.HasError);
         }
         GetNode<Button>("%SettingsButton").Disabled = busy;
         _versionSelect.Disabled = busy || _versionOptions.Count < 2;
