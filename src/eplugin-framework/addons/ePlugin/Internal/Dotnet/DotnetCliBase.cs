@@ -127,6 +127,25 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
     }
 
     /// <summary>
+    /// After <paramref name="projectPath"/> was added to the solution or referenced (<paramref name="reference"/>), makes
+    /// that entry build it as <c>Release</c> when the game is exported for release, unless the project optimizes
+    /// <c>ExportRelease</c> itself (<see cref="ReleaseConfiguration"/>). The project was added either way, so a failure
+    /// here is only a warning: the game still builds, with an unoptimized library.
+    /// </summary>
+    protected void MapExportRelease(string projectPath, bool reference)
+    {
+        var project = ProjectFile(projectPath);
+        var (exitCode, output) = Execute("msbuild", ReleaseConfiguration.ProbeArguments(project));
+        var mapped = exitCode == 0 && (ReleaseConfiguration.Optimizes(output) ||
+            (reference ? ReleaseConfiguration.MapReference(GodotProjectPath, project) : ReleaseConfiguration.MapSolution(SolutionPath, project)));
+        if (mapped) return;
+        // the project was added, so its addition did not fail
+        LastFailure = null;
+        Logger?.Warn($"Cannot make {(reference ? Path.GetFileName(GodotProjectPath) : Path.GetFileName(SolutionPath))} build {projectPath} " +
+                     $"as {ReleaseConfiguration.Release} in {ReleaseConfiguration.Export}; release exports will contain it unoptimized.");
+    }
+
+    /// <summary>
     /// The absolute path of a project a recipe names: relative to the Godot project directory, as a <c>res://</c> path,
     /// or absolute. The CLI is given absolute paths, so it does not depend on the editor's working directory; it writes
     /// project references relative to the project and removes them again by their absolute path.

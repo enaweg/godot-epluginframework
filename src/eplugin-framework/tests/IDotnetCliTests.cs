@@ -110,8 +110,9 @@ public class IDotnetCliTests
                 Assertions.AssertBool(cli.TryRemoveProjectFromSolution("res://Gone/Gone.csproj")).IsTrue();
                 var library = Path.Combine(root, "Lib", "Lib.csproj");
                 Assertions.AssertThat(runner.Calls[0]).ContainsExactly("dotnet", "sln", Path.Combine(repository, "MyGame.sln"), "add", library);
-                Assertions.AssertThat(runner.Calls[1]).ContainsExactly("dotnet", "sln", Path.Combine(repository, "MyGame.sln"), "remove", library);
-                Assertions.AssertInt(runner.Calls.Count).IsEqual(2);
+                Assertions.AssertThat(runner.Calls[1]).ContainsExactly("dotnet", "msbuild", library, "-getProperty:Optimize", "-p:Configuration=ExportRelease");
+                Assertions.AssertThat(runner.Calls[2]).ContainsExactly("dotnet", "sln", Path.Combine(repository, "MyGame.sln"), "remove", library);
+                Assertions.AssertInt(runner.Calls.Count).IsEqual(3);
             }
 
             // the solution named after the assembly also in the XML format, before another solution
@@ -178,6 +179,8 @@ public class IDotnetCliTests
         var project = Path.Combine(ProjectRoot, "EPluginFramework.csproj");
         var solution = Path.Combine(ProjectRoot, "EPluginFramework.sln");
         var absolute = Path.Combine(ProjectRoot, "addons", "other", "Other.csproj");
+        // after a project is added, whether it optimizes ExportRelease itself
+        string[] probe = ["dotnet", "msbuild", absolute, "-getProperty:Optimize", "-p:Configuration=ExportRelease"];
 
         var cli9Runner = new RecordingRunner();
         var cli9 = new DotnetCli9(new NullLogger(), false, ProjectRoot, AssemblyName, cli9Runner);
@@ -194,8 +197,11 @@ public class IDotnetCliTests
             ["dotnet", "build", solution, "--no-incremental"],
             ["dotnet", "add", project, "package", "Some.Package", "--version", "1.2.3", "--source", Path.Combine(ProjectRoot, "feed")],
             ["dotnet", "sln", solution, "add", absolute],
+            probe,
             ["dotnet", "sln", solution, "add", "-s", "Folder", absolute],
+            probe,
             ["dotnet", "add", project, "reference", absolute],
+            probe,
             ["dotnet", "remove", project, "package", "ZLogger"],
             ["dotnet", "test", solution],
             ["dotnet", "restore", "--force"]);
@@ -214,7 +220,9 @@ public class IDotnetCliTests
             ["dotnet", "build", solution, "--no-incremental"],
             ["dotnet", "package", "add", "Some.Package", "--project", project, "--source", "https://example.org/v3/index.json", "--prerelease"],
             ["dotnet", "sln", solution, "add", "-s", "Folder", absolute],
+            probe,
             ["dotnet", "reference", "add", absolute, "--project", project],
+            probe,
             ["dotnet", "package", "remove", "ZLogger", "--project", project],
             ["dotnet", "test", solution],
             ["dotnet", "restore", "--force"]);
@@ -272,16 +280,20 @@ public class IDotnetCliTests
             cli.RemoveProjectFromSolution("addons/other/Other.csproj");
             cli.AddNugetToProject("Some.Package", prerelease: true);
 
-            Assertions.AssertInt(runner.Calls.Count).IsEqual(5);
+            Assertions.AssertInt(runner.Calls.Count).IsEqual(7);
             Assertions.AssertThat(runner.Calls[0]).ContainsExactly("dotnet", "build", solution, "--no-incremental");
             Assertions.AssertThat(runner.Calls[1]).ContainsExactly("dotnet", "sln", solution, "add", absolute);
-            Assertions.AssertBool(runner.Calls[2].Contains(absolute) && runner.Calls[2].Contains(project)).IsTrue();
-            Assertions.AssertBool(runner.Calls[3].Contains("ZLogger") && runner.Calls[3].Contains("remove")).IsTrue();
-            Assertions.AssertString(runner.Calls[4][^1]).IsEqual("--prerelease");
+            Assertions.AssertString(runner.Calls[2][1]).IsEqual("msbuild");
+            Assertions.AssertBool(runner.Calls[3].Contains(absolute) && runner.Calls[3].Contains(project)).IsTrue();
+            Assertions.AssertString(runner.Calls[4][1]).IsEqual("msbuild");
+            Assertions.AssertBool(runner.Calls[5].Contains("ZLogger") && runner.Calls[5].Contains("remove")).IsTrue();
+            Assertions.AssertString(runner.Calls[6][^1]).IsEqual("--prerelease");
             Assertions.AssertString(log[0]).IsEqual($"log: cli: Using {cli.GetType().Name} for dotnet commands.");
             // the project directory is shortened in the log
             Assertions.AssertBool(log.Any(l => l.StartsWith("log: cli: Executing: dotnet build <project>", System.StringComparison.Ordinal))).IsTrue();
-            Assertions.AssertInt(log.Count(l => l.StartsWith("warn:", System.StringComparison.Ordinal))).IsEqual(2);
+            // the recorded project and solution do not list addons/other, so neither can build it as Release
+            Assertions.AssertInt(log.Count(l => l.StartsWith("warn:", System.StringComparison.Ordinal) && l.Contains("unoptimized"))).IsEqual(2);
+            Assertions.AssertInt(log.Count(l => l.StartsWith("warn:", System.StringComparison.Ordinal))).IsEqual(4);
         }
     }
 
@@ -351,6 +363,8 @@ public class IDotnetCliTests
                 Assertions.AssertBool(cli.TryAddProjectToSolution(lib, "Libraries")).IsTrue();
                 Assertions.AssertBool(cli.TryAddProjectReference(lib)).IsTrue();
                 Assertions.AssertBool(Contains() && References()).IsTrue();
+                // a plain library is built as Release when the game is exported for release
+                Assertions.AssertString(File.ReadAllText(Path.Combine(root, "Game.csproj"))).Contains("Configuration=Release");
 
                 Assertions.AssertBool(cli.TryRemoveProjectReference(lib)).IsTrue();
                 Assertions.AssertBool(cli.TryRemoveProjectFromSolution(lib)).IsTrue();
@@ -363,6 +377,67 @@ public class IDotnetCliTests
             {
                 Directory.Delete(root, true);
             }
+        }
+    }
+
+    [TestCase(Timeout = 120000)]
+    public static void APlainLibraryIsBuiltAsReleaseInExportReleaseAndAnOptimizingOneIsLeftAlone()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "eplugin-cli-" + Path.GetRandomFileName());
+        Directory.CreateDirectory(Path.Combine(root, "plain"));
+        Directory.CreateDirectory(Path.Combine(root, "optimizing"));
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "Game.csproj"), """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>""");
+            File.WriteAllText(Path.Combine(root, "plain", "Plain.csproj"), """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>""");
+            // like a Godot.NET.Sdk project
+            File.WriteAllText(Path.Combine(root, "optimizing", "Optimizing.csproj"), """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net8.0</TargetFramework>
+                    <Configurations>Debug;ExportDebug;ExportRelease</Configurations>
+                    <Optimize Condition="'$(Configuration)' == 'ExportRelease'">true</Optimize>
+                  </PropertyGroup>
+                </Project>
+                """);
+            // the solution configurations GodotTools creates
+            File.WriteAllText(Path.Combine(root, "Game.sln"), """
+                Microsoft Visual Studio Solution File, Format Version 12.00
+                Global
+                	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+                	Debug|Any CPU = Debug|Any CPU
+                	ExportDebug|Any CPU = ExportDebug|Any CPU
+                	ExportRelease|Any CPU = ExportRelease|Any CPU
+                	EndGlobalSection
+                EndGlobal
+
+                """);
+            var sdk = new DotnetVersionManager(new NullLogger(), false);
+            DotnetCliBase cli = DotnetVersionManager.ParseMajorVersion(sdk.DotnetVersion) >= 10
+                ? new DotnetCli10(new NullLogger(), false, root)
+                : new DotnetCli9(new NullLogger(), false, root);
+            foreach (var library in new[] { "plain/Plain.csproj", "optimizing/Optimizing.csproj" })
+            {
+                Assertions.AssertBool(cli.TryAddProjectToSolution(library, null)).IsTrue();
+                Assertions.AssertBool(cli.TryAddProjectReference(library)).IsTrue();
+            }
+
+            var solution = File.ReadAllText(Path.Combine(root, "Game.sln"));
+            var project = File.ReadAllText(Path.Combine(root, "Game.csproj"));
+            string Guid(string name) => System.Text.RegularExpressions.Regex.Match(solution, $@"""{name}"", ""[^""]+"", ""(\{{[^}}]+\}})""").Groups[1].Value;
+            Assertions.AssertString(solution).Contains($"{Guid("Plain")}.ExportRelease|Any CPU.ActiveCfg = Release|Any CPU");
+            Assertions.AssertString(solution).Contains($"{Guid("Plain")}.ExportDebug|Any CPU.ActiveCfg = Debug|Any CPU");
+            Assertions.AssertString(solution).Contains($"{Guid("Optimizing")}.ExportRelease|Any CPU.ActiveCfg = ExportRelease|Any CPU");
+            Assertions.AssertInt(project.Split("Configuration=Release").Length - 1).IsEqual(1);
+            Assertions.AssertBool(project.IndexOf("Configuration=Release", StringComparison.Ordinal) < project.IndexOf("Optimizing.csproj", StringComparison.Ordinal)).IsTrue();
+
+            // removing the reference removes what it set
+            Assertions.AssertBool(cli.TryRemoveProjectReference("plain/Plain.csproj")).IsTrue();
+            Assertions.AssertString(File.ReadAllText(Path.Combine(root, "Game.csproj"))).NotContains("Configuration=Release");
+        }
+        finally
+        {
+            Directory.Delete(root, true);
         }
     }
 

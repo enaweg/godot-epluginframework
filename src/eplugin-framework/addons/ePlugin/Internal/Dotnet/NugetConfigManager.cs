@@ -5,7 +5,6 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Xml;
 using System.Xml.Linq;
 using Enaweg.Plugin.Internal.Update;
 using Enaweg.Plugin.Logging;
@@ -68,13 +67,13 @@ internal static partial class NugetConfigManager
             else
             {
                 packageSources = new XElement("packageSources");
-                AddLines(root, packageSources);
+                XmlFile.AddLines(root, packageSources);
             }
 
             var existingAdd = packageSources.Elements("add").FirstOrDefault(e => (string?)e.Attribute("key") == key);
             if (existingAdd is null)
             {
-                AddLines(packageSources,
+                XmlFile.AddLines(packageSources,
                     new XComment(UsedByComment([pluginSlug])),
                     new XElement("add", new XAttribute("key", key), new XAttribute("value", normalized)));
             }
@@ -85,7 +84,7 @@ internal static partial class NugetConfigManager
                 SetUsedByComment(existingAdd, usedBy);
             }
 
-            Save(file, configPath);
+            file.Write(configPath);
             return true;
         }
         catch (Exception ex)
@@ -126,10 +125,10 @@ internal static partial class NugetConfigManager
             {
                 if (CommentBefore(add) is { } comment)
                 {
-                    RemoveLine(comment);
+                    XmlFile.RemoveLine(comment);
                 }
 
-                RemoveLine(add);
+                XmlFile.RemoveLine(add);
             }
             else
             {
@@ -137,19 +136,19 @@ internal static partial class NugetConfigManager
             }
 
             // only when nothing else is left, comments included, e.g. a source the team commented out
-            if (packageSources is not null && packageSources.Nodes().All(IsWhitespace))
+            if (packageSources is not null && packageSources.Nodes().All(XmlFile.IsWhitespace))
             {
-                RemoveLine(packageSources);
+                XmlFile.RemoveLine(packageSources);
             }
 
-            if (root.Nodes().All(IsWhitespace) && file.Document.Nodes().All(n => n == root || n is XText))
+            if (root.Nodes().All(XmlFile.IsWhitespace) && file.Document.Nodes().All(n => n == root || n is XText))
             {
                 File.Delete(configPath);
                 logger?.Log("Removed nuget.config (no managed NuGet sources remain).");
                 return true;
             }
 
-            Save(file, configPath);
+            file.Write(configPath);
             return true;
         }
         catch (Exception ex)
@@ -217,7 +216,7 @@ internal static partial class NugetConfigManager
         {
             comment.Value = text;
         }
-        else if (IndentBefore(add) is { } indent)
+        else if (XmlFile.IndentBefore(add) is { } indent)
         {
             add.AddBeforeSelf(new XComment(text), new XText("\n" + indent));
         }
@@ -334,94 +333,11 @@ internal static partial class NugetConfigManager
             : ConfigFileNames[0];
     }
 
-    /// <summary>A config file as read, with what <see cref="Save"/> needs to write it back unchanged apart from the edited nodes.</summary>
-    private sealed record ConfigFile(XDocument Document, string NewLine, bool ByteOrderMark);
-
-    private static ConfigFile Load(string configPath)
+    private static XmlFile Load(string configPath)
     {
-        if (!File.Exists(configPath))
-        {
-            const string empty = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<configuration>\n</configuration>\n";
-            return new(XDocument.Parse(empty, LoadOptions.PreserveWhitespace), Environment.NewLine, false);
-        }
-
-        var bytes = File.ReadAllBytes(configPath);
-        // the reader turns every line break into \n; Save writes them back as the file had them.
-        var newLine = Array.IndexOf(bytes, (byte)'\r') >= 0 ? "\r\n" : "\n";
-        using var stream = new MemoryStream(bytes);
-        return new(XDocument.Load(stream, LoadOptions.PreserveWhitespace), newLine, bytes.AsSpan().StartsWith(Encoding.UTF8.Preamble));
-    }
-
-    /// <summary>
-    /// Writes the file back in one step. The file is committed and shared by the team, so its formatting and declaration
-    /// are kept and only the nodes edited here change.
-    /// </summary>
-    private static void Save(ConfigFile file, string configPath)
-    {
-        AtomicFile.Write(configPath, stream =>
-        {
-            using var text = new StreamWriter(stream, new UTF8Encoding(file.ByteOrderMark), leaveOpen: true);
-            if (file.Document.Declaration is { } declaration)
-            {
-                // the writer would add or change the encoding; it writes UTF-8.
-                declaration.Encoding = declaration.Encoding is null ? null : "utf-8";
-                text.Write(declaration.ToString());
-            }
-
-            var settings = new XmlWriterSettings { OmitXmlDeclaration = true, NewLineChars = file.NewLine, NewLineHandling = NewLineHandling.Replace };
-            using var writer = XmlWriter.Create(text, settings);
-            file.Document.Save(writer);
-        });
-    }
-
-    /// <summary>
-    /// Adds <paramref name="nodes"/> after the last child of <paramref name="parent"/>, each on its own line and indented
-    /// like its siblings, or on the same line where the file keeps them on one.
-    /// </summary>
-    private static void AddLines(XElement parent, params XNode[] nodes)
-    {
-        var sibling = parent.Nodes().FirstOrDefault(n => !IsWhitespace(n));
-        var closing = parent.LastNode is XText text && IsWhitespace(text) ? text : null;
-        var indent = sibling is not null ? IndentBefore(sibling)
-            : closing is not null && closing.Value.Contains('\n') ? LastLine(closing.Value) + "  "
-            : IndentBefore(parent) is { } outer ? outer + "  " : null;
-        if (indent is null)
-        {
-            parent.Add(nodes);
-            return;
-        }
-
-        var lines = nodes.SelectMany(node => new XNode[] { new XText("\n" + indent), node }).ToArray();
-        if (closing is not null)
-        {
-            closing.AddBeforeSelf(lines);
-        }
-        else
-        {
-            parent.Add(lines, new XText("\n" + (IndentBefore(parent) ?? "")));
-        }
-    }
-
-    /// <summary>Removes a node together with the line break and indentation before it.</summary>
-    private static void RemoveLine(XNode node)
-    {
-        if (node.PreviousNode is { } previous && IsWhitespace(previous))
-        {
-            previous.Remove();
-        }
-
-        node.Remove();
-    }
-
-    /// <summary>The indentation of a node that starts its own line; null when it follows other content on its line.</summary>
-    private static string? IndentBefore(XNode node)
-    {
-        if (node is XElement { Parent: null })
-        {
-            return "";
-        }
-
-        return node.PreviousNode is XText text && IsWhitespace(text) && text.Value.Contains('\n') ? LastLine(text.Value) : null;
+        if (File.Exists(configPath)) return XmlFile.Read(configPath);
+        const string empty = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<configuration>\n</configuration>\n";
+        return new(XDocument.Parse(empty, LoadOptions.PreserveWhitespace), Environment.NewLine, false);
     }
 
     /// <summary>The comment before an entry, skipping the line break between them.</summary>
@@ -432,16 +348,12 @@ internal static partial class NugetConfigManager
     private static XComment? CommentBefore(XElement add)
     {
         var node = add.PreviousNode;
-        while (node is not null && IsWhitespace(node))
+        while (node is not null && XmlFile.IsWhitespace(node))
         {
             node = node.PreviousNode;
         }
 
         return node is XComment comment && comment.Value.Trim().StartsWith(UsedByCommentPrefix, StringComparison.Ordinal) ? comment : null;
     }
-
-    private static bool IsWhitespace(XNode node) => node is XText text && string.IsNullOrWhiteSpace(text.Value);
-
-    private static string LastLine(string value) => value[(value.LastIndexOf('\n') + 1)..];
 }
 #endif

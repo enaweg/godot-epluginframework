@@ -50,9 +50,11 @@ internal sealed class DotnetCli9(ILogger? logger, bool enableDebugLogging, strin
 
     public override bool TryAddProjectToSolution(string projectPath, string? virtualFolderName)
     {
-        return Execute(virtualFolderName is null
+        if (Execute(virtualFolderName is null
             ? ["sln", SolutionPath, "add", ProjectFile(projectPath)]
-            : ["sln", SolutionPath, "add", "-s", virtualFolderName, ProjectFile(projectPath)]).Item1 == 0;
+            : ["sln", SolutionPath, "add", "-s", virtualFolderName, ProjectFile(projectPath)]).Item1 != 0) return false;
+        MapExportRelease(projectPath, reference: false);
+        return true;
     }
 
     public override bool AddNugetToProject(string nugetName, string? version = null, string? source = null,
@@ -104,7 +106,9 @@ internal sealed class DotnetCli9(ILogger? logger, bool enableDebugLogging, strin
 
     public override bool TryAddProjectReference(string projectReference)
     {
-        return Execute(["add", GodotProjectPath, "reference", ProjectFile(projectReference)]).Item1 == 0;
+        if (Execute(["add", GodotProjectPath, "reference", ProjectFile(projectReference)]).Item1 != 0) return false;
+        MapExportRelease(projectReference, reference: true);
+        return true;
     }
 
     public override void RemoveProjectReference(string projectReference)
