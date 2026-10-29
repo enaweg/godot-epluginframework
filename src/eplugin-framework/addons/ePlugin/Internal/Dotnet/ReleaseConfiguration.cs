@@ -18,13 +18,19 @@ namespace Enaweg.Plugin.Internal.Dotnet;
 /// (<c>dotnet sln add</c> maps <c>ExportRelease</c> to a project's <c>Debug</c>), which wins when the solution is built.
 /// Projects that optimize <c>ExportRelease</c> themselves, such as <c>Godot.NET.Sdk</c> ones, are left alone.
 /// </summary>
-internal static class ReleaseConfiguration
+internal static partial class ReleaseConfiguration
 {
     public const string Export = "ExportRelease";
     public const string Release = "Release";
 
-    private static readonly Regex SolutionProject = new(@"^\s*Project\(""\{[^}]+\}""\)\s*=\s*""[^""]*""\s*,\s*""([^""]+)""\s*,\s*""(\{[^}]+\})""",
-        RegexOptions.Multiline | RegexOptions.CultureInvariant);
+    // A project of a .sln; group 1 is its path, group 2 its GUID.
+    [GeneratedRegex(@"^\s*Project\(""\{[^}]+\}""\)\s*=\s*""[^""]*""\s*,\s*""([^""]+)""\s*,\s*""(\{[^}]+\})""", RegexOptions.Multiline | RegexOptions.CultureInvariant)]
+    private static partial Regex SolutionProject();
+
+    // The project configuration a .sln maps ExportRelease to, in a {guid}.ExportRelease|<platform>.ActiveCfg or .Build.0 line.
+    [GeneratedRegex(@"^(?<lead>[ \t]*(?<guid>\{[^}\r\n]+\})\.ExportRelease\|[^.\r\n]+\.(?:ActiveCfg|Build\.0)[ \t]*=[ \t]*)(?<configuration>[^|\r\n]+)(?<platform>\|[^\r\n]*)(?=\r?$)",
+        RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ExportReleaseMapping();
 
     /// <summary>The arguments of <c>dotnet msbuild</c> that print whether a project optimizes <see cref="Export"/>.</summary>
     public static string[] ProbeArguments(string project) => [project, "-getProperty:Optimize", $"-p:Configuration={Export}"];
@@ -89,16 +95,13 @@ internal static class ReleaseConfiguration
         var bytes = File.ReadAllBytes(solutionFile);
         var byteOrderMark = bytes.AsSpan().StartsWith(Encoding.UTF8.Preamble);
         var text = new UTF8Encoding(false).GetString(byteOrderMark ? bytes[Encoding.UTF8.Preamble.Length..] : bytes);
-        var guids = SolutionProject.Matches(text).Where(m => ProjectReferences.SamePath(directory, m.Groups[1].Value, project))
-            .Select(m => m.Groups[2].Value).ToArray();
-        if (guids.Length == 0) return false;
-        var mapped = text;
-        foreach (var guid in guids)
-        {
-            var line = new Regex($@"^(?<lead>[ \t]*{Regex.Escape(guid)}\.{Export}\|[^.\r\n]+\.(?:ActiveCfg|Build\.0)[ \t]*=[ \t]*)(?<configuration>[^|\r\n]+)(?<platform>\|[^\r\n]*)(?=\r?$)",
-                RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-            mapped = line.Replace(mapped, m => m.Groups["lead"].Value + Release + m.Groups["platform"].Value);
-        }
+        var guids = SolutionProject().Matches(text).Where(m => ProjectReferences.SamePath(directory, m.Groups[1].Value, project))
+            .Select(m => m.Groups[2].Value).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (guids.Count == 0) return false;
+        // only the lines of this project; the others are written back as they are
+        var mapped = ExportReleaseMapping().Replace(text, m => guids.Contains(m.Groups["guid"].Value)
+            ? m.Groups["lead"].Value + Release + m.Groups["platform"].Value
+            : m.Value);
 
         if (mapped != text)
         {
