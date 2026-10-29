@@ -20,6 +20,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
     private const string ManagerMenuName = "ePlugin Manager...";
     // Engine metadata survives assembly reloads, unlike the fields of this script instance.
     private const string ManagerButtonMeta = "eplugin_manager_button";
+    private const string ExportFilterMeta = "eplugin_export_filter";
     private readonly EditorSignalConnections _managerSignals = new();
     private bool _managerUiAdded;
     private Button? _managerButton;
@@ -206,9 +207,16 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         base._DisablePlugin();
     }
 
+    public override void _EnterTree()
+    {
+        base._EnterTree();
+        AddExportFilter();
+    }
+
     public override void _ExitTree()
     {
         RemoveManagerUi();
+        RemoveExportFilter();
         _updateLifetime.Cancel();
         _updateLifetime.Dispose();
 
@@ -323,6 +331,25 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         if (Engine.Singleton.HasMeta(ManagerButtonMeta)) Engine.Singleton.RemoveMeta(ManagerButtonMeta);
         _managerButton = null;
     }
+    /// <summary>
+    /// Leaves the framework's editor-only files out of exports. Godot keeps the export plugin across assembly reloads,
+    /// which do not run this again, and reloads its script; its instance id is kept in Engine metadata like the button's.
+    /// </summary>
+    private void AddExportFilter()
+    {
+        RemoveExportFilter();
+        var filter = new ExportFilter();
+        AddExportPlugin(filter);
+        Engine.Singleton.SetMeta(ExportFilterMeta, filter.GetInstanceId());
+    }
+
+    private void RemoveExportFilter()
+    {
+        if (!Engine.Singleton.HasMeta(ExportFilterMeta)) return;
+        if (GodotObject.InstanceFromId(Engine.Singleton.GetMeta(ExportFilterMeta).AsUInt64()) is EditorExportPlugin filter) RemoveExportPlugin(filter);
+        Engine.Singleton.RemoveMeta(ExportFilterMeta);
+    }
+
     private void OpenManager()
     {
         if (!EGlobal.Instance.IsValid())

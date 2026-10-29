@@ -32,6 +32,16 @@ Install [ePlugin Framework from the Godot Asset Store](https://store.godotengine
 
 Release archives include a small shared progress helper (about 80 KB) that runs on the installed .NET runtime and draws its window with native UI. Source checkouts generate the helper during a normal build. Linux needs GTK 3 for that window. Plugin operations continue if the helper is missing or fails. Asset Library distributions should use the release archive to include the helper.
 
+### Exported games
+
+ePlugin runs only in the editor, so its files do not belong in exported games. While ePlugin is enabled, every export skips its scripts, dialogs and icons (`addons/ePlugin`) and the project's plugin state (`addons/eplugin-state.json`, `addons/eplugin-update-sites.json`), without changing your export presets. Godot still adds its empty placeholder for each C# script. To leave them out also when you export with ePlugin disabled, enter this under **Project > Export > Resources > Filters to exclude files/folders from project** in each preset:
+
+```
+addons/ePlugin/*, addons/eplugin-state.json, addons/eplugin-update-sites.json
+```
+
+The NuGet packages, projects, autoloads and [managed directories](docs/creating-plugins.md#recipe-resources) of enabled ePlugins are part of the game and are exported with it. A project a recipe adds is built in its `Release` configuration when you export a release (see `AddProject` in [Create an ePlugin](docs/creating-plugins.md#recipe-resources)).
+
 ## Features
 
 ePlugin works with plugins that have a `plugin.cfg` in their folder below `res://addons` (`res://addons/<slug>/plugin.cfg`), whatever their type: ePlugins, plain C#, GDScript and GDExtension plugins, and with GDExtensions in their own folder without one. Other add-ons without a `plugin.cfg`, such as a script library or an asset pack, are not supported.
