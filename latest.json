@@ -1,8 +1,8 @@
 {
- "commit": "ff45b6c6cd2114e7faa315ff8ac3aeec3590d762",
- "date": "2026-10-29T19:50:35Z",
- "covered": 11960,
- "coverable": 13243,
+ "commit": "7837a44fe51863adceaa4b53212bb51c2d2d9203",
+ "date": "2026-10-29T20:23:52Z",
+ "covered": 12072,
+ "coverable": 13362,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -13,8 +13,8 @@
    12
   ],
   "src/eplugin-framework/addons/ePlugin/EPluginPlugin.cs": [
-   184,
-   324
+   200,
+   340
   ],
   "src/eplugin-framework/addons/ePlugin/EditorPluginExtensions.cs": [
    62,
@@ -41,16 +41,16 @@
    53
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetCli10.cs": [
-   78,
-   78
+   81,
+   82
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetCli9.cs": [
-   78,
-   78
+   81,
+   82
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetCliBase.cs": [
-   70,
-   70
+   80,
+   80
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetFailure.cs": [
    36,
@@ -69,8 +69,8 @@
    1
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/NugetConfigManager.cs": [
-   254,
-   264
+   200,
+   208
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/PluginsOnlyBuild.cs": [
    32,
@@ -79,6 +79,14 @@
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/ProjectReferences.cs": [
    38,
    40
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/ReleaseConfiguration.cs": [
+   71,
+   72
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/XmlFile.cs": [
+   55,
+   57
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EEditorPluginBuilder.cs": [
    69,
@@ -183,6 +191,14 @@
   "src/eplugin-framework/addons/ePlugin/Internal/EditorHost.cs": [
    51,
    86
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/ExportExclusions.cs": [
+   8,
+   8
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/ExportFilter.cs": [
+   0,
+   4
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Kinds/CSharpPluginWorkflow.cs": [
    4,
