@@ -72,7 +72,7 @@ internal static class ProjectReferences
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or XmlException) { return null; }
     }
 
-    private static bool SamePath(string baseDirectory, string relative, string absolute)
+    internal static bool SamePath(string baseDirectory, string relative, string absolute)
     {
         try
         {

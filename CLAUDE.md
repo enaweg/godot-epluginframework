@@ -286,6 +286,14 @@ the `.csproj`/`.sln`/`.slnx` through `ProjectReferences` (pure, tested): an inva
 an absent entry succeeds with a warning, and anything it cannot tell (unreadable file, MSBuild properties) runs the CLI
 as before.
 
+After adding a project to the solution or referencing it, both CLIs call `DotnetCliBase.MapExportRelease`: unless
+`dotnet msbuild -getProperty:Optimize -p:Configuration=ExportRelease` says the project optimizes `ExportRelease` itself
+(`Godot.NET.Sdk` projects), the pure `ReleaseConfiguration` makes the reference (`SetConfiguration`) and the `.sln`/`.slnx`
+build it as `Release` there. Godot exports with `dotnet publish <csproj> -c ExportRelease`, which a reference inherits, and
+`Microsoft.NET.Sdk` optimizes only `Release`; `dotnet sln add` maps `ExportRelease` to the project's `Debug`. A failure
+there only warns, since the project was added. `XmlFile` reads and writes XML files the project commits (`nuget.config`,
+project files) keeping their formatting.
+
 ### Plugin kinds
 
 Only plugins with a `plugin.cfg` in their folder below `res://addons` are supported, whatever their kind, plus
