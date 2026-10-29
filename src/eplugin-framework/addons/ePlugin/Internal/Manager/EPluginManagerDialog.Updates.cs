@@ -47,7 +47,7 @@ internal sealed partial class EPluginManagerDialog
 
     private void Confirm()
     {
-        if (_model.CanApply) Install(new InstallRequest(_model.Selected));
+        if (_model.CanApply) Install(new InstallRequest(_model.Installable));
     }
 
     private void Install(InstallRequest request) => Run(InstallAsync(request), "Installing updates");

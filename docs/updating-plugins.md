@@ -116,9 +116,9 @@ Before swapping addon files, the updater saves and closes open scenes so no scen
 
 ## Checks and installation
 
-The update list is part of ePlugin Manager. Select updates with the checkboxes in the **Version** column, then use the bottom **Update** button to install the batch.
+The update list is part of ePlugin Manager. The **Version** column shows each available update, and the bottom **Update** button installs all of them in one batch, except those with an error. To install a single plugin's update, or another version, choose it in the plugin's details.
 
-![ePlugin Manager showing three selected updates from version 1.0 to 1.1.0 and the selected plugin's local package](images/eplugin-updates.png)
+![ePlugin Manager showing three updates from version 1.0 to 1.1.0 and the selected plugin's local package](images/eplugin-updates.png)
 
 This screenshot uses example local ZIP releases of the repository's sample plugins; the displayed update versions are sample data.
 

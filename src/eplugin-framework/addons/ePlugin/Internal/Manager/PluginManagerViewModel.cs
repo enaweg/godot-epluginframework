@@ -18,7 +18,6 @@ internal sealed class UpdateRow(UpdateCandidate candidate, IReadOnlyList<Finding
     public List<Finding> Findings { get; } = findings.ToList();
     public FailedUpdate? Failed { get; } = failed;
     public bool HasError => Findings.Any(f => f.Severity == FindingSeverity.Error);
-    public bool Selected { get; set; } = failed is null && !findings.Any(f => f.Severity == FindingSeverity.Error);
 }
 internal sealed class PluginRow(PluginInfo plugin, UpdateRow? update)
 {
@@ -52,15 +51,19 @@ internal sealed class PluginManagerViewModel
 {
     public List<PluginRow> Plugins { get; } = [];
     public List<UpdateRow> Updates { get; } = [];
-    public bool CanApply => Selected.Count > 0;
+    public bool CanApply => Installable.Count > 0;
     /// <summary>
     /// A plugin that needs attention comes first; updates count only when they can be installed, so an update the
     /// project rules out neither turns the button green nor red.
     /// </summary>
     public ManagerStatus Status => Plugins.Any(p => p.NeedsAttention) ? ManagerStatus.NeedsAttention
         : Updates.Any(u => !u.HasError) ? ManagerStatus.UpdatesAvailable : ManagerStatus.Normal;
-    public IReadOnlyList<UpdateCandidate> Selected => Updates.Where(r => r.Selected && !r.HasError).Select(r => r.Candidate).ToArray();
-    public string OkText => $"Update {Selected.Count} plugin{(Selected.Count == 1 ? "" : "s")}";
+    /// <summary>
+    /// The updates the Update button installs: every listed one without an error, also one that failed before. A single
+    /// version is installed from the plugin's details.
+    /// </summary>
+    public IReadOnlyList<UpdateCandidate> Installable => Updates.Where(r => !r.HasError).Select(r => r.Candidate).ToArray();
+    public string OkText => $"Update {Installable.Count} plugin{(Installable.Count == 1 ? "" : "s")}";
     public PluginManagerViewModel(IReadOnlyList<PluginInfo> plugins, IReadOnlyList<UpdateCandidate> candidates,
         IReadOnlyList<PluginUpdateTarget> targets, UpdateCache? cache, Func<UpdateCandidate, IReadOnlyList<Finding>> findings)
     {
@@ -97,19 +100,6 @@ internal sealed class PluginManagerViewModel
         });
     }
     public PluginRow? Find(string slug) => Plugins.FirstOrDefault(p => p.Plugin.Slug == slug);
-
-    /// <summary>
-    /// Leaves out the updates the user left out in <paramref name="previous"/>, the model this one replaces, so refreshing
-    /// the list does not check them again. A newer version of a left-out plugin is offered checked, and so is one that was
-    /// unchecked only because of an error or an earlier failure, which the user could not have left out.
-    /// </summary>
-    public void KeepUnselected(PluginManagerViewModel? previous)
-    {
-        if (previous is null) return;
-        var unselected = previous.Updates.Where(u => !u.Selected && !u.HasError && u.Failed is null)
-            .Select(u => (u.Candidate.Slug, u.Candidate.NewVersion)).ToHashSet();
-        foreach (var update in Updates.Where(u => unselected.Contains((u.Candidate.Slug, u.Candidate.NewVersion)))) update.Selected = false;
-    }
 
     /// <summary>The update state shown on the update icon of an updatable plugin; null for a plugin that is not.</summary>
     public static string? UpdateState(PluginRow row) =>

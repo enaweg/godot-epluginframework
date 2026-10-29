@@ -41,49 +41,35 @@ public class PluginManagerViewModelTests
     }
 
     [TestCase]
-    public static void BlockedAndFailedVersionsAreNotPreselected()
+    public static void UpdateInstallsEveryUpdateWithoutAnError()
     {
         var cache = new UpdateCache(); cache.FailedUpdates["failed"] = [new("2.0", "build failed", DateTimeOffset.UtcNow)];
         var candidates = new[] { Candidate("blocked"), Candidate("failed"), Candidate("healthy") };
         var targets = candidates.Select(c => new PluginUpdateTarget(c.Slug, c.PluginName, c.InstalledVersion, c.SourceUrl, "/unused", IsBlocked: c.Slug == "blocked")).ToArray();
         var model = new PluginManagerViewModel([], candidates, targets, cache, _ => []);
-        Assertions.AssertInt(model.Selected.Count).IsEqual(1);
-        Assertions.AssertString(model.Selected[0].Slug).IsEqual("healthy");
+        Assertions.AssertThat(model.Installable.Select(c => c.Slug).ToArray()).ContainsExactly("failed", "healthy");
+        Assertions.AssertString(model.OkText).IsEqual("Update 2 plugins");
+        Assertions.AssertBool(model.CanApply).IsTrue();
         Assertions.AssertBool(model.Updates.Single(r => r.Candidate.Slug == "blocked").HasError).IsTrue();
+        // the details still say that it failed before
         Assertions.AssertObject(model.Updates.Single(r => r.Candidate.Slug == "failed").Failed!).IsNotNull();
     }
-    [TestCase]
-    public static void UpdatesLeftOutStayLeftOutWhenTheListIsRefreshed()
-    {
-        var candidates = new[] { Candidate("kept"), Candidate("left-out") };
-        var targets = candidates.Select(c => new PluginUpdateTarget(c.Slug, c.PluginName, c.InstalledVersion, c.SourceUrl, "/unused")).ToArray();
-        var before = new PluginManagerViewModel([], candidates, targets, null, _ => []);
-        before.Updates.Single(r => r.Candidate.Slug == "left-out").Selected = false;
-
-        var after = new PluginManagerViewModel([], candidates, targets, null, _ => []);
-        after.KeepUnselected(before);
-        Assertions.AssertThat(after.Selected.Select(c => c.Slug).ToArray()).ContainsExactly("kept");
-
-        // a newer version than the one left out is offered again
-        var newer = new PluginManagerViewModel([], [Candidate("kept"), Candidate("left-out") with { NewVersion = "3.0" }], targets, null, _ => []);
-        newer.KeepUnselected(after);
-        Assertions.AssertThat(newer.Selected.Select(c => c.Slug).ToArray()).ContainsExactly("kept", "left-out");
-    }
 
     [TestCase]
-    public static void AnUpdateUncheckedByAnErrorIsCheckedOnceTheErrorIsGone()
+    public static void AnUpdateIsInstallableOnceItsErrorIsGone()
     {
         var candidates = new[] { Candidate("disabled"), Candidate("blocked") };
         PluginUpdateTarget Target(UpdateCandidate c, bool blocked = false) => new(c.Slug, c.PluginName, c.InstalledVersion, c.SourceUrl, "/unused", IsBlocked: blocked);
         // disabled in the manager, and blocked by a failed activation
         var before = new PluginManagerViewModel([], candidates, [Target(candidates[1], blocked: true)], null, _ => []);
-        Assertions.AssertInt(before.Selected.Count).IsEqual(0);
+        Assertions.AssertInt(before.Installable.Count).IsEqual(0);
+        Assertions.AssertBool(before.CanApply).IsFalse();
 
         // enabled again, and retried successfully
         var after = new PluginManagerViewModel([], candidates, candidates.Select(c => Target(c)).ToArray(), null, _ => []);
-        after.KeepUnselected(before);
 
-        Assertions.AssertThat(after.Selected.Select(c => c.Slug).ToArray()).ContainsExactly("disabled", "blocked");
+        Assertions.AssertThat(after.Installable.Select(c => c.Slug).ToArray()).ContainsExactly("disabled", "blocked");
+        Assertions.AssertString(after.OkText).IsEqual("Update 2 plugins");
     }
 
     [TestCase]
