@@ -1,7 +1,7 @@
 {
- "commit": "7108433c82ef3c67c453aa0c9d9a4671a11f1d17",
- "date": "2026-11-04T14:58:11Z",
- "covered": 12915,
+ "commit": "2489f40735a3aeeb7a4b54bc61e3b3b2d6202b0b",
+ "date": "2026-11-04T15:03:22Z",
+ "covered": 12906,
  "coverable": 14234,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
@@ -13,7 +13,7 @@
    12
   ],
   "src/eplugin-framework/addons/ePlugin/EPluginPlugin.cs": [
-   205,
+   202,
    342
   ],
   "src/eplugin-framework/addons/ePlugin/EditorPluginExtensions.cs": [
@@ -177,7 +177,7 @@
    9
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Updates.cs": [
-   148,
+   144,
    170
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Welcomes.cs": [
@@ -193,7 +193,7 @@
    1
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EditorHost.cs": [
-   48,
+   47,
    83
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/ExportExclusions.cs": [
@@ -297,7 +297,7 @@
    426
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EditorIcons.cs": [
-   56,
+   55,
    58
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EditorSignalConnections.cs": [
