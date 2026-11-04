@@ -113,6 +113,45 @@ public class UpdatePackageTests
     }
 
     [TestCase]
+    public void AnUpdateSaysWhichSubPluginsItReplacesOrDeletesAndRefusesToDeleteAnEnabledOne()
+    {
+        var installed = Path.Combine(_root, "installed");
+        var stage = Path.Combine(_root, "plugin");
+        void Plugin(string directory, string version)
+        {
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(Path.Combine(directory, "plugin.cfg"), Config(version));
+            File.WriteAllText(Path.Combine(directory, "plugin.gd"), "extends EditorPlugin");
+        }
+        Plugin(installed, "1.0.0");
+        Plugin(Path.Combine(installed, "kept"), "1.0.0");
+        Plugin(Path.Combine(installed, "tools", "dropped"), "1.0.0");
+        Plugin(Path.Combine(installed, "unused"), "1.0.0");
+        // a hidden folder is no sub-plugin for Godot
+        Plugin(Path.Combine(installed, ".demo"), "1.0.0");
+        Plugin(stage, "2.0.0");
+        Plugin(Path.Combine(stage, "kept"), "2.0.0");
+        var candidate = new UpdateCandidate("plugin", "Plugin", "1.0.0", "2.0.0", "https://example.org/releases", null, null, new ZipPackageRef("https://example.org/plugin.zip", "plugin"));
+        var target = new PluginUpdateTarget("plugin", "Plugin", "1.0.0", candidate.SourceUrl, installed);
+        var validator = new AddonPackageValidator();
+
+        // none enabled: the update deletes the sub-plugins the new version no longer has, which the review says
+        var disabled = validator.Validate(new(target, candidate, stage));
+        Assertions.AssertBool(disabled.IsValid).IsTrue();
+        Assertions.AssertThat(disabled.Findings.Where(f => f.Code == "R31").Select(f => f.Message).ToArray()).ContainsExactly(
+            "The new version no longer has the sub-plugin res://addons/plugin/tools/dropped; the update deletes its folder.",
+            "The new version no longer has the sub-plugin res://addons/plugin/unused; the update deletes its folder.");
+
+        // the plugin enabled its sub-plugins: one that would be deleted has to be disabled first
+        var enabled = validator.Validate(new(target with { EnabledSubPlugins = ["kept", "tools/dropped"] }, candidate, stage));
+        Assertions.AssertBool(enabled.IsValid).IsFalse();
+        var r31 = enabled.Findings.Where(f => f.Code == "R31").ToArray();
+        Assertions.AssertString(r31.Single(f => f.Severity == FindingSeverity.Error).Message).Contains("res://addons/plugin/tools/dropped, which is enabled. Disable it first");
+        Assertions.AssertString(r31.Single(f => f.Message.Contains("/kept")).Message).Contains("replaces the enabled sub-plugin res://addons/plugin/kept");
+        Assertions.AssertObject(r31.Single(f => f.Message.Contains("/unused")).Severity).IsEqual(FindingSeverity.Warning);
+    }
+
+    [TestCase]
     public void AStagedPluginCfgThatCannotBeParsedIsReportedInsteadOfThrowing()
     {
         var installed = Path.Combine(_root, "installed");
