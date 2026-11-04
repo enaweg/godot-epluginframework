@@ -299,7 +299,7 @@ project files) keeping their formatting.
 The framework is editor-only, but it lives in the game project. `ExportFilter` (an `EditorExportPlugin` that
 `EPluginPlugin._EnterTree` adds and `_ExitTree` removes; its instance id is kept in Engine metadata, because an assembly
 reload resets the plugin's fields but keeps the export plugin and reloads its script) skips `ExportExclusions.Patterns`
-(`addons/ePlugin/*` and the shared state files) in every export. GodotTools still adds a 1-byte placeholder for each C#
+(`addons/ePlugin/*`, the shared state files and the machine-local `.user` state file) in every export. GodotTools still adds a 1-byte placeholder for each C#
 script. It is not written into `export_presets.cfg`: Godot keeps presets in memory, has no API to change them, and would
 overwrite the file. The README documents the same patterns as a manual exclude filter for exports with the framework
 disabled; keep both in step (`ExportExclusionsTests`).
