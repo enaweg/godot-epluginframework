@@ -134,7 +134,7 @@ restart. Operations that need no reload (including declined licenses or failed b
 Don't use GodotTools' `Internal.IsAssembliesReloadingNeeded` for this: it reported a reload as needed
 with no newer build on disk. Editor restarts go through `IEditorHost.RestartEditor`, which frees GodotTools'
 `HotReloadAssemblyWatcher` first: a focus change while the editor shut down made it reload the updated assembly, which
-crashed Godot 4.7.2 before it started again. It also marks the global undo history as saved right before restarting,
+crashed Godot 4.7.2 before it started again. It also clears the global undo history right before restarting,
 because Godot otherwise asks to save modified resources first (plugins adding autoloads at startup leave it unsaved).
 
 `EGlobal` (`addons/ePlugin/Internal/EGlobal.cs`) is an internal singleton owning all plugin state. Its partials split it by
@@ -327,7 +327,7 @@ folder below `res://addons` with `/` (`acme/tool`), which `EditorInterface.SetPl
 top-level slug is its folder name as before; validate slugs with `AddonLayout.IsValidSlug` (state files
 `IsStoredSlug`), never by rejecting `/`. A `plugin.cfg` below a plugin's own is a sub-plugin: Godot does not list it,
 the manager lists it only while enabled (`PluginInfo.PartOf`), `IsEPlugin` does not count its script for the outer
-plugin, and it belongs to the outer plugin's package (R29). Plugins and add-ons with a `/` in their slug are never update
+plugin, and it belongs to the outer plugin's package (R31). Plugins and add-ons with a `/` in their slug are never update
 targets (`CollectUpdateTargets`), because staging, journals and recovery address a package's folder directly below
 `res://addons`; the state store writes their entries to `nested*` lists, which older versions skip (they refused `/`).
 
