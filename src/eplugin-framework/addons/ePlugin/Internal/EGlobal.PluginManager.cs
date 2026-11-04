@@ -134,7 +134,8 @@ internal sealed partial class EGlobal
                 FailedAttempt = _stateStore?.GetLocal(slug),
                 Recipe = context is { IsRecipeCreated: true } ? context.Builder.PluginRecipe : null,
                 LocalPackages = LocalIndex.Matching(slug).Count(),
-                Extensions = NativeExtensionStatus.Read(_host.ProjectRoot, slug, _host.IsExtensionLoaded)
+                Extensions = NativeExtensionStatus.Read(_host.ProjectRoot, slug, _host.IsExtensionLoaded),
+                Repository = PluginRepositoryOf(slug)
             });
         }
         plugins.AddRange(ExtensionAddonSlugs().Select(ExtensionAddonInfo));

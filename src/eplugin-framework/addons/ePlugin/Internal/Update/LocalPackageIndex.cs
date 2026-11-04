@@ -162,9 +162,12 @@ internal static class LocalPackageIndexer
 /// </summary>
 internal static class LocalDirectorySource
 {
-    /// <summary>One candidate per version, newest first; of several files with the same version the newest file wins.</summary>
+    /// <summary>
+    /// One candidate per version, newest first; of several files with the same version the newest file wins. None for a
+    /// plugin folder no package may replace (<see cref="PluginUpdateTarget.PackagesAllowed"/>).
+    /// </summary>
     public static IReadOnlyList<UpdateCandidate> Versions(LocalPackageIndex index, PluginUpdateTarget target) =>
-        index.Matching(target.Slug)
+        !target.PackagesAllowed ? [] : index.Matching(target.Slug)
             .Select(p => (Package: p, Version: SemVer.TryParse(p.Version, out var v) ? v : default))
             .OrderByDescending(p => p.Version).ThenByDescending(p => p.Package.ModifiedUtc)
             .DistinctBy(p => p.Version.Key)

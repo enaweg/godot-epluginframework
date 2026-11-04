@@ -43,7 +43,8 @@ internal sealed partial class EGlobal
         {
             Version = ExtensionAddonVersion(slug) ?? "", UpdateSite = UpdateSiteOf(slug), Known = known,
             FailedAttempt = _stateStore?.GetLocal(slug),
-            Extensions = NativeExtensionStatus.Read(_host.ProjectRoot, slug, _host.IsExtensionLoaded)
+            Extensions = NativeExtensionStatus.Read(_host.ProjectRoot, slug, _host.IsExtensionLoaded),
+            Repository = PluginRepositoryOf(slug)
         };
     }
 
@@ -51,6 +52,6 @@ internal sealed partial class EGlobal
     private PluginUpdateTarget ExtensionAddonTarget(string slug) =>
         new(slug, KnownPluginOf(slug)?.Name ?? slug, ExtensionAddonVersion(slug) ?? "", null,
             ProjectSettings.GlobalizePath(_host.PluginDirectory(slug)), _stateStore?.IsBlocked(slug) == true, _stateStore?.IsReadOnly != false,
-            ExtensionAddonVersion(slug), UpdateSiteOf(slug), KnownPluginOf(slug)?.UpdateUrl, PluginKind.GDExtensionAddon);
+            ExtensionAddonVersion(slug), UpdateSiteOf(slug), KnownPluginOf(slug)?.UpdateUrl, PluginKind.GDExtensionAddon, PluginRepositoryOf(slug));
 }
 #endif

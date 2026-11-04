@@ -25,7 +25,7 @@ internal sealed class PluginRow(PluginInfo plugin, UpdateRow? update)
     public UpdateRow? Update { get; } = update;
     public bool IsEPlugin => Plugin.Kind is PluginKind.Framework or PluginKind.EPlugin;
     public bool IsUpdatable => Plugin.UpdateUrl is not null || Plugin.UpdateSite is not null || Plugin.Known is not null ||
-                               Plugin.LocalPackages > 0 || Update is not null;
+                               Plugin.LocalPackages > 0 || Update is not null || Plugin.Repository?.SubmoduleSite is not null;
     public bool HasUpdate => Update is not null;
     /// <summary>Godot loads a GDExtension add-on whatever is enabled, so it has nothing to enable or disable.</summary>
     public bool CanToggle => !Plugin.Missing && Plugin.Kind != PluginKind.GDExtensionAddon;
@@ -77,6 +77,8 @@ internal sealed class PluginManagerViewModel
                 if (candidate.SourceUrl is not null && !target.UpdateUrls.Contains(candidate.SourceUrl))
                     messages.Add(new("source_changed", FindingSeverity.Error, "The plugin's update site changed or was removed; check for updates again."));
                 if (target.IsBlocked || target.StoreReadOnly) messages.Add(new("R17", FindingSeverity.Error, "Resolve the plugin's problem under Needs attention first."));
+                if (candidate.Package is not SubmodulePackageRef && target.Repository?.PackageRefusal("The plugin folder") is { } refusal)
+                    messages.Add(new("R29", FindingSeverity.Error, refusal));
                 if (target.RecordedVersion is not null && !SemVer.Same(target.RecordedVersion, target.InstalledVersion))
                     messages.Add(new("recorded_version", FindingSeverity.Info, "Last working version: " + target.RecordedVersion));
             }
@@ -140,9 +142,24 @@ internal sealed class PluginManagerViewModel
     public static string? VersionSource(VersionOption option) => option.Candidate switch
     {
         { Package: LocalZipPackageRef local } => "Local package: " + local.Path,
+        { SourceUrl: { } url, Package: SubmodulePackageRef tag } => $"Checked out in the submodule from its remote {url}, tag {tag.Tag}, commit {SubmoduleSource.Short(tag.Commit)}",
         { SourceUrl: { } url, Package: GitPackageRef git } => $"From the update site {url}, commit {git.Commit[..Math.Min(git.Commit.Length, 10)]}",
         { SourceUrl: { } url } => "From the update site " + url,
         _ => null
+    };
+
+    /// <summary>
+    /// What the details say about a plugin folder under git version control, as BBCode ending in a line break; empty for
+    /// a plain folder.
+    /// </summary>
+    public static string RepositoryLine(PluginRepository? repository) => repository switch
+    {
+        { Kind: RepositoryKind.Submodule, SubmoduleSite: { } remote } =>
+            $"[b]Git submodule:[/b] updated by checking out the version tags of its remote {Escape(remote)}. Commit the changed submodule in " +
+            "your project's repository afterwards.\n",
+        { Kind: RepositoryKind.Submodule } =>
+            $"[color={TextColors.Warning}]Git submodule:[/color] it has no remote to update from; update it with git.\n",
+        _ => repository?.PackageRefusal("The plugin folder") is { } refusal ? $"[color={TextColors.Warning}]Version control:[/color] {Escape(refusal)}\n" : ""
     };
 
     /// <summary>Why the selected version cannot be installed, or null when it can.</summary>
@@ -240,6 +257,11 @@ internal sealed class PluginManagerViewModel
         var parts = new List<string>();
         var installed = results.Where(r => r.Outcome is UpdateOutcome.Completed or UpdateOutcome.AwaitingReload).SelectMany(r => r.Packages).ToArray();
         if (installed.Length > 0) parts.Add($"Installed {Names(installed)}.");
+        // The project's repository records the commit of each submodule, which the user commits with the project.
+        var submodules = installed.Where(p => p.Candidate.Package is SubmodulePackageRef).ToArray();
+        if (submodules.Length > 0)
+            parts.Add($"Commit the changed submodule{(submodules.Length == 1 ? "" : "s")} of {string.Join(", ", submodules.Select(p => p.Candidate.PluginName))} " +
+                      "in your project's repository.");
         foreach (var result in results)
         {
             if (result.Outcome is null) parts.Add($"Skipped {Names(result.Packages)}: {Reason(result.Failure, "it was refused")}. Its files were not changed.");
@@ -347,15 +369,20 @@ internal sealed class PluginManagerViewModel
         if (kept is not null) text.Append(KeptUpdateSection(kept));
 
         text.Append("\n[b]Update[/b]\n");
+        text.Append(RepositoryLine(plugin.Repository));
+        // A submodule is updated from its remote only, whatever update sites plugin.cfg, the project or the built-in list name.
+        var submodule = plugin.Repository?.Kind == RepositoryKind.Submodule;
         if (row.Update is { } update)
         {
             text.Append(CultureInfo.CurrentCulture, $"{Escape(update.Candidate.InstalledVersion)} → [color={TextColors.Success}]{Escape(update.Candidate.NewVersion)}[/color]\n");
             if (update.Candidate.Package is LocalZipPackageRef local) Line("Local package", local.Path);
+            else if (update.Candidate.Package is SubmodulePackageRef tag) Line("Tag", $"{tag.Tag} ({SubmoduleSource.Short(tag.Commit)})");
             else Link("Update site", update.Candidate.SourceUrl);
             if (update.Candidate.ReleaseUrl is not null) Link("Release", update.Candidate.ReleaseUrl);
             foreach (var finding in update.Findings) text.Append(CultureInfo.CurrentCulture, $"[color={Color(finding.Severity)}]{finding.Severity}:[/color] {Escape(finding.Message)}\n");
             if (update.Failed is { } failed) text.Append(CultureInfo.CurrentCulture, $"[color={TextColors.Error}]Previously failed {failed.Utc:u}:[/color] {Escape(failed.Reason)}\n");
         }
+        else if (submodule) { /* RepositoryLine named its remote. */ }
         else if ((plugin.UpdateSite ?? plugin.UpdateUrl ?? plugin.Known?.UpdateUrl) is { } site) Link("Update site", site);
         else if (plugin.Kind == PluginKind.GDExtensionAddon)
             text.Append("Not updatable: the add-on has no plugin.cfg to name an update site, the project sets none, and ePlugin's " +
@@ -367,21 +394,21 @@ internal sealed class PluginManagerViewModel
             text.Append("ePlugin does not know the installed version, because the add-on has no plugin.cfg and ePlugin did not " +
                         "install it, so no update is offered. Install the latest version, which is preselected below, or choose another; " +
                         "from then on, updates are found.\n");
-        if (plugin.UpdateSite is not null)
+        if (plugin.UpdateSite is not null && !submodule)
         {
             var replaced = plugin.UpdateUrl is not null && plugin.UpdateUrl != plugin.UpdateSite;
             text.Append(replaced ? "The project sets this update site. It replaces plugin.cfg's update_url, which is used when it does not work:\n"
                 : "The project sets this update site.\n");
             if (replaced) Link("plugin.cfg update_url", plugin.UpdateUrl);
         }
-        if (plugin.Known is { } known)
+        if (plugin.Known is { } known && !submodule)
         {
             if (plugin.UpdateSite is null && plugin.UpdateUrl is null)
                 text.Append("This update site comes from ePlugin's built-in list.\n");
             else if (known.UpdateUrl != plugin.UpdateSite && known.UpdateUrl != plugin.UpdateUrl)
                 Link("Built-in update site", known.UpdateUrl);
         }
-        if (plugin.LocalPackages > 0) Line("Local packages", plugin.LocalPackages.ToString(CultureInfo.CurrentCulture));
+        if (plugin.LocalPackages > 0 && !submodule) Line("Local packages", plugin.LocalPackages.ToString(CultureInfo.CurrentCulture));
 
         if (plugin.Recipe is { } recipe)
         {

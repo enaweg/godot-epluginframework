@@ -45,6 +45,22 @@ internal sealed class UpdatePluginJournal
     /// installed version's accepted license stays, also when the update is rolled back. Null when none was asked about.
     /// </summary>
     public string? AcceptedLicense { get; set; }
+    /// <summary>
+    /// The plugin folder is a git submodule, updated by checking out <see cref="SubmoduleJournal.NewCommit"/> and rolled
+    /// back by checking out <see cref="SubmoduleJournal.OldCommit"/> (<see cref="SubmoduleSwap"/>); null for a package
+    /// update. Journals without it are package updates.
+    /// </summary>
+    public SubmoduleJournal? Submodule { get; set; }
+}
+/// <summary>The commits of a submodule update, see <see cref="UpdatePluginJournal.Submodule"/>.</summary>
+internal sealed class SubmoduleJournal
+{
+    /// <summary>The commit the submodule was at before the update.</summary>
+    public string OldCommit { get; set; } = "";
+    /// <summary>The commit of the version tag the update checks out.</summary>
+    public string NewCommit { get; set; } = "";
+    /// <summary>The version tag of the submodule's remote, for messages.</summary>
+    public string Tag { get; set; } = "";
 }
 internal sealed record JournalBuild(string Name, int ExitCode, string LogFile);
 internal sealed class UpdateJournal
@@ -122,6 +138,9 @@ internal sealed class UpdateJournal
             if (PackageFiles.Normalize(plugin.Slug) != plugin.Slug || plugin.Slug.Contains('/') ||
                 !(plugin.OldVersion.Length == 0 || SemVer.TryParse(plugin.OldVersion, out _)) || !SemVer.TryParse(plugin.NewVersion, out _))
                 throw new InvalidDataException("Invalid plugin in update journal.");
+        foreach (var submodule in journal.Plugins.Select(p => p.Submodule).OfType<SubmoduleJournal>())
+            if (!GitSource.IsCommit(submodule.OldCommit) || !GitSource.IsCommit(submodule.NewCommit) || submodule.Tag is null || submodule.Tag.Any(char.IsControl))
+                throw new InvalidDataException("Invalid submodule update in update journal.");
         foreach (var path in journal.ProjectFiles)
             if (PackageFiles.Normalize(path) != path || path.Contains('/')) throw new InvalidDataException("Invalid project backup path.");
         foreach (var recipe in journal.Recipes)

@@ -363,6 +363,11 @@ built-in list), checks, staging, groups, plugin state attempts, restarts and rec
   never give the plugins-only build (`PluginsOnlyBuild`, which decides whether an update that breaks only project code
   is kept) the editor's `OutDir`.
 - `UpdateRecovery` stays independent of `EGlobal` and recipe execution.
+- Packages never contain `.git`, so no swap may replace a plugin folder that holds a repository
+  (`AddonFiles.RefuseRepository`, R29). `PluginRepository.Detect` tells submodules, clones, folders inside another
+  repository and folders holding one apart; a submodule is updated through git from its remote's version tags
+  (`SubmoduleSource`, `SubmoduleSwap`: checkout of the tag's commit, rollback and recovery check the old one out), and
+  the user commits the changed submodule in the project's repository.
 - Journal readers stay additive and backward compatible. Bump `IndexerVersion` when `LocalPackageIndexer.Read` changes
   what it extracts. Regenerate `KnownPlugins.Data.cs` with the tools, never by hand.
 

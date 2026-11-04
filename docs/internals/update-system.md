@@ -217,7 +217,15 @@ packages made for Godot 3 (R27, `Godot3Evidence`: GDNative files or GDScript tha
 reason for a release of the same version. The manager deletes a staged batch it does not install (`UpdateFlow.Clear`); since an assembly reload or a
 crash forgets it, `ResumeUpdates` deletes folders without a journal last written more than six hours ago
 (`UpdateJournals.AbandonedStaging`). A plugin folder that is a link (to a working copy) is refused for every kind (R20), and both swaps refuse it
-too (`AddonFiles.RefuseLink`), since moving it would replace the link with the downloaded copy. Version control systems such as Perforce sync files
+too (`AddonFiles.RefuseLink`), since moving it would replace the link with the downloaded copy. Packages never contain
+`.git` (`PackageFiles.Skip`), so a swap would move a repository in the folder into the backup that the commit deletes:
+`PluginRepository.Detect` (pure, file reads only) tells a submodule (a `.git` registered in the superproject's
+`.gitmodules`), a clone or worktree (any other `.git` of its own), a folder inside another repository below the project
+root, and one that contains a repository. `PluginUpdateTarget.Repository` carries it; every kind but `None` is refused
+for packages by the validator (R29, which looks at the folder itself when the target has none), by `UpdateApplier.Apply`
+before the marker, by the manager's rows and by `LocalDirectorySource`, and both swaps refuse a folder holding a `.git`
+(`AddonFiles.RefuseRepository`) on install and restore; early recovery asks for a manual repair instead of copying a
+backup over one. Version control systems such as Perforce sync files
 read-only, which Windows refuses to delete or overwrite: plugin, project, backup and staging files are deleted and
 overwritten only through `AddonFiles.DeleteTree`, `DeleteFile` and `Overwrite`, which clear that attribute first. Staging and
 the reviews can take minutes, so `EGlobal.UpdateApplyBlocker` is asked again before anything is written: by `UpdateFlow`
@@ -301,6 +309,47 @@ the new copy (`ProjectBackup.Find`). Both restore the files the backup folder ho
 journal saved after the replacement may not list yet. Reconcile leaves the recipes of plugins in another active journal,
 in a journal kept before reconciling whose marker Retry still resumes, or rolled back since the assembly was loaded
 alone (`UntouchedRecipes`).
+
+## Git submodules
+
+A plugin folder that `PluginRepository.Detect` finds to be a submodule is updated through git, never from a package.
+Its `PluginUpdateTarget.UpdateUrls` is only `PluginRepository.SubmoduleSite` (the `origin` URL from the submodule's git
+config, else the `.gitmodules` URL), so caches, `source_changed` and `AppliedRevision` work as for any site, and
+`UpdateService.FirstWorkingSiteAsync` asks `IUpdateSourceFactory.ForSubmodule` for its source instead of `Create(url)`.
+`SubmoduleSource` lists the version tags of `git ls-remote --tags origin` in the submodule (`GitSource.VersionTags`, the
+same rules as a Git source) as candidates with a `SubmodulePackageRef` (commit and tag; cache discriminator `submodule`,
+which an older framework cannot read and drops with the rest of its disposable cache). It runs through a `GitRunner` that
+allows the file protocol, since the remote is the project's own configuration (a shared folder, say) rather than a URL
+a plugin names; `protocol.ext` stays off, and fetches never recurse into submodules. `GitRunner` drops `GIT_DIR` and the
+other repository variables an editor may inherit, so every command works on its working directory.
+
+Staging (`PackageFetcher`, off the editor thread) runs `SubmoduleSource.StageAsync`: it reads HEAD and the tracked
+changes (`status --untracked-files=no`, so Godot's `.uid` and `.import` files do not count), fetches the remote's
+branches (`--no-tags`, as a local tag that differs would fail the fetch) and the tag into `FETCH_HEAD`, refuses a tag
+that moved since the check, and looks for commits HEAD reaches that are on no `refs/remotes/origin/*` branch and in no
+tag the remote has for the same commit (a local tag does not publish anything; above 300 such tags all local tags count).
+It writes the commit's files with `git archive` and `SubmoduleFiles.Extract` (regular files only, `PackageFiles` limits
+and paths) into the staging folder, so `AddonPackageValidator` validates them like a package; the working copy is not
+touched. Uncommitted changes, unpublished commits and a `.gitmodules` in the new version (nested submodules, which the
+checkout would leave alone) are R30 errors. The validator skips R9 and R25 (a submodule's `update_url` cannot move its
+updates) and adds R29 as information, telling the user to commit the changed submodule. `ValidatedPackage.SubmoduleHead`
+keeps the HEAD that staging checked.
+
+`UpdateApplier.Apply` refuses, before the marker, a submodule package whose folder is no longer a submodule, is no
+longer at `SubmoduleHead` or has tracked changes, and journals `UpdatePluginJournal.Submodule` (old commit, new commit,
+tag; additive, validated as full SHA-1 or SHA-256 ids). For such a plugin `SubmoduleSwap` replaces the kind's swap, also
+for GDExtension plugins and ePlugins with one: `Install` writes the old commit's files to `backup/<slug>` (through
+`.partial`, for the interim bridge, `NativeExtensionWorkflow`'s comparison and a manual repair), then checks the new
+commit out as a detached HEAD (`--no-recurse-submodules`; a repeated install at the new commit with a backup does
+nothing). `Restore` deletes the files the bridge preserved (untracked in the new version, they would block the
+checkout), refuses tracked changes (a kept update the user edited goes to `update_rollback_failed` and Retry), checks
+the old commit out, and moves the backup aside like `AddonFileSwap`. Git runs synchronously there (`SubmoduleGit`,
+local commands only), on the editor thread like the file swaps. Everything else (reconcile, builds, verification,
+`Commit`, `Keep`, restarts) is unchanged; `FinishCommit` logs the commit to make and
+`PluginManagerViewModel.UpdateSummary` names the changed submodules. Early recovery reads `submodule.oldCommit` and
+`preserved` and checks the old commit out instead of copying the backup. A framework version from before submodule
+updates would treat such a journal as a package update and restore the backup over the folder, deleting the submodule's
+`.git` file (its repository lives in the superproject's `.git/modules`, so `git submodule update` brings it back).
 
 ## Installing new add-ons
 

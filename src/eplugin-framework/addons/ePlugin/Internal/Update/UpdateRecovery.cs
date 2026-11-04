@@ -19,7 +19,11 @@ internal static class UpdateRecovery
         public string Slug { get; set; } = "";
         public string OldVersion { get; set; } = "";
         public bool SwapStarted { get; set; }
+        public List<string> Preserved { get; set; } = [];
+        /// <summary>Set for a git submodule, which is restored by checking out its old commit rather than from the backup.</summary>
+        public Submodule? Submodule { get; set; }
     }
+    private sealed class Submodule { public string OldCommit { get; set; } = ""; }
     private sealed class Snapshot { public int SchemaVersion { get; set; } = 1; public List<string> Directories { get; set; } = []; }
     private sealed class Recipe
     {
@@ -76,6 +80,14 @@ internal static class UpdateRecovery
                     if (plugin.SwapStarted && !Directory.Exists(backup) &&
                         (!File.Exists(Path.Combine(installed, "plugin.cfg")) || !HasVersion(Path.Combine(installed, "plugin.cfg"), plugin.OldVersion)))
                         throw new IOException("Missing backup for " + plugin.Slug);
+                    if (plugin.Submodule is { } submodule)
+                    {
+                        if (!GitSource.IsCommit(submodule.OldCommit) || plugin.Preserved.Any(p => p.Split('/', '\\').Contains("..")))
+                            throw new InvalidDataException("Invalid submodule update of " + plugin.Slug);
+                    }
+                    // Copying the backup over it would delete the repository; no swap replaces such a folder either.
+                    else if (Directory.Exists(backup) && PluginRepository.HoldsRepository(installed))
+                        throw new IOException($"{installed} holds a git repository, which restoring the backup would delete");
                 }
                 // Restored already, by an earlier start or a rollback whose build failed: the project may have been repaired since.
                 var (projectBackup, projectFiles) = journal.KeepProjectFiles ? ("", []) : ProjectBackup.Find(folder, journal.ProjectFiles);
@@ -91,6 +103,12 @@ internal static class UpdateRecovery
                     var backup = Inside(Path.Combine(folder, "backup"), plugin.Slug);
                     if (!Directory.Exists(backup)) continue;
                     var installed = Inside(Path.Combine(projectRoot, "addons"), plugin.Slug);
+                    if (plugin.Submodule is { } submodule)
+                    {
+                        // The backup was written before the checkout; checking out the old commit is repeatable too.
+                        RestoreSubmodule(installed, plugin.Preserved, submodule.OldCommit);
+                        continue;
+                    }
                     AddonFiles.DeleteTree(installed);
                     // Copy, rather than consume, backups so interrupted early recovery is repeatable.
                     Copy(backup, installed);
@@ -153,6 +171,20 @@ internal static class UpdateRecovery
             }
         }
         return Outcome.Continue;
+    }
+    /// <summary>Checks out the commit a submodule had before the update; refuses uncommitted changes, which it would mix in.</summary>
+    private static void RestoreSubmodule(string installed, IReadOnlyList<string> preserved, string commit)
+    {
+        var git = new GitRunner(allowFileProtocol: true);
+        foreach (var path in preserved.OrderByDescending(p => p.Length))
+        {
+            var full = Inside(installed, path);
+            if (Directory.Exists(full)) AddonFiles.DeleteTree(full);
+            else AddonFiles.DeleteFile(full);
+        }
+        if (SubmoduleGit.Head(git, installed).Equals(commit, StringComparison.OrdinalIgnoreCase)) return;
+        if (SubmoduleGit.Changes(git, installed) is { Count: > 0 } changes) throw new IOException(SubmoduleSource.LocalChanges(installed, changes).Message);
+        SubmoduleGit.Checkout(git, installed, commit);
     }
     private static void Write(string path, JsonObject json) => AtomicFile.Write(path, stream => JsonSerializer.Serialize(stream, json, Options));
     private static void Slug(string slug) { if (slug.Contains('/') || slug.Contains('\\')) throw new InvalidDataException("Invalid addon slug."); Inside("/", slug); }

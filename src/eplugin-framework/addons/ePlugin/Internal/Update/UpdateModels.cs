@@ -14,6 +14,7 @@ namespace Enaweg.Plugin.Internal.Update;
 [JsonDerivedType(typeof(ZipPackageRef), "zip")]
 [JsonDerivedType(typeof(GitPackageRef), "git")]
 [JsonDerivedType(typeof(LocalZipPackageRef), "local-zip")]
+[JsonDerivedType(typeof(SubmodulePackageRef), "submodule")]
 internal abstract record UpdatePackageRef;
 /// <param name="Alternatives">
 /// The other packages of the same version: ZIPs of the release named as much like the add-on (see
@@ -23,6 +24,11 @@ internal abstract record UpdatePackageRef;
 /// </param>
 internal sealed record ZipPackageRef(string Url, string ExpectedName, IReadOnlyList<string>? Alternatives = null) : UpdatePackageRef;
 internal sealed record GitPackageRef(string Repository, string Path, string Commit) : UpdatePackageRef;
+/// <summary>
+/// A version tag of a git submodule's remote: the update checks out <paramref name="Commit"/> in the submodule instead of
+/// replacing its files (see <see cref="SubmoduleSource"/>).
+/// </summary>
+internal sealed record SubmodulePackageRef(string Commit, string Tag) : UpdatePackageRef;
 /// <summary>A ZIP file found by indexing one of the user's local directories.</summary>
 internal sealed record LocalZipPackageRef(string Path) : UpdatePackageRef;
 /// <param name="UpdateUrl">The plugin.cfg update_url; null when only local directories can update the plugin.</param>
@@ -32,16 +38,30 @@ internal sealed record LocalZipPackageRef(string Path) : UpdatePackageRef;
 /// What the editor knows of the installed plugin: <see cref="PluginKind.Framework"/>, <see cref="PluginKind.EPlugin"/>, or
 /// <see cref="PluginKind.Unknown"/> for every other plugin, whose kind validation reads from its files.
 /// </param>
+/// <param name="Repository">
+/// How the plugin folder is under git version control (<see cref="PluginRepository.Detect"/>); null when it was not looked
+/// at, in which case validation looks at the folder itself.
+/// </param>
 internal sealed record PluginUpdateTarget(string Slug, string Name, string InstalledVersion, string? UpdateUrl,
     string Directory, bool IsBlocked = false, bool StoreReadOnly = false, string? RecordedVersion = null,
-    string? OverrideUrl = null, string? KnownUrl = null, PluginKind Kind = PluginKind.Unknown)
+    string? OverrideUrl = null, string? KnownUrl = null, PluginKind Kind = PluginKind.Unknown, PluginRepository? Repository = null)
 {
     /// <summary>
-    /// The update sites to try, in order: the project's, the plugin.cfg update_url, then the built-in one. A candidate
-    /// found at any of them belongs to the plugin. Empty when only local directories can update the plugin.
+    /// Whether packages may replace the plugin folder: not when it is a git submodule, a clone, part of another repository
+    /// or holds one (see <see cref="PluginRepository"/>).
     /// </summary>
-    public IReadOnlyList<string> UpdateUrls => new[] { OverrideUrl, UpdateUrl, KnownUrl }
-        .Where(url => !string.IsNullOrWhiteSpace(url)).Select(url => url!).Distinct(StringComparer.Ordinal).ToArray();
+    public bool PackagesAllowed => Repository is null or { Kind: RepositoryKind.None };
+
+    /// <summary>
+    /// The update sites to try, in order: the project's, the plugin.cfg update_url, then the built-in one. A candidate
+    /// found at any of them belongs to the plugin. Empty when only local directories can update the plugin. A git
+    /// submodule has only its remote (<see cref="PluginRepository.SubmoduleSite"/>): it is updated through git, never
+    /// from a package of another site.
+    /// </summary>
+    public IReadOnlyList<string> UpdateUrls => Repository is { Kind: RepositoryKind.Submodule } submodule
+        ? submodule.SubmoduleSite is { } remote ? [remote] : []
+        : new[] { OverrideUrl, UpdateUrl, KnownUrl }
+            .Where(url => !string.IsNullOrWhiteSpace(url)).Select(url => url!).Distinct(StringComparer.Ordinal).ToArray();
 
     /// <summary>
     /// A GDExtension add-on ePlugin did not install: nothing names its version, so no release counts as an update of it,
@@ -82,7 +102,13 @@ internal interface IVersionListSource
     /// <summary>One candidate per published version; the order is not defined.</summary>
     Task<IReadOnlyList<UpdateCandidate>> ListAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct);
 }
-internal interface IUpdateSourceFactory { IUpdateSource Create(string url); }
+internal interface IUpdateSourceFactory
+{
+    IUpdateSource Create(string url);
+
+    /// <summary>The source of a git submodule plugin: the version tags of its remote.</summary>
+    IUpdateSource ForSubmodule(PluginRepository repository) => new UnsupportedUpdateSource(repository.SubmoduleSite ?? repository.Directory);
+}
 internal sealed class UnsupportedUpdateSource(string url) : IUpdateSource
 {
     public Task<UpdateCandidate?> CheckAsync(PluginUpdateTarget target, UpdateCheckOptions options, CancellationToken ct) =>
@@ -128,6 +154,12 @@ internal sealed class UpdateSourceFactory(UpdateHttp? http = null, IGitRunner? g
             return key.EndsWith(".git", StringComparison.Ordinal) ? key[..^4] : key;
         }
     }
+
+    /// <summary>
+    /// A submodule's own remote may be a local path (a shared folder, a mirror), which the project configured itself, so
+    /// unlike an update_url the file protocol is allowed for it.
+    /// </summary>
+    public IUpdateSource ForSubmodule(PluginRepository repository) => new SubmoduleSource(git ?? new GitRunner(allowFileProtocol: true), repository);
 
     public IUpdateSource Create(string url)
     {

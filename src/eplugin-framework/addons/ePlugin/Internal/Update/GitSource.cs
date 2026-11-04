@@ -72,9 +72,10 @@ internal sealed class GitRunner(bool allowFileProtocol = false) : IGitRunner
     public async Task<GitOutcome> RunAsync(string directory, IReadOnlyList<string> arguments, CancellationToken ct, bool trace = false)
     {
         var batchSsh = !await HasCustomSsh(directory, ct).ConfigureAwait(false);
-        // A fetch transfers the commit's trees and a checkout its blobs, which take long on a slow connection.
-        return await StartAsync(directory, arguments, arguments.Contains("checkout") || arguments.Contains("fetch") ? 300 : 60, batchSsh, trace, ct)
-            .ConfigureAwait(false);
+        // A fetch transfers the commit's trees and a checkout its blobs, which take long on a slow connection; an archive
+        // writes a whole commit.
+        return await StartAsync(directory, arguments, arguments.Contains("checkout") || arguments.Contains("fetch") || arguments.Contains("archive") ? 300 : 60,
+            batchSsh, trace, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -104,6 +105,10 @@ internal sealed class GitRunner(bool allowFileProtocol = false) : IGitRunner
         var start = new ProcessStartInfo("git") { WorkingDirectory = directory, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
         foreach (var value in new[] { "-c", "protocol.file.allow=" + (allowFileProtocol ? "always" : "never"), "-c", "protocol.ext.allow=never", "-c", "protocol.version=2" }.Concat(arguments)) start.ArgumentList.Add(value);
         start.Environment["GIT_TERMINAL_PROMPT"] = "0";
+        // An editor started from a git hook or a script inherits these, which would point every command at that repository
+        // instead of its working directory's.
+        foreach (var variable in new[] { "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY", "GIT_PREFIX" })
+            start.Environment.Remove(variable);
         if (batchSsh) start.Environment["GIT_SSH_COMMAND"] = "ssh -o BatchMode=yes";
         if (trace) start.Environment["GIT_TRACE_PACKET"] = "1";
         Process? started;
@@ -151,24 +156,32 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
     }
     /// <summary>One candidate per version tag, announcing the tag's version; nothing is fetched.</summary>
     private UpdateCandidate[] TagCandidates(string[][] refs, PluginUpdateTarget target) =>
+        VersionTags(refs).Select(c => new UpdateCandidate(target.Slug, target.Name, target.InstalledVersion, c.Version.ToString(),
+            target.UpdateUrl, null, c.Commit, new GitPackageRef(url.Repository, url.Path, c.Commit))).ToArray();
+
+    /// <summary>The version tags of <c>ls-remote</c> output, newest first, each with the commit it points to.</summary>
+    internal static (string Tag, string Commit, SemVer Version)[] VersionTags(string[][] refs) =>
         refs.Where(p => IsVersionTag(p[1]))
             .Select(p =>
             {
                 var tag = p[1][10..];
                 if (!SemVer.TryParse(tag, out var version)) throw new InvalidDataException($"Invalid version tag: {tag}.");
-                return (Commit: Tagged(refs, tag), Version: version);
+                return (Tag: tag, Commit: Tagged(refs, tag), Version: version);
             })
             .Where(c => IsCommit(c.Commit))
             // "v1.2" and "1.2.0" name the same version; the highest tag order keeps one of them.
             .OrderByDescending(c => c.Version).DistinctBy(c => c.Version.Key)
-            .Select(c => new UpdateCandidate(target.Slug, target.Name, target.InstalledVersion, c.Version.ToString(),
-                target.UpdateUrl, null, c.Commit, new GitPackageRef(url.Repository, url.Path, c.Commit!))).ToArray();
+            .Select(c => (c.Tag, c.Commit!, c.Version)).ToArray();
+
+    /// <summary>The lines of <c>git ls-remote</c> output as object and ref name.</summary>
+    internal static string[][] ParseRefs(string output) =>
+        output.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => line.Trim().Split('\t')).Where(p => p.Length == 2).ToArray();
     /// <summary>
     /// Deletes a git working folder. git writes its object files read-only, which Windows refuses to delete, and a
     /// checked-out link must not make files outside the folder writable.
     /// </summary>
     private static void DeleteWork(string work) => AddonFiles.DeleteTree(work);
-    private static async Task<GitOutcome> Checked(IGitRunner runner, string directory, string[] args, CancellationToken ct, bool trace = false)
+    internal static async Task<GitOutcome> Checked(IGitRunner runner, string directory, string[] args, CancellationToken ct, bool trace = false)
     {
         var result = await runner.RunAsync(directory, args, ct, trace).ConfigureAwait(false);
         if (result.ExitCode != 0)
@@ -178,9 +191,10 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
         }
         return result;
     }
-    private async Task EnsureVersion(string work, CancellationToken ct)
+    private Task EnsureVersion(string work, CancellationToken ct) => EnsureVersion(git, work, ct);
+    internal static async Task EnsureVersion(IGitRunner git, string directory, CancellationToken ct)
     {
-        var version = await Checked(git, work, ["--version"], ct).ConfigureAwait(false);
+        var version = await Checked(git, directory, ["--version"], ct).ConfigureAwait(false);
         var match = Regex.Match(version.Output, @"\d+\.\d+");
         if (!Version.TryParse(match.Value, out var parsed) || parsed < new Version(2, 25))
             throw new UpdateProblemException($"git {(match.Success ? match.Value + " " : "")}is too old: git update sites need git 2.25 or newer. " +
@@ -189,14 +203,15 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
     private async Task<string[][]> Refs(string work, CancellationToken ct)
     {
         var remote = await Checked(git, work, ["ls-remote", "--heads", "--tags", "--", url.Repository], ct).ConfigureAwait(false);
-        return remote.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => line.Trim().Split('\t')).Where(p => p.Length == 2).ToArray();
+        return ParseRefs(remote.Output);
     }
-    private static bool IsCommit(string? value) => value is not null && Regex.IsMatch(value, "^[a-fA-F0-9]{40}$");
+    /// <summary>A full commit id: SHA-1, or SHA-256 in repositories that use it.</summary>
+    internal static bool IsCommit(string? value) => value is not null && Regex.IsMatch(value, "^[a-fA-F0-9]{40}(?:[a-fA-F0-9]{24})?$");
     private static bool IsVersionTag(string name) =>
         name.StartsWith("refs/tags/", StringComparison.Ordinal) && !name.EndsWith("^{}", StringComparison.Ordinal) &&
         SemVer.TryParse(name[10..], out _);
     /// <summary>The commit a tag points to, peeled for an annotated tag; null when there is no such tag.</summary>
-    private static string? Tagged(string[][] refs, string tag) =>
+    internal static string? Tagged(string[][] refs, string tag) =>
         refs.FirstOrDefault(p => p[1] == "refs/tags/" + tag + "^{}")?[0] ?? refs.FirstOrDefault(p => p[1] == "refs/tags/" + tag)?[0];
 
     /// <summary>The commit a branch, tag or commit the source is pinned to points to now, otherwise the default branch's.</summary>

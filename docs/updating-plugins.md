@@ -154,6 +154,8 @@ An update with an error cannot be selected or installed. These are refused:
 - a GDExtension whose libraries are outside the plugin folder, whose library for the editor is named but missing, or that the editor's Godot version cannot load (see [GDExtension plugins](gdextension-plugins.md#publish-a-release)), a forbidden file, or a package over the size limits of 20000 files, 256 MB per file and 1 GB in total (see [Publish an updatable release](#publish-an-updatable-release))
 - a version rejected by a hard dependency constraint of another enabled plugin
 - a plugin folder that is a link (a symlink or junction to another checkout); update the plugin where it points to
+- a package for a plugin folder under git version control: one with a `.git` of its own (a cloned working copy or a worktree), one inside another repository below the project root, or one that contains a repository. A package never contains `.git`, so replacing the folder would delete the repository; update such a plugin with git (see [Plugins under version control](#plugins-under-version-control)). A git submodule is updated through git from its remote's tags instead, and no package of another source is installed over it
+- a submodule update while the submodule has uncommitted changes or unpushed commits (see [Git submodules](#git-submodules))
 - a plugin whose update is changed or blocked: its `update_url` changed since the check, it is no longer enabled, or an earlier attempt still waits for a decision under **Needs attention**
 
 A package without files for the plugin, for another addon slug, with forbidden files, over the size limits, or with several equally deep plugin folders of that name is a packaging problem of the plugin; the refusal says so, as only the plugin's author can fix it. Some of these can only be found once the package is downloaded, for example a release whose plugin script is missing. Such a package is shown as refused in the **Review updates** dialog and left out of the batch; the other selected updates are still installed, and the manager lists the skipped package after them. Only when every package of the batch is refused is nothing installed.
@@ -162,6 +164,39 @@ Shown without stopping: an optional recipe of another plugin that no longer matc
 
 > [!NOTE]
 > An update replaces the whole addon folder, `plugin.cfg` included. If you added `update_url` to a third-party plugin yourself, its next release usually does not contain it: the review reports **Update source changed: removed** and leaves the update unchecked until you trust it, and after installing, the plugin has no `update_url` until you add it again. Set a [project update site](#project-update-sites) for plugins whose releases do not declare an `update_url`; it stays in use across updates.
+
+## Plugins under version control
+
+The project's own repository does not matter: a plugin folder that is just part of it is updated like any other. A plugin folder that is a repository of its own, or part of another one, is different, because a package update replaces the whole folder with files that never contain `.git`:
+
+| Plugin folder | Updates |
+|---|---|
+| A git submodule of the project's repository (registered in its `.gitmodules`) | Through git, from the version tags of the submodule's remote; see below. |
+| A cloned working copy or a worktree (its own `.git`, not registered as a submodule) | Refused; update it with git in that folder. |
+| Inside another repository below the project root, for example an `addons` folder that is a submodule | Refused; update that repository with git. |
+| Contains a repository, such as a nested submodule | Refused; update it with git. |
+
+Checks still show an update a release offers for a refused plugin, with the reason it cannot be installed in its details, and the **Update** button leaves it out. Packages from local directories are not offered for it. If the editor stopped during an update and early recovery would have to restore a backup over a folder that holds a repository, it asks for a manual repair instead.
+
+A clone is not updated like a submodule, although it could be checked out the same way: it is often on a branch, a fork or a commit of your own, nothing in the project records which commit it should be at, and checking out a release tag would leave that branch. Make it a submodule (`git submodule add <url> addons/<slug>`) if ePlugin should update it.
+
+### Git submodules
+
+A plugin folder that is a git submodule is updated through git, so its repository stays. Its update site is the submodule's remote: the URL of its `origin`, else the one `.gitmodules` records. The `update_url` of its `plugin.cfg`, a project update site and the built-in list are not used for it. Every tag of the remote named like a version is a version, as for a [Git source](#configure-an-update-source), and checks compare the newest one the plugin may move to with the version in its installed `plugin.cfg`. Such an update is shown in the ePlugin Manager like any other, and the plugin's details list every tag in the **Version** selector. A submodule whose remote has no version tags is not updated by ePlugin.
+
+Installing an update fetches the tag from the remote into the submodule and validates the files of its commit like a package (without changing the submodule), then, once the batch is confirmed, checks the commit out as a detached HEAD, as `git submodule update` leaves submodules. The rest of the update is the same as for a package: recipe changes, the build, verification, the restart and the rollback, which checks the old commit out again. Untracked files in the submodule, such as the `.uid` and `.import` files Godot writes, stay.
+
+The update is refused while the submodule
+
+- has changes to tracked files that are not committed,
+- has commits that are on no branch of its remote and in no tag the remote has as well (they would be left behind on a detached HEAD), or
+- moved to another commit since the update was downloaded, or the tag on the remote moved since the check.
+
+Commit and push your changes, or discard them, and update again. A version with submodules of its own is refused too, because ePlugin does not update nested submodules.
+
+Afterwards, the project's repository shows the submodule at its new commit (`git status` lists `modified: addons/<slug> (new commits)`). Commit it, so everyone working on the project gets the same version: `git add addons/<slug>` and `git commit`. The manager's result says so too. Until then, a `git submodule update` would check the old commit out again.
+
+Git runs in the submodule with your own credentials and configuration, without interactive prompts, like for a Git source; the submodule's remote may also be a local path, such as a shared folder, which a Git `update_url` may not.
 
 ## Builds, restart, and recovery
 

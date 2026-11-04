@@ -81,9 +81,14 @@ internal sealed partial class EGlobal
                 metadata.Version, metadata.UpdateUrl, ProjectSettings.GlobalizePath(directory),
                 _stateStore?.IsBlocked(slug) == true, _stateStore?.IsReadOnly != false, _stateStore?.GetShared(slug)?.Version,
                 UpdateSiteOf(slug), KnownPluginOf(slug)?.UpdateUrl,
-                slug == FrameworkSlug ? PluginKind.Framework : IsManagedPlugin(slug) ? PluginKind.EPlugin : PluginKind.Unknown);
+                slug == FrameworkSlug ? PluginKind.Framework : IsManagedPlugin(slug) ? PluginKind.EPlugin : PluginKind.Unknown,
+                PluginRepositoryOf(slug));
         }).Where(t => t is not null).Cast<PluginUpdateTarget>().Concat(ExtensionAddonSlugs().Select(ExtensionAddonTarget)).ToArray();
     }
+
+    /// <summary>How the folder of <paramref name="slug"/> is under git version control, see <see cref="PluginRepository"/>.</summary>
+    internal PluginRepository PluginRepositoryOf(string slug) =>
+        PluginRepository.Detect(ProjectSettings.GlobalizePath(_host.PluginDirectory(slug)), _host.ProjectRoot);
 
     /// <summary>
     /// Checks for updates; <paramref name="force"/> for a manual check. See <see cref="UpdateCheckGate"/> for a check
