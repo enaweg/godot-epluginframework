@@ -1,8 +1,8 @@
 {
- "commit": "35146b8205ade8c9940311d4fdacbeeb0f17cd20",
- "date": "2026-11-04T10:32:59Z",
- "covered": 12262,
- "coverable": 13550,
+ "commit": "c4eadb2ea0680539e4c586ab726fbedad9a1af8b",
+ "date": "2026-11-04T10:33:32Z",
+ "covered": 12384,
+ "coverable": 13671,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -29,8 +29,8 @@
    306
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/AssemblyReload.cs": [
-   24,
-   28
+   25,
+   29
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/AssemblyUnloadCleanup.cs": [
    7,
@@ -117,8 +117,8 @@
    19
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Licenses.cs": [
-   279,
-   289
+   326,
+   339
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.LocalCleanup.cs": [
    20,
@@ -137,16 +137,16 @@
    112
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.PlainPlugins.cs": [
-   131,
-   144
+   130,
+   143
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.PluginManager.cs": [
    76,
    89
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.RecipeOperations.cs": [
-   112,
-   125
+   114,
+   127
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Retry.cs": [
    138,
@@ -181,8 +181,8 @@
    75
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.cs": [
-   276,
-   314
+   277,
+   315
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EPluginProgress.cs": [
    1,
@@ -245,8 +245,8 @@
    4
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Licenses/LicenseReview.cs": [
-   47,
-   47
+   68,
+   68
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Licenses/LicenseSettings.cs": [
    9,
@@ -273,8 +273,8 @@
    38
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.Operations.cs": [
-   103,
-   149
+   125,
+   168
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.Updates.cs": [
    49,
@@ -289,7 +289,7 @@
    84
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.cs": [
-   363,
+   364,
    426
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EditorIcons.cs": [
@@ -309,8 +309,8 @@
    75
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/LicenseDialog.cs": [
-   150,
-   163
+   175,
+   188
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/ManagerReopenMarker.cs": [
    16,
@@ -329,8 +329,8 @@
    11
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/PluginManagerViewModel.cs": [
-   269,
-   274
+   270,
+   275
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/SettingsDialog.cs": [
    46,
@@ -353,8 +353,8 @@
    79
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateFlow.cs": [
-   234,
-   243
+   236,
+   245
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateReview.cs": [
    71,
