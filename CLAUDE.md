@@ -124,7 +124,9 @@ queue drained by `EPluginPlugin._Process` that a reload discards). UI signal han
 through `EditorSignalConnections` (`Internal/Manager/`), which disconnects them before their C# targets are disposed.
 `AssemblyUnloadCleanup` (registered from `_Process`) releases references outside libraries hold to the project's types,
 so the collectible assembly can unload. And do not start a plugin operation while a reload is due:
-`AssemblyReload.IsPending` compares the build's timestamp against the one this assembly was loaded from. The ePlugin
+`AssemblyReload.IsPending` compares the build's timestamp against the one this assembly was loaded from. An operation
+that waits for the user or the network first (an update's downloads and reviews) asks again right before its first side
+effect (`EGlobal.UpdateApplyBlocker`, also refusing while a restart is pending or plugins are changing). The ePlugin
 Manager also locks native input and its editable cells as soon as a plugin operation is queued, through dependency
 callbacks and the build. If the operation produced a pending reload, its gate stays locked until the reloaded manager
 is initialized; the timestamp guard's 15 s timeout must not reopen that old UI. A reload that fails requires an editor
@@ -146,7 +148,7 @@ plugin's install recipe.
 
 Lifecycle code calls the editor only through `IEditorHost` (toggling plugins, the enabled list, the project root,
 assembly name and solution directory, the addons folder and plugin directories, the user's editor config folder, the plugin nodes an assembly reload rebuilds contexts from, whether a slug is an
-ePlugin and the recipe of a disabled one, autoloads, filesystem scans and whether one runs, pausing imports while
+ePlugin and the recipe of a disabled one, autoloads, filesystem scans and whether one runs, whether an assembly reload is pending, pausing imports while
 unfocused, restarting the editor, whether dialogs can show, loading/unloading GDExtensions and whether one is loaded);
 keep new lifecycle code behind it so it stays testable. Recipes are created through `TryEnsureRecipe`, which puts the
 plugin in error and discards a half-built recipe when `CreateRecipe` throws. Scans that only read other plugins' recipes pass `scan: true`, which logs

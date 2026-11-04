@@ -86,14 +86,17 @@ internal sealed partial class EPluginManagerDialog
 
     /// <summary>
     /// Addon files are about to be replaced: from now on the installation is a plugin operation, which may build the
-    /// project. Downloading and the reviews before it can still be canceled.
+    /// project. Downloading and the reviews before it can still be canceled. False when an operation runs already or a
+    /// reload it built is due: the installation then stops before changing anything.
     /// </summary>
-    private void BeginApply()
+    private bool BeginApply()
     {
+        // InstallAsync starts only while no operation runs, and none starts while it works; this keeps it that way.
+        if (!_pluginOperation.TryBegin()) return false;
+        AssemblyReload.Capture();
         _swapping = true;
-        // InstallAsync started only while no operation ran, and none can start while it works.
-        if (_pluginOperation.TryBegin()) AssemblyReload.Capture();
         Buttons();
+        return true;
     }
 
     private void Cancel()

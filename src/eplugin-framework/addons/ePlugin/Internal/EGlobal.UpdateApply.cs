@@ -75,6 +75,7 @@ internal sealed partial class EGlobal
     internal async Task<IReadOnlyList<UpdateGroupResult>> ApplyUpdatesAsync(IReadOnlyList<ValidatedPackage> packages, string directory, bool trustChangedSources,
         bool askOnBuildFailure = false)
     {
+        RefuseBlockedApply();
         RefreshPlainPlugins();
         var ct = _ePluginContext!.UpdateLifetime;
         // Restored when this method returns, before the deferred editor restart saves the editor settings.
@@ -88,6 +89,8 @@ internal sealed partial class EGlobal
             if (DateTimeOffset.UtcNow >= deadline) throw new TimeoutException("Editor filesystem scan did not finish. Wait until the editor is idle and try again.");
             await _ePluginContext.ToSignal(_ePluginContext.GetTree().CreateTimer(0.1), SceneTreeTimer.SignalName.Timeout);
         }
+        // The editor processed frames while it waited; from here on the groups run without any.
+        RefuseBlockedApply();
         var groups = UpdateGroupsOf(packages);
         using var restarts = DeferRestarts();
         // The editor drops a scan requested while one runs, so a scan per group would miss later groups: scan once after all.
@@ -102,6 +105,30 @@ internal sealed partial class EGlobal
             {
                 if (result.Outcome is { } outcome) HandleUpdateOutcome(result.Directory, outcome);
             }, askOnBuildFailure);
+    }
+
+    /// <summary>
+    /// Why a staged batch cannot be installed now, as a sentence for the status line; null when it can. Downloading and
+    /// the reviews before an installation can take minutes, so this is asked again right before it changes anything: a
+    /// build of this assembly (e.g. by an IDE) waits for its reload, which would interrupt the installation on the old
+    /// code; a restart for an earlier update is due; or plugins are being enabled or disabled.
+    /// </summary>
+    internal string? UpdateApplyBlocker
+    {
+        get
+        {
+            if (_host.IsAssemblyReloadPending)
+                return "A C# build finished while the update was prepared. Install it again once the editor has loaded the rebuilt code.";
+            if (IsRestartPending) return "The editor restarts to finish an earlier update. Install the update again after the restart.";
+            if (IsChangingPlugins) return "Plugins are being enabled or disabled. Install the update again once they are done.";
+            return null;
+        }
+    }
+
+    /// <summary>Throws before the update's marker, journal or any addon file is written when it cannot be installed now.</summary>
+    private void RefuseBlockedApply()
+    {
+        if (UpdateApplyBlocker is { } reason) throw new InvalidOperationException(reason + " Addon files were not changed.");
     }
 
     /// <summary>What a build failure does to an update of this plugin started from its details: ask, keep or rollback.</summary>

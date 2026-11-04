@@ -16,6 +16,13 @@ internal interface IUpdateWorkflowHost
 {
     IReadOnlyList<UpdateCandidate> PendingUpdates { get; }
     bool IsRestartPending { get; }
+
+    /// <summary>
+    /// Why a staged batch cannot be installed now (a C# build waits for its reload, a restart is due, or plugins are
+    /// changing), as a sentence for the status line; null when it can.
+    /// </summary>
+    string? UpdateApplyBlocker { get; }
+
     Task<UpdateCheckResult> CheckForUpdatesAsync(bool force);
     Task<IReadOnlyList<UpdateCandidate>> ListRemoteVersionsAsync(PluginUpdateTarget target, CancellationToken ct);
 
@@ -69,8 +76,11 @@ internal sealed class InstallView
     /// <summary>Whether the manager is still shown; once it is not, a running installation stops before changing files.</summary>
     public Func<bool> Alive { get; init; } = () => true;
     public Action<string> Status { get; init; } = _ => { };
-    /// <summary>Addon files are about to be replaced; the manager can no longer be closed.</summary>
-    public Action Swapping { get; init; } = () => { };
+    /// <summary>
+    /// Addon files are about to be replaced; the manager can no longer be closed. False when the manager cannot start
+    /// the installation as a plugin operation, e.g. because another one runs; nothing is installed then.
+    /// </summary>
+    public Func<bool> Swapping { get; init; } = () => true;
 }
 
 /// <summary>
@@ -326,7 +336,20 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
                 ct.ThrowIfCancellationRequested();
             }
 
-            view.Swapping();
+            // Downloading and the reviews can take minutes: an IDE's build, a restart or a plugin toggle may have come up
+            // meanwhile. The staged batch has no journal yet, so it is dropped like any other refusal before the transaction.
+            if (host.UpdateApplyBlocker is { } blocked)
+            {
+                Clear();
+                return new(InstallStep.Canceled, $"Update not installed. {blocked} Addon files were not changed.");
+            }
+
+            if (!view.Swapping())
+            {
+                Clear();
+                return new(InstallStep.Canceled, "Update not installed: another plugin operation is running. Install it again once it is done. Addon files were not changed.");
+            }
+
             view.Status(request.VersionInstall ? "Installing the selected version..." : "Installing selected addons...");
             // Independent groups are installed one after another; a failing group is rolled back without the others.
             // Only an update started from the plugin's details asks whether to keep a version that does not build.

@@ -76,6 +76,12 @@ internal interface IEditorHost
     bool IsScanningFilesystem { get; }
 
     /// <summary>
+    /// Whether a newer build of this C# assembly waits for the editor to load it (<see cref="AssemblyReload.IsPending"/>):
+    /// no plugin operation may start until it did.
+    /// </summary>
+    bool IsAssemblyReloadPending { get; }
+
+    /// <summary>
     /// Turns off "Import Resources When Unfocused" until the result is disposed. While the editor is unfocused, that
     /// setting rescans every half second; a project whose rescan takes longer never becomes idle.
     /// </summary>
@@ -169,6 +175,8 @@ internal sealed class EditorHost : IEditorHost
     }
 
     public bool IsScanningFilesystem => EditorInterface.Singleton.GetResourceFilesystem().IsScanning();
+
+    public bool IsAssemblyReloadPending => AssemblyReload.IsPending;
 
     public IDisposable SuspendUnfocusedImports() => UnfocusedImportSuspension.Begin();
 
