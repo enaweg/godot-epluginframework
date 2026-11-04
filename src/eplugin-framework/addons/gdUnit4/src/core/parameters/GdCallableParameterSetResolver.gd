@@ -41,14 +41,12 @@ func _compile(instance: Node, expression: String) -> Array[Array]:
 	if parameter_set == null:
 		return []
 
-	for parameters: Array in parameter_set:
-		_finalize_parameter_set(parameters)
-
-	# We want to use allways typed arrays
-	if not parameter_set.is_typed():
-		parameter_set = Array(parameter_set, TYPE_ARRAY, "", null)
-
-	return parameter_set
+	var result: Array[Array] = []
+	result.resize(parameter_set.size())
+	for index in parameter_set.size():
+		@warning_ignore("unsafe_call_argument", "unsafe_method_access")
+		result[index] = _finalize_parameter_set(parameter_set[index].duplicate())
+	return result
 
 
 func _parse_arguments(args_str: String) -> Array:
