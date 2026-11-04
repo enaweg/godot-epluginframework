@@ -1,8 +1,8 @@
 {
- "commit": "4b8c5cf451cc67425852ed6875e9bc5cdc215f66",
- "date": "2026-11-04T10:31:58Z",
- "covered": 12113,
- "coverable": 13391,
+ "commit": "35146b8205ade8c9940311d4fdacbeeb0f17cd20",
+ "date": "2026-11-04T10:32:59Z",
+ "covered": 12262,
+ "coverable": 13550,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -13,8 +13,8 @@
    12
   ],
   "src/eplugin-framework/addons/ePlugin/EPluginPlugin.cs": [
-   203,
-   340
+   205,
+   342
   ],
   "src/eplugin-framework/addons/ePlugin/EditorPluginExtensions.cs": [
    62,
@@ -101,16 +101,16 @@
    35
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Activation.cs": [
-   299,
-   334
+   327,
+   367
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.AddonInstall.cs": [
    28,
    34
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Deactivation.cs": [
-   130,
-   135
+   167,
+   176
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.ExtensionAddons.cs": [
    19,
@@ -137,8 +137,8 @@
    112
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.PlainPlugins.cs": [
-   130,
-   143
+   131,
+   144
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.PluginManager.cs": [
    76,
@@ -153,8 +153,8 @@
    160
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Transitions.cs": [
-   146,
-   189
+   197,
+   241
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateApply.cs": [
    199,
@@ -321,8 +321,8 @@
    4
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/PluginAttention.cs": [
-   103,
-   106
+   106,
+   109
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/PluginCatalog.cs": [
    11,
@@ -385,8 +385,8 @@
    14
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PluginStateStore.cs": [
-   498,
-   519
+   525,
+   546
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PluginToggles.cs": [
    13,
