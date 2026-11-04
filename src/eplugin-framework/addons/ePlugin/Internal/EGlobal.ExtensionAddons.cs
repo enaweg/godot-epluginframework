@@ -9,7 +9,8 @@ using Godot;
 namespace Enaweg.Plugin.Internal;
 
 /// <summary>
-/// GDExtension add-ons: a GDExtension in its own folder below <c>res://addons</c> without a <c>plugin.cfg</c>. Godot loads
+/// GDExtension add-ons: a GDExtension in its own folder below <c>res://addons</c> (also in a subfolder, see
+/// <see cref="AddonLayout"/>) without a <c>plugin.cfg</c> in or below it. Godot loads
 /// it whether anything is enabled or not, so for ePlugin it is always available, as a dependency too, and never toggled.
 /// Its files name no version: the version is the one the shared plugin state recorded when an update installed it, and
 /// unknown until then. Such an add-on is offered no update automatically; the ePlugin Manager installs a chosen version.
@@ -18,7 +19,7 @@ internal sealed partial class EGlobal
 {
     /// <summary>Whether <paramref name="slug"/> is a GDExtension add-on, see <see cref="PluginKinds.IsExtensionAddon"/>.</summary>
     internal bool IsExtensionAddon(string slug) =>
-        slug.Length > 0 && PluginKinds.IsExtensionAddon(ProjectSettings.GlobalizePath(_host.PluginDirectory(slug)));
+        slug.Length > 0 && PluginKinds.IsExtensionAddon(ProjectSettings.GlobalizePath(_host.AddonsDirectory), slug);
 
     /// <summary>
     /// Whether a plugin a recipe depends on is there for it: enabled, or a GDExtension add-on, which Godot always runs.
@@ -28,12 +29,8 @@ internal sealed partial class EGlobal
     /// <summary>The version ePlugin recorded for a GDExtension add-on; null when it did not install it.</summary>
     private string? ExtensionAddonVersion(string slug) => _stateStore?.GetShared(slug)?.Version;
 
-    /// <summary>The slugs of the GDExtension add-ons below the addons folder.</summary>
-    private string[] ExtensionAddonSlugs()
-    {
-        using var addons = DirAccess.Open(_host.AddonsDirectory);
-        return (addons?.GetDirectories() ?? []).Where(IsExtensionAddon).ToArray();
-    }
+    /// <summary>The slugs of the GDExtension add-ons below the addons folder, also in subfolders.</summary>
+    private IReadOnlyList<string> ExtensionAddonSlugs() => ScanAddons().ExtensionAddons;
 
     /// <summary>A GDExtension add-on as the ePlugin Manager lists it.</summary>
     private PluginInfo ExtensionAddonInfo(string slug)

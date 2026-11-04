@@ -160,6 +160,7 @@ internal sealed partial class AddonPackageValidator(IEnumerable<IAddonRule>? ext
         }
         else if (!context.NewInstall && repository.PackageRefusal(installed.Directory) is { } refusal)
             Add("R29", FindingSeverity.Error, refusal);
+        if (!context.NewInstall) findings.AddRange(SubPluginFindings(installed, stage));
         var installedFiles = Directory.Exists(installed.Directory) ? PackageFiles.Files(installed.Directory).ToArray() : [];
         // What differs between plugin kinds, e.g. the native libraries of a GDExtension plugin.
         var kind = PluginKinds.ForPackage(installed, script, files, installedFiles);
@@ -207,6 +208,33 @@ internal sealed partial class AddonPackageValidator(IEnumerable<IAddonRule>? ext
         if (installed.IsBlocked || installed.StoreReadOnly) Add("R17", FindingSeverity.Error, "Resolve the plugin's problem under Needs attention in the ePlugin Manager first.");
         foreach (var rule in extraRules ?? []) findings.AddRange(rule.Check(context));
         return new(candidate, stage, version, newUrl, files.Concat(installedFiles).Any(f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)), findings, kind);
+    }
+
+    /// <summary>
+    /// R31: a sub-plugin (a <c>plugin.cfg</c> below the plugin's own, which Godot does not list) belongs to the plugin's
+    /// package, so the update replaces it, and deletes one the new version no longer has. Deleting an enabled one would
+    /// leave Godot running a plugin whose files are gone, so it is refused until the sub-plugin is disabled; one the
+    /// update replaces while it is enabled is not disabled for it, which the review says.
+    /// </summary>
+    internal static IEnumerable<Finding> SubPluginFindings(PluginUpdateTarget installed, string stage)
+    {
+        var staged = AddonLayout.SubPlugins(stage).ToHashSet(PackageFiles.PathComparer);
+        var enabled = installed.EnabledSubPlugins.ToHashSet(PackageFiles.PathComparer);
+        foreach (var sub in AddonLayout.SubPlugins(installed.Directory))
+        {
+            var folder = $"res://addons/{installed.Slug}/{sub}";
+            if (staged.Contains(sub))
+            {
+                if (enabled.Contains(sub))
+                    yield return new("R31", FindingSeverity.Warning, $"The update replaces the enabled sub-plugin {folder} with {installed.Name}'s new version " +
+                                                                      "without disabling it; disable and enable it afterwards, so it runs the new version.");
+            }
+            else if (enabled.Contains(sub))
+                yield return new("R31", FindingSeverity.Error, $"The new version no longer has the sub-plugin {folder}, which is enabled. " +
+                                                                "Disable it first: the update deletes its folder.");
+            else
+                yield return new("R31", FindingSeverity.Warning, $"The new version no longer has the sub-plugin {folder}; the update deletes its folder.");
+        }
     }
 
     /// <summary>Added to refusals that only the plugin's author can fix, as the package itself is faulty.</summary>

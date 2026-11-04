@@ -75,20 +75,11 @@ internal static class PluginKinds
         : validated is PluginKind.Framework or PluginKind.EPlugin ? PluginKind.Unknown : validated;
 
     /// <summary>
-    /// Whether <paramref name="directory"/> (a file system path) is a GDExtension add-on: a folder without a
-    /// <c>plugin.cfg</c> that contains a <c>.gdextension</c> file outside hidden folders.
+    /// Whether <paramref name="slug"/> is a GDExtension add-on below <paramref name="addonsDirectory"/> (a file system
+    /// path): a folder without a <c>plugin.cfg</c> in it or below it that contains a <c>.gdextension</c> file outside
+    /// hidden folders, see <see cref="AddonLayout"/>.
     /// </summary>
-    public static bool IsExtensionAddon(string directory)
-    {
-        try
-        {
-            return !File.Exists(Path.Combine(directory, "plugin.cfg")) && Directory.Exists(directory) &&
-                   Directory.EnumerateFiles(directory, "*" + GDExtensionConfig.Extension, new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint })
-                       .Select(f => Path.GetRelativePath(directory, f).Replace('\\', '/'))
-                       .Any(f => !PackageFiles.Skip(f) && !f.Split('/').Any(part => part.StartsWith('.')));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
-    }
+    public static bool IsExtensionAddon(string addonsDirectory, string slug) => AddonLayout.IsExtensionAddon(addonsDirectory, slug);
 
     /// <summary>Whether <paramref name="directory"/> (a file system path) contains a <c>.gdextension</c> file.</summary>
     public static bool HasNativeExtension(string directory)

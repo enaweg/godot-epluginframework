@@ -10,4 +10,6 @@ The adjacent `res://addons/eplugin-state.json.user` stores unfinished or failed 
 
 The file also records accepted plugin licenses in its `licenses` list. The list is left out until a license is accepted. See [Plugin licenses](plugin-licenses.md#recorded-acceptances). Likewise, its `welcomes` list records the plugins whose welcome page was shown, and is left out until one was; see [Plugin welcome pages](plugin-welcome.md#recorded-welcome-pages).
 
+Entries name a plugin by its slug, its folder below `res://addons`. A plugin in a subfolder (see [Plugins in subfolders](creating-plugins.md#plugins-in-subfolders)) has a slug with `/`, such as `acme/my_plugin`; its entries are kept in lists of their own, `nestedPlugins`, `nestedLicenses` and `nestedWelcomes` (and `nestedAttempts` in the `.user` file), each left out while empty. ePlugin versions before support for subfolders refuse such a slug in the other lists, which made the whole file unreadable for them; they skip these lists and keep the rest.
+
 A failed operation leaves the checked-in JSON at its last completed state. These files provide the basis for migration and rollback tooling; they do not restore addon files or undo partial recipe changes themselves. Update journals and recovery steps are covered in [Updating plugins](updating-plugins.md#builds-restart-and-recovery).

@@ -90,6 +90,21 @@ public class EGlobalUpdateRecipeTests : IDisposable
     }
 
     [TestCase]
+    public void TheJournalOfAnUpdateKeepsTheRecipeOfAnEPluginInASubfolder()
+    {
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"));
+        _fixture.AddEPlugin("acme/tool", b => b.AddNuget("Tool.Package"));
+        _fixture.Enable("app");
+        _fixture.Enable("acme/tool");
+
+        // every activated ePlugin's recipe is recorded, so the journal must still load with it
+        var journal = BeginUpdate("app");
+
+        var saved = UpdateJournal.Load(journal.Directory);
+        Assertions.AssertString(saved.Recipes["acme/tool"].Old.Nugets.Single().Name).IsEqual("Tool.Package");
+    }
+
+    [TestCase]
     public void RebaseRetainsTheUpdatedPluginsBaselineAndRefreshesOtherEnabledPlugins()
     {
         _fixture.AddEPlugin("app", b => b.AddNuget("Old.Package"));

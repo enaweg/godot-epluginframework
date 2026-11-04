@@ -319,7 +319,17 @@ disabled; keep both in step (`ExportExclusionsTests`).
 
 Only plugins with a `plugin.cfg` in their folder below `res://addons` are supported, whatever their kind, plus
 GDExtension add-ons (below); other add-ons without one (a script library) are neither listed, updated, toggled nor
-resolved as dependencies.
+resolved as dependencies. The folder may be in a subfolder: `AddonLayout` (pure) finds plugins exactly like Godot's
+Plugins list (`EditorPluginSettings::_get_plugins`, the same in 4.4-4.7: a folder not starting with `.` is a plugin when it
+has a `plugin.cfg`, else it is searched further; nothing inside a plugin's folder is listed). A slug is the plugin's
+folder below `res://addons` with `/` (`acme/tool`), which `EditorInterface.SetPluginEnabled` reads as
+`res://addons/<slug>/plugin.cfg` (the path `editor_plugins/enabled` stores, `EditorHost.ParseEnabledPlugins`), so a
+top-level slug is its folder name as before; validate slugs with `AddonLayout.IsValidSlug` (state files
+`IsStoredSlug`), never by rejecting `/`. A `plugin.cfg` below a plugin's own is a sub-plugin: Godot does not list it,
+the manager lists it only while enabled (`PluginInfo.PartOf`), `IsEPlugin` does not count its script for the outer
+plugin, and it belongs to the outer plugin's package (R29). Plugins and add-ons with a `/` in their slug are never update
+targets (`CollectUpdateTargets`), because staging, journals and recovery address a package's folder directly below
+`res://addons`; the state store writes their entries to `nested*` lists, which older versions skip (they refused `/`).
 
 `Internal/Kinds/` distinguishes `PluginKind`s (Framework, EPlugin, CSharp, GDScript, GDExtension, Unknown,
 GDExtensionAddon) and gives each an explicit sealed `PluginKindWorkflow` (`FrameworkPluginWorkflow`, `EPluginWorkflow`,
@@ -337,8 +347,9 @@ its update restarts anyway. ePlugin Framework ships no GDExtension (R10 refuses 
 directories must be reloadable: `ShowHideHelper` loads them after showing and unloads them before hiding through
 `IEditorHost`, and refuses to show one that is not reloadable.
 
-A GDExtension add-on is a folder below `res://addons` without `plugin.cfg` that has a `.gdextension` outside hidden
-folders (`EGlobal.ExtensionAddons.cs`). Godot always loads it, so it is never toggled, counts as an available
+A GDExtension add-on is a folder below `res://addons` that `AddonLayout`'s search reaches, without `plugin.cfg` in or
+below it, that has a `.gdextension` outside hidden folders (`EGlobal.ExtensionAddons.cs`): the outermost such folder, and
+never one holding a plugin in a subfolder (Godot loads every `.gdextension` outside hidden folders regardless). Godot always loads it, so it is never toggled, counts as an available
 dependency (`IsDependencyAvailable`), and is listed as always loaded. Its version is the one the shared state recorded
 when an update installed it ("" until then, when checks only cache its latest release and the manager installs a chosen
 version). The manager
@@ -490,7 +501,9 @@ state files goes one way: an upgrade must never lose state, so every newer versi
 is optional and reads as its default when absent; `PluginStateStoreTests.OlderFilesWithoutNewerFieldsAreReadWithoutLosingState`).
 Readers skip fields they do not know, so a file written by a newer version does not fail to load, and write only the
 fields they know: what an older version cannot represent is lost after a downgrade, and rolling the state back is not
-supported. A missing `plugins`/`attempts` list or another `schemaVersion` still makes the store read-only. A shared file that changed on disk since it was read (a git pull) is read again before a write
+supported. Values older readers refuse go into new optional fields instead of existing ones: entries of plugins in
+subfolders (a slug with `/`) are written to `nestedPlugins`/`nestedLicenses`/`nestedWelcomes`/`nestedAttempts` and merged
+when read (`PluginStateStoreTests.PluginsInSubfoldersAreWrittenToListsOlderVersionsSkip`). A missing `plugins`/`attempts` list or another `schemaVersion` still makes the store read-only. A shared file that changed on disk since it was read (a git pull) is read again before a write
 (`PluginStateStore.Rebase`), which refuses only when the same entries changed there too, to other values than this write's. Licenses and welcome pages
 recorded while the file could not be written stay recorded for the session, also when it is read again, and the next
 write that succeeds saves them; Engine metadata keeps them across assembly reloads (`RestoreUnsavedState`). Only an update's acknowledgement sets `lastCompletedAttemptId` (recovery and rollback compare

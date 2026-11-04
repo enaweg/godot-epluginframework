@@ -45,6 +45,22 @@ public class EditorHostTests
         Assertions.AssertBool(host.IsEPlugin("sample_plugin")).IsTrue();
         Assertions.AssertBool(host.IsEPlugin("gdUnit4")).IsFalse();
         Assertions.AssertBool(host.IsEPlugin("missing_plugin")).IsFalse();
+        // an ePlugin script belongs to the plugin whose plugin.cfg is closest to it, not to a folder or plugin holding that
+        Assertions.AssertBool(PluginTypes.HasEPluginBelow("res://addons", _ => false)).IsFalse();
+        Assertions.AssertBool(PluginTypes.HasEPluginBelow("res://addons", directory => directory == "res://addons")).IsFalse();
+        Assertions.AssertBool(PluginTypes.HasEPluginBelow("res://addons/sample_plugin", directory => directory == "res://addons/sample_plugin")).IsTrue();
+    }
+
+    [TestCase]
+    public static void EnabledPluginsAreNamedByTheirFolderBelowTheAddonsFolder()
+    {
+        var slugs = EditorHost.ParseEnabledPlugins([
+            "res://addons/tool/plugin.cfg", "res://addons/acme/native_tool/plugin.cfg", "res://addons/outer/sub/plugin.cfg",
+            // outside the addons folder, which ePlugin does not support
+            "res://tools/plugin.cfg", "res://addons/plugin.cfg", "res://addons/tool/other.cfg"
+        ]);
+
+        Assertions.AssertThat(slugs.Order(System.StringComparer.Ordinal).ToArray()).ContainsExactly("acme/native_tool", "outer/sub", "tool");
     }
 
     [TestCase]

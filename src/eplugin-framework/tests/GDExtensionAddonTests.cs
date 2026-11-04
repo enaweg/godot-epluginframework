@@ -88,6 +88,24 @@ public class GDExtensionAddonTests : IDisposable
     }
 
     [TestCase]
+    public void AFolderHoldingAGDExtensionPluginIsNoGDExtensionAddon()
+    {
+        // addons/acme/native_tool is a GDExtension plugin; acme, which has no plugin.cfg itself, only holds it
+        Directory.CreateDirectory(_fixture.Addon("acme"));
+        WriteExtension(Path.Combine(_fixture.Addon("acme"), "native_tool"), "native_tool");
+        File.WriteAllText(Path.Combine(_fixture.Addon("acme"), "native_tool", "plugin.cfg"), "[plugin]\nname=\"Native\"\nversion=\"1.0.0\"\nscript=\"plugin.gd\"\n");
+        _fixture.AddEPlugin("app", b => b.AddPluginDependency("acme"));
+
+        Assertions.AssertBool(_fixture.Global.IsExtensionAddon("acme")).IsFalse();
+        Assertions.AssertBool(_fixture.Global.CollectPlugins().Any(p => p.Slug == "acme")).IsFalse();
+        // nor an update target, whose update would replace the whole folder with the plugin in it
+        Assertions.AssertBool(_fixture.Global.CollectUpdateTargets().Any(t => t.Slug == "acme")).IsFalse();
+        // nor a dependency that is always there
+        _fixture.Enable("app");
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Error);
+    }
+
+    [TestCase]
     public void AGDExtensionWithoutPluginCfgIsAnUpdateTargetWithItsRecordedVersion()
     {
         WriteExtension(_fixture.Addon("servo"));

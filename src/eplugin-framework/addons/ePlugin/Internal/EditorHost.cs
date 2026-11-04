@@ -20,7 +20,10 @@ internal interface IEditorHost
     /// </summary>
     void SetPluginEnabled(string slug, bool enabled);
 
-    /// <summary>The slugs of the plugins below <c>res://addons</c> that <c>editor_plugins/enabled</c> lists.</summary>
+    /// <summary>
+    /// The slugs of the plugins below <c>res://addons</c> that <c>editor_plugins/enabled</c> lists, also of those in a
+    /// subfolder (<c>acme/tool</c>), see <see cref="AddonLayout"/>.
+    /// </summary>
     IReadOnlySet<string> EnabledPluginSlugs();
 
     /// <summary>The project's folder (<c>res://</c>) as an absolute path, where update journals and backups are kept.</summary>
@@ -48,7 +51,10 @@ internal interface IEditorHost
     /// </summary>
     string ConfigDirectory { get; }
 
-    /// <summary>The directory of a plugin, which holds its <c>plugin.cfg</c>, as a path Godot's file APIs can read.</summary>
+    /// <summary>
+    /// The directory of a plugin, which holds its <c>plugin.cfg</c>, as a path Godot's file APIs can read: the slug is
+    /// the directory's path below the addons folder.
+    /// </summary>
     string PluginDirectory(string slug);
 
     /// <summary>The nodes Godot adds the editor plugins to, read after an assembly reload dropped their contexts.</summary>
@@ -132,7 +138,7 @@ internal sealed class EditorHost : IEditorHost
 
     public IReadOnlyList<Node> PluginNodes() => EditorInterface.Singleton.GetBaseControl().GetParent().GetChildren();
 
-    public bool IsEPlugin(string slug) => PluginTypes.HasEPluginBelow(PluginDirectory(slug));
+    public bool IsEPlugin(string slug) => PluginTypes.HasEPluginBelow(PluginDirectory(slug), directory => FileAccess.FileExists(directory + "/plugin.cfg"));
 
     public bool CreateRecipeOfDisabledPlugin(string slug, IEEditorPluginBuilder builder)
     {
@@ -263,12 +269,11 @@ internal sealed class EditorHost : IEditorHost
         : setting.StartsWith("res://", StringComparison.Ordinal) ? setting
         : "res://" + setting;
 
-    /// <summary>The plugin slugs of <c>editor_plugins/enabled</c> entries (<c>res://addons/&lt;slug&gt;/plugin.cfg</c>).</summary>
+    /// <summary>
+    /// The plugin slugs of <c>editor_plugins/enabled</c> entries (<c>res://addons/&lt;slug&gt;/plugin.cfg</c>, also for
+    /// a plugin in a subfolder: <c>res://addons/acme/tool/plugin.cfg</c> is <c>acme/tool</c>).
+    /// </summary>
     internal static IReadOnlySet<string> ParseEnabledPlugins(IEnumerable<string> paths) =>
-        paths.Where(path => path.StartsWith("res://addons/", StringComparison.Ordinal) &&
-                            path.EndsWith("/plugin.cfg", StringComparison.Ordinal))
-            .Select(path => path["res://addons/".Length..^"/plugin.cfg".Length])
-            .Where(slug => slug.Length > 0 && !slug.Contains('/') && !slug.Contains('\\'))
-            .ToHashSet(StringComparer.Ordinal);
+        paths.Select(AddonLayout.SlugOfConfig).OfType<string>().ToHashSet(StringComparer.Ordinal);
 }
 #endif
