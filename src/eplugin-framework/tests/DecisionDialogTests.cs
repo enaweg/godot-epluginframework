@@ -131,6 +131,8 @@ public class DecisionDialogTests
 
         Assertions.AssertString(Summary("dependency_resolution_failed")).StartsWith("Enabling failed: a plugin it depends on");
         Assertions.AssertString(Summary("dependency_disabled")).Contains("was disabled before it finished activating");
+        Assertions.AssertString(Summary("dependency_timed_out")).Contains("did not activate in time");
+        Assertions.AssertString(Summary("operation_timed_out", PersistedPluginState.Deactivated)).StartsWith("Disabling failed: the plugin operation made no progress");
         Assertions.AssertString(Summary("recipe_creation_failed", PersistedPluginState.Deactivated)).StartsWith("Disabling failed: the plugin's CreateRecipe");
         Assertions.AssertString(Summary("dependent_recipe_creation_failed")).Contains("CreateRecipe of a plugin that depends on it");
         Assertions.AssertString(Summary("solution_build_failed")).IsEqual("Enabling failed: the project did not build afterwards.");
@@ -198,7 +200,8 @@ public class DecisionDialogTests
             "attempt_in_progress", "dependency_resolution_failed", "recipe_creation_failed", "dependent_recipe_creation_failed",
             "recipe_operation_failed", "solution_build_failed", "optional_recipe_failed", "invalid_plugin_version",
             "participant_blocked", "cannot_record_participant", "state_commit_failed", "deactivation_failed",
-            "plugin_enable_refused", "retry_not_continued", "dotnet_unavailable", "dependency_disabled"
+            "plugin_enable_refused", "retry_not_continued", "dotnet_unavailable", "dependency_disabled",
+            "dependency_timed_out", "operation_timed_out"
         ];
         foreach (var reason in reasons)
         {

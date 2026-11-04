@@ -85,6 +85,9 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
         // Plain plugins enabled or disabled in Project Settings run no framework code; their licenses, dependants and
         // optional recipes are handled here, before the dialogs below look at them.
         if (_pluginTogglesDue) _pluginTogglesDue = !EGlobal.Instance.ObservePluginToggles();
+        // A plugin operation stuck on a dependency that never activates would lock the manager forever.
+        EGlobal.Instance.CheckStalledTransition(DateTime.UtcNow, Engine.GetProcessFrames(),
+            paused: IsOpen(_licenseDialog) || IsOpen(_failureDialog));
 
         ShowManagerStatus();
         ReopenManager();

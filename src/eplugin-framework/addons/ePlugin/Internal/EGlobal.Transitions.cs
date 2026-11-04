@@ -225,6 +225,104 @@ internal sealed partial class EGlobal
         }
     }
 
+    /// <summary>
+    /// How long a plugin operation may make no progress, while the editor keeps drawing frames, before
+    /// <see cref="CheckStalledTransition"/> fails it. Dependencies activate inside the toggle that enables them, so a
+    /// plugin waits across frames only for one that never calls <c>EnableEPlugin</c>, or calls it later itself.
+    /// </summary>
+    internal static readonly TimeSpan StallTimeout = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// The frames a stalled operation needs besides <see cref="StallTimeout"/>. Recipes and builds run synchronously
+    /// and block the frame they run in, so one frame that took long is work, not a stall.
+    /// </summary>
+    internal const ulong StallFrames = 30;
+
+    private string? _stallSignature;
+    private DateTime _stallSince;
+    private ulong _stallFrame;
+
+    /// <summary>
+    /// The watchdog of plugin operations, called every frame: one that made no progress for <see cref="StallTimeout"/>
+    /// and <see cref="StallFrames"/>, e.g. a plugin waiting for a dependency that never activates, fails. Otherwise it
+    /// would stay open forever, locking the ePlugin Manager and leaving the others' build and state undone. Nothing is
+    /// counted while something legitimately holds the operation: a license review or another dialog that asks for a
+    /// decision (<paramref name="paused"/>), a held transition, an update, or a pending assembly reload. Returns whether
+    /// it failed one.
+    /// </summary>
+    /// <param name="now">The current time; a parameter, so tests choose it.</param>
+    /// <param name="frame">The editor's frame count, <c>Engine.GetProcessFrames()</c>.</param>
+    internal bool CheckStalledTransition(DateTime now, ulong frame, bool paused = false)
+    {
+        if (!IsValid() || !IsChangingPlugins || paused || _transitionHold > 0 || _pendingLicenseReview is not null ||
+            _recipeUpdateJournal is not null || _updateRefreshSuppression > 0)
+        {
+            _stallSignature = null;
+            return false;
+        }
+
+        var signature = TransitionSignature();
+        if (signature != _stallSignature)
+        {
+            _stallSignature = signature;
+            _stallSince = now;
+            _stallFrame = frame;
+            return false;
+        }
+
+        if (now - _stallSince < StallTimeout || frame - _stallFrame < StallFrames)
+        {
+            return false;
+        }
+
+        // These read files, so only once the time is up; the next attempt counts the whole timeout again.
+        if (AssemblyReload.IsPending || _updateJournals?.Read().Any(j => j.IsActive) == true)
+        {
+            _stallSignature = null;
+            return false;
+        }
+
+        _stallSignature = null;
+        FailStalledTransition();
+        return true;
+    }
+
+    /// <summary>What a plugin operation is at: any change counts as progress for the watchdog.</summary>
+    private string TransitionSignature() => string.Join("|",
+        _transition?.AttemptId.ToString() ?? "-",
+        string.Join(",", _transition?.Participants.Select(p => $"{p.Key.Slug}:{p.Key.State}:{p.Value}") ?? []),
+        string.Join(",", _toCheckEnable.Select(c => $"{c.Slug}:{c.State}")),
+        string.Join(",", _toCheckDisable.Select(c => c.Slug)));
+
+    private void FailStalledTransition()
+    {
+        var seconds = (int)StallTimeout.TotalSeconds;
+        if (_toCheckEnable.Count > 0)
+        {
+            // what the chain waits for: dependencies that are enabled, but neither activated nor waiting themselves
+            var waiting = _toCheckEnable.ToHashSet();
+            var stalled = waiting.Where(c => c.IsRecipeCreated)
+                .SelectMany(c => c.Builder.PluginRecipe.PluginDependencies)
+                .Select(d => d.Slug).Distinct(StringComparer.Ordinal)
+                .Where(slug => ManagedContext(slug) is { State: EEditorPluginState.Created } dependency && !waiting.Contains(dependency))
+                .ToArray();
+            var names = stalled.Length > 0 ? string.Join(", ", stalled) : "a dependency";
+            var reason = $"Plugin dependency {names} did not activate within {seconds} s: its _EnablePlugin may not call " +
+                         $"this.EnableEPlugin(). Report it to the author of {names}, then retry.";
+            _ePluginContext?.Logger.Error($"{string.Join(", ", waiting.Select(c => c.Slug).Distinct(StringComparer.Ordinal))} stopped waiting: {reason}");
+            FailWaitingPlugins(reason, "dependency_timed_out");
+            return;
+        }
+
+        // nothing waits for a dependency, but a participant never completed its callback
+        var detail = $"The plugin operation made no progress for {seconds} s.";
+        _ePluginContext?.Logger.Error($"{detail} It is given up on; retry it under Needs attention in the ePlugin Manager.");
+        FailTransition("operation_timed_out", detail);
+        // also without a transition to fail, e.g. a deactivation that never joined one
+        _toCheckDisable.Clear();
+        RefreshEditor(rebuild: false);
+    }
+
     internal bool FinishTransition()
     {
         if (_recipeUpdateJournal is not null) return false;

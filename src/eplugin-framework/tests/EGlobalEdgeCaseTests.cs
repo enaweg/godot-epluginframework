@@ -115,9 +115,27 @@ public partial class EGlobalEdgeCaseTests : IDisposable
         Assertions.AssertObject(_fixture.State("other")).IsEqual(EEditorPluginState.Activated);
         Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Created);
         // other joined the transition app keeps open, which builds once base activates: a plugin that never calls
-        // EnableEPlugin cannot be told apart from one Godot has not enabled yet, e.g. while the editor starts
+        // EnableEPlugin cannot be told apart from one that calls it later
         Assertions.AssertThat(_fixture.Operations.Skip(start).ToArray()).ContainsExactly("add-nuget Other.Package");
         Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsTrue();
+
+        // until the watchdog gives up on app, while the editor keeps running without any progress
+        var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        Assertions.AssertBool(_fixture.Global.CheckStalledTransition(now, 1000)).IsFalse();
+        Assertions.AssertBool(_fixture.Global.CheckStalledTransition(now + EGlobal.StallTimeout, 1000 + EGlobal.StallFrames)).IsTrue();
+        EGlobal.RunPosted();
+
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Error);
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsFalse();
+        var failed = _fixture.Store.GetLocal("app")!;
+        Assertions.AssertString(failed.Reason).IsEqual("dependency_timed_out");
+        Assertions.AssertString(failed.Detail!).StartsWith("Plugin dependency base did not activate within 30 s");
+        // app installed nothing, so other completes without it: built and recorded
+        Assertions.AssertThat(_fixture.Operations.Skip(start).ToArray()).ContainsExactly("add-nuget Other.Package", "build");
+        Assertions.AssertObject(_fixture.State("other")).IsEqual(EEditorPluginState.Activated);
+        Assertions.AssertObject(_fixture.Store.GetLocal("other")).IsNull();
+        Assertions.AssertObject(_fixture.Store.GetShared("other")!.State).IsEqual(PersistedPluginState.Activated);
+        Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsFalse();
     }
 
     [TestCase]
