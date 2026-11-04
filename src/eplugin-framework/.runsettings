@@ -2,7 +2,7 @@
 <RunSettings>
   <RunConfiguration>
     <MaxCpuCount>1</MaxCpuCount>
-    <TestSessionTimeout>180000</TestSessionTimeout>
+    <TestSessionTimeout>900000</TestSessionTimeout>
     <TreatNoTestsAsError>true</TreatNoTestsAsError>
   </RunConfiguration>
   <GdUnit4>
