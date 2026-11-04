@@ -70,9 +70,40 @@ internal static class UpdateFailureDecision
         projectCodeOnly && setting != "rollback" ? (setting == "ask" && askOnBuildFailure && !grouped ? "ask" : "keep")
         : grouped ? "rollback" : setting == "keep" ? "keep" : setting == "ask" && askOnBuildFailure ? "ask" : "rollback";
 }
-internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, IUpdateHost host, IUpdateStateStore cache)
+/// <param name="git">Runs git in the plugin folders that are git submodules; only local commands.</param>
+internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, IUpdateHost host, IUpdateStateStore cache, IGitRunner? git = null)
 {
+    private readonly IGitRunner _git = git ?? new GitRunner(allowFileProtocol: true);
+
     private string Installed(string slug) => PackageFiles.Inside(Path.Combine(projectRoot, "addons"), slug);
+
+    /// <summary>
+    /// Checks, before the marker, that the package may change the plugin folder: a package never replaces a folder under
+    /// git version control (a swap would delete its repository, see <see cref="AddonFiles.RefuseRepository"/>), and a
+    /// submodule update needs the folder to still be the submodule staging found, at the same commit and without
+    /// uncommitted changes. Returns the commits a submodule update journals; null for a package.
+    /// </summary>
+    private SubmoduleJournal? Submodule(ValidatedPackage package)
+    {
+        var installed = Installed(package.Candidate.Slug);
+        var repository = PluginRepository.Detect(installed, projectRoot);
+        if (package.Candidate.Package is not SubmodulePackageRef submodule)
+        {
+            if (repository.PackageRefusal(installed) is { } refusal) throw new InvalidOperationException(refusal);
+            return null;
+        }
+        if (repository.Kind != RepositoryKind.Submodule || package.SubmoduleHead is null)
+            throw new InvalidOperationException($"{installed} is no longer a git submodule; check for updates again.");
+        var head = SubmoduleGit.Head(_git, installed);
+        if (!head.Equals(package.SubmoduleHead, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"The submodule {installed} moved to another commit since the update was downloaded; update again.");
+        if (SubmoduleGit.Changes(_git, installed) is { Count: > 0 } changes) throw new InvalidOperationException(SubmoduleSource.LocalChanges(installed, changes).Message);
+        return new() { OldCommit = head, NewCommit = submodule.Commit, Tag = submodule.Tag };
+    }
+
+    /// <summary>How the plugin's files are replaced: a submodule checks out the new commit, anything else uses its kind's swap.</summary>
+    private IAddonSwap Swap(PluginKindWorkflow workflow, UpdatePluginJournal plugin) =>
+        plugin.Submodule is null ? workflow.Swap(plugin) : new SubmoduleSwap(_git, plugin);
 
     /// <summary>
     /// The installed version: the plugin.cfg's, or for a GDExtension add-on, which has none, the one the shared state
@@ -195,9 +226,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         {
             var slug = package.Candidate.Slug;
             if (!host.IsEnabled(slug)) throw new InvalidOperationException($"Plugin {slug} is no longer enabled.");
-            // Checked again here, before the marker: a swap would delete a repository in the folder (see AddonFiles.RefuseRepository).
-            if (PluginRepository.Detect(Installed(slug), projectRoot).PackageRefusal(Installed(slug)) is { } refusal)
-                throw new InvalidOperationException(refusal);
+            var submodule = Submodule(package);
             var old = InstalledVersion(slug, package.Kind);
             // The check read the version through Godot, which reads an unquoted 1.2.0 as 1.2.
             if (!SemVer.Same(old, package.Candidate.InstalledVersion)) throw new InvalidOperationException($"Plugin {slug} changed since the update check; check again.");
@@ -206,7 +235,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             journal.Plugins.Add(new() { Slug = slug, OldVersion = old!, NewVersion = next, IsEPlugin = managed,
                 Kind = PluginKinds.ForJournal(slug, managed, package.Kind).ToString(), WasEnabled = true,
                 NativeExtension = PluginKinds.HasNativeExtension(package.StagingDir) || PluginKinds.HasNativeExtension(Installed(slug)), ContainsCSharp = package.ContainsCSharp, SourceUrl = package.Candidate.Origin, Revision = package.Candidate.ResolvedRevision,
-                Uids = UidMap.Collect(Installed(slug)), AcceptedLicense = package.AcceptedLicense });
+                Uids = UidMap.Collect(Installed(slug)), AcceptedLicense = package.AcceptedLicense, Submodule = submodule });
         }
         host.PrepareJournal(journal);
         BackupProject(journal);
@@ -238,7 +267,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                 workflow.BeforeSwap(plugin);
                 plugin.SwapStarted = true;
                 journal.Save();
-                var swap = workflow.Swap(plugin);
+                var swap = Swap(workflow, plugin);
                 host.Log($"{workflow.Name} {plugin.Slug}: installing {plugin.NewVersion} ({swap.Name}).");
                 if (workflow.DisabledDuringSwap) host.SetPlainEnabled(plugin.Slug, false);
                 var discarded = swap.Install(Installed(plugin.Slug), journal.Staging(plugin.Slug), journal.Backup(plugin.Slug), journal.Discarded(plugin.Slug));
@@ -347,6 +376,9 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             host.Log(plugin.OldVersion == plugin.NewVersion ? $"Reinstalled {plugin.Slug} {plugin.NewVersion}."
                 : plugin.OldVersion.Length == 0 ? $"Installed {plugin.Slug} {plugin.NewVersion} over a version ePlugin did not know."
                 : $"Updated {plugin.Slug} {plugin.OldVersion} -> {plugin.NewVersion}.");
+            if (plugin.Submodule is { } submodule)
+                host.Log($"The submodule {Installed(plugin.Slug)} is now at {submodule.Tag} ({SubmoduleSource.Short(submodule.NewCommit)}); " +
+                         "commit the changed submodule in your project's repository.");
         }
         // The journal first: a verified journal whose marker is gone blocks every later update until it is committed.
         var committed = false;
@@ -418,7 +450,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                 if (System.IO.Directory.Exists(journal.Backup(plugin.Slug)))
                 {
                     var workflow = PluginKinds.Workflow(plugin);
-                    var swap = workflow.Swap(plugin);
+                    var swap = Swap(workflow, plugin);
                     host.Log($"{workflow.Name} {plugin.Slug}: restoring {plugin.OldVersion} ({swap.Name}).");
                     if (workflow.DisabledDuringSwap && host.IsEnabled(plugin.Slug)) host.SetPlainEnabled(plugin.Slug, false);
                     var discarded = swap.Restore(installed, journal.Backup(plugin.Slug), journal.Discarded(plugin.Slug));

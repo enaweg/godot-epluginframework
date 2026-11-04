@@ -80,7 +80,9 @@ internal sealed class GitFixture : IDisposable
     {
         var start = new ProcessStartInfo("git") { WorkingDirectory = directory, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
         foreach (var value in new[] { "-c", "user.name=Test", "-c", "user.email=test@example.org", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false",
-                     "-c", "protocol.file.allow=always", "-c", "core.autocrlf=false", "-c", "init.defaultBranch=main" })
+                     "-c", "protocol.file.allow=always", "-c", "init.defaultBranch=main",
+                     // no hooks a developer installed globally, which only slow the fixture down
+                     "-c", "core.hooksPath=" + Path.Combine(Path.GetTempPath(), "eplugin-tests-no-hooks") })
             start.ArgumentList.Add(value);
         foreach (var argument in arguments) start.ArgumentList.Add(argument);
         start.Environment["GIT_TERMINAL_PROMPT"] = "0";

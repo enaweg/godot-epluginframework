@@ -26,7 +26,7 @@ internal enum RepositoryKind
 /// The git repository a plugin folder belongs to, read from the files alone (nothing runs git). A package update
 /// replaces the whole folder, which would delete a <c>.git</c> in it and change another repository's working copy, so
 /// every kind but <see cref="RepositoryKind.None"/> is refused for packages (<see cref="PackageRefusal"/>); a submodule
-/// is updated through git instead.
+/// is updated through git instead (<see cref="SubmoduleSource"/>).
 /// </summary>
 /// <param name="Directory">The plugin folder, a full file system path.</param>
 /// <param name="Repository">

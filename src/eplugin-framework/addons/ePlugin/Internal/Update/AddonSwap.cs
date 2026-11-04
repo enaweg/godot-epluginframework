@@ -141,7 +141,7 @@ internal static class AddonFiles
     /// <summary>
     /// Refuses to replace a folder that holds a git repository (a <c>.git</c> file or folder in it or below it): packages
     /// never contain one (<see cref="PackageFiles.Skip"/>), so a swap would move it into the backup that the commit deletes.
-    /// Git submodules are updated through git instead.
+    /// Git submodules are updated through git instead (<see cref="SubmoduleSwap"/>).
     /// </summary>
     public static void RefuseRepository(string directory)
     {

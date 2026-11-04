@@ -171,7 +171,9 @@ internal sealed class UpdateService(IUpdateSourceFactory factory, IClock clock, 
             try
             {
                 var site = target with { UpdateUrl = url, OverrideUrl = null, KnownUrl = null };
-                var result = await run(factory.Create(url), site, timeout.Token).WaitAsync(timeout.Token).ConfigureAwait(false);
+                // A submodule's only site is its remote, read through the submodule's own git configuration.
+                var source = target.Repository is { Kind: RepositoryKind.Submodule } submodule ? factory.ForSubmodule(submodule) : factory.Create(url);
+                var result = await run(source, site, timeout.Token).WaitAsync(timeout.Token).ConfigureAwait(false);
                 return (result, url, errors.Count == 0 ? null : $"{string.Join("; ", errors)}; used {url} instead");
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }

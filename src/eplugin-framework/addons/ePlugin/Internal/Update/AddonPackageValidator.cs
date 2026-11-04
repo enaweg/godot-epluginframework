@@ -27,9 +27,13 @@ internal interface IAddonRule { IEnumerable<Finding> Check(ValidationContext con
 /// The source of the new version's license the user accepted before installing it, recorded once the update commits;
 /// null when none was asked about.
 /// </param>
+/// <param name="SubmoduleHead">
+/// Of a submodule update: the commit the submodule was at when staging found it without uncommitted changes and
+/// unpublished commits. The update refuses to start from another one.
+/// </param>
 internal sealed record ValidatedPackage(UpdateCandidate Candidate, string StagingDir, SemVer NewVersion,
     string? NewUpdateUrl, bool ContainsCSharp, IReadOnlyList<Finding> Findings, PluginKind Kind = PluginKind.Unknown,
-    string? AcceptedLicense = null)
+    string? AcceptedLicense = null, string? SubmoduleHead = null)
 {
     public bool IsValid => Findings.All(f => f.Severity != FindingSeverity.Error);
 }
@@ -119,8 +123,10 @@ internal sealed partial class AddonPackageValidator(IEnumerable<IAddonRule>? ext
         // An add-on's name is its slug or the built-in list's name, never one from its files.
         if (!addon && !context.NewInstall && metadata.GetValueOrDefault("name") != installed.Name) Add("R8", FindingSeverity.Warning, "Plugin name changed.");
         var newUrl = metadata.GetValueOrDefault("update_url");
-        var ownRepository = UpdateSourceFactory.Repository(installed.UpdateUrl);
-        if (newUrl != installed.UpdateUrl && !context.NewInstall)
+        // A submodule is updated from its own remote whatever plugin.cfg names, so its update_url cannot move it elsewhere.
+        var submodule = candidate.Package as SubmodulePackageRef;
+        var ownRepository = submodule is null ? UpdateSourceFactory.Repository(installed.UpdateUrl) : null;
+        if (newUrl != installed.UpdateUrl && !context.NewInstall && submodule is null)
         {
             // Later updates come from the new update_url, with an update site the project sets whenever that one fails, and
             // R25 compares with it once it is installed. Another repository may belong to someone else, also on the same
@@ -144,7 +150,15 @@ internal sealed partial class AddonPackageValidator(IEnumerable<IAddonRule>? ext
         // Packages never contain a .git, so replacing a folder that holds a repository would delete it, and one inside
         // another repository would change that repository's working copy.
         var repository = installed.Repository ?? PluginRepository.Detect(installed.Directory, null);
-        if (!context.NewInstall && repository.PackageRefusal(installed.Directory) is { } refusal)
+        if (submodule is not null)
+        {
+            if (repository.Kind != RepositoryKind.Submodule)
+                Add("R29", FindingSeverity.Error, $"{installed.Directory} is no longer a git submodule; check for updates again.");
+            else
+                Add("R29", FindingSeverity.Info, $"The plugin folder is a git submodule: the update checks out {submodule.Tag} " +
+                                                 $"({SubmoduleSource.Short(submodule.Commit)}) in it. Commit the changed submodule in your project's repository afterwards.");
+        }
+        else if (!context.NewInstall && repository.PackageRefusal(installed.Directory) is { } refusal)
             Add("R29", FindingSeverity.Error, refusal);
         var installedFiles = Directory.Exists(installed.Directory) ? PackageFiles.Files(installed.Directory).ToArray() : [];
         // What differs between plugin kinds, e.g. the native libraries of a GDExtension plugin.

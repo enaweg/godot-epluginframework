@@ -13,8 +13,15 @@ namespace Enaweg.Plugin.Internal.Update;
 internal sealed record RefusedPackage(UpdateCandidate Candidate, string Reason);
 /// <summary>The packages of a batch that were staged and validated, and the ones that were refused.</summary>
 internal sealed record StagedBatch(IReadOnlyList<ValidatedPackage> Packages, IReadOnlyList<RefusedPackage> Refused);
-internal sealed class PackageFetcher(UpdateHttp http, IGitRunner git)
+/// <param name="submoduleGit">Runs git in submodules, whose own remote may be a local path; see <see cref="UpdateSourceFactory.ForSubmodule"/>.</param>
+internal sealed class PackageFetcher(UpdateHttp http, IGitRunner git, IGitRunner? submoduleGit = null)
 {
+    /// <summary>Adds what staging found to the package's findings.</summary>
+    private sealed class StagedFindings(IReadOnlyList<Finding> findings) : IAddonRule
+    {
+        public IEnumerable<Finding> Check(ValidationContext context) => findings;
+    }
+
     /// <summary>
     /// Stages and validates every package of the batch. A package that cannot be fetched or is refused is left out alone,
     /// so it does not hold back the others, which are installed in independent groups anyway. Only a batch in which every
@@ -140,6 +147,14 @@ internal sealed class PackageFetcher(UpdateHttp http, IGitRunner git)
             if (candidate.SourceUrl is null || !GitUrl.TryParse(candidate.SourceUrl, out var url) || url!.Repository != package.Repository || url.Path != package.Path)
                 throw new InvalidDataException("Git package does not match its declared source.");
             await new GitSource(http, git, url).FetchAsync(package, candidate.Slug, stage, ct).ConfigureAwait(false);
+        }
+        else if (candidate.Package is SubmodulePackageRef submodule)
+        {
+            if (target.Repository is not { Kind: RepositoryKind.Submodule } repository || candidate.SourceUrl is null || candidate.SourceUrl != repository.SubmoduleSite)
+                throw new InvalidDataException($"{target.Directory} is no longer a git submodule of that remote; check for updates again.");
+            var staged = await new SubmoduleSource(submoduleGit ?? new GitRunner(allowFileProtocol: true), repository).StageAsync(submodule, stage, ct).ConfigureAwait(false);
+            return new AddonPackageValidator([new StagedFindings(staged.Problems)]).Validate(new(target, candidate, stage, allowDowngrade, allowReinstall))
+                with { SubmoduleHead = staged.Head };
         }
         else throw new InvalidDataException("Unsupported package reference.");
         return new AddonPackageValidator().Validate(new(target, candidate, stage, allowDowngrade, allowReinstall));
