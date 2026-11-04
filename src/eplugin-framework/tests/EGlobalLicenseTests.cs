@@ -72,6 +72,92 @@ public class EGlobalLicenseTests : IDisposable
     }
 
     [TestCase]
+    public void ARequiredLicenseThatCannotBeReadIsShownButNeverAccepted()
+    {
+        // license_required=true, but the plugin ships no LICENSE file
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"), extraConfig: "license_required=true");
+        _fixture.Host.Dialogs = true;
+
+        _fixture.Enable("app");
+        EGlobal.RunPosted();
+
+        var review = _fixture.Global.PendingLicenseReview!;
+        Assertions.AssertObject(review.DecisionOf("app")).IsEqual(LicenseDecision.Unreadable);
+        Assertions.AssertString(review.Entries.Single().Problem).Contains("is missing");
+        review.AcceptAll();
+        _fixture.Global.CompleteLicenseReview(review);
+        EGlobal.RunPosted();
+
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsFalse();
+        Assertions.AssertThat(_fixture.Operations).IsEmpty();
+        Assertions.AssertObject(_fixture.Store.GetLicense("app")).IsNull();
+        Assertions.AssertBool(_fixture.Log.Any(l => l.StartsWith("error:", StringComparison.Ordinal) &&
+                                                    l.Contains(" was not enabled: the license of app cannot be read, so it cannot be accepted (The license file res://addons/app/LICENSE is missing).") &&
+                                                    l.Contains(PluginLicense.UnreadableAdvice))).IsTrue();
+
+        // a file added later is shown before it counts as accepted
+        RequireLicense("app");
+        Assertions.AssertObject(_fixture.Global.ReviewActivationLicenses("app", "App")!.DecisionOf("app")).IsEqual(LicenseDecision.Pending);
+    }
+
+    [TestCase]
+    public void AutoAcceptNeverAcceptsALicenseThatCannotBeRead()
+    {
+        _fixture.AddPlainPlugin("lib", extraConfig: "license_required=true");
+        RequireLicense("lib");
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package").AddPluginDependency("lib"),
+            extraConfig: "license_required=true\nlicense_file=\"../outside/LICENSE\"");
+        ProjectSettings.SetSetting(LicenseSettings.AutoAcceptKey, true);
+
+        // a headless editor: nothing can be shown, so only the log explains it
+        _fixture.Enable("app");
+        EGlobal.RunPosted();
+
+        Assertions.AssertBool(_fixture.Host.Enabled.Overlaps(["app", "lib"])).IsFalse();
+        Assertions.AssertThat(_fixture.Operations).IsEmpty();
+        Assertions.AssertObject(_fixture.Global.PendingLicenseReview).IsNull();
+        // the license that can be read is accepted automatically as usual
+        Assertions.AssertBool(_fixture.Store.GetLicense("lib")!.Automatic).IsTrue();
+        Assertions.AssertObject(_fixture.Store.GetLicense("app")).IsNull();
+        Assertions.AssertBool(_fixture.Log.Any(l => l.StartsWith("error:", StringComparison.Ordinal) &&
+                                                    l.Contains(" was not enabled: the license of app cannot be read") &&
+                                                    l.Contains("must be a relative path inside the plugin directory"))).IsTrue();
+
+        // the manager's review lists it, so the dialog explains it
+        var review = _fixture.Global.ReviewActivationLicenses("app", "App")!;
+        Assertions.AssertThat(review.Entries.Select(e => e.Slug).ToArray()).ContainsExactly("app");
+        Assertions.AssertBool(review.IsComplete).IsTrue();
+    }
+
+    [TestCase]
+    public void AnUpdateOrAnEnabledPluginWhoseLicenseCannotBeReadIsNotAccepted()
+    {
+        var packages = new[] { Staged("tool", "license_required=true", null) };
+        ProjectSettings.SetSetting(LicenseSettings.AutoAcceptKey, true);
+        _fixture.AddPlainPlugin("tool", extraConfig: "license_required=true");
+
+        var update = _fixture.Global.ReviewUpdateLicenses(packages)!;
+
+        Assertions.AssertBool(update.IsUpdate).IsTrue();
+        Assertions.AssertObject(update.DecisionOf("tool")).IsEqual(LicenseDecision.Unreadable);
+        Assertions.AssertArray(update.Canceled.Select(a => a.Slug).ToArray()).ContainsExactly("tool");
+        Assertions.AssertObject(_fixture.Store.GetLicense("tool")).IsNull();
+
+        // enabled without the framework asking: closing the dialog disables it, like declining
+        _fixture.Host.Enabled.Add("tool");
+        _fixture.Host.Dialogs = true;
+        _fixture.Global.ReviewEnabledLicenses();
+        var enabled = _fixture.Global.PendingLicenseReview!;
+        Assertions.AssertBool(enabled.Activations.Single().Enabled).IsTrue();
+        _fixture.Global.CompleteLicenseReview(enabled);
+        EGlobal.RunPosted();
+
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("tool")).IsFalse();
+        Assertions.AssertObject(_fixture.Store.GetLicense("tool")).IsNull();
+        Assertions.AssertBool(_fixture.Log.Any(l => l.Contains("tool was disabled: the license of tool cannot be read"))).IsTrue();
+    }
+
+    [TestCase]
     public void LicenseDecisionsAnAssemblyReloadInterruptedAreAppliedAfterIt()
     {
         _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"), extraConfig: "license_required=true");
@@ -316,14 +402,17 @@ public class EGlobalLicenseTests : IDisposable
         EGlobal.RunPosted();
     }
 
-    /// <summary>A staged update of version 2.0.0 whose plugin.cfg has <paramref name="config"/>.</summary>
-    private ValidatedPackage Staged(string slug, string config, string licenseFile)
+    /// <summary>
+    /// A staged update of version 2.0.0 whose plugin.cfg has <paramref name="config"/>; without
+    /// <paramref name="licenseFile"/> it ships no license.
+    /// </summary>
+    private ValidatedPackage Staged(string slug, string config, string? licenseFile)
     {
         var dir = Path.Combine(_fixture.Root, "staging", slug);
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "plugin.cfg"),
             $"[plugin]\n\nname=\"{slug}\"\nversion=\"2.0.0\"\nscript=\"plugin.gd\"\n{config}\n");
-        File.WriteAllText(Path.Combine(dir, licenseFile), "New terms");
+        if (licenseFile is not null) File.WriteAllText(Path.Combine(dir, licenseFile), "New terms");
         if (!SemVer.TryParse("2.0.0", out var version)) throw new InvalidOperationException("2.0.0 is a version");
         var candidate = new UpdateCandidate(slug, slug, "1.0.0", "2.0.0", "https://example.org/releases", null, null,
             new ZipPackageRef("https://example.org/p.zip", slug));

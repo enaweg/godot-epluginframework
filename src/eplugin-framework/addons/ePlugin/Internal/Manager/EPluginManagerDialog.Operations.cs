@@ -166,7 +166,9 @@ internal sealed partial class EPluginManagerDialog
             _working = false;
             if (!GodotObject.IsInstanceValid(this) || !IsInsideTree()) return;
             Refresh();
-            _status.Text = $"{name} was not enabled: a license it needs was declined.";
+            _status.Text = decided.UnreadableReason is { } unreadable
+                ? $"{name} was not enabled: {unreadable}."
+                : $"{name} was not enabled: a license it needs was declined.";
         }).Open();
     }
 

@@ -61,6 +61,14 @@ In this example, enabling Sample Dependant Plugin also enables SamplePlugin, its
 
 A license is accepted once per project. Disabling and enabling the plugin again does not ask again. If `addons/eplugin-state.json` cannot be written, for example while it has a merge conflict, an accepted license still counts until the editor restarts, also after C# assembly reloads, and is saved once the file can be written again. In a headless editor no dialog can be shown, so a plugin that needs a license is not enabled unless licenses are accepted automatically.
 
+### A license that cannot be read
+
+A plugin with `license_required=true` whose license cannot be shown cannot be accepted, because nobody could read what they would agree to. This is the case when the license file is missing, is larger than 1 MiB or cannot be read, or when `license_file` (or the path the recipe sets) leaves the plugin directory. The dialog then says that the plugin has a license it cannot read, why, and what helps, and only offers **Close**: there is nothing to accept, and the plugin stays disabled, like after declining. Other licenses in the same dialog are decided as usual, and **Accept all** leaves the unreadable one out. The ePlugin Manager's status line and plugin details say the same, and the log reports it as an error, also in a headless editor.
+
+Nothing is recorded for such a license, so a file that is added later is shown and has to be accepted before the plugin is enabled. `eplugin/licenses/auto_accept` does not accept it either. The same applies to an update whose new version cannot show its required license: it is left out of the batch like an update whose license was declined, and the version you have stays installed. An update that would enable a disabled dependency whose license cannot be read fails and is rolled back. A plugin that is already enabled but whose license was never accepted and cannot be read is disabled when you close the dialog.
+
+The fix is up to the plugin's author: ship the license inside the plugin directory, at most 1 MiB, as `LICENSE` or under the name `license_file` or the recipe gives. If the file was removed by accident, reinstalling or updating the plugin restores it.
+
 ## When a license counts as accepted
 
 A license stays accepted while it comes from the same place: the same license file path, the same `res://` path set by the recipe, or, for a license text set by the recipe, the same text. The contents of a file are not compared. Plugin authors who want an updated license file to be accepted again should therefore ship it under a new name, such as `LICENSE-2.0.md`.
@@ -77,11 +85,11 @@ A new version may also require a plugin that is installed but disabled. The upda
 
 ## Reading a license again
 
-The plugin details of the [ePlugin Manager](eplugin-manager.md) show each plugin's license. Click it to open the license again. For a plugin that requires a license, the details also show whether and when it was accepted. A missing `LICENSE` file is shown as missing.
+The plugin details of the [ePlugin Manager](eplugin-manager.md) show each plugin's license. Click it to open the license again. For a plugin that requires a license, the details also show whether and when it was accepted. A missing `LICENSE` file is shown as missing; a required license that [cannot be read](#a-license-that-cannot-be-read) shows why and what helps instead of a link.
 
 ## Accepting licenses automatically
 
-The project setting `eplugin/licenses/auto_accept` accepts every license without showing it. Turn it on with **Accept every license without showing it** on the **General** tab of the [ePlugin Manager](eplugin-manager.md)'s **Settings**, which asks for confirmation first, or in Project Settings > General (with Advanced Settings shown). It is stored in `project.godot`, so it applies to everyone working on the project.
+The project setting `eplugin/licenses/auto_accept` accepts every license without showing it, except one that [cannot be read](#a-license-that-cannot-be-read). Turn it on with **Accept every license without showing it** on the **General** tab of the [ePlugin Manager](eplugin-manager.md)'s **Settings**, which asks for confirmation first, or in Project Settings > General (with Advanced Settings shown). It is stored in `project.godot`, so it applies to everyone working on the project.
 
 > [!WARNING]
 > This is risky. You agree to license terms nobody has read, which may for example restrict commercial use, require attribution or forbid redistribution. Each license accepted this way is logged with a warning and recorded as accepted automatically.

@@ -115,14 +115,13 @@ internal sealed partial class EGlobal
         // a context left from before the plugin was disabled holds old metadata; versions are read from plugin.cfg
         _contexts.RemoveAll(c => c.Slug == slug && c.Plugin is null);
         var name = PluginName(slug);
-        var pending = CollectActivationLicenses(slug);
-        if (pending.Count > 0 && !AcceptAutomatically(pending))
+        var pending = AcceptAutomatically(CollectActivationLicenses(slug));
+        if (pending.Count > 0)
         {
             var names = string.Join(", ", pending.Select(e => e.Name));
             if (!LicenseUiAvailable)
             {
-                _ePluginContext?.Logger.Error(
-                    $"{name} was not enabled: the license of {names} has to be accepted in the editor, or set {LicenseSettings.AutoAcceptKey}.");
+                _ePluginContext?.Logger.Error(NotEnabledWithoutDialog(name, pending));
             }
             else
             {

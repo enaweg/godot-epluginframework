@@ -172,6 +172,32 @@ public class PluginManagerDialogTests : IDisposable
     }
 
     [TestCase]
+    public async Task APluginWhoseRequiredLicenseCannotBeReadStaysDisabledAndSaysWhy()
+    {
+        // license_required=true, but no LICENSE file
+        _fixture.AddPlainPlugin("licensed", extraConfig: "license_required=true");
+        _dialog.Refresh();
+
+        Click("licensed", EnabledColumn, true);
+        await Frames();
+        var license = Popped<LicenseDialog>()!;
+        Assertions.AssertString(license.GetNode<RichTextLabel>("%LicenseText").Text).Contains("is missing.");
+        Assertions.AssertString(license.GetOkButton().Text).IsEqual("Close");
+
+        license.EmitSignal(AcceptDialog.SignalName.Confirmed);
+        await Frames();
+
+        Assertions.AssertBool(_fixture.Host.IsPluginEnabled("licensed")).IsFalse();
+        Assertions.AssertObject(_fixture.Store.GetLicense("licensed")).IsNull();
+        Assertions.AssertString(Status).StartsWith("licensed was not enabled: the license of licensed cannot be read, so it cannot be accepted");
+        // the details offer no license to open, only why it cannot be accepted
+        Select("licensed");
+        Assertions.AssertString(_dialog.GetNode<RichTextLabel>("%DetailsText").Text).Contains("cannot be accepted, so the plugin stays disabled");
+        _dialog.GetNode<RichTextLabel>("%DetailsText").EmitSignal(RichTextLabel.SignalName.MetaClicked, PluginManagerViewModel.LicenseMeta);
+        Assertions.AssertObject(Popped<LicenseDialog>()).IsNull();
+    }
+
+    [TestCase]
     public void TheWelcomePageIsShownAgainFromTheDetails()
     {
         File.WriteAllText(Path.Combine(_fixture.Addon("tool"), "README.md"), "# Tool\nHello");

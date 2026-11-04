@@ -318,7 +318,9 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
                 if (selected.Length == 0)
                 {
                     var notice = PluginManagerViewModel.RefusedSummary(Refused) +
-                                 "Update canceled: its license was declined. Addon files were not changed.";
+                                 (decided.UnreadableReason is { } unreadable
+                                     ? $"Update canceled: {unreadable}. Addon files were not changed."
+                                     : "Update canceled: its license was declined. Addon files were not changed.");
                     Clear();
                     return new(InstallStep.Canceled, notice);
                 }

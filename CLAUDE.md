@@ -464,7 +464,11 @@ A plugin's license comes from the recipe's `SetLicense` (text, or a `res://` pat
 acceptance, because that has to be known without running plugin code (e.g. for staged updates). `Internal/Licenses/`
 is pure and unit-tested: `PluginLicense` resolves/reads it and gives it a *source* (relative file, `res://` path, or
 `text:<hash>` for recipe text; file contents are never compared), and `LicenseReview` holds per-license decisions
-(declining a dependency's license cancels and skips its dependants). Acceptances live in the optional `licenses` list
+(declining a dependency's license cancels and skips its dependants). A required license with a `Problem` (missing,
+over 1 MiB, outside the plugin) is `LicenseDecision.Unreadable` from the start: it is never accepted, not by Accept all,
+auto-accept (`AcceptAutomatically` returns it as left to review) or `RecordLicenses`, and cancels what needs it like a
+declined one, so the dialog only explains it (`PluginLicense.UnreadableAdvice`) and closes; an update needing it is
+left out. Acceptances live in the optional `licenses` list
 of the shared `eplugin-state.json` (`PluginStateStore.TryRecordLicenses`), omitted while empty. Compatibility of the
 state files goes one way: an upgrade must never lose state, so every newer version reads every older file (a new field
 is optional and reads as its default when absent; `PluginStateStoreTests.OlderFilesWithoutNewerFieldsAreReadWithoutLosingState`).

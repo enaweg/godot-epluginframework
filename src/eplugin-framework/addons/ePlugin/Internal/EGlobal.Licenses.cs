@@ -35,8 +35,8 @@ internal sealed partial class EGlobal
             return true; // EGlobal's existing headless tests do not initialize the editor.
         }
 
-        var pending = CollectActivationLicenses(context.Slug);
-        if (pending.Count == 0 || AcceptAutomatically(pending))
+        var pending = AcceptAutomatically(CollectActivationLicenses(context.Slug));
+        if (pending.Count == 0)
         {
             return true;
         }
@@ -46,7 +46,9 @@ internal sealed partial class EGlobal
         {
             // A dependency whose license was not reviewed with the plugin that enables it, because its recipe could
             // not be read beforehand. The waiting chain cannot pause for a dialog, so it fails like a missing dependency.
-            var reason = $"The license of {names} has to be accepted first. Enable {context.Name} on its own to review it, then retry it under Needs attention in the ePlugin Manager.";
+            var reason = UnreadableReason(pending) is { } unreadable
+                ? $"{context.Name} was not enabled: {unreadable}. {PluginLicense.UnreadableAdvice}"
+                : $"The license of {names} has to be accepted first. Enable {context.Name} on its own to review it, then retry it under Needs attention in the ePlugin Manager.";
             context.Logger?.Error(reason);
             context.State = EEditorPluginState.Error;
             context.ErrorDetail = new InvalidOperationException(reason);
@@ -57,8 +59,7 @@ internal sealed partial class EGlobal
 
         if (!LicenseUiAvailable)
         {
-            context.Logger?.Error(
-                $"{context.Name} was not enabled: the license of {names} has to be accepted in the editor, or set {LicenseSettings.AutoAcceptKey}.");
+            context.Logger?.Error(NotEnabledWithoutDialog(context.Name, pending));
         }
         else
         {
@@ -215,28 +216,43 @@ internal sealed partial class EGlobal
             ProjectSettings.GlobalizePath(_host.PluginDirectory(slug))), false, null)
         : null;
 
-    /// <summary>Accepts the licenses without asking when the project allows it; returns whether it did.</summary>
-    private bool AcceptAutomatically(IReadOnlyCollection<LicenseEntry> entries)
+    /// <summary>
+    /// Accepts the licenses without asking when the project allows it. Returns those left to review: all of them without
+    /// auto-accept, else those that cannot be read, which are never accepted.
+    /// </summary>
+    private IReadOnlyList<LicenseEntry> AcceptAutomatically(IReadOnlyList<LicenseEntry> entries)
     {
         if (!LicenseSettings.AutoAccept)
         {
-            return false;
+            return entries;
         }
 
-        foreach (var entry in entries)
+        var readable = entries.Where(e => e.Problem is null).ToArray();
+        foreach (var entry in readable)
         {
             _ePluginContext?.Logger.Warn(
                 $"Accepted the license of {entry.Name} ({PluginLicense.Display(entry.Slug, entry.Source)}) without showing it, because {LicenseSettings.AutoAcceptKey} is enabled.");
         }
 
-        RecordLicenses(entries, automatic: true);
-        return true;
+        RecordLicenses(readable, automatic: true);
+        return entries.Where(e => e.Problem is not null).ToArray();
     }
+
+    /// <summary>Why the licenses cannot be accepted because some cannot be read; null when all of them can be.</summary>
+    private static string? UnreadableReason(IReadOnlyList<LicenseEntry> entries) => new LicenseReview(entries, []).UnreadableReason;
+
+    /// <summary>The error of a plugin a headless editor did not enable because of its licenses.</summary>
+    private static string NotEnabledWithoutDialog(string name, IReadOnlyList<LicenseEntry> pending) =>
+        UnreadableReason(pending) is { } unreadable
+            ? $"{name} was not enabled: {unreadable}. {PluginLicense.UnreadableAdvice}"
+            : $"{name} was not enabled: the license of {string.Join(", ", pending.Select(e => e.Name))} has to be accepted in the editor, or set {LicenseSettings.AutoAcceptKey}.";
 
     private void RecordLicenses(IEnumerable<LicenseEntry> entries, bool automatic)
     {
         var now = DateTimeOffset.UtcNow;
-        var accepted = entries.Select(e => new AcceptedLicense(e.Slug, e.Source, e.Version, now, automatic)).ToArray();
+        // a license nobody could read is never recorded, also not by a caller that missed it
+        var accepted = entries.Where(e => e.Problem is null)
+            .Select(e => new AcceptedLicense(e.Slug, e.Source, e.Version, now, automatic)).ToArray();
         if (_stateStore is null || accepted.Length == 0 || _stateStore.TryRecordLicenses(accepted))
         {
             return;
@@ -286,12 +302,13 @@ internal sealed partial class EGlobal
 
     /// <summary>
     /// The licenses to review before enabling a plugin from the ePlugin Manager, or null when there are none left
-    /// after auto-accepting.
+    /// after auto-accepting. A license that cannot be read is always left, so the dialog explains why the plugin stays
+    /// disabled.
     /// </summary>
     internal LicenseReview? ReviewActivationLicenses(string slug, string name)
     {
-        var pending = CollectActivationLicenses(slug);
-        if (pending.Count == 0 || AcceptAutomatically(pending))
+        var pending = AcceptAutomatically(CollectActivationLicenses(slug));
+        if (pending.Count == 0)
         {
             return null;
         }
@@ -305,7 +322,8 @@ internal sealed partial class EGlobal
     /// </summary>
     /// <remarks>
     /// A license set by a recipe is only known once the new code is compiled. Those are checked after the update by
-    /// <see cref="ReviewEnabledLicenses"/>.
+    /// <see cref="ReviewEnabledLicenses"/>. A required license the new version cannot show is listed, also with
+    /// auto-accept: it cannot be accepted, so that update is left out like one whose license was declined.
     /// </remarks>
     internal LicenseReview? ReviewUpdateLicenses(IEnumerable<ValidatedPackage> packages)
     {
@@ -330,12 +348,13 @@ internal sealed partial class EGlobal
             }
         }
 
-        if (pending.Count == 0 || AcceptAutomatically(pending))
+        var left = AcceptAutomatically(pending);
+        if (left.Count == 0)
         {
             return null;
         }
 
-        return new LicenseReview(pending, pending.Select(e => new LicenseActivation(e.Slug, e.Name, [e.Slug])).ToArray(),
+        return new LicenseReview(left, left.Select(e => new LicenseActivation(e.Slug, e.Name, [e.Slug])).ToArray(),
             isUpdate: true);
     }
 
@@ -367,20 +386,22 @@ internal sealed partial class EGlobal
             }
         }
 
-        if (pending.Count == 0 || AcceptAutomatically(pending))
+        var left = AcceptAutomatically(pending);
+        if (left.Count == 0)
         {
             return;
         }
 
         if (!LicenseUiAvailable)
         {
-            _ePluginContext?.Logger.Warn(
-                $"The license of {string.Join(", ", pending.Select(e => e.Name))} is not accepted; accept it in the editor or set {LicenseSettings.AutoAcceptKey}.");
+            _ePluginContext?.Logger.Warn(UnreadableReason(left) is { } unreadable
+                ? $"The license of an enabled plugin is not accepted: {unreadable}. {PluginLicense.UnreadableAdvice}"
+                : $"The license of {string.Join(", ", left.Select(e => e.Name))} is not accepted; accept it in the editor or set {LicenseSettings.AutoAcceptKey}.");
             return;
         }
 
-        QueueLicenseReview(new LicenseReview(pending,
-            pending.Select(e => new LicenseActivation(e.Slug, e.Name, [e.Slug], Enabled: true)).ToArray()));
+        QueueLicenseReview(new LicenseReview(left,
+            left.Select(e => new LicenseActivation(e.Slug, e.Name, [e.Slug], Enabled: true)).ToArray()));
     }
 
     /// <summary>Records the licenses the user accepted in a review.</summary>
@@ -417,10 +438,11 @@ internal sealed partial class EGlobal
         RecordLicenses(review);
         foreach (var activation in review.Canceled)
         {
-            var declined = review.Entries.Where(e => activation.Licenses.Contains(e.Slug) &&
-                                                     review.DecisionOf(e.Slug) == LicenseDecision.Declined);
-            _ePluginContext?.Logger.Warn(
-                $"{activation.Name} {(activation.Enabled ? "was disabled" : "was not enabled")}: the license of {string.Join(", ", declined.Select(e => e.Name))} was declined.");
+            var text = $"{activation.Name} {(activation.Enabled ? "was disabled" : "was not enabled")}: {review.CanceledReason(activation)}.";
+            if (activation.Licenses.Any(l => review.DecisionOf(l) == LicenseDecision.Unreadable))
+                _ePluginContext?.Logger.Error(text + " " + PluginLicense.UnreadableAdvice);
+            else
+                _ePluginContext?.Logger.Warn(text);
         }
 
         // never inside the dialog's signal: enabling and disabling run recipes and may rebuild the assembly

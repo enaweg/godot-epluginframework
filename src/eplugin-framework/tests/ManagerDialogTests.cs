@@ -349,7 +349,68 @@ public class ManagerDialogTests
         Assertions.AssertString(Viewed(new LicenseInfo(entry, true, new AcceptedLicense("a", entry.Source, "1.0.0", DateTimeOffset.UtcNow, true))))
             .Contains("automatically because " + LicenseSettings.AutoAcceptKey);
         Assertions.AssertString(Viewed(new LicenseInfo(entry with { Problem = "Missing" }, true, null),
+                dialog => Assertions.AssertString(dialog.GetNode<RichTextLabel>("%LicenseText").Text)
+                    .IsEqual("[color=#ff7070]Missing[/color]\n\n" + PluginLicense.UnreadableAdvice)))
+            .IsEqual("a asks for its license to be accepted, but it cannot be read, so it cannot be accepted. a cannot be enabled until it can be read.");
+        Assertions.AssertString(Viewed(new LicenseInfo(entry with { Problem = "Missing" }, false, null),
             dialog => Assertions.AssertString(dialog.GetNode<RichTextLabel>("%LicenseText").Text).IsEqual("[color=#ff7070]Missing[/color]"))).IsNotEmpty();
+    }
+
+    [TestCase]
+    public static void TheLicenseDialogExplainsALicenseItCannotReadAndOnlyCloses()
+    {
+        var review = new LicenseReview([Unreadable("a")], [new LicenseActivation("a", "A", ["a"])]);
+        LicenseReview? finished = null;
+        var dialog = LicenseDialog.Create(review, r => finished = r);
+        try
+        {
+            Assertions.AssertString(dialog.GetNode<Label>("%Summary").Text)
+                .IsEqual("The license of a cannot be read, so it cannot be accepted. A stays disabled.");
+            Assertions.AssertString(dialog.GetNode<RichTextLabel>("%LicenseText").Text)
+                .IsEqual("[color=#ff7070]The license file res://addons/a/LICENSE is missing.[/color]\n\n" + PluginLicense.UnreadableAdvice);
+            // nothing to accept or decline, only to close
+            Assertions.AssertString(dialog.GetOkButton().Text).IsEqual("Close");
+            Assertions.AssertBool(dialog.GetOkButton().Disabled).IsFalse();
+            Assertions.AssertBool(Button(dialog, "Decline").Visible).IsFalse();
+            Assertions.AssertBool(Button(dialog, "Accept all").Visible).IsFalse();
+
+            dialog.EmitSignal(AcceptDialog.SignalName.CustomAction, "accept_all");
+            dialog.EmitSignal(AcceptDialog.SignalName.Confirmed);
+
+            Assertions.AssertObject(finished).IsSame(review);
+            Assertions.AssertObject(review.DecisionOf("a")).IsEqual(LicenseDecision.Unreadable);
+            Assertions.AssertInt(review.Accepted.Count()).IsEqual(0);
+            Assertions.AssertArray(review.Canceled.Select(a => a.Slug).ToArray()).ContainsExactly("a");
+        }
+        finally { Free(dialog); }
+
+        // next to a license that can be read, only that one is accepted
+        var mixed = new LicenseReview([License("b"), Unreadable("a")],
+            [new LicenseActivation("b", "B", ["b"]), new LicenseActivation("a", "A", ["a"], Enabled: true)]);
+        finished = null;
+        dialog = LicenseDialog.Create(mixed, r => finished = r);
+        try
+        {
+            Assertions.AssertString(dialog.GetNode<Label>("%Summary").Text).StartsWith("Accept the licenses below.");
+            Assertions.AssertString(dialog.GetNode<Label>("%Summary").Text)
+                .EndsWith("The license of a cannot be read, so it cannot be accepted. A is disabled when you close this dialog.");
+            Assertions.AssertString(dialog.GetNode<Label>("%LicenseName").Text).IsEqual("b 1.0.0");
+            Assertions.AssertBool(Button(dialog, "Accept all").Visible).IsFalse();
+            Assertions.AssertString(dialog.GetNode<ItemList>("%LicenseList").GetItemTooltip(1)).StartsWith("Cannot be read");
+            // selecting the unreadable one offers nothing to decide
+            dialog.GetNode<ItemList>("%LicenseList").EmitSignal(ItemList.SignalName.ItemSelected, 1);
+            Assertions.AssertBool(dialog.GetOkButton().Disabled).IsTrue();
+            Assertions.AssertBool(Button(dialog, "Decline").Disabled).IsTrue();
+            dialog.EmitSignal(AcceptDialog.SignalName.Confirmed);
+            Assertions.AssertObject(finished).IsNull();
+
+            dialog.GetNode<ItemList>("%LicenseList").EmitSignal(ItemList.SignalName.ItemSelected, 0);
+            dialog.EmitSignal(AcceptDialog.SignalName.Confirmed);
+            Assertions.AssertObject(finished).IsSame(mixed);
+            Assertions.AssertArray(mixed.Accepted.Select(e => e.Slug).ToArray()).ContainsExactly("b");
+            Assertions.AssertArray(mixed.Canceled.Select(a => a.Slug).ToArray()).ContainsExactly("a");
+        }
+        finally { Free(dialog); }
     }
 
     [TestCase]
@@ -483,6 +544,9 @@ public class ManagerDialogTests
     }
 
     private static LicenseEntry License(string slug) => new(slug, slug, "1.0.0", "LICENSE", $"License of {slug}");
+
+    private static LicenseEntry Unreadable(string slug) =>
+        License(slug) with { Text = "", Problem = $"The license file res://addons/{slug}/LICENSE is missing." };
 
     private static PluginRow Row(PluginInfo plugin) => new(plugin, null);
 
