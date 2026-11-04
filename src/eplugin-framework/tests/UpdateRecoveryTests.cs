@@ -80,6 +80,18 @@ public class UpdateRecoveryTests
         Assertions.AssertBool(Directory.Exists(Path.Combine(addon, ".new"))).IsTrue();
     }
     [TestCase]
+    public void EarlyRecoveryRestoresTheDirectoriesOfAnEPluginInASubfolder()
+    {
+        var addon = Path.Combine(_root, "addons/acme/tool");
+        Directory.CreateDirectory(Path.Combine(addon, ".old"));
+        Directory.CreateDirectory(Path.Combine(addon, "new"));
+        _journal.Recipes["acme/tool"] = new() { Old = new() { Directories = ["res://addons/acme/tool/.old"] }, Applied = new() { Directories = ["res://addons/acme/tool/.new"] } };
+        _journal.StartCount = 1; _journal.Save();
+        Assertions.AssertObject(Recover()).IsEqual(UpdateRecovery.Outcome.Restart);
+        Assertions.AssertBool(Directory.Exists(Path.Combine(addon, "old"))).IsTrue();
+        Assertions.AssertBool(Directory.Exists(Path.Combine(addon, ".new"))).IsTrue();
+    }
+    [TestCase]
     public void EarlyRecoveryUsesTheNewProjectBackupWhenReplacingItWasInterrupted()
     {
         // The new backup was complete when the old one was moved aside; the journal, saved afterwards, still lists the old

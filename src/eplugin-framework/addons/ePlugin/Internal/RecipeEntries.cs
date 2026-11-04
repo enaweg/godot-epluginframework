@@ -100,8 +100,9 @@ internal static class RecipeEntries
     private static void RequireSlug(string? pluginSlug)
     {
         Require(pluginSlug, nameof(pluginSlug), "plugin slug");
-        if (pluginSlug is "." or ".." || pluginSlug!.IndexOfAny(['/', '\\', ':']) >= 0)
-            throw new ArgumentException($"'{pluginSlug}' is not a plugin slug: use its folder name below addons.", nameof(pluginSlug));
+        // "addons/other" is the usual mistake of naming the path from res://, which was never a slug
+        if (!AddonLayout.IsValidSlug(pluginSlug) || pluginSlug!.StartsWith("addons/", StringComparison.Ordinal))
+            throw new ArgumentException($"'{pluginSlug}' is not a plugin slug: use its folder below addons, such as my_plugin, or acme/my_plugin for one in a subfolder.", nameof(pluginSlug));
     }
 
     private static void RequireConstraint(string? version)

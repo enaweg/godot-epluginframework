@@ -72,6 +72,12 @@ internal sealed record StateFileProblem(string File, string Message, string Hint
 /// does not know, written by a newer one, are skipped when reading and not written again, so they are lost after a
 /// downgrade; only another <c>schemaVersion</c> makes the files read-only.
 /// <para>
+/// Plugins in a subfolder of <c>res://addons</c> have a slug with <c>/</c>, which versions before them refused in every
+/// list, so that the whole file could no longer be read. Their entries are written to lists of their own
+/// (<c>nestedPlugins</c>, <c>nestedLicenses</c>, <c>nestedWelcomes</c>, and <c>nestedAttempts</c> in the local file),
+/// which older versions skip; reading takes entries of either list.
+/// </para>
+/// <para>
 /// The shared file is committed and edited by everyone on the project, so it changes only with its content:
 /// <c>lastCompletedAttemptId</c> names the last acknowledged update, which recovery needs; enabling and disabling plugins
 /// leave it alone, and an attempt that changes no entry does not write the file at all.
@@ -197,14 +203,14 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
             _sharedBytes = File.Exists(_sharedPath) ? File.ReadAllBytes(_sharedPath) : null;
             var shared = _sharedBytes is null
                 ? new SharedDocument { SchemaVersion = SchemaVersion, Plugins = [] }
-                : JsonSerializer.Deserialize<SharedDocument>(_sharedBytes, JsonOptions)
+                : JsonSerializer.Deserialize<SharedDocument>(_sharedBytes, JsonOptions)?.Unnested()
                   ?? throw new InvalidDataException("The file contains no plugin state.");
             ValidateShared(shared);
             file = _localPath;
             var localBytes = File.Exists(_localPath) ? File.ReadAllBytes(_localPath) : null;
             var local = localBytes is null
                 ? new LocalDocument { SchemaVersion = SchemaVersion, Attempts = [] }
-                : JsonSerializer.Deserialize<LocalDocument>(localBytes, JsonOptions)
+                : JsonSerializer.Deserialize<LocalDocument>(localBytes, JsonOptions)?.Unnested()
                   ?? throw new InvalidDataException("The file contains no plugin state.");
             ValidateLocal(local);
             UseShared(shared);
@@ -602,27 +608,32 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
                 return true;
             }
 
+            var (plugins, nestedPlugins) = Split(states.Values.OrderBy(x => x.Slug, StringComparer.Ordinal)
+                .Select(x => new SharedEntry
+                {
+                    Slug = x.Slug, Version = x.Version, State = x.State, Missing = x.Missing
+                }), x => x.Slug);
+            var (licenseEntries, nestedLicenses) = Split(licenses.Values.OrderBy(x => x.Slug, StringComparer.Ordinal)
+                .Select(x => new LicenseDocumentEntry
+                {
+                    Slug = x.Slug, License = x.License, Version = x.Version, AcceptedUtc = x.AcceptedUtc,
+                    Automatic = x.Automatic
+                }), x => x.Slug);
+            var (welcomeEntries, nestedWelcomes) = Split(welcomes.Values.OrderBy(x => x.Slug, StringComparer.Ordinal)
+                .Select(x => new WelcomeDocumentEntry
+                {
+                    Slug = x.Slug, Version = x.Version, ShownUtc = x.ShownUtc
+                }), x => x.Slug);
             var document = new SharedDocument
             {
                 SchemaVersion = SchemaVersion,
                 LastCompletedAttemptId = completedAttemptId,
-                Plugins = states.Values.OrderBy(x => x.Slug, StringComparer.Ordinal)
-                    .Select(x => new SharedEntry
-                    {
-                        Slug = x.Slug, Version = x.Version, State = x.State, Missing = x.Missing
-                    }).ToList(),
-                Licenses = licenses.Count == 0 ? null : licenses.Values.OrderBy(x => x.Slug, StringComparer.Ordinal)
-                    .Select(x => new LicenseDocumentEntry
-                    {
-                        Slug = x.Slug, License = x.License, Version = x.Version, AcceptedUtc = x.AcceptedUtc,
-                        Automatic = x.Automatic
-                    }).ToList(),
-                Welcomes = welcomes.Count == 0 ? null : welcomes.Values.OrderBy(x => x.Slug, StringComparer.Ordinal)
-                    .Select(x => new WelcomeDocumentEntry
-                    {
-                        Slug = x.Slug, Version = x.Version, ShownUtc = x.ShownUtc
-                    })
-                    .ToList()
+                Plugins = plugins ?? [],
+                Licenses = licenseEntries,
+                Welcomes = welcomeEntries,
+                NestedPlugins = nestedPlugins,
+                NestedLicenses = nestedLicenses,
+                NestedWelcomes = nestedWelcomes
             };
             var bytes = Serialize(document);
             AtomicFile.Write(_sharedPath, bytes);
@@ -656,22 +667,19 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
                 return true;
             }
 
-            var document = new LocalDocument
-            {
-                SchemaVersion = SchemaVersion,
-                Attempts = attempts.Values.OrderBy(x => x.Slug, StringComparer.Ordinal)
-                    .Select(x => new LocalEntry
-                    {
-                        AttemptId = x.AttemptId,
-                        Slug = x.Slug,
-                        InstalledVersion = x.InstalledVersion,
-                        TargetState = x.TargetState,
-                        State = x.State,
-                        Reason = x.Reason,
-                        Detail = x.Detail,
-                        Log = x.Log
-                    }).ToList()
-            };
+            var (entries, nested) = Split(attempts.Values.OrderBy(x => x.Slug, StringComparer.Ordinal)
+                .Select(x => new LocalEntry
+                {
+                    AttemptId = x.AttemptId,
+                    Slug = x.Slug,
+                    InstalledVersion = x.InstalledVersion,
+                    TargetState = x.TargetState,
+                    State = x.State,
+                    Reason = x.Reason,
+                    Detail = x.Detail,
+                    Log = x.Log
+                }), x => x.Slug);
+            var document = new LocalDocument { SchemaVersion = SchemaVersion, Attempts = entries ?? [], NestedAttempts = nested };
             AtomicFile.Write(_localPath, Serialize(document));
             return true;
         }
@@ -779,9 +787,22 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
     private static bool ValidLicense(AcceptedLicense license) =>
         ValidSlug(license.Slug) && !string.IsNullOrWhiteSpace(license.License);
 
-    private static bool ValidSlug(string? slug) =>
-        !string.IsNullOrWhiteSpace(slug) && slug != "." && slug != ".." &&
-        slug.IndexOfAny(['/', '\\']) < 0;
+    // A plugin in a subfolder has a slug with '/'; see the class remarks for where its entries are written.
+    private static bool ValidSlug(string? slug) => AddonLayout.IsStoredSlug(slug);
+
+    /// <summary>
+    /// Splits entries into those of plugins directly below the addons folder and those of plugins in a subfolder, which
+    /// are written to the nested lists; null for an empty list, which is left out.
+    /// </summary>
+    private static (List<T>? Top, List<T>? Nested) Split<T>(IEnumerable<T> entries, Func<T, string?> slug)
+    {
+        var all = entries.ToList();
+        var top = all.Where(e => !AddonLayout.IsNested(slug(e) ?? "")).ToList();
+        var nested = all.Where(e => AddonLayout.IsNested(slug(e) ?? "")).ToList();
+        return (top.Count > 0 ? top : null, nested.Count > 0 ? nested : null);
+    }
+
+    private static List<T>? Join<T>(List<T>? top, List<T>? nested) => nested is null ? top : [.. top ?? [], .. nested];
 
     /// <summary>
     /// Moves this store's changes onto a shared file that changed on disk since it was read, e.g. by a git pull: the file
@@ -800,7 +821,7 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
         SharedDocument disk;
         try
         {
-            disk = JsonSerializer.Deserialize<SharedDocument>(actual, JsonOptions) ?? throw new InvalidDataException("Shared plugin state is null.");
+            disk = JsonSerializer.Deserialize<SharedDocument>(actual, JsonOptions)?.Unnested() ?? throw new InvalidDataException("Shared plugin state is null.");
             ValidateShared(disk);
         }
         catch (Exception ex) when (ex is JsonException or InvalidDataException or UnsupportedSchemaException)
@@ -875,6 +896,25 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
 
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<WelcomeDocumentEntry>? Welcomes { get; set; }
+
+        // The entries of plugins in a subfolder, which older versions skip; see the class remarks.
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<SharedEntry>? NestedPlugins { get; set; }
+
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<LicenseDocumentEntry>? NestedLicenses { get; set; }
+
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<WelcomeDocumentEntry>? NestedWelcomes { get; set; }
+
+        /// <summary>The document with the entries of the nested lists in the others, as this version reads them.</summary>
+        public SharedDocument Unnested() => new()
+        {
+            SchemaVersion = SchemaVersion, LastCompletedAttemptId = LastCompletedAttemptId,
+            // a file without "plugins" stays unreadable, whatever its nested list holds
+            Plugins = Plugins is null ? null : Join(Plugins, NestedPlugins),
+            Licenses = Join(Licenses, NestedLicenses), Welcomes = Join(Welcomes, NestedWelcomes)
+        };
     }
 
     private sealed class WelcomeDocumentEntry
@@ -907,6 +947,15 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
     {
         public int SchemaVersion { get; set; }
         public List<LocalEntry>? Attempts { get; set; }
+
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<LocalEntry>? NestedAttempts { get; set; }
+
+        /// <summary>The document with the nested attempts in <see cref="Attempts"/>, as this version reads them.</summary>
+        public LocalDocument Unnested() => new()
+        {
+            SchemaVersion = SchemaVersion, Attempts = Attempts is null ? null : Join(Attempts, NestedAttempts)
+        };
     }
 
     private sealed class LocalEntry

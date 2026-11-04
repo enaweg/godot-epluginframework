@@ -595,6 +595,76 @@ public class PluginStateStoreTests
     }
 
     [TestCase]
+    public void PluginsInSubfoldersAreWrittenToListsOlderVersionsSkip()
+    {
+        var (store, path) = NewStore();
+        var accepted = DateTimeOffset.Parse("2026-10-01T10:00:00+00:00", System.Globalization.CultureInfo.InvariantCulture);
+        Assertions.AssertBool(store.TryCreateBaseline([
+            new SharedPluginState("top", "1.0", PersistedPluginState.Activated),
+            new SharedPluginState("acme/tool", "2.0", PersistedPluginState.Activated)
+        ])).IsTrue();
+        Assertions.AssertBool(store.TryRecordLicenses([
+            new AcceptedLicense("acme/tool", "LICENSE", "2.0", accepted, false), new AcceptedLicense("top", "LICENSE", "1.0", accepted, false)
+        ])).IsTrue();
+        Assertions.AssertBool(store.TryRecordWelcomes([new ShownWelcome("acme/tool", "2.0", accepted)])).IsTrue();
+        Assertions.AssertBool(store.TryBeginAttempt("acme/app", "1.0", PersistedPluginState.Activated, out var id)).IsTrue();
+        Assertions.AssertBool(store.TryFail(id, PersistedPluginState.Failed, "recipe_operation_failed")).IsTrue();
+
+        // versions before them refused a slug with '/' in every list, and skip lists they do not know
+        using (var shared = JsonDocument.Parse(File.ReadAllText(path)))
+        {
+            var root = shared.RootElement;
+            Assertions.AssertThat(Slugs(root, "plugins")).ContainsExactly("top");
+            Assertions.AssertThat(Slugs(root, "nestedPlugins")).ContainsExactly("acme/tool");
+            Assertions.AssertThat(Slugs(root, "licenses")).ContainsExactly("top");
+            Assertions.AssertThat(Slugs(root, "nestedLicenses")).ContainsExactly("acme/tool");
+            Assertions.AssertBool(root.TryGetProperty("welcomes", out _)).IsFalse();
+            Assertions.AssertThat(Slugs(root, "nestedWelcomes")).ContainsExactly("acme/tool");
+        }
+        using (var local = JsonDocument.Parse(File.ReadAllText(path + ".user")))
+        {
+            Assertions.AssertThat(Slugs(local.RootElement, "attempts")).IsEmpty();
+            Assertions.AssertThat(Slugs(local.RootElement, "nestedAttempts")).ContainsExactly("acme/app");
+        }
+
+        var reloaded = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(reloaded.Load()).IsTrue();
+        Assertions.AssertObject(reloaded.GetShared("acme/tool")).IsEqual(new SharedPluginState("acme/tool", "2.0", PersistedPluginState.Activated));
+        Assertions.AssertBool(reloaded.IsLicenseAccepted("acme/tool", "LICENSE") && reloaded.IsLicenseAccepted("top", "LICENSE")).IsTrue();
+        Assertions.AssertBool(reloaded.IsWelcomeShown("acme/tool")).IsTrue();
+        Assertions.AssertObject(reloaded.GetLocal("acme/app")!.State).IsEqual(PersistedPluginState.Failed);
+
+        static string[] Slugs(JsonElement root, string list) => root.TryGetProperty(list, out var entries)
+            ? entries.EnumerateArray().Select(e => e.GetProperty("slug").GetString()!).ToArray() : [];
+    }
+
+    [TestCase]
+    public void ASlugWithASubfolderIsReadFromEitherListButOnlyOnce()
+    {
+        var (_, path) = NewStore();
+        // e.g. edited by hand
+        File.WriteAllText(path, """
+            { "schemaVersion": 1, "plugins": [ { "slug": "acme/tool", "version": "1.0", "state": "activated" } ] }
+            """);
+        var store = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(store.Load()).IsTrue();
+        Assertions.AssertString(store.GetShared("acme/tool")!.Version).IsEqual("1.0");
+
+        foreach (var invalid in new[]
+                 {
+                     """{ "schemaVersion": 1, "plugins": [ { "slug": "acme/tool", "version": "1.0", "state": "activated" } ], "nestedPlugins": [ { "slug": "acme/tool", "version": "2.0", "state": "activated" } ] }""",
+                     """{ "schemaVersion": 1, "plugins": [], "nestedPlugins": [ { "slug": "acme/../tool", "version": "2.0", "state": "activated" } ] }""",
+                     // a nested list does not stand in for the required "plugins"
+                     """{ "schemaVersion": 1, "nestedPlugins": [ { "slug": "acme/tool", "version": "2.0", "state": "activated" } ] }"""
+                 })
+        {
+            File.WriteAllText(path, invalid);
+            var refused = new PluginStateStore(path, new NullLogger());
+            Assertions.AssertBool(refused.Load()).OverrideFailureMessage(invalid).IsFalse();
+        }
+    }
+
+    [TestCase]
     public void AMisspelledOrNewerSchemaMakesTheFilesReadOnly()
     {
         foreach (var content in new[] { """{ "schemaVersion": 1, "plugin": [] }""", """{ "schemaVersion": 2, "plugins": [] }""" })

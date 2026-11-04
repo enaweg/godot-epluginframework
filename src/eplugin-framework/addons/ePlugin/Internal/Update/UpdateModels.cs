@@ -53,6 +53,12 @@ internal sealed record PluginUpdateTarget(string Slug, string Name, string Insta
     public bool PackagesAllowed => Repository is null or { Kind: RepositoryKind.None };
 
     /// <summary>
+    /// The enabled sub-plugins in the plugin's folder (a <c>plugin.cfg</c> below it, which Godot does not list but the
+    /// plugin may enable), relative to the folder with <c>/</c>: the update replaces them with the plugin's files.
+    /// </summary>
+    public IReadOnlyList<string> EnabledSubPlugins { get; init; } = [];
+
+    /// <summary>
     /// The update sites to try, in order: the project's, the plugin.cfg update_url, then the built-in one. A candidate
     /// found at any of them belongs to the plugin. Empty when only local directories can update the plugin. A git
     /// submodule has only its remote (<see cref="PluginRepository.SubmoduleSite"/>): it is updated through git, never

@@ -145,7 +145,9 @@ internal sealed class UpdateJournal
             if (PackageFiles.Normalize(path) != path || path.Contains('/')) throw new InvalidDataException("Invalid project backup path.");
         foreach (var recipe in journal.Recipes)
         {
-            if (PackageFiles.Normalize(recipe.Key) != recipe.Key || recipe.Key.Contains('/')) throw new InvalidDataException("Invalid recipe owner.");
+            // Every activated ePlugin's recipe is recorded, also one of a plugin in a subfolder (acme/tool), which updates
+            // never update themselves.
+            if (PackageFiles.Normalize(recipe.Key) != recipe.Key) throw new InvalidDataException("Invalid recipe owner.");
             RecipeReconciler.Validate(recipe.Value.Old);
             RecipeReconciler.Validate(recipe.Value.Applied);
             if (recipe.Value.Target is not null) RecipeReconciler.Validate(recipe.Value.Target);

@@ -121,13 +121,28 @@ public class EEditorPluginBuilderTests
     }
 
     [TestCase]
+    public static void ADependencyCanNameAPluginInASubfolder()
+    {
+        var builder = EEditorPluginBuilder.Create();
+
+        builder.AddPluginDependency("acme/native_tool", ">=1.0")
+            .AddOptionalPluginDependency("acme/integration", null, o => o.AddNuget("Acme.Glue"));
+
+        Assertions.AssertThat(builder.PluginRecipe.PluginDependencies).Contains(new EEditorPluginRecipe.Plugin("acme/native_tool", ">=1.0"));
+        Assertions.AssertString(builder.PluginRecipe.OptionalPluginDependencies[0].Slug).IsEqual("acme/integration");
+    }
+
+    [TestCase]
     public static void InvalidDeclarationsThrowAndSayWhatIsWrong()
     {
         (string What, Action<IEEditorPluginBuilder> Declare)[] cases =
         [
             ("empty slug", b => b.AddPluginDependency(" ")),
             ("path as slug", b => b.AddPluginDependency("res://addons/other")),
-            ("nested slug", b => b.AddOptionalPluginDependency("addons/other", null, _ => { })),
+            ("path from res:// as slug", b => b.AddOptionalPluginDependency("addons/other", null, _ => { })),
+            ("empty folder in slug", b => b.AddPluginDependency("acme//other")),
+            ("parent folder in slug", b => b.AddPluginDependency("acme/../other")),
+            ("backslash in slug", b => b.AddPluginDependency("acme\\other")),
             ("constraint", b => b.AddPluginDependency("other", "latest")),
             ("optional constraint", b => b.AddOptionalPluginDependency("other", ">=one", _ => { })),
             ("package id", b => b.AddNuget("not a package")),

@@ -74,8 +74,8 @@ public interface IEEditorPluginBuilder : IEEditorPluginRecipeBuilder
     /// so it is never enabled; only its version is checked.
     /// </summary>
     /// <param name="pluginSlug">
-    /// The directory name of the required plugin under <c>addons/</c>
-    /// (e.g. <c>"my-dependency"</c> for <c>addons/my-dependency/</c>).
+    /// The slug of the required plugin: its directory below <c>addons/</c>
+    /// (e.g. <c>"my-dependency"</c> for <c>addons/my-dependency/</c>, <c>"acme/my-dependency"</c> for one in a subfolder).
     /// </param>
     /// <param name="version">
     /// Optional version constraint matched against the dependency's <c>plugin.cfg</c> (for a GDExtension without one,
@@ -99,8 +99,8 @@ public interface IEEditorPluginBuilder : IEEditorPluginRecipeBuilder
     /// installed when that plugin is already enabled.
     /// </summary>
     /// <param name="pluginSlug">
-    /// The directory name of the optional plugin under <c>addons/</c>
-    /// (e.g. <c>"my-dependency"</c> for <c>addons/my-dependency/</c>).
+    /// The slug of the optional plugin: its directory below <c>addons/</c>
+    /// (e.g. <c>"my-dependency"</c> for <c>addons/my-dependency/</c>, <c>"acme/my-dependency"</c> for one in a subfolder).
     /// </param>
     /// <param name="version">
     /// Optional version constraint matched against the dependency's <c>plugin.cfg</c>, using the same

@@ -9,24 +9,28 @@ namespace Enaweg.Plugin;
 
 /// <summary>
 /// Helper extensions for <see cref="EditorPlugin"/> that resolve plugin identity and metadata
-/// from the plugin's on-disk layout (its <c>res://addons/&lt;slug&gt;/</c> directory and
+/// from the plugin's on-disk layout (its <c>res://addons/&lt;slug&gt;/</c> directory, also in a subfolder, and
 /// <c>plugin.cfg</c>).
 /// </summary>
 [Tool]
 public static class EditorPluginExtensions
 {
     /// <summary>
-    /// Returns the plugin's slug — the directory name under <c>res://addons/</c> that contains it
-    /// (e.g. <c>"my-plugin"</c> for <c>res://addons/my-plugin/MyPlugin.cs</c>).
+    /// Returns the plugin's slug — the path of its directory below <c>res://addons/</c>, with <c>/</c>
+    /// (e.g. <c>"my-plugin"</c> for <c>res://addons/my-plugin/MyPlugin.cs</c>, and <c>"acme/my-plugin"</c> for a plugin
+    /// in a subfolder, <c>res://addons/acme/my-plugin/MyPlugin.cs</c>). It is the name Godot's
+    /// <c>EditorInterface.SetPluginEnabled</c> takes, and the one dependencies name the plugin by.
     /// </summary>
     /// <param name="plugin">The editor plugin to inspect.</param>
-    /// <returns>The leaf directory name of the plugin's install location.</returns>
+    /// <returns>
+    /// The plugin's directory below <c>res://addons/</c>; for a plugin outside it, the name of its directory.
+    /// </returns>
     public static string GetPluginSlug(this EditorPlugin plugin)
     {
         var path = GetPluginDirectory(plugin);
         if (path is not null)
         {
-            return Path.GetFileName(path);
+            return AddonLayout.SlugOf(path) ?? Path.GetFileName(path);
         }
 
         return string.IsNullOrEmpty(plugin.Name) ? $"plugin-{plugin.GetInstanceId()}" : plugin.Name;
@@ -38,9 +42,9 @@ public static class EditorPluginExtensions
     /// </summary>
     /// <param name="plugin">The editor plugin to inspect.</param>
     /// <returns>
-    /// The directory with the <c>plugin.cfg</c> that holds the script (e.g. <c>res://addons/my-plugin</c> for a script
-    /// at <c>res://addons/my-plugin/MyPlugin.cs</c> or <c>res://addons/my-plugin/src/MyPlugin.cs</c>), else the
-    /// script's own directory.
+    /// The directory with the <c>plugin.cfg</c> closest to the script (e.g. <c>res://addons/my-plugin</c> for a script
+    /// at <c>res://addons/my-plugin/MyPlugin.cs</c> or <c>res://addons/my-plugin/src/MyPlugin.cs</c>, and
+    /// <c>res://addons/acme/my-plugin</c> for one in a subfolder), else the script's own directory.
     /// </returns>
     public static string? GetPluginDirectory(this EditorPlugin plugin)
     {

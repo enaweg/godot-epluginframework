@@ -67,13 +67,15 @@ internal sealed partial class EGlobal
     /// <summary>
     /// Every enabled plugin with a readable plugin.cfg and every GDExtension add-on, with the update site the project sets
     /// for it. Plugins without an update site can still be updated from the local directories; remote checks skip
-    /// them.
+    /// them. Plugins and add-ons in a subfolder of the addons folder are left out: updates find and install a package's
+    /// folder by its slug directly below the addons folder.
     /// </summary>
     internal IReadOnlyList<PluginUpdateTarget> CollectUpdateTargets()
     {
         RefreshPlainPlugins();
         ReloadUpdateSites();
-        return GetEnabledPluginSlugs().Select(slug =>
+        var enabled = GetEnabledPluginSlugs();
+        return enabled.Where(slug => !AddonLayout.IsNested(slug)).Select(slug =>
         {
             var directory = _host.PluginDirectory(slug);
             var metadata = EditorPluginExtensions.ReadMetadata(directory + "/plugin.cfg");
@@ -82,8 +84,14 @@ internal sealed partial class EGlobal
                 _stateStore?.IsBlocked(slug) == true, _stateStore?.IsReadOnly != false, _stateStore?.GetShared(slug)?.Version,
                 UpdateSiteOf(slug), KnownPluginOf(slug)?.UpdateUrl,
                 slug == FrameworkSlug ? PluginKind.Framework : IsManagedPlugin(slug) ? PluginKind.EPlugin : PluginKind.Unknown,
-                PluginRepositoryOf(slug));
-        }).Where(t => t is not null).Cast<PluginUpdateTarget>().Concat(ExtensionAddonSlugs().Select(ExtensionAddonTarget)).ToArray();
+                PluginRepositoryOf(slug))
+            {
+                // the update replaces them with the plugin's files, see AddonPackageValidator.SubPluginFindings
+                EnabledSubPlugins = enabled.Where(s => s.StartsWith(slug + "/", StringComparison.Ordinal)).Select(s => s[(slug.Length + 1)..])
+                    .Order(StringComparer.Ordinal).ToArray()
+            };
+        }).Where(t => t is not null).Cast<PluginUpdateTarget>()
+            .Concat(ExtensionAddonSlugs().Where(slug => !AddonLayout.IsNested(slug)).Select(ExtensionAddonTarget)).ToArray();
     }
 
     /// <summary>How the folder of <paramref name="slug"/> is under git version control, see <see cref="PluginRepository"/>.</summary>

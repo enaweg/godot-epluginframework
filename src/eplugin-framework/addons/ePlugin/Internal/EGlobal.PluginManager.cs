@@ -80,8 +80,8 @@ internal sealed partial class EGlobal
         _nextNativeExtensionCheck = frame + NativeExtensionCheckFrames;
         try
         {
-            using var addons = DirAccess.Open(_host.AddonsDirectory);
-            return _nativeExtensionProblems = string.Join(",", (addons?.GetDirectories() ?? [])
+            var layout = ScanAddons();
+            return _nativeExtensionProblems = string.Join(",", layout.Plugins.Concat(layout.ExtensionAddons)
                 .SelectMany(slug => NativeExtensionStatus.Read(_host.ProjectRoot, slug, _host.IsExtensionLoaded)
                     .Where(e => e.Problem is not null).Select(e => $"{slug}/{e.File}")));
         }
@@ -91,9 +91,16 @@ internal sealed partial class EGlobal
         }
     }
 
+    /// <summary>The plugins and GDExtension add-ons below the addons folder, see <see cref="AddonLayout"/>.</summary>
+    private AddonLayout.Layout ScanAddons() => AddonLayout.Scan(AddonsPath);
+
+    /// <summary>The addons folder as a file system path.</summary>
+    private string AddonsPath => ProjectSettings.GlobalizePath(_host.AddonsDirectory);
+
     /// <summary>
-    /// Every addon with a plugin.cfg directly below the addons folder, enabled or not, every GDExtension add-on, plus
-    /// plugins that only remain as a failed local attempt.
+    /// Every plugin Godot's Plugins list shows (a folder with a plugin.cfg below the addons folder, also in a subfolder,
+    /// see <see cref="AddonLayout"/>), enabled or not, every enabled sub-plugin, which its plugin enabled, every
+    /// GDExtension add-on, plus plugins that only remain as a failed local attempt.
     /// </summary>
     internal IReadOnlyList<PluginInfo> CollectPlugins()
     {
@@ -103,8 +110,10 @@ internal sealed partial class EGlobal
         var types = PluginTypes.All;
         var framework = _ePluginContext?.GetPluginSlug() ?? "ePlugin";
         var plugins = new List<PluginInfo>();
-        using var addons = DirAccess.Open(_host.AddonsDirectory);
-        foreach (var slug in addons?.GetDirectories() ?? [])
+        var layout = ScanAddons();
+        // Godot does not list a sub-plugin, but its plugin may enable it; its state is then shown too.
+        var subPlugins = enabled.Where(slug => !layout.Plugins.Contains(slug, StringComparer.Ordinal)).Order(StringComparer.Ordinal);
+        foreach (var slug in layout.Plugins.Concat(subPlugins))
         {
             var directory = _host.PluginDirectory(slug);
             if (!FileAccess.FileExists(directory + "/plugin.cfg")) continue;
@@ -114,7 +123,8 @@ internal sealed partial class EGlobal
                 // listed, so the user sees why a plugin is missing from the list instead of wondering
                 plugins.Add(new PluginInfo(slug, slug, PluginKind.Unknown, enabled.Contains(slug))
                 {
-                    ConfigProblem = $"Its plugin.cfg cannot be read (Godot reports {loaded}).", FailedAttempt = _stateStore?.GetLocal(slug)
+                    ConfigProblem = $"Its plugin.cfg cannot be read (Godot reports {loaded}).", FailedAttempt = _stateStore?.GetLocal(slug),
+                    PartOf = AddonLayout.ContainingPlugin(AddonsPath, slug)
                 });
                 continue;
             }
@@ -135,10 +145,11 @@ internal sealed partial class EGlobal
                 Recipe = context is { IsRecipeCreated: true } ? context.Builder.PluginRecipe : null,
                 LocalPackages = LocalIndex.Matching(slug).Count(),
                 Extensions = NativeExtensionStatus.Read(_host.ProjectRoot, slug, _host.IsExtensionLoaded),
-                Repository = PluginRepositoryOf(slug)
+                Repository = PluginRepositoryOf(slug),
+                PartOf = AddonLayout.ContainingPlugin(AddonsPath, slug)
             });
         }
-        plugins.AddRange(ExtensionAddonSlugs().Select(ExtensionAddonInfo));
+        plugins.AddRange(layout.ExtensionAddons.Select(ExtensionAddonInfo));
         foreach (var attempt in _stateStore?.LocalAttempts ?? [])
         {
             if (plugins.Any(p => p.Slug == attempt.Slug)) continue;

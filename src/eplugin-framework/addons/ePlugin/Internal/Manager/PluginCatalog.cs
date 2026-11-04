@@ -40,6 +40,11 @@ internal sealed record PluginInfo(string Slug, string Name, PluginKind Kind, boo
     /// <summary>The recipe, when the plugin already created it in this session.</summary>
     public EEditorPluginRecipe? Recipe { get; init; }
     public bool Missing { get; init; }
+    /// <summary>
+    /// The plugin whose folder holds this one, a sub-plugin Godot does not list and that is listed only while it is
+    /// enabled; null for every other plugin.
+    /// </summary>
+    public string? PartOf { get; init; }
     /// <summary>The GDExtensions the plugin ships, as the editor runs them.</summary>
     public IReadOnlyList<NativeExtensionStatus> Extensions { get; init; } = [];
     /// <summary>How the plugin folder is under git version control; null when it was not looked at.</summary>

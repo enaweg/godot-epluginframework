@@ -24,8 +24,10 @@ internal sealed class PluginRow(PluginInfo plugin, UpdateRow? update)
     public PluginInfo Plugin { get; } = plugin;
     public UpdateRow? Update { get; } = update;
     public bool IsEPlugin => Plugin.Kind is PluginKind.Framework or PluginKind.EPlugin;
-    public bool IsUpdatable => Plugin.UpdateUrl is not null || Plugin.UpdateSite is not null || Plugin.Known is not null ||
-                               Plugin.LocalPackages > 0 || Update is not null || Plugin.Repository?.SubmoduleSite is not null;
+    /// <summary>Updates know where to get the plugin. A plugin in a subfolder of the addons folder is never updated.</summary>
+    public bool IsUpdatable => !AddonLayout.IsNested(Plugin.Slug) &&
+                               (Plugin.UpdateUrl is not null || Plugin.UpdateSite is not null || Plugin.Known is not null ||
+                                Plugin.LocalPackages > 0 || Update is not null || Plugin.Repository?.SubmoduleSite is not null);
     public bool HasUpdate => Update is not null;
     /// <summary>Godot loads a GDExtension add-on whatever is enabled, so it has nothing to enable or disable.</summary>
     public bool CanToggle => !Plugin.Missing && Plugin.Kind != PluginKind.GDExtensionAddon;
@@ -372,7 +374,11 @@ internal sealed class PluginManagerViewModel
         text.Append(RepositoryLine(plugin.Repository));
         // A submodule is updated from its remote only, whatever update sites plugin.cfg, the project or the built-in list name.
         var submodule = plugin.Repository?.Kind == RepositoryKind.Submodule;
-        if (row.Update is { } update)
+        if (plugin.PartOf is { } outer)
+            text.Append(CultureInfo.CurrentCulture, $"Not updatable on its own: it is a sub-plugin in the folder of {Escape(outer)}, and an update of {Escape(outer)} installs it.\n");
+        else if (AddonLayout.IsNested(plugin.Slug))
+            text.Append(CultureInfo.CurrentCulture, $"Not updatable: ePlugin updates only plugins directly in res://addons, and this one is in a subfolder (res://addons/{Escape(plugin.Slug)}). Replace its folder by hand to update it.\n");
+        else if (row.Update is { } update)
         {
             text.Append(CultureInfo.CurrentCulture, $"{Escape(update.Candidate.InstalledVersion)} → [color={TextColors.Success}]{Escape(update.Candidate.NewVersion)}[/color]\n");
             if (update.Candidate.Package is LocalZipPackageRef local) Line("Local package", local.Path);

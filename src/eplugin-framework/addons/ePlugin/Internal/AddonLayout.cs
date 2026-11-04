@@ -133,6 +133,22 @@ internal static class AddonLayout
     }
 
     /// <summary>
+    /// The plugin whose folder holds the plugin <paramref name="slug"/> below <paramref name="addonsDirectory"/> (a file
+    /// system path), which makes it a sub-plugin Godot does not list: the outermost folder above it with a
+    /// <c>plugin.cfg</c>. Null for a plugin Godot lists.
+    /// </summary>
+    public static string? ContainingPlugin(string addonsDirectory, string slug)
+    {
+        var parts = slug.Split('/');
+        for (var i = 1; i < parts.Length; i++)
+        {
+            var outer = string.Join('/', parts[..i]);
+            if (File.Exists(Path.Combine(addonsDirectory, outer, Config))) return outer;
+        }
+        return null;
+    }
+
+    /// <summary>
     /// The folders below the plugin folder <paramref name="pluginDirectory"/> (a file system path) that have a
     /// <c>plugin.cfg</c> outside hidden folders, as paths relative to it with <c>/</c>: the sub-plugins Godot does not
     /// list, since they belong to the plugin.

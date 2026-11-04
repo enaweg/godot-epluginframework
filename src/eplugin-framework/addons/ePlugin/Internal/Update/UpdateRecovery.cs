@@ -115,7 +115,8 @@ internal static class UpdateRecovery
                 }
                 foreach (var recipe in journal.Recipes.Where(r => !journal.Plugins.Any(p => p.Slug == r.Key)))
                 {
-                    Slug(recipe.Key);
+                    // an ePlugin in a subfolder (acme/tool) owns a recipe too
+                    RecipeOwner(recipe.Key);
                     var addon = Inside(Path.Combine(projectRoot, "addons"), recipe.Key);
                     var applied = recipe.Value.Applied.Directories.ToList();
                     if (recipe.Value.Pending.ValueKind == JsonValueKind.Object && recipe.Value.Pending.TryGetProperty("directory", out var pending) && pending.ValueKind == JsonValueKind.String)
@@ -188,6 +189,7 @@ internal static class UpdateRecovery
     }
     private static void Write(string path, JsonObject json) => AtomicFile.Write(path, stream => JsonSerializer.Serialize(stream, json, Options));
     private static void Slug(string slug) { if (slug.Contains('/') || slug.Contains('\\')) throw new InvalidDataException("Invalid addon slug."); Inside("/", slug); }
+    private static void RecipeOwner(string slug) { if (slug.Contains('\\')) throw new InvalidDataException("Invalid addon slug."); Inside("/", slug); }
     private static string Inside(string root, string relative)
     {
         if (string.IsNullOrWhiteSpace(relative) || Path.IsPathRooted(relative) || relative.Split('/', '\\').Any(p => p is "" or "." or "..")) throw new InvalidDataException("Unsafe recovery path.");
