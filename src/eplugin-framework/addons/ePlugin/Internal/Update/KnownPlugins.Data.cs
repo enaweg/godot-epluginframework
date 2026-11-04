@@ -1,7 +1,7 @@
 #if TOOLS
 namespace Enaweg.Plugin.Internal.Update;
 
-// Generated on 2026-10-25 by tools/generate_known_plugins.cs from godot_addons_active_20_stars.json (built by
+// Generated on 2026-11-04 by tools/generate_known_plugins.cs from godot_addons_active_20_stars.json (built by
 // tools/build_godot_addons.cs): popular add-ons with at least 20 stars on GitHub (fewer on GitLab and Codeberg) and a
 // commit within the last two years, plus those in tools/extra_addons.txt, with a release or version tag. Add-ons found by
 // GitLab's or Codeberg's search are listed only with a slug named like their repository. Each slug is the one
@@ -50,7 +50,7 @@ internal static partial class KnownPlugins
         // https://github.com/godot-extended-libraries/godot-antialiased-line2d, latest release v1.2.0
         new("antialiased_line2d", "Antialiased Line2D - Better antialiasing for 2D line/polygon/circle drawing", "https://github.com/godot-extended-libraries/godot-antialiased-line2d/releases",
             "https://github.com/godot-extended-libraries/godot-antialiased-line2d#readme", "https://github.com/Calinou/godot-antialiased-line2d-demo", "https://github.com/godot-extended-libraries/godot-antialiased-line2d"),
-        // https://github.com/AhmedGD1/Anvil, latest release v2.3.0
+        // https://github.com/AhmedGD1/Anvil, latest release v3.0.0
         new("anvil", "Anvil", "https://github.com/AhmedGD1/Anvil/releases",
             "https://github.com/AhmedGD1/Anvil#readme", "https://github.com/AhmedGD1/Anvil", "https://github.com/AhmedGD1/Anvil"),
         // https://github.com/AppLovin/AppLovin-MAX-Godot, latest release release_1_2_0
@@ -173,7 +173,7 @@ internal static partial class KnownPlugins
         // https://github.com/timothyqiu/godot-csv-data-importer, latest tag 2.1
         new("csv-data-importer", "CSV Data Importer", "https://github.com/timothyqiu/godot-csv-data-importer/tags",
             "https://github.com/timothyqiu/godot-csv-data-importer#readme", "https://github.com/timothyqiu/godot-csv-data-importer", "https://github.com/timothyqiu/godot-csv-data-importer"),
-        // https://github.com/Teaching-myself-Godot/ez-curved-lines-2d, latest release 3.3.1
+        // https://github.com/Teaching-myself-Godot/ez-curved-lines-2d, latest release 3.5.1
         new("curved_lines_2d", "Scalable Vector Shapes 2D", "https://github.com/Teaching-myself-Godot/ez-curved-lines-2d/releases",
             "https://github.com/Teaching-myself-Godot/ez-curved-lines-2d#readme", "https://github.com/Teaching-myself-Godot/ez-curved-lines-2d", "https://github.com/Teaching-myself-Godot/ez-curved-lines-2d"),
         // https://github.com/arukurei/Daicon, latest release v1.6
@@ -197,7 +197,7 @@ internal static partial class KnownPlugins
         // https://github.com/mphe/godot-diagnostic-list, latest release v1.1.1
         new("diagnosticlist", "Diagnostic List", "https://github.com/mphe/godot-diagnostic-list/releases",
             "https://github.com/mphe/godot-diagnostic-list#readme", "https://github.com/mphe/godot-diagnostic-list", "https://github.com/mphe/godot-diagnostic-list"),
-        // https://github.com/nathanhoad/godot_dialogue_manager, latest release v4.1.0
+        // https://github.com/nathanhoad/godot_dialogue_manager, latest release v4.2.0
         new("dialogue_manager", "Dialogue Manager", "https://github.com/nathanhoad/godot_dialogue_manager/releases",
             "https://github.com/nathanhoad/godot_dialogue_manager#readme", "https://dialogue.nathanhoad.net/", "https://github.com/nathanhoad/godot_dialogue_manager"),
         // https://github.com/nagidev/DialogueNodes, latest release v1.2
@@ -344,7 +344,7 @@ internal static partial class KnownPlugins
         // https://github.com/markeel/gdterm, latest release v1.0.2
         new("gdterm", "GDTerm (Godot In-Editor Terminal)", "https://github.com/markeel/gdterm/releases",
             "https://github.com/markeel/gdterm#readme", "https://github.com/markeel/gdterm", "https://github.com/markeel/gdterm"),
-        // https://github.com/godot-gdunit-labs/gdUnit4, latest release v6.2.2
+        // https://github.com/godot-gdunit-labs/gdUnit4, latest release v6.2.3
         new("gdUnit4", "GdUnit4", "https://github.com/godot-gdunit-labs/gdUnit4/releases",
             "https://github.com/godot-gdunit-labs/gdUnit4#readme", "https://godot-gdunit-labs.github.io/gdUnit4/latest/", "https://github.com/godot-gdunit-labs/gdUnit4"),
         // https://github.com/CodeNameTwister/GDAnti-Cheats, latest release 0.2.2.1
@@ -473,7 +473,7 @@ internal static partial class KnownPlugins
         // https://github.com/addmix/godot_aerodynamic_physics, latest release v0.9.1
         new("godot_aerodynamic_physics", "Godot Aerodynamic Physics", "https://github.com/addmix/godot_aerodynamic_physics/releases",
             "https://github.com/addmix/godot_aerodynamic_physics#readme", "https://godotengine.org/asset-library/asset/2580", "https://github.com/addmix/godot_aerodynamic_physics"),
-        // https://github.com/hi-godot/godot-ai, latest release v4.3.1
+        // https://github.com/hi-godot/godot-ai, latest release v4.4.1
         new("godot_ai", "godot-ai", "https://github.com/hi-godot/godot-ai/releases",
             "https://github.com/hi-godot/godot-ai#readme", "https://github.com/hi-godot/godot-ai", "https://github.com/hi-godot/godot-ai"),
         // https://github.com/kagenash1/godot-behavior-tree, latest release 2.0
@@ -488,7 +488,7 @@ internal static partial class KnownPlugins
         // https://github.com/mssbabou/Godot-Git, latest release v2.1.0
         new("godot_git", "Godot-Git", "https://github.com/mssbabou/Godot-Git/releases",
             "https://github.com/mssbabou/Godot-Git#readme", "https://store.godotengine.org/asset/markus-steen/godot-git/", "https://github.com/mssbabou/Godot-Git"),
-        // https://github.com/tipragot/godot-iroh, latest release v0.1.6
+        // https://github.com/tipragot/godot-iroh, latest release v0.2.0
         new("godot_iroh", "Godot Iroh", "https://github.com/tipragot/godot-iroh/releases",
             "https://github.com/tipragot/godot-iroh#readme", "https://github.com/tipragot/godot-iroh", "https://github.com/tipragot/godot-iroh"),
         // https://github.com/nlaha/godot-midi, latest release 0.3.0
@@ -557,13 +557,13 @@ internal static partial class KnownPlugins
         // https://github.com/Inspiaaa/HCoroutines, latest release v2.0.1
         new("HCoroutines", "HCoroutines (C#)", "https://github.com/Inspiaaa/HCoroutines/releases",
             "https://github.com/Inspiaaa/HCoroutines#readme", "https://godotengine.org/asset-library/asset/3327", "https://github.com/Inspiaaa/HCoroutines"),
-        // https://git.johnsoellner.me/swoopy/health-system, latest release v2.1.0
+        // https://git.johnsoellner.me/swoopy/health-system, latest release v2.4.0
         new("health-system", "health-system", "https://git.johnsoellner.me/swoopy/health-system/releases",
             "https://git.johnsoellner.me/swoopy/health-system", "https://git.johnsoellner.me/swoopy/health-system", "https://git.johnsoellner.me/swoopy/health-system"),
         // https://github.com/cluttered-code/godot-health-hitbox-hurtbox, latest release v5.0.4
         new("health_hitbox_hurtbox", "Health, HitBoxes, HurtBoxes and HitScans", "https://github.com/cluttered-code/godot-health-hitbox-hurtbox/releases",
             "https://github.com/cluttered-code/godot-health-hitbox-hurtbox#readme", "https://github.com/cluttered-code/godot-health-hitbox-hurtbox", "https://github.com/cluttered-code/godot-health-hitbox-hurtbox"),
-        // https://github.com/Zehir/godot-hexagon-tile-map-layer, latest release v2.5.2
+        // https://github.com/Zehir/godot-hexagon-tile-map-layer, latest release v2.6.0
         new("hexagon_tilemaplayer", "Hexagon TileMapLayer", "https://github.com/Zehir/godot-hexagon-tile-map-layer/releases",
             "https://github.com/Zehir/godot-hexagon-tile-map-layer#readme", "https://godotengine.org/asset-library/asset/3733", "https://github.com/Zehir/godot-hexagon-tile-map-layer"),
         // https://github.com/NitroxNova/humanizer, latest release v2.2.0
@@ -623,7 +623,7 @@ internal static partial class KnownPlugins
         // https://github.com/monxa/GodotIK, latest release v1.3.1
         new("libik", "Godot IK - 3D Inverse Kinematics for Godot", "https://github.com/monxa/GodotIK/releases",
             "https://github.com/monxa/GodotIK#readme", "https://github.com/monxa/GodotIK", "https://github.com/monxa/GodotIK"),
-        // https://github.com/Brawmario/libsm64-godot, latest release v2.7.2
+        // https://github.com/Brawmario/libsm64-godot, latest release v2.8.1
         new("libsm64_godot", "Libsm64 Godot", "https://github.com/Brawmario/libsm64-godot/releases",
             "https://github.com/Brawmario/libsm64-godot#readme", "https://github.com/Brawmario/libsm64-godot", "https://github.com/Brawmario/libsm64-godot"),
         // https://github.com/SpockBauru/LightmapProbeGrid, latest release v2.2.1
@@ -662,10 +662,10 @@ internal static partial class KnownPlugins
         // https://github.com/gilzoide/lua-gdextension, latest release 0.8.2
         new("lua-gdextension", "Lua GDExtension", "https://github.com/gilzoide/lua-gdextension/releases",
             "https://github.com/gilzoide/lua-gdextension#readme", "https://godotengine.org/asset-library/asset/2330", "https://github.com/gilzoide/lua-gdextension"),
-        // https://github.com/Maaack/Godot-Options-Menus, latest release v1.6.0
+        // https://github.com/Maaack/Godot-Options-Menus, latest release v1.7.1
         new("maaacks_options_menus", "Maaack's Options Menus", "https://github.com/Maaack/Godot-Options-Menus/releases",
             "https://github.com/Maaack/Godot-Options-Menus#readme", "https://github.com/Maaack/Godot-Options-Menus", "https://github.com/Maaack/Godot-Options-Menus"),
-        // https://github.com/Maaack/Godot-Scene-Loader, latest release v1.7.0
+        // https://github.com/Maaack/Godot-Scene-Loader, latest release v1.7.1
         new("maaacks_scene_loader", "Maaack's Scene Loader", "https://github.com/Maaack/Godot-Scene-Loader/releases",
             "https://github.com/Maaack/Godot-Scene-Loader#readme", "https://github.com/Maaack/Godot-Scene-Loader", "https://github.com/Maaack/Godot-Scene-Loader"),
         // https://github.com/ELF32bit/godot-mapper, latest release v2.3
@@ -758,7 +758,7 @@ internal static partial class KnownPlugins
         // https://github.com/TheVulcoreTeam/Persistence, latest release v2.1.0
         new("persistence_node", "Persistence Node", "https://github.com/TheVulcoreTeam/Persistence/releases",
             "https://github.com/TheVulcoreTeam/Persistence#readme", "https://github.com/TheVulcoreTeam/Persistence", "https://github.com/TheVulcoreTeam/Persistence"),
-        // https://github.com/ramokz/phantom-camera, latest release v0.11.0.3
+        // https://github.com/ramokz/phantom-camera, latest release v0.11.0.4
         new("phantom_camera", "Phantom Camera", "https://github.com/ramokz/phantom-camera/releases",
             "https://github.com/ramokz/phantom-camera#readme", "https://phantom-camera.dev", "https://github.com/ramokz/phantom-camera"),
         // https://github.com/Wiggan/pixquare-godot-importer, latest tag 0.3
@@ -809,7 +809,7 @@ internal static partial class KnownPlugins
         // https://github.com/chairfull/GodotRichTextLabel2, latest release v1.14
         new("richtext2", "RichTextLabel2", "https://github.com/chairfull/GodotRichTextLabel2/releases",
             "https://github.com/chairfull/GodotRichTextLabel2#readme", "https://github.com/chairfull/GodotRichTextLabel2", "https://github.com/chairfull/GodotRichTextLabel2"),
-        // https://github.com/JetBrains/godot-support, latest release v1.5.5
+        // https://github.com/JetBrains/godot-support, latest release v1.5.6
         new("rider-plugin", "godot-support", "https://github.com/JetBrains/godot-support/releases",
             "https://github.com/JetBrains/godot-support#readme", "https://github.com/JetBrains/godot-support", "https://github.com/JetBrains/godot-support"),
         // https://github.com/SirRamEsq/SmartShape2D, latest release 3.3.2
@@ -917,6 +917,9 @@ internal static partial class KnownPlugins
         // https://github.com/98teg/SpriteMesh, latest release v2.1.0
         new("sprite_mesh", "SpriteMesh", "https://github.com/98teg/SpriteMesh/releases",
             "https://github.com/98teg/SpriteMesh#readme", "https://github.com/98teg/SpriteMesh", "https://github.com/98teg/SpriteMesh"),
+        // https://github.com/mrjshzk/StairsCharacter3D, latest release v1.0.0
+        new("StairsCharacter", "StairsCharacter3D", "https://github.com/mrjshzk/StairsCharacter3D/releases",
+            "https://github.com/mrjshzk/StairsCharacter3D#readme", "https://github.com/mrjshzk/StairsCharacter3D", "https://github.com/mrjshzk/StairsCharacter3D"),
         // https://github.com/laoguowangCP/godot-statechart-sharp, latest release v0.8
         new("statechart_sharp", "Statechart Sharp: a state machine plugin", "https://github.com/laoguowangCP/godot-statechart-sharp/releases",
             "https://github.com/laoguowangCP/godot-statechart-sharp#readme", "https://github.com/laoguowangCP/godot-statechart-sharp", "https://github.com/laoguowangCP/godot-statechart-sharp"),
@@ -953,7 +956,7 @@ internal static partial class KnownPlugins
         // https://github.com/Dragonboon/Terrainy, latest release 1.5.0
         new("terrainy", "Terrainy", "https://github.com/Dragonboon/Terrainy/releases",
             "https://github.com/Dragonboon/Terrainy#readme", "https://godotengine.org/asset-library/asset/3438", "https://github.com/Dragonboon/Terrainy"),
-        // https://github.com/TokisanGames/Terrain3D, latest release v1.1.0-rc1
+        // https://github.com/TokisanGames/Terrain3D, latest release v1.1.0-stable
         new("terrain_3d", "Terrain3D", "https://github.com/TokisanGames/Terrain3D/releases",
             "https://github.com/TokisanGames/Terrain3D#readme", "https://github.com/TokisanGames/Terrain3D", "https://github.com/TokisanGames/Terrain3D"),
         // https://github.com/nndda/Theatre, latest release 0.12.2
@@ -980,9 +983,6 @@ internal static partial class KnownPlugins
         // https://github.com/zekostudio/godot-timeflow, latest release v2.0.0
         new("timeflow", "Godot Time Control", "https://github.com/zekostudio/godot-timeflow/releases",
             "https://github.com/zekostudio/godot-timeflow#readme", "https://github.com/zekostudio/godot-timeflow", "https://github.com/zekostudio/godot-timeflow"),
-        // https://github.com/ImTani/godot-time-rewind-2d, latest release v1.0.1
-        new("time_rewind_2d", "TimeRewind2D", "https://github.com/ImTani/godot-time-rewind-2d/releases",
-            "https://github.com/ImTani/godot-time-rewind-2d#readme", "https://godotengine.org/asset-library/asset/3283", "https://github.com/ImTani/godot-time-rewind-2d"),
         // https://github.com/OrigamiDev-Pete/TODO_Manager, latest release v2.7.0
         new("Todo_Manager", "TODO Manager", "https://github.com/OrigamiDev-Pete/TODO_Manager/releases",
             "https://github.com/OrigamiDev-Pete/TODO_Manager#readme", "https://github.com/OrigamiDev-Pete/TODO_Manager", "https://github.com/OrigamiDev-Pete/TODO_Manager"),
@@ -1046,9 +1046,6 @@ internal static partial class KnownPlugins
         // https://github.com/MASSHUU12/godot-yat, latest release v1.31.1-beta
         new("yat", "YAT - Yet Another Terminal (C#)", "https://github.com/MASSHUU12/godot-yat/releases",
             "https://github.com/MASSHUU12/godot-yat#readme", "https://godotengine.org/asset-library/asset/2324", "https://github.com/MASSHUU12/godot-yat"),
-        // https://github.com/Joy-less/YouCanDoIt, latest release v4.4
-        new("YouCanDoIt", "You Can Do It!", "https://github.com/Joy-less/YouCanDoIt/releases",
-            "https://github.com/Joy-less/YouCanDoIt#readme", "https://github.com/Joy-less/YouCanDoIt", "https://github.com/Joy-less/YouCanDoIt"),
         // https://github.com/Zylann/godot_editor_debugger_plugin, latest release 0.4
         new("zylann.editor_debugger", "Editor debugger", "https://github.com/Zylann/godot_editor_debugger_plugin/releases",
             "https://github.com/Zylann/godot_editor_debugger_plugin#readme", "https://github.com/Zylann/godot_editor_debugger_plugin", "https://github.com/Zylann/godot_editor_debugger_plugin"),
