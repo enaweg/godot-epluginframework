@@ -102,6 +102,58 @@ public class PluginStateStoreTests
     }
 
     [TestCase]
+    public void AParticipantThatChangedNothingCanLeaveItsAttempt()
+    {
+        var (store, path) = NewStore();
+        Assertions.AssertBool(store.TryCreateBaseline([])).IsTrue();
+        Assertions.AssertBool(store.TryBeginAttempt("dependency", "1.0", PersistedPluginState.Activated, out var id)).IsTrue();
+        Assertions.AssertBool(store.TryAddParticipant(id, "consumer", "1.0", PersistedPluginState.Activated)).IsTrue();
+        Assertions.AssertBool(store.TryBeginAttempt("unrelated", "1.0", PersistedPluginState.Activated, out var other)).IsTrue();
+
+        Assertions.AssertBool(store.TryRemoveParticipant(other, "consumer")).IsFalse();
+        Assertions.AssertBool(store.TryRemoveParticipant(id, "missing")).IsFalse();
+        Assertions.AssertBool(store.TryRemoveParticipant(id, "consumer")).IsTrue();
+
+        var reloaded = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(reloaded.Load()).IsTrue();
+        Assertions.AssertObject(reloaded.GetLocal("consumer")).IsNull();
+        // the others complete without it; the last one leaving takes the attempt with it
+        Assertions.AssertBool(store.TryComplete(id, [new SharedPluginState("dependency", "1.0", PersistedPluginState.Activated)])).IsTrue();
+        Assertions.AssertBool(store.TryRemoveParticipant(other, "unrelated")).IsTrue();
+        Assertions.AssertBool(store.LocalAttempts.Count == 0).IsTrue();
+    }
+
+    [TestCase]
+    public void SomeParticipantsFailInAnAttemptOfTheirOwnWhileTheOthersComplete()
+    {
+        var (store, path) = NewStore();
+        Assertions.AssertBool(store.TryCreateBaseline([])).IsTrue();
+        Assertions.AssertBool(store.TryBeginAttempt("done", "1.0", PersistedPluginState.Activated, out var id)).IsTrue();
+        Assertions.AssertBool(store.TryAddParticipant(id, "waiting", "2.0", PersistedPluginState.Activated)).IsTrue();
+        Assertions.AssertBool(store.TryAddParticipant(id, "also", "3.0", PersistedPluginState.Activated)).IsTrue();
+
+        Assertions.AssertBool(store.TrySplitFailed(id, ["waiting", "unknown"], "dependency_timed_out")).IsFalse();
+        Assertions.AssertBool(store.TrySplitFailed(id, [], "dependency_timed_out")).IsFalse();
+        Assertions.AssertBool(store.TrySplitFailed(id, ["waiting", "also"], "dependency_timed_out",
+            new Dictionary<string, string> { ["waiting"] = "base did not activate." })).IsTrue();
+
+        var reloaded = new PluginStateStore(path, new NullLogger());
+        Assertions.AssertBool(reloaded.Load()).IsTrue();
+        var waiting = reloaded.GetLocal("waiting")!;
+        var also = reloaded.GetLocal("also")!;
+        Assertions.AssertObject(waiting.AttemptId).IsNotEqual(id);
+        Assertions.AssertObject(also.AttemptId).IsEqual(waiting.AttemptId);
+        Assertions.AssertString(waiting.Reason).IsEqual("dependency_timed_out");
+        Assertions.AssertString(waiting.Detail!).IsEqual("base did not activate.");
+        Assertions.AssertString(waiting.InstalledVersion).IsEqual("2.0");
+        Assertions.AssertObject(also.Detail).IsNull();
+        Assertions.AssertBool(reloaded.IsBlocked("waiting")).IsTrue();
+        Assertions.AssertBool(store.TryComplete(id, [new SharedPluginState("done", "1.0", PersistedPluginState.Activated)])).IsTrue();
+        Assertions.AssertObject(store.GetShared("waiting")).IsNull();
+        Assertions.AssertBool(store.IsBlocked("waiting")).IsTrue();
+    }
+
+    [TestCase]
     public void AParticipantJoiningAgainChangesItsTargetAndKeepsItsInstalledVersion()
     {
         var (store, path) = NewStore();

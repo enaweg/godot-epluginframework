@@ -389,7 +389,57 @@ internal sealed partial class EGlobal
     private EEditorPluginMetadata? ReadInstalledMetadata(string slug) =>
         EditorPluginExtensions.ReadMetadata($"{_host.PluginDirectory(slug)}/plugin.cfg");
 
-    private void FailAllUncheckedPluginsAndRefresh(string reason)
+    /// <param name="reason">What went wrong, the detail of each waiting plugin without an error of its own.</param>
+    /// <param name="code">The reason code recorded for the attempt.</param>
+    private void FailAllUncheckedPluginsAndRefresh(string reason, string code = "dependency_resolution_failed")
+    {
+        var failed = MarkWaitingFailed(reason);
+        FailTransition(code);
+        DisableFailedLater(failed);
+        // nothing of the failed activation is built: it is retried as a whole
+        RefreshEditor(rebuild: false);
+    }
+
+    /// <summary>
+    /// Fails the plugins waiting on <see cref="_toCheckEnable"/>, found waiting after other plugins of the transition
+    /// finished, e.g. because their dependency never activated or the user disabled it. They installed nothing, so they
+    /// fail in an attempt of their own, and the others of the transition complete without them: built and recorded.
+    /// </summary>
+    private void FailWaitingPlugins(string reason, string code)
+    {
+        var waiting = _toCheckEnable.ToHashSet();
+        var transition = _transition;
+        if (transition is null || _stateStore is null || transition.Participants.Keys.All(waiting.Contains) ||
+            waiting.Any(p => !transition.Participants.ContainsKey(p)))
+        {
+            FailAllUncheckedPluginsAndRefresh(reason, code);
+            return;
+        }
+
+        var failed = MarkWaitingFailed(reason);
+        var details = failed.ToDictionary(p => p.Slug, p => p.ErrorDetail!.Message, StringComparer.Ordinal);
+        if (!_stateStore.TrySplitFailed(transition.AttemptId, details.Keys, code, details))
+        {
+            FailTransition("cannot_record_participant", RecordFailedDetail);
+            DisableFailedLater(failed);
+            RefreshEditor(rebuild: false);
+            return;
+        }
+
+        foreach (var plugin in failed)
+        {
+            transition.Participants.Remove(plugin);
+        }
+
+        DisableFailedLater(failed);
+        if (FinishTransition())
+        {
+            RefreshEditor(rebuild: false);
+        }
+    }
+
+    /// <summary>Puts the waiting plugins in error and takes them off the stack; returns them.</summary>
+    private PluginContext[] MarkWaitingFailed(string reason)
     {
         var failed = _toCheckEnable.ToArray();
         foreach (var plugin in failed)
@@ -399,11 +449,16 @@ internal sealed partial class EGlobal
         }
 
         _toCheckEnable.Clear();
+        return failed;
+    }
 
-        FailTransition("dependency_resolution_failed");
-        // Godot may still be running the _EnablePlugin of each of them: the plugin that failed and those waiting for it
-        // as their dependency. Disabling one right away would free it inside its own callback, so they are disabled on
-        // the next frame. In error, the DisableEPlugin that runs changes nothing.
+    /// <summary>
+    /// Godot may still be running the _EnablePlugin of each of them: the plugin that failed and those waiting for it as
+    /// their dependency. Disabling one right away would free it inside its own callback, so they are disabled on the next
+    /// frame. In error, the DisableEPlugin that runs changes nothing.
+    /// </summary>
+    private void DisableFailedLater(PluginContext[] failed)
+    {
         Post(() =>
         {
             foreach (var plugin in failed.Where(p => _host.IsPluginEnabled(p.Slug)))
@@ -411,8 +466,6 @@ internal sealed partial class EGlobal
                 _host.SetPluginEnabled(plugin.Slug, false);
             }
         });
-        // nothing of the failed activation is built: it is retried as a whole
-        RefreshEditor(rebuild: false);
     }
 
     private void InstallEPlugin(PluginContext context, EEditorPluginRecipe recipe)
