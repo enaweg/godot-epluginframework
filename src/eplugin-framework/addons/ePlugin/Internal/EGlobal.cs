@@ -46,6 +46,8 @@ internal sealed partial class EGlobal
     private readonly HashSet<PluginContext> _enabledWithFramework = [];
     private readonly Stack<PluginContext> _toCheckDisable = new();
     private readonly Queue<IInitialize> _toInitialize = new();
+    // Set while Initialize runs: initializers wait for its end, also those registered or discovered meanwhile.
+    private bool _starting;
     private PluginTransition? _transition;
     private bool _transitionFailed;
     // While above zero the transition stays open, so several plugins toggled one after another are built once.
@@ -120,11 +122,20 @@ internal sealed partial class EGlobal
     /// </summary>
     /// <param name="plugin"></param>
     /// <param name="loggerFactory"></param>
-    public void Initialize(EPluginPlugin plugin, ILoggerFactory loggerFactory)
+    public void Initialize(EPluginPlugin plugin, ILoggerFactory loggerFactory) => Start(() => InitializeCore(plugin, loggerFactory));
+
+    /// <summary>
+    /// Runs a start of the framework, which <paramref name="initialize"/> sets up, then the initializers registered or
+    /// discovered until its end. They wait for the end, although the framework is valid from early on: an initializer
+    /// relies on the state files, the resumed plugins, updates and licenses. A start that throws runs none of them and
+    /// keeps them queued for the start that is tried next, so each runs once. Tests pass their own set-up.
+    /// </summary>
+    internal void Start(Action initialize)
     {
+        _starting = true;
         try
         {
-            InitializeCore(plugin, loggerFactory);
+            initialize();
         }
         catch
         {
@@ -133,6 +144,12 @@ internal sealed partial class EGlobal
             _ePluginContext = null;
             throw;
         }
+        finally
+        {
+            _starting = false;
+        }
+
+        ExecuteInitializers();
     }
 
     private void InitializeCore(EPluginPlugin plugin, ILoggerFactory loggerFactory)
@@ -357,7 +374,7 @@ internal sealed partial class EGlobal
         _contexts.Add(context);
         if (context.PluginBase is IInitialize initialize)
         {
-            // before the framework is set up there is nothing to pass yet; it initializes the plugin then
+            // before the framework has started, e.g. while its start discovers the plugin, this waits for the start's end
             AddInitializer(initialize);
         }
     }
@@ -474,13 +491,12 @@ internal sealed partial class EGlobal
 
         _ePluginContext.Logger.Log(
             $"Found {_contexts.Count(p => p.State is EEditorPluginState.Activated)} active plugins.");
-
-        ExecuteInitializers();
     }
 
+    /// <summary>Runs the queued initializers; called at the end of a start, which they wait for.</summary>
     internal void ExecuteInitializers()
     {
-        if (!IsValid())
+        if (!IsValid() || _starting)
         {
             return;
         }
@@ -506,8 +522,10 @@ internal sealed partial class EGlobal
 
     public void AddInitializer(IInitialize initializer)
     {
-        // The queue is only run while the framework starts: one registered later, e.g. by a plugin enabled since, runs now.
-        if (!IsValid())
+        // The queue is only run at the end of a start: one registered later, e.g. by a plugin enabled since, runs now.
+        // One registered during the start (by a plugin it discovers or resumes) waits for its end, although the
+        // framework is valid then already.
+        if (!IsValid() || _starting)
         {
             _toInitialize.Enqueue(initializer);
             return;

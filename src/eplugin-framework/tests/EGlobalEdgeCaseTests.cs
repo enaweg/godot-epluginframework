@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Enaweg.Plugin.Internal;
+using Enaweg.Plugin.Sample;
 using GdUnit4;
 using Godot;
 using Moq;
@@ -442,15 +443,14 @@ public partial class EGlobalEdgeCaseTests : IDisposable
         var later = new InitializingPlugin();
         try
         {
+            // the fixture's framework has started: a plugin enabled since is initialized when its context is created
             _fixture.Global.AddContext(new PluginContext(null, plugin, null));
             Assertions.AssertInt(plugin.Calls).IsEqual(1);
 
             var global = new EGlobal(_fixture.Host);
             global.AddContext(new PluginContext(null, later, null));
             Assertions.AssertInt(later.Calls).IsEqual(0);
-            global.Attach(_fixture.Framework, new Logging.GenericLoggerFactory(c => new RecordingLogger(_fixture.Log, c)), _fixture.Cli);
-            // what the end of the framework's start does
-            global.ExecuteInitializers();
+            global.Start(() => global.Attach(_fixture.Framework, Loggers(), _fixture.Cli));
             Assertions.AssertInt(later.Calls).IsEqual(1);
             // registered once the framework is ready, e.g. by a plugin enabled later: nothing would run the queue again
             global.AddInitializer(later);
@@ -463,6 +463,145 @@ public partial class EGlobalEdgeCaseTests : IDisposable
             plugin.Free();
             later.Free();
         }
+    }
+
+    [TestCase]
+    public void InitializersWaitForTheEndOfTheStart()
+    {
+        var observed = new List<string>();
+        var global = new EGlobal(_fixture.Host) { StateStore = _fixture.Store };
+        // an ePlugin enabled while the framework was not running, resumed by the start
+        _fixture.AddEPlugin("sample_plugin", null);
+        var sample = new SamplePlugin();
+        var discovered = new InitializingPlugin();
+        try
+        {
+            _fixture.Host.Nodes.AddRange([_fixture.Framework, sample]);
+            _fixture.Host.Enabled.Add("sample_plugin");
+            var context = new PluginContext(sample, sample, new RecordingLogger(_fixture.Log, "sample")) { Slug = "sample_plugin", Cli = _fixture.Cli };
+            global.AddContext(context);
+            global.EnableEPlugin(context);
+            // e.g. from a module initializer, before the framework's first frame
+            global.AddInitializer(new Initializer(() => observed.Add($"registered before: {context.State}, {_fixture.Store.GetShared("sample_plugin")?.State}")));
+
+            global.Start(() =>
+            {
+                global.Attach(_fixture.Framework, Loggers(), _fixture.Cli);
+                // valid from here on, but not started yet
+                Assertions.AssertBool(global.IsValid()).IsTrue();
+                global.ReloadContexts(null);
+                // what ReloadContexts does for a plugin node that implements IInitialize
+                global.AddContext(new PluginContext(null, discovered, null));
+                // e.g. by the plugin the start resumes
+                global.AddInitializer(new Initializer(() => observed.Add("registered during the start")));
+                global.CreateStateBaseline();
+                global.ResumeWaitingPlugins();
+                Assertions.AssertInt(discovered.Calls).IsEqual(0);
+                observed.Add("start done");
+            });
+
+            // after the plugins it resumed were installed and recorded
+            Assertions.AssertThat(observed).ContainsExactly("start done", "registered before: Activated, Activated", "registered during the start");
+            Assertions.AssertInt(discovered.Calls).IsEqual(1);
+            Assertions.AssertThat(_fixture.Operations).ContainsExactly("add-nuget ZLogger", "build");
+        }
+        finally
+        {
+            sample.Free();
+            discovered.Free();
+        }
+    }
+
+    [TestCase]
+    public void AStartThatFailsRunsNoInitializerAndTheRetryRunsEachOnce()
+    {
+        var global = new EGlobal(_fixture.Host) { StateStore = _fixture.Store };
+        var registered = 0;
+        var plugin = new InitializingPlugin();
+        try
+        {
+            global.AddInitializer(new Initializer(() => registered++));
+            var starts = 0;
+            void Start() => global.Start(() =>
+            {
+                global.Attach(_fixture.Framework, Loggers(), _fixture.Cli);
+                // a context is created once per instance; the retry finds it again
+                global.GetOrCreateContext(plugin);
+                // e.g. the state files cannot be read, after the plugins were discovered
+                if (++starts == 1) throw new IOException("state file is locked");
+            });
+
+            var failed = false;
+            try { Start(); }
+            catch (IOException) { failed = true; }
+
+            Assertions.AssertBool(failed).IsTrue();
+            // the framework does not count as started, so nothing ran against it
+            Assertions.AssertBool(global.IsValid()).IsFalse();
+            Assertions.AssertInt(registered).IsEqual(0);
+            Assertions.AssertInt(plugin.Calls).IsEqual(0);
+            // registered while the start waits to be tried again
+            var waiting = 0;
+            global.AddInitializer(new Initializer(() => waiting++));
+            Assertions.AssertInt(waiting).IsEqual(0);
+
+            Start();
+
+            Assertions.AssertBool(global.IsValid()).IsTrue();
+            Assertions.AssertInt(registered).IsEqual(1);
+            Assertions.AssertInt(plugin.Calls).IsEqual(1);
+            Assertions.AssertInt(waiting).IsEqual(1);
+        }
+        finally
+        {
+            plugin.Free();
+        }
+    }
+
+    [TestCase]
+    public void AnInitializerThatThrowsAtTheEndOfTheStartDoesNotStopTheOthers()
+    {
+        var global = new EGlobal(_fixture.Host);
+        var ran = 0;
+        global.AddInitializer(new Initializer(() => throw new InvalidOperationException("broken")));
+        global.AddInitializer(new Initializer(() => ran++));
+
+        global.Start(() => global.Attach(_fixture.Framework, Loggers(), _fixture.Cli));
+
+        Assertions.AssertInt(ran).IsEqual(1);
+        // the start itself succeeded
+        Assertions.AssertBool(global.IsValid()).IsTrue();
+        Assertions.AssertBool(Logged("error", "failed: broken")).IsTrue();
+    }
+
+    [TestCase]
+    public void APublicRegistrationWaitsForTheStart()
+    {
+        var global = new EGlobal(_fixture.Host);
+        var ran = 0;
+        using (EGlobal.UseInstance(global))
+        {
+            EPlugin.RegisterInitializer(new Initializer(() => ran++));
+            Assertions.AssertInt(ran).IsEqual(0);
+
+            global.Start(() =>
+            {
+                global.Attach(_fixture.Framework, Loggers(), _fixture.Cli);
+                EPlugin.RegisterInitializer(new Initializer(() => ran++));
+                Assertions.AssertInt(ran).IsEqual(0);
+            });
+            Assertions.AssertInt(ran).IsEqual(2);
+
+            EPlugin.RegisterInitializer(new Initializer(() => ran++));
+            Assertions.AssertInt(ran).IsEqual(3);
+        }
+    }
+
+    private Logging.GenericLoggerFactory Loggers() => new(c => new RecordingLogger(_fixture.Log, c));
+
+    private sealed class Initializer(Action initialize) : IInitialize
+    {
+        public void Initialize(IEPlugin ePlugin) => initialize();
     }
 
     [TestCase]
