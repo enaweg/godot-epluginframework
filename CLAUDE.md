@@ -160,7 +160,9 @@ itself: its `_DisablePlugin` calls `EGlobal.Detach`, which drops the singleton, 
 enabled again initializes like after an assembly reload instead of using the freed one. The compiled plugin types are read
 once per assembly load (`PluginTypes`). `Initialize` leaves `EGlobal` invalid when it throws; `EPluginPlugin` logs it (the full exception only when it changes),
 tries again after 10 s, doubling up to 5 minutes, and keeps its toolbar button, which opens `StartupFailureDialog` instead
-of the manager. One failing `IInitialize` does not stop the others.
+of the manager. `IInitialize`s (registered or a discovered plugin's) run once, at the end of a successful `Initialize`
+(`EGlobal.Start`, which tests drive with their own set-up): `EGlobal` is valid early in it, so they are queued until its
+end, and a start that throws keeps them for the retry. One failing `IInitialize` does not stop the others.
 
 ### Authoring contract (public API surface)
 
