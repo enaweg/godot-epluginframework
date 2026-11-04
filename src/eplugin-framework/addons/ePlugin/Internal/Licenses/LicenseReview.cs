@@ -5,7 +5,12 @@ using System.Linq;
 
 namespace Enaweg.Plugin.Internal.Licenses;
 
-internal enum LicenseDecision { Pending, Accepted, Declined, Skipped }
+/// <summary>What was decided about a license of a <see cref="LicenseReview"/>.</summary>
+/// <remarks>
+/// <see cref="Unreadable"/>: the license cannot be shown (<see cref="LicenseEntry.Problem"/>), so it can never be
+/// accepted. It is decided from the start and cancels the activations that need it, like a declined license.
+/// </remarks>
+internal enum LicenseDecision { Pending, Accepted, Declined, Skipped, Unreadable }
 
 /// <summary>
 /// A plugin waiting for licenses before it is enabled or updated: its own and those of the dependencies enabled
@@ -22,7 +27,9 @@ internal sealed record LicenseActivation(string Slug, string Name, IReadOnlyList
 /// </summary>
 /// <remarks>
 /// An activation goes ahead only when every license it needs was accepted. Declining a license cancels the
-/// activations that need it, which skips the licenses no remaining activation needs.
+/// activations that need it, which skips the licenses no remaining activation needs. A license that cannot be read is
+/// never accepted, also not by <see cref="AcceptAll"/>: nobody could have read what they agreed to, and acceptance is
+/// recorded by where the license comes from, so a file added later would count as accepted without being shown.
 /// </remarks>
 internal sealed class LicenseReview
 {
@@ -34,7 +41,9 @@ internal sealed class LicenseReview
         Entries = entries.DistinctBy(e => e.Slug).ToArray();
         Activations = activations;
         IsUpdate = isUpdate;
-        foreach (var entry in Entries) _decisions[entry.Slug] = LicenseDecision.Pending;
+        foreach (var entry in Entries)
+            _decisions[entry.Slug] = entry.Problem is null ? LicenseDecision.Pending : LicenseDecision.Unreadable;
+        SkipUnneeded();
     }
 
     public IReadOnlyList<LicenseEntry> Entries { get; }
@@ -46,10 +55,12 @@ internal sealed class LicenseReview
     public bool IsComplete => _decisions.Values.All(d => d != LicenseDecision.Pending);
     public int PendingCount => _decisions.Values.Count(d => d == LicenseDecision.Pending);
     public IEnumerable<LicenseEntry> Accepted => Entries.Where(e => DecisionOf(e.Slug) == LicenseDecision.Accepted);
+    /// <summary>The licenses that cannot be read, so they cannot be accepted.</summary>
+    public IEnumerable<LicenseEntry> Unreadable => Entries.Where(e => DecisionOf(e.Slug) == LicenseDecision.Unreadable);
     public IEnumerable<LicenseActivation> Approved =>
         Activations.Where(a => a.Licenses.All(l => DecisionOf(l) == LicenseDecision.Accepted));
     public IEnumerable<LicenseActivation> Canceled =>
-        Activations.Where(a => a.Licenses.Any(l => DecisionOf(l) is LicenseDecision.Declined or LicenseDecision.Skipped));
+        Activations.Where(a => a.Licenses.Any(l => DecisionOf(l) is LicenseDecision.Declined or LicenseDecision.Skipped or LicenseDecision.Unreadable));
 
     /// <summary>The licenses of another review are added; a license already listed keeps its decision.</summary>
     public LicenseReview Merge(LicenseReview other)
@@ -58,6 +69,7 @@ internal sealed class LicenseReview
             Activations.Concat(other.Activations.Where(a => Activations.All(o => o.Slug != a.Slug))).ToArray(),
             IsUpdate && other.IsUpdate);
         foreach (var (slug, decision) in _decisions) merged._decisions[slug] = decision;
+        merged.SkipUnneeded();
         return merged;
     }
 
@@ -66,15 +78,10 @@ internal sealed class LicenseReview
     public void Decline(string slug)
     {
         Decide(slug, LicenseDecision.Declined);
-        // a license only canceled activations still need is not asked about anymore
-        foreach (var entry in Entries.Where(e => DecisionOf(e.Slug) == LicenseDecision.Pending).ToArray())
-        {
-            var needed = Activations.Where(a => a.Licenses.Contains(entry.Slug)).ToArray();
-            if (needed.Length > 0 && needed.All(a => a.Licenses.Any(l => DecisionOf(l) == LicenseDecision.Declined)))
-                _decisions[entry.Slug] = LicenseDecision.Skipped;
-        }
+        SkipUnneeded();
     }
 
+    /// <summary>Accepts every license not decided yet; one that cannot be read stays unaccepted.</summary>
     public void AcceptAll()
     {
         foreach (var entry in Entries) Decide(entry.Slug, LicenseDecision.Accepted);
@@ -97,9 +104,44 @@ internal sealed class LicenseReview
     public IEnumerable<LicenseActivation> NeededBy(string slug) =>
         Activations.Where(a => a.Slug != slug && a.Licenses.Contains(slug));
 
+    /// <summary>
+    /// Why a canceled activation does not go ahead, to follow "… was not enabled: ". A license that cannot be read
+    /// comes first, as only fixing it helps.
+    /// </summary>
+    public string CanceledReason(LicenseActivation activation)
+    {
+        var needed = Entries.Where(e => activation.Licenses.Contains(e.Slug)).ToArray();
+        if (DescribeUnreadable(needed.Where(e => DecisionOf(e.Slug) == LicenseDecision.Unreadable)) is { } unreadable)
+            return unreadable;
+        var declined = needed.Where(e => DecisionOf(e.Slug) == LicenseDecision.Declined).ToArray();
+        return declined.Length > 0
+            ? $"the license of {string.Join(", ", declined.Select(e => e.Name))} was declined"
+            : "a license it needs was not accepted";
+    }
+
+    /// <summary>Why the licenses that cannot be read cannot be accepted, to follow "… was not enabled: "; null without any.</summary>
+    public string? UnreadableReason => DescribeUnreadable(Unreadable);
+
+    private static string? DescribeUnreadable(IEnumerable<LicenseEntry> unreadable)
+    {
+        var text = string.Join("; ", unreadable.Select(e => $"the license of {e.Name} cannot be read, so it cannot be accepted ({e.Problem!.TrimEnd('.')})"));
+        return text.Length == 0 ? null : text;
+    }
+
     private void Decide(string slug, LicenseDecision decision)
     {
         if (_decisions.TryGetValue(slug, out var current) && current == LicenseDecision.Pending) _decisions[slug] = decision;
+    }
+
+    /// <summary>A license only canceled activations still need is not asked about anymore.</summary>
+    private void SkipUnneeded()
+    {
+        foreach (var entry in Entries.Where(e => DecisionOf(e.Slug) == LicenseDecision.Pending).ToArray())
+        {
+            var needed = Activations.Where(a => a.Licenses.Contains(entry.Slug)).ToArray();
+            if (needed.Length > 0 && needed.All(a => a.Licenses.Any(l => DecisionOf(l) is LicenseDecision.Declined or LicenseDecision.Unreadable)))
+                _decisions[entry.Slug] = LicenseDecision.Skipped;
+        }
     }
 }
 #endif

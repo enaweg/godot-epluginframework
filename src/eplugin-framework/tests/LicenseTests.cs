@@ -188,6 +188,9 @@ public class LicenseTests
             .Contains("automatically");
         var problem = new LicenseInfo(Entry("plugin", "docs/EULA") with { Problem = "Cannot read it" }, true, null);
         Assertions.AssertString(PluginManagerViewModel.LicenseLine(problem)).Contains("Cannot read it");
+        // a required license that cannot be read says what helps
+        Assertions.AssertString(PluginManagerViewModel.LicenseLine(problem)).Contains("cannot be accepted, so the plugin stays disabled");
+        Assertions.AssertString(PluginManagerViewModel.LicenseLine(problem with { Required = false })).NotContains("cannot be accepted");
         Assertions.AssertString(PluginManagerViewModel.LicenseLine(null)).IsEmpty();
     }
 
@@ -204,6 +207,41 @@ public class LicenseTests
         Assertions.AssertInt(review.Approved.Count()).IsEqual(0);
         Assertions.AssertInt(review.Accepted.Count()).IsEqual(0);
         Assertions.AssertArray(review.Canceled.Select(a => a.Slug).ToArray()).ContainsExactly("plugin");
+    }
+
+    [TestCase]
+    public static void ALicenseThatCannotBeReadIsNeverAcceptedAndCancelsWhatNeedsIt()
+    {
+        var unreadable = Entry("plugin") with { Problem = "The license file res://addons/plugin/LICENSE is missing." };
+        var review = new LicenseReview([Entry("dependency"), unreadable],
+            [new LicenseActivation("plugin", "Plugin", ["dependency", "plugin"])]);
+
+        // nothing is left to decide: the dependency is only enabled for the plugin, which cannot go ahead
+        Assertions.AssertObject(review.DecisionOf("plugin")).IsEqual(LicenseDecision.Unreadable);
+        Assertions.AssertObject(review.DecisionOf("dependency")).IsEqual(LicenseDecision.Skipped);
+        Assertions.AssertBool(review.IsComplete).IsTrue();
+        review.Accept("plugin");
+        review.AcceptAll();
+        Assertions.AssertObject(review.DecisionOf("plugin")).IsEqual(LicenseDecision.Unreadable);
+        Assertions.AssertInt(review.Accepted.Count()).IsEqual(0);
+        Assertions.AssertInt(review.Approved.Count()).IsEqual(0);
+        Assertions.AssertArray(review.Canceled.Select(a => a.Slug).ToArray()).ContainsExactly("plugin");
+        Assertions.AssertString(review.CanceledReason(review.Canceled.Single()))
+            .IsEqual("the license of plugin cannot be read, so it cannot be accepted (The license file res://addons/plugin/LICENSE is missing)");
+
+        // another activation that does not need it is decided on its own, also by Accept all
+        var separate = new LicenseReview([Entry("one"), unreadable],
+            [new LicenseActivation("one", "One", ["one"]), new LicenseActivation("plugin", "Plugin", ["plugin"])], isUpdate: true);
+        Assertions.AssertInt(separate.PendingCount).IsEqual(1);
+        Assertions.AssertString(separate.NextPending()!.Slug).IsEqual("one");
+        separate.AcceptAll();
+        Assertions.AssertArray(separate.Accepted.Select(e => e.Slug).ToArray()).ContainsExactly("one");
+        Assertions.AssertArray(separate.Approved.Select(a => a.Slug).ToArray()).ContainsExactly("one");
+        Assertions.AssertArray(separate.Canceled.Select(a => a.Slug).ToArray()).ContainsExactly("plugin");
+        Assertions.AssertString(separate.UnreadableReason).Contains("the license of plugin cannot be read");
+        Assertions.AssertString(new LicenseReview([Entry("one")], []).UnreadableReason).IsNull();
+        // merging keeps it unreadable
+        Assertions.AssertObject(new LicenseReview([Entry("one")], []).Merge(separate).DecisionOf("plugin")).IsEqual(LicenseDecision.Unreadable);
     }
 
     [TestCase]

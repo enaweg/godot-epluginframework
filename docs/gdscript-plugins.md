@@ -150,7 +150,7 @@ license_file="docs/EULA.txt"
 
 The path is relative to the plugin folder. The license is shown as [BBCode](https://docs.godotengine.org/en/stable/tutorials/ui/bbcode_in_richtextlabel.html); plain text works too.
 
-Set `license_required=true` to have users accept the license before the plugin is enabled, from the ePlugin Manager or from **Project Settings > Plugins**. Declining, or closing the dialog, leaves the plugin disabled; accepting enables it.
+Set `license_required=true` to have users accept the license before the plugin is enabled, from the ePlugin Manager or from **Project Settings > Plugins**. Declining, or closing the dialog, leaves the plugin disabled; accepting enables it. A required license that is missing cannot be accepted, so the plugin stays disabled until the file is there (see [A license that cannot be read](plugin-licenses.md#a-license-that-cannot-be-read)).
 
 The manager asks before it enables the plugin. Project Settings enables a GDScript plugin before ePlugin can step in, so the framework disables it again in the next frame and shows the license then. The plugin's `_enter_tree`, `_enable_plugin`, `_disable_plugin` and `_exit_tree` therefore run once before the license is accepted, so a dock added in `_enter_tree`, as in the example above, appears briefly; keep them free of work that should wait for the license.
 

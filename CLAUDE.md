@@ -475,7 +475,11 @@ A plugin's license comes from the recipe's `SetLicense` (text, or a `res://` pat
 acceptance, because that has to be known without running plugin code (e.g. for staged updates). `Internal/Licenses/`
 is pure and unit-tested: `PluginLicense` resolves/reads it and gives it a *source* (relative file, `res://` path, or
 `text:<hash>` for recipe text; file contents are never compared), and `LicenseReview` holds per-license decisions
-(declining a dependency's license cancels and skips its dependants). Acceptances live in the optional `licenses` list
+(declining a dependency's license cancels and skips its dependants). A required license with a `Problem` (missing,
+over 1 MiB, outside the plugin) is `LicenseDecision.Unreadable` from the start: it is never accepted, not by Accept all,
+auto-accept (`AcceptAutomatically` returns it as left to review) or `RecordLicenses`, and cancels what needs it like a
+declined one, so the dialog only explains it (`PluginLicense.UnreadableAdvice`) and closes; an update needing it is
+left out. Acceptances live in the optional `licenses` list
 of the shared `eplugin-state.json` (`PluginStateStore.TryRecordLicenses`), omitted while empty. Compatibility of the
 state files goes one way: an upgrade must never lose state, so every newer version reads every older file (a new field
 is optional and reads as its default when absent; `PluginStateStoreTests.OlderFilesWithoutNewerFieldsAreReadWithoutLosingState`).
@@ -495,6 +499,11 @@ over the plugin and every disabled hard dependency it would enable; a disabled e
 throw-away instance of its compiled script type. With pending licenses the plugin is disabled again (deferred: Godot is
 still inside its `_EnablePlugin`), the review is queued, and `EPluginPlugin._Process` shows `LicenseDialog` a frame
 later; accepting re-enables it (the toggles wait in Engine metadata for a pending reload, `ResumeLicenseDecisions`).
+The slugs a queued or shown review would enable stay in Engine metadata until `CompleteLicenseReview`, so
+`ResumeLicenseReviews` (in `Initialize`) queues the review a reload dropped again with its dialog. The manager's own
+license dialog remembers its enable the same way (`RememberLicenseEnable`) before deferring it, and takes it back
+when it enables the plugin itself, so an acceptance while a reload is due enables the plugin after the reload
+(`AssemblyReload.Simulated` lets tests make a reload due).
 `ReviewEnabledLicenses` (end of `Initialize`) asks about enabled plugins whose license
 source is not accepted, e.g. a recipe license an update changed; declining disables them. The ePlugin Manager asks
 before `SetPluginEnabled` and before installing staged updates (recorded when the update commits,

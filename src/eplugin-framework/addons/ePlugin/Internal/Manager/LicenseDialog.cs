@@ -29,6 +29,7 @@ internal sealed partial class LicenseDialog : AcceptDialog, ISerializationListen
     private Button? _acceptAll;
     private string? _selected;
     private bool _done;
+    private bool _required;
     private bool ViewOnly => _finished is null;
 
     /// <summary>Calls <paramref name="finished"/> once every license is decided; closing the dialog declines the rest.</summary>
@@ -43,16 +44,17 @@ internal sealed partial class LicenseDialog : AcceptDialog, ISerializationListen
     public static LicenseDialog CreateViewer(LicenseInfo license)
     {
         var dialog = GD.Load<PackedScene>(ScenePath).Instantiate<LicenseDialog>();
-        dialog.Initialize(new LicenseReview([license.Entry], []), null, ViewSummary(license));
+        dialog.Initialize(new LicenseReview([license.Entry], []), null, ViewSummary(license), license.Required);
         return dialog;
     }
 
     /// <summary>Opens above whatever exclusive editor window is open, e.g. Project Settings or the ePlugin Manager.</summary>
     public void Open() => EditorWindows.Popup(this);
 
-    private void Initialize(LicenseReview review, Action<LicenseReview>? finished, string summary)
+    /// <param name="required">The licenses have to be accepted, which every license of a review has.</param>
+    private void Initialize(LicenseReview review, Action<LicenseReview>? finished, string summary, bool required = true)
     {
-        _review = review; _finished = finished;
+        _review = review; _finished = finished; _required = required;
         _list = GetNode<ItemList>("%LicenseList"); _summary = GetNode<Label>("%Summary");
         _name = GetNode<Label>("%LicenseName"); _source = GetNode<Label>("%LicenseSource");
         _neededBy = GetNode<Label>("%NeededBy"); _text = GetNode<RichTextLabel>("%LicenseText");
@@ -69,7 +71,7 @@ internal sealed partial class LicenseDialog : AcceptDialog, ISerializationListen
             _decline = AddButton("Decline", false, DeclineAction);
             _acceptAll = AddButton("Accept all", true, AcceptAllAction);
             _acceptAll.TooltipText = "Accept every license that is not decided yet.";
-            _signals.Connect(this, AcceptDialog.SignalName.Confirmed, Callable.From(() => Decide(accept: true)));
+            _signals.Connect(this, AcceptDialog.SignalName.Confirmed, Callable.From(Confirm));
             _signals.Connect(this, AcceptDialog.SignalName.CustomAction, Callable.From<StringName>(HandleCustomAction));
             _signals.Connect(this, AcceptDialog.SignalName.Canceled, Callable.From(DeclineRemaining));
         }
@@ -84,6 +86,18 @@ internal sealed partial class LicenseDialog : AcceptDialog, ISerializationListen
     }
 
     private static string Summary(LicenseReview review)
+    {
+        var unreadable = review.Unreadable.ToArray();
+        if (unreadable.Length == 0) return DecisionSummary(review);
+        var blocked = review.Activations.Where(a => a.Licenses.Any(l => review.DecisionOf(l) == LicenseDecision.Unreadable));
+        var outcome = string.Join(" ", blocked.Select(a => review.IsUpdate ? $"The update of {a.Name} is not installed."
+            : a.Enabled ? $"{a.Name} is disabled when you close this dialog."
+            : $"{a.Name} stays disabled."));
+        var text = $"The license of {string.Join(", ", unreadable.Select(e => e.Name))} cannot be read, so it cannot be accepted. {outcome}".TrimEnd();
+        return review.PendingCount == 0 ? text : DecisionSummary(review) + " " + text;
+    }
+
+    private static string DecisionSummary(LicenseReview review)
     {
         var first = review.Entries[0];
         if (review.IsUpdate)
@@ -108,6 +122,9 @@ internal sealed partial class LicenseDialog : AcceptDialog, ISerializationListen
     {
         var name = license.Entry.Name;
         if (!license.Required) return $"{name} does not ask for its license to be accepted.";
+        if (license.Entry.Problem is not null)
+            return $"{name} asks for its license to be accepted, but it cannot be read, so it cannot be accepted. " +
+                   (license.IsAccepted ? "It was accepted before it became unreadable." : $"{name} cannot be enabled until it can be read.");
         if (license.IsAccepted)
             return $"The license of {name} was accepted on {license.Accepted!.AcceptedUtc.ToLocalTime():g}" +
                    (license.Accepted.Automatic ? $", automatically because {LicenseSettings.AutoAcceptKey} was enabled." : ".");
@@ -125,13 +142,18 @@ internal sealed partial class LicenseDialog : AcceptDialog, ISerializationListen
         _source.TooltipText = _source.Text;
         // the license is BBCode; a problem is plain text
         var scale = EditorWindows.Scale;
-        _text.Text = entry.Problem is null ? PluginManagerViewModel.ScaleFontSizes(entry.Text, scale) : $"[color={TextColors.Error}]{entry.Problem.Replace("[", "[lb]")}[/color]";
+        _text.Text = entry.Problem is null ? PluginManagerViewModel.ScaleFontSizes(entry.Text, scale) : ProblemText(entry.Problem, _required);
         _text.ScrollToLine(0);
         var neededBy = _review.NeededBy(slug).Select(a => a.Name).ToArray();
         _neededBy.Text = _review.IsUpdate || neededBy.Length == 0 ? "" : $"Needed to enable {string.Join(", ", neededBy)}.";
         _neededBy.Visible = _neededBy.Text.Length > 0;
         Render();
     }
+
+    /// <summary>Why a license cannot be shown and, when it has to be accepted, what can be done about it.</summary>
+    internal static string ProblemText(string problem, bool required) =>
+        $"[color={TextColors.Error}]{problem.Replace("[", "[lb]")}[/color]" +
+        (required ? "\n\n" + PluginLicense.UnreadableAdvice.Replace("[", "[lb]") : "");
 
     private void Render()
     {
@@ -145,6 +167,7 @@ internal sealed partial class LicenseDialog : AcceptDialog, ISerializationListen
             {
                 LicenseDecision.Accepted => Icon("StatusSuccess"),
                 LicenseDecision.Declined => Icon("StatusError"),
+                LicenseDecision.Unreadable => Icon("StatusWarning"),
                 _ => null
             });
             _list.SetItemTooltip(index, decision switch
@@ -152,6 +175,7 @@ internal sealed partial class LicenseDialog : AcceptDialog, ISerializationListen
                 LicenseDecision.Accepted => "Accepted.",
                 LicenseDecision.Declined => "Declined.",
                 LicenseDecision.Skipped => "Not needed anymore: the plugins that need it stay disabled.",
+                LicenseDecision.Unreadable => "Cannot be read, so it cannot be accepted: the plugins that need it stay disabled.",
                 _ => "Not decided yet."
             });
             if (decision == LicenseDecision.Skipped)
@@ -160,9 +184,20 @@ internal sealed partial class LicenseDialog : AcceptDialog, ISerializationListen
         }
 
         if (_decline is null || _acceptAll is null) return;
+        // only licenses that cannot be read: there is nothing to decide, only to close
+        var closeOnly = _review.IsComplete;
+        OkButtonText = closeOnly ? "Close" : "Accept";
+        _decline.Visible = !closeOnly;
         var pending = _selected is not null && _review.DecisionOf(_selected) == LicenseDecision.Pending;
-        GetOkButton().Disabled = _decline.Disabled = !pending;
+        GetOkButton().Disabled = !closeOnly && !pending;
+        _decline.Disabled = !pending;
         _acceptAll.Visible = _review.PendingCount > 1;
+    }
+
+    private void Confirm()
+    {
+        if (_review.IsComplete) Finish();
+        else Decide(accept: true);
     }
 
     private void HandleCustomAction(StringName action)
@@ -203,7 +238,9 @@ internal sealed partial class LicenseDialog : AcceptDialog, ISerializationListen
     private void QueueWindowIcon() => CallDeferred(nameof(RefreshWindowIcon));
     private void RefreshWindowIcon() => EditorWindows.ApplyIcon(this);
 
-    // An assembly reload drops the review, so the dialog goes with it. The plugins it was asked for stay disabled.
+    // An assembly reload drops the review, so the dialog goes with it. A review the license gate queued is queued again
+    // after the reload (EGlobal.ResumeLicenseReviews), so its dialog reappears; the ePlugin Manager's own one is not,
+    // and the reloaded manager shows the plugin still disabled.
     public void OnBeforeSerialize()
     {
         _signals.Dispose();

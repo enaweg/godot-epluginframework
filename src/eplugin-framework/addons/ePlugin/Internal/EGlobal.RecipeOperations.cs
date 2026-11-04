@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Enaweg.Plugin.Internal.Dotnet;
+using Enaweg.Plugin.Internal.Licenses;
 using Enaweg.Plugin.Internal.Update;
 using Godot;
 
@@ -183,9 +184,11 @@ internal sealed partial class EGlobal
             throw new InvalidOperationException($"Dependency {dependency.Slug} {metadata.Version} does not match {dependency.Version}.");
         if (_host.IsPluginEnabled(dependency.Slug)) return;
         // An update cannot stop for the license dialog, and the new recipe that requires the plugin is only known once it is compiled.
-        if (CollectActivationLicenses(dependency.Slug) is { Count: > 0 } licenses && !AcceptAutomatically(licenses))
-            throw new InvalidOperationException($"The new version requires {dependency.Slug}, and the license of {string.Join(", ", licenses.Select(l => l.Name))} has to be accepted first. " +
-                                                $"Enable {dependency.Slug} in the ePlugin Manager, then install the update again.");
+        if (AcceptAutomatically(CollectActivationLicenses(dependency.Slug)) is { Count: > 0 } licenses)
+            throw new InvalidOperationException(UnreadableReason(licenses) is { } unreadable
+                ? $"The new version requires {dependency.Slug}, which cannot be enabled: {unreadable}. {PluginLicense.UnreadableAdvice}"
+                : $"The new version requires {dependency.Slug}, and the license of {string.Join(", ", licenses.Select(l => l.Name))} has to be accepted first. " +
+                  $"Enable {dependency.Slug} in the ePlugin Manager, then install the update again.");
         RegisterUpdateParticipant(dependency.Slug, metadata.Version);
         _host.SetPluginEnabled(dependency.Slug, true);
         var context = ManagedContext(dependency.Slug);

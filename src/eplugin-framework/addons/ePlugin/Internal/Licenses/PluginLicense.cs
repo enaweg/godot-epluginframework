@@ -37,6 +37,12 @@ internal static class PluginLicense
     public const string TextPrefix = "text:";
     public const long MaximumSize = 1024 * 1024;
 
+    /// <summary>What can be done about a license that has to be accepted but cannot be read; follows its problem.</summary>
+    public const string UnreadableAdvice =
+        "A license that cannot be read cannot be accepted, so the plugin stays disabled. The plugin's author has to ship it " +
+        "inside the plugin directory, at most 1 MiB, where plugin.cfg (license_file, else LICENSE) or the recipe names it. If the " +
+        "file was removed by accident, reinstalling or updating the plugin restores it.";
+
     /// <summary>Accepts the INI value <c>true</c> as well as the string <c>"true"</c>.</summary>
     public static bool IsTrue(string? value) => value?.Trim().Equals("true", StringComparison.OrdinalIgnoreCase) == true;
 

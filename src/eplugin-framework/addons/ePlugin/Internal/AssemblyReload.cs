@@ -29,11 +29,15 @@ internal static class AssemblyReload
     /// <summary>Remembers the build this assembly was loaded from; called once the framework initializes.</summary>
     public static void Capture() => _loadedBuild ??= BuildTime();
 
+    /// <summary>For tests: whether a reload is pending, instead of comparing build times; null compares them.</summary>
+    internal static bool? Simulated { get; set; }
+
     /// <summary>True while a newer build of this assembly waits to be loaded.</summary>
     public static bool IsPending
     {
         get
         {
+            if (Simulated is { } simulated) return simulated;
             try
             {
                 var state = Decide(ref _loadedBuild, BuildTime(), DateTime.UtcNow, ref _pendingSince);

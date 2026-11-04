@@ -209,7 +209,8 @@ internal sealed class PluginManagerViewModel
         if (entry.Problem is not null)
             return !license.Required && entry.Source == PluginLicense.DefaultFile
                 ? $"[b]License:[/b] missing (no {PluginLicense.DefaultFile} file in the plugin directory)\n"
-                : $"[b]License:[/b] [color={TextColors.Error}]{Escape(entry.Problem)}[/color]\n";
+                : $"[b]License:[/b] [color={TextColors.Error}]{Escape(entry.Problem)}[/color]" +
+                  (license.Required && !license.IsAccepted ? $" {Escape(PluginLicense.UnreadableAdvice)}" : "") + "\n";
         var state = !license.Required ? ""
             : license.IsAccepted ? $" (accepted {license.Accepted!.AcceptedUtc.ToLocalTime():d}{(license.Accepted.Automatic ? " automatically" : "")})"
             : license.Accepted is not null ? " (not accepted yet, an earlier license was)"

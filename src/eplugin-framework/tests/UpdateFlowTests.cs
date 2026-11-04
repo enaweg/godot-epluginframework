@@ -196,6 +196,32 @@ public class UpdateFlowTests : IDisposable
     }
 
     [TestCase]
+    public async Task AnUpdateWhoseLicenseCannotBeReadIsLeftOutWithoutRecordingIt()
+    {
+        _host.Packages["a"] = [];
+        _host.Packages["b"] = [];
+        _host.LicensesToReview = ["a", "b"];
+        _host.UnreadableLicenses = ["b"];
+        // even Accept all cannot accept it
+        _decide = review => review.AcceptAll();
+
+        var outcome = await Flow().InstallAsync(new([Candidate("a"), Candidate("b")]), View(), CancellationToken.None);
+
+        Assertions.AssertObject(outcome.Step).IsEqual(InstallStep.Installed);
+        var installed = _host.Applied.Single().Packages.Single();
+        Assertions.AssertString(installed.Candidate.Slug).IsEqual("a");
+        Assertions.AssertString(installed.AcceptedLicense).IsNotNull();
+
+        _host.LicensesToReview = ["b"];
+        var canceled = await Flow().InstallAsync(new([Candidate("b")]), View(), CancellationToken.None);
+
+        Assertions.AssertObject(canceled.Step).IsEqual(InstallStep.Canceled);
+        Assertions.AssertString(canceled.Notice)
+            .StartsWith("Update canceled: the license of b cannot be read, so it cannot be accepted (The license file is missing).");
+        Assertions.AssertInt(_host.Applied.Count).IsEqual(1);
+    }
+
+    [TestCase]
     public async Task AChosenVersionAsksWhetherToKeepAVersionThatDoesNotBuild()
     {
         _host.Packages["a"] = [];
@@ -751,6 +777,8 @@ public class UpdateFlowTests : IDisposable
         public Dictionary<string, Finding[]> Packages { get; } = [];
         public IReadOnlyList<RefusedPackage> Refused { get; set; } = [];
         public string[] LicensesToReview { get; set; } = [];
+        /// <summary>Of <see cref="LicensesToReview"/>, the licenses whose file the new version is missing.</summary>
+        public string[] UnreadableLicenses { get; set; } = [];
         public UpdateOutcome Outcome { get; set; } = UpdateOutcome.Completed;
         public bool ApplyFails { get; set; }
         public bool CheckThrows { get; set; }
@@ -793,7 +821,9 @@ public class UpdateFlowTests : IDisposable
         public LicenseReview? ReviewUpdateLicenses(IEnumerable<ValidatedPackage> packages)
         {
             var entries = packages.Where(p => LicensesToReview.Contains(p.Candidate.Slug))
-                .Select(p => PluginLicense.FromText(p.Candidate.Slug, p.Candidate.PluginName, "2.0.0", "Terms")).ToArray();
+                .Select(p => UnreadableLicenses.Contains(p.Candidate.Slug)
+                    ? new LicenseEntry(p.Candidate.Slug, p.Candidate.PluginName, "2.0.0", "LICENSE", "", "The license file is missing.")
+                    : PluginLicense.FromText(p.Candidate.Slug, p.Candidate.PluginName, "2.0.0", "Terms")).ToArray();
             return entries.Length == 0 ? null
                 : new LicenseReview(entries, entries.Select(e => new LicenseActivation(e.Slug, e.Name, [e.Slug])).ToArray(), isUpdate: true);
         }
