@@ -34,10 +34,10 @@ Release archives include a small shared progress helper (about 80 KB) that runs 
 
 ### Exported games
 
-ePlugin runs only in the editor, so its files do not belong in exported games. While ePlugin is enabled, every export skips its scripts, dialogs and icons (`addons/ePlugin`) and the project's plugin state (`addons/eplugin-state.json`, `addons/eplugin-update-sites.json`), without changing your export presets. Godot still adds its empty placeholder for each C# script. To leave them out also when you export with ePlugin disabled, enter this under **Project > Export > Resources > Filters to exclude files/folders from project** in each preset:
+ePlugin runs only in the editor, so its files do not belong in exported games. While ePlugin is enabled, every export skips its scripts, dialogs and icons (`addons/ePlugin`) and the project's plugin state (`addons/eplugin-state.json`, this machine's `addons/eplugin-state.json.user`, `addons/eplugin-update-sites.json`), without changing your export presets. Godot still adds its empty placeholder for each C# script. To leave them out also when you export with ePlugin disabled, enter this under **Project > Export > Resources > Filters to exclude files/folders from project** in each preset:
 
 ```
-addons/ePlugin/*, addons/eplugin-state.json, addons/eplugin-update-sites.json
+addons/ePlugin/*, addons/eplugin-state.json, addons/eplugin-state.json.user, addons/eplugin-update-sites.json
 ```
 
 The NuGet packages, projects, autoloads and [managed directories](docs/creating-plugins.md#recipe-resources) of enabled ePlugins are part of the game and are exported with it. A project a recipe adds is built in its `Release` configuration when you export a release (see `AddProject` in [Create an ePlugin](docs/creating-plugins.md#recipe-resources)).
