@@ -172,6 +172,7 @@ internal sealed partial class EGlobal
         ResumeWaitingPlugins();
         ResumeUpdates();
         ReviewEnabledLicenses();
+        ResumeLicenseReviews();
         ResumeLicenseDecisions();
         InitializeUpdates(plugin);
     }

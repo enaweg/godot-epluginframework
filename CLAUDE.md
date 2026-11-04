@@ -488,6 +488,11 @@ over the plugin and every disabled hard dependency it would enable; a disabled e
 throw-away instance of its compiled script type. With pending licenses the plugin is disabled again (deferred: Godot is
 still inside its `_EnablePlugin`), the review is queued, and `EPluginPlugin._Process` shows `LicenseDialog` a frame
 later; accepting re-enables it (the toggles wait in Engine metadata for a pending reload, `ResumeLicenseDecisions`).
+The slugs a queued or shown review would enable stay in Engine metadata until `CompleteLicenseReview`, so
+`ResumeLicenseReviews` (in `Initialize`) queues the review a reload dropped again with its dialog. The manager's own
+license dialog remembers its enable the same way (`RememberLicenseEnable`) before deferring it, and takes it back
+when it enables the plugin itself, so an acceptance while a reload is due enables the plugin after the reload
+(`AssemblyReload.Simulated` lets tests make a reload due).
 `ReviewEnabledLicenses` (end of `Initialize`) asks about enabled plugins whose license
 source is not accepted, e.g. a recipe license an update changed; declining disables them. The ePlugin Manager asks
 before `SetPluginEnabled` and before installing staged updates (recorded when the update commits,

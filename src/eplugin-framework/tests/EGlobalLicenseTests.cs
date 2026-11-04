@@ -183,6 +183,58 @@ public class EGlobalLicenseTests : IDisposable
     }
 
     [TestCase]
+    public void AReviewAnAssemblyReloadDroppedIsQueuedAgainAfterIt()
+    {
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"), extraConfig: "license_required=true");
+        RequireLicense("app");
+        _fixture.AddPlainPlugin("tool", extraConfig: "license_required=true");
+        RequireLicense("tool");
+        _fixture.AddPlainPlugin("shared", extraConfig: "license_required=true");
+        RequireLicense("shared");
+        _fixture.Global.InitializePluginToggles();
+        _fixture.Host.Dialogs = true;
+        // enabled in Project Settings: the gate disables them again until their licenses are accepted
+        _fixture.Enable("app");
+        _fixture.Host.Enabled.UnionWith(["tool", "shared"]);
+        _fixture.Global.ObservePluginToggles();
+        EGlobal.RunPosted();
+        Assertions.AssertThat(_fixture.Global.PendingLicenseReview!.Activations.Select(a => a.Slug).ToArray())
+            .ContainsExactlyInAnyOrder("app", "tool", "shared");
+        Assertions.AssertBool(_fixture.Host.Enabled.Overlaps(["app", "tool", "shared"])).IsFalse();
+
+        // A build in another IDE reloads the assembly while the dialog is open, which drops it undecided. Meanwhile
+        // the license of shared was accepted in another editor and pulled.
+        _fixture.Store.TryRecordLicenses([new AcceptedLicense("shared", "LICENSE", "1.0.0", DateTimeOffset.UtcNow, false)]);
+        EGlobal.DiscardPosted();
+        var reloaded = Reloaded();
+        reloaded.ResumeLicenseReviews();
+
+        var review = reloaded.PendingLicenseReview!;
+        Assertions.AssertThat(review.Activations.Select(a => a.Slug).ToArray()).ContainsExactlyInAnyOrder("app", "tool");
+        Assertions.AssertBool(EGlobal.HasLicenseDecision("shared")).IsTrue();
+        review.Accept("app");
+        review.Decline("tool");
+        reloaded.CompleteLicenseReview(review);
+        EGlobal.RunPosted();
+
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("app")).IsTrue();
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("shared")).IsTrue();
+        Assertions.AssertBool(_fixture.Host.Enabled.Contains("tool")).IsFalse();
+        // decided, so the next reload does not ask again
+        var next = Reloaded();
+        next.ResumeLicenseReviews();
+        Assertions.AssertObject(next.PendingLicenseReview).IsNull();
+    }
+
+    /// <summary>The framework after an assembly reload: a new EGlobal with the same editor, state file and Engine metadata.</summary>
+    private EGlobal Reloaded()
+    {
+        var global = new EGlobal(_fixture.Host) { StateStore = _fixture.Store };
+        global.Attach(_fixture.Framework, new Logging.GenericLoggerFactory(c => new RecordingLogger(_fixture.Log, c)), _fixture.Cli);
+        return global;
+    }
+
+    [TestCase]
     public void ALicenseFoundOnlyWhileADependencyIsEnabledFailsTheWaitingChain()
     {
         _fixture.AddPlainPlugin("lib", extraConfig: "license_required=true");

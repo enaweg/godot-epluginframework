@@ -161,7 +161,14 @@ internal sealed partial class EPluginManagerDialog
                 CompletePluginOperation();
                 return;
             }
-            if (decided.Approved.Any()) { CallDeferred(MethodName.SetPluginEnabled, slug, name, true); return; }
+            if (decided.Approved.Any())
+            {
+                // Kept in Engine metadata until it is enabled: a reload due before that discards this call, and
+                // Initialize enables the plugin then.
+                EGlobal.RememberLicenseEnable(slug);
+                CallDeferred(MethodName.EnableAccepted, slug, name);
+                return;
+            }
             _pluginOperation.Complete(false);
             _working = false;
             if (!GodotObject.IsInstanceValid(this) || !IsInsideTree()) return;
@@ -170,6 +177,25 @@ internal sealed partial class EPluginManagerDialog
                 ? $"{name} was not enabled: {unreadable}."
                 : $"{name} was not enabled: a license it needs was declined.";
         }).Open();
+    }
+
+    /// <summary>
+    /// Enables a plugin whose licenses were just accepted. When a reload became due while the dialog was open, the
+    /// enable waits for it like the decisions of a license review, rather than being dropped with the license recorded.
+    /// </summary>
+    private void EnableAccepted(string slug, string name)
+    {
+        // An assembly reload replaced this dialog since the click; Initialize enables the plugin as remembered.
+        if (!IsInitialized) return;
+        if (_pluginOperation.IsRunning && !AssemblyReload.IsPending)
+        {
+            EGlobal.TakeLicenseEnable(slug);
+            SetPluginEnabled(slug, name, true);
+            return;
+        }
+        // applied once the reload is done (posted work waits for it), or right away when nothing is pending
+        _global.ResumeLicenseDecisions();
+        if (_pluginOperation.IsRunning && EndedByPendingReload()) _status.Text = $"{name} is enabled once the editor loaded the rebuilt C# code...";
     }
 
     private void SetPluginEnabled(string slug, string name, bool enable)

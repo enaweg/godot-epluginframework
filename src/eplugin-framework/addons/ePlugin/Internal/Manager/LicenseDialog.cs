@@ -238,7 +238,9 @@ internal sealed partial class LicenseDialog : AcceptDialog, ISerializationListen
     private void QueueWindowIcon() => CallDeferred(nameof(RefreshWindowIcon));
     private void RefreshWindowIcon() => EditorWindows.ApplyIcon(this);
 
-    // An assembly reload drops the review, so the dialog goes with it. The plugins it was asked for stay disabled.
+    // An assembly reload drops the review, so the dialog goes with it. A review the license gate queued is queued again
+    // after the reload (EGlobal.ResumeLicenseReviews), so its dialog reappears; the ePlugin Manager's own one is not,
+    // and the reloaded manager shows the plugin still disabled.
     public void OnBeforeSerialize()
     {
         _signals.Dispose();

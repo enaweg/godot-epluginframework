@@ -172,6 +172,72 @@ public class PluginManagerDialogTests : IDisposable
     }
 
     [TestCase]
+    public async Task ALicenseAcceptedWhileAReloadIsDueEnablesThePluginAfterTheReload()
+    {
+        foreach (var slug in new[] { "licensed", "second" })
+        {
+            _fixture.AddPlainPlugin(slug, extraConfig: "license_required=true");
+            File.WriteAllText(Path.Combine(_fixture.Addon(slug), "LICENSE"), "Terms of use");
+        }
+        _dialog.Refresh();
+
+        Click("licensed", EnabledColumn, true);
+        await Frames();
+        try
+        {
+            // a build in another IDE, which the editor loads in a moment
+            AssemblyReload.Simulated = true;
+            Popped<LicenseDialog>()!.EmitSignal(AcceptDialog.SignalName.Confirmed);
+            await Frames();
+
+            Assertions.AssertBool(_fixture.Host.IsPluginEnabled("licensed")).IsFalse();
+            Assertions.AssertBool(_fixture.Store.IsLicenseAccepted("licensed", "LICENSE")).IsTrue();
+            Assertions.AssertBool(EGlobal.HasLicenseDecision("licensed")).IsTrue();
+            Assertions.AssertString(Status).IsEqual("licensed is enabled once the editor loaded the rebuilt C# code...");
+        }
+        finally { AssemblyReload.Simulated = null; }
+
+        // The reload discards the posted work and replaces the manager; Initialize applies what was remembered.
+        EGlobal.DiscardPosted();
+        _fixture.Global.ResumeLicenseDecisions();
+        EGlobal.RunPosted();
+        Assertions.AssertBool(_fixture.Host.IsPluginEnabled("licensed")).IsTrue();
+        Assertions.AssertBool(EGlobal.HasLicenseDecision("licensed")).IsFalse();
+
+        // a reload that replaces the manager before its deferred enable runs does not lose it either
+        _dialog.Free();
+        _dialog = EPluginManagerDialog.Create(_fixture.Global, CancellationToken.None);
+        Root.AddChild(_dialog);
+        _dialog.Refresh();
+        Click("second", EnabledColumn, true);
+        await Frames();
+        Popped<LicenseDialog>()!.EmitSignal(AcceptDialog.SignalName.Confirmed);
+        _dialog.Free();
+        await Frames();
+        Assertions.AssertBool(_fixture.Host.IsPluginEnabled("second")).IsFalse();
+        _fixture.Global.ResumeLicenseDecisions();
+        EGlobal.RunPosted();
+        Assertions.AssertBool(_fixture.Host.IsPluginEnabled("second")).IsTrue();
+    }
+
+    [TestCase]
+    public async Task ALicenseAcceptedWithoutAPendingReloadEnablesThePluginOnce()
+    {
+        _fixture.AddPlainPlugin("licensed", extraConfig: "license_required=true");
+        File.WriteAllText(Path.Combine(_fixture.Addon("licensed"), "LICENSE"), "Terms of use");
+        _dialog.Refresh();
+
+        Click("licensed", EnabledColumn, true);
+        await Frames();
+        Popped<LicenseDialog>()!.EmitSignal(AcceptDialog.SignalName.Confirmed);
+        await Frames();
+
+        Assertions.AssertBool(_fixture.Host.IsPluginEnabled("licensed")).IsTrue();
+        // the manager enabled it itself, so nothing is left for after a reload
+        Assertions.AssertBool(EGlobal.HasLicenseDecision("licensed")).IsFalse();
+    }
+
+    [TestCase]
     public async Task APluginWhoseRequiredLicenseCannotBeReadStaysDisabledAndSaysWhy()
     {
         // license_required=true, but no LICENSE file

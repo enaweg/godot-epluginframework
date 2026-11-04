@@ -411,6 +411,55 @@ internal sealed partial class EGlobal
     {
         _pendingLicenseReview = _pendingLicenseReview?.Merge(review) ?? review;
         _pendingLicenseFrame = Engine.GetProcessFrames();
+        SetWaitingForLicenses(WaitingForLicenses().Union(review.Activations.Where(a => !a.Enabled).Select(a => a.Slug), StringComparer.Ordinal));
+    }
+
+    // The plugins a queued or shown license review would enable, kept in Engine metadata until it is completed: an
+    // assembly reload (e.g. a build in another IDE) drops the review and its dialog, while the license gate already
+    // disabled them. Enabled plugins are not kept, as Initialize reviews those anyway (ReviewEnabledLicenses).
+    private const string LicenseReviewsMeta = "eplugin_license_reviews";
+
+    private static string[] WaitingForLicenses() =>
+        Engine.Singleton.HasMeta(LicenseReviewsMeta) ? Engine.Singleton.GetMeta(LicenseReviewsMeta).AsStringArray() : [];
+
+    private static void SetWaitingForLicenses(IEnumerable<string> slugs)
+    {
+        var waiting = slugs.ToArray();
+        if (waiting.Length > 0) Engine.Singleton.SetMeta(LicenseReviewsMeta, waiting);
+        else if (Engine.Singleton.HasMeta(LicenseReviewsMeta)) Engine.Singleton.RemoveMeta(LicenseReviewsMeta);
+    }
+
+    /// <summary>
+    /// Queues the license reviews an assembly reload dropped again, so their dialog reappears; called by Initialize,
+    /// before <see cref="ResumeLicenseDecisions"/>. A plugin whose licenses were accepted meanwhile, e.g. in another
+    /// editor, is enabled as if they had been accepted in its dialog.
+    /// </summary>
+    internal void ResumeLicenseReviews()
+    {
+        var waiting = WaitingForLicenses();
+        SetWaitingForLicenses([]);
+        if (_stateStore is null) return;
+        foreach (var slug in waiting)
+        {
+            // enabled again meanwhile, which asked again; or removed
+            if (_host.IsPluginEnabled(slug) || ReadInstalledMetadata(slug) is null) continue;
+            var pending = AcceptAutomatically(CollectActivationLicenses(slug));
+            var name = PluginName(slug);
+            if (pending.Count == 0)
+            {
+                _ePluginContext?.Logger.Log($"The licenses {name} waited for are accepted now; enabling it.");
+                RememberLicenseDecisions([(slug, true)]);
+            }
+            else if (!LicenseUiAvailable)
+            {
+                _ePluginContext?.Logger.Error(NotEnabledWithoutDialog(name, pending));
+            }
+            else
+            {
+                _ePluginContext?.Logger.Log($"{name} still waits for the license of {string.Join(", ", pending.Select(e => e.Name))} to be accepted.");
+                QueueLicenseReview(new LicenseReview(pending, [new LicenseActivation(slug, name, pending.Select(e => e.Slug).ToArray())]));
+            }
+        }
     }
 
     /// <summary>
@@ -436,6 +485,7 @@ internal sealed partial class EGlobal
     internal void CompleteLicenseReview(LicenseReview review)
     {
         RecordLicenses(review);
+        SetWaitingForLicenses(WaitingForLicenses().Except(review.Activations.Select(a => a.Slug), StringComparer.Ordinal));
         foreach (var activation in review.Canceled)
         {
             var text = $"{activation.Name} {(activation.Enabled ? "was disabled" : "was not enabled")}: {review.CanceledReason(activation)}.";
@@ -470,10 +520,31 @@ internal sealed partial class EGlobal
             ? Engine.Singleton.GetMeta(LicenseDecisionsMeta).AsStringArray().Where(t => t.Length > 1).Select(t => (t[1..], t[0] == '+')).ToArray()
             : [];
 
-    /// <summary>Drops the decisions not applied yet, e.g. when the framework is disabled.</summary>
-    internal static void ForgetLicenseDecisions()
+    /// <summary>
+    /// Remembers that the plugin is enabled because its licenses were accepted in the ePlugin Manager, until the manager
+    /// enables it (<see cref="TakeLicenseEnable"/>) or, when an assembly reload interrupts it, Initialize does.
+    /// </summary>
+    internal static void RememberLicenseEnable(string slug) => RememberLicenseDecisions([(slug, true)]);
+
+    /// <summary>Forgets what <see cref="RememberLicenseEnable"/> kept, as the caller enables the plugin itself.</summary>
+    internal static void TakeLicenseEnable(string slug)
+    {
+        var rest = RememberedLicenseDecisions().Where(t => t.Slug != slug).ToArray();
+        ForgetLicenseDecisions(reviews: false);
+        if (rest.Length > 0) RememberLicenseDecisions(rest);
+    }
+
+    /// <summary>Whether a license review decided to enable or disable the plugin, and that was not applied yet.</summary>
+    internal static bool HasLicenseDecision(string slug) => RememberedLicenseDecisions().Any(t => t.Slug == slug);
+
+    /// <summary>
+    /// Drops the decisions not applied yet and, unless <paramref name="reviews"/> is false, the reviews waiting for
+    /// their dialog, e.g. when the framework is disabled.
+    /// </summary>
+    internal static void ForgetLicenseDecisions(bool reviews = true)
     {
         if (Engine.Singleton.HasMeta(LicenseDecisionsMeta)) Engine.Singleton.RemoveMeta(LicenseDecisionsMeta);
+        if (reviews) SetWaitingForLicenses([]);
     }
 
     /// <summary>Applies the decisions of a license review that an assembly reload interrupted; called by Initialize.</summary>
@@ -495,7 +566,7 @@ internal sealed partial class EGlobal
         }
 
         var toggles = RememberedLicenseDecisions();
-        ForgetLicenseDecisions();
+        ForgetLicenseDecisions(reviews: false);
         if (toggles.Length == 0) return;
         _transitionHold++;
         try
