@@ -55,6 +55,10 @@ public static class EPlugin
     /// Registers an initializer whose <see cref="IInitialize.Initialize"/> is called once the framework has finished
     /// starting up, or right away when it already has.
     /// </summary>
+    /// <remarks>
+    /// One registered while the framework starts, e.g. by a plugin it enables, waits for the end of the start too, and
+    /// one registered while a failed start waits to be tried again is called once that start succeeds.
+    /// </remarks>
     /// <param name="initializer">The initializer to call.</param>
     public static void RegisterInitializer(IInitialize initializer)
     {
