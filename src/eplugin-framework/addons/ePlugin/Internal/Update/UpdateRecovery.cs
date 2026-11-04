@@ -76,6 +76,9 @@ internal static class UpdateRecovery
                     if (plugin.SwapStarted && !Directory.Exists(backup) &&
                         (!File.Exists(Path.Combine(installed, "plugin.cfg")) || !HasVersion(Path.Combine(installed, "plugin.cfg"), plugin.OldVersion)))
                         throw new IOException("Missing backup for " + plugin.Slug);
+                    // Copying the backup over it would delete the repository; no swap replaces such a folder either.
+                    if (Directory.Exists(backup) && PluginRepository.HoldsRepository(installed))
+                        throw new IOException($"{installed} holds a git repository, which restoring the backup would delete");
                 }
                 // Restored already, by an earlier start or a rollback whose build failed: the project may have been repaired since.
                 var (projectBackup, projectFiles) = journal.KeepProjectFiles ? ("", []) : ProjectBackup.Find(folder, journal.ProjectFiles);

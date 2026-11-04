@@ -141,6 +141,11 @@ internal sealed partial class AddonPackageValidator(IEnumerable<IAddonRule>? ext
         // A plugin folder linked to a working copy would be replaced by the downloaded copy, the link and all.
         if (Directory.Exists(installed.Directory) && (File.GetAttributes(installed.Directory) & FileAttributes.ReparsePoint) != 0)
             Add("R20", FindingSeverity.Error, "The plugin folder is a link; update the plugin where it points to.");
+        // Packages never contain a .git, so replacing a folder that holds a repository would delete it, and one inside
+        // another repository would change that repository's working copy.
+        var repository = installed.Repository ?? PluginRepository.Detect(installed.Directory, null);
+        if (!context.NewInstall && repository.PackageRefusal(installed.Directory) is { } refusal)
+            Add("R29", FindingSeverity.Error, refusal);
         var installedFiles = Directory.Exists(installed.Directory) ? PackageFiles.Files(installed.Directory).ToArray() : [];
         // What differs between plugin kinds, e.g. the native libraries of a GDExtension plugin.
         var kind = PluginKinds.ForPackage(installed, script, files, installedFiles);

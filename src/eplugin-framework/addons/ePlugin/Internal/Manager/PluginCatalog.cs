@@ -42,6 +42,8 @@ internal sealed record PluginInfo(string Slug, string Name, PluginKind Kind, boo
     public bool Missing { get; init; }
     /// <summary>The GDExtensions the plugin ships, as the editor runs them.</summary>
     public IReadOnlyList<NativeExtensionStatus> Extensions { get; init; } = [];
+    /// <summary>How the plugin folder is under git version control; null when it was not looked at.</summary>
+    public PluginRepository? Repository { get; init; }
 }
 
 internal static class PluginCatalog

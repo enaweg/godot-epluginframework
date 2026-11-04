@@ -37,6 +37,7 @@ internal sealed class AddonFolderSwap : IAddonSwap
     public int Install(string installed, string staging, string backup, string discard)
     {
         AddonFiles.RefuseLink(installed);
+        AddonFiles.RefuseRepository(installed);
         Directory.CreateDirectory(Path.GetDirectoryName(backup)!);
         AddonFiles.MoveDirectory(installed, backup);
         AddonFiles.MoveDirectory(staging, installed);
@@ -45,6 +46,7 @@ internal sealed class AddonFolderSwap : IAddonSwap
 
     public int Restore(string installed, string backup, string discard)
     {
+        AddonFiles.RefuseRepository(installed);
         AddonFiles.DeleteTree(installed);
         AddonFiles.MoveDirectory(backup, installed);
         return 0;
@@ -70,6 +72,7 @@ internal sealed class AddonFileSwap : IAddonSwap
     public int Install(string installed, string staging, string backup, string discard)
     {
         AddonFiles.RefuseLink(installed);
+        AddonFiles.RefuseRepository(installed);
         var partial = backup + ".partial";
         AddonFiles.DeleteTree(partial);
         if (Directory.Exists(backup)) throw new IOException("A backup of the plugin already exists: " + backup);
@@ -86,6 +89,7 @@ internal sealed class AddonFileSwap : IAddonSwap
     {
         Directory.CreateDirectory(installed);
         AddonFiles.RefuseLink(installed);
+        AddonFiles.RefuseRepository(installed);
         var discarded = AddonFiles.RemoveContents(installed, discard);
         AddonFiles.CopyTree(backup, installed);
         // Moved aside in one step before it is deleted: a delete that stops halfway would leave a partial backup that a
@@ -132,6 +136,20 @@ internal static class AddonFiles
     {
         if (File.Exists(to)) File.SetAttributes(to, File.GetAttributes(to) & ~FileAttributes.ReadOnly);
         File.Copy(from, to, true);
+    }
+
+    /// <summary>
+    /// Refuses to replace a folder that holds a git repository (a <c>.git</c> file or folder in it or below it): packages
+    /// never contain one (<see cref="PackageFiles.Skip"/>), so a swap would move it into the backup that the commit deletes.
+    /// Git submodules are updated through git instead.
+    /// </summary>
+    public static void RefuseRepository(string directory)
+    {
+        if (!Directory.Exists(directory)) return;
+        var own = Path.Combine(directory, PluginRepository.GitEntry);
+        var git = File.Exists(own) || Directory.Exists(own) ? own : PluginRepository.Nested(directory);
+        if (git is not null)
+            throw new IOException($"{directory} holds the git repository {git}, which replacing its files would delete; update it with git.");
     }
 
     /// <summary>Deletes a file when it exists, also a read-only one (see <see cref="DeleteTree"/>).</summary>

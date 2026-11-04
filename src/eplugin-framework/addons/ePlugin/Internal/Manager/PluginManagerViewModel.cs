@@ -77,6 +77,8 @@ internal sealed class PluginManagerViewModel
                 if (candidate.SourceUrl is not null && !target.UpdateUrls.Contains(candidate.SourceUrl))
                     messages.Add(new("source_changed", FindingSeverity.Error, "The plugin's update site changed or was removed; check for updates again."));
                 if (target.IsBlocked || target.StoreReadOnly) messages.Add(new("R17", FindingSeverity.Error, "Resolve the plugin's problem under Needs attention first."));
+                if (target.Repository?.PackageRefusal("The plugin folder") is { } refusal)
+                    messages.Add(new("R29", FindingSeverity.Error, refusal));
                 if (target.RecordedVersion is not null && !SemVer.Same(target.RecordedVersion, target.InstalledVersion))
                     messages.Add(new("recorded_version", FindingSeverity.Info, "Last working version: " + target.RecordedVersion));
             }
@@ -144,6 +146,15 @@ internal sealed class PluginManagerViewModel
         { SourceUrl: { } url } => "From the update site " + url,
         _ => null
     };
+
+    /// <summary>
+    /// What the details say about a plugin folder under git version control, as BBCode ending in a line break; empty for
+    /// a plain folder.
+    /// </summary>
+    public static string RepositoryLine(PluginRepository? repository) =>
+        repository?.PackageRefusal("The plugin folder") is { } refusal
+            ? $"[color={TextColors.Warning}]Version control:[/color] {Escape(refusal)}\n"
+            : "";
 
     /// <summary>Why the selected version cannot be installed, or null when it can.</summary>
     public static string? VersionChangeBlocked(PluginRow row, VersionOption option)
@@ -346,6 +357,7 @@ internal sealed class PluginManagerViewModel
         if (kept is not null) text.Append(KeptUpdateSection(kept));
 
         text.Append("\n[b]Update[/b]\n");
+        text.Append(RepositoryLine(plugin.Repository));
         if (row.Update is { } update)
         {
             text.Append(CultureInfo.CurrentCulture, $"{Escape(update.Candidate.InstalledVersion)} → [color={TextColors.Success}]{Escape(update.Candidate.NewVersion)}[/color]\n");

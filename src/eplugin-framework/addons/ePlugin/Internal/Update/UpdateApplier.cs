@@ -195,6 +195,9 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         {
             var slug = package.Candidate.Slug;
             if (!host.IsEnabled(slug)) throw new InvalidOperationException($"Plugin {slug} is no longer enabled.");
+            // Checked again here, before the marker: a swap would delete a repository in the folder (see AddonFiles.RefuseRepository).
+            if (PluginRepository.Detect(Installed(slug), projectRoot).PackageRefusal(Installed(slug)) is { } refusal)
+                throw new InvalidOperationException(refusal);
             var old = InstalledVersion(slug, package.Kind);
             // The check read the version through Godot, which reads an unquoted 1.2.0 as 1.2.
             if (!SemVer.Same(old, package.Candidate.InstalledVersion)) throw new InvalidOperationException($"Plugin {slug} changed since the update check; check again.");

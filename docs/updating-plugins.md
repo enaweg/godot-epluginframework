@@ -152,6 +152,7 @@ An update with an error cannot be selected or installed. These are refused:
 - a GDExtension whose libraries are outside the plugin folder, whose library for the editor is named but missing, or that the editor's Godot version cannot load (see [GDExtension plugins](gdextension-plugins.md#publish-a-release)), a forbidden file, or a package over the size limits of 20000 files, 256 MB per file and 1 GB in total (see [Publish an updatable release](#publish-an-updatable-release))
 - a version rejected by a hard dependency constraint of another enabled plugin
 - a plugin folder that is a link (a symlink or junction to another checkout); update the plugin where it points to
+- a package for a plugin folder under git version control: one with a `.git` of its own (a cloned working copy or a worktree), one inside another repository below the project root, or one that contains a repository. A package never contains `.git`, so replacing the folder would delete the repository; update such a plugin with git (see [Plugins under version control](#plugins-under-version-control))
 - a plugin whose update is changed or blocked: its `update_url` changed since the check, it is no longer enabled, or an earlier attempt still waits for a decision under **Needs attention**
 
 A package without files for the plugin, for another addon slug, with forbidden files, over the size limits, or with several equally deep plugin folders of that name is a packaging problem of the plugin; the refusal says so, as only the plugin's author can fix it. Some of these can only be found once the package is downloaded, for example a release whose plugin script is missing. Such a package is shown as refused in the **Review updates** dialog and left out of the batch; the other selected updates are still installed, and the manager lists the skipped package after them. Only when every package of the batch is refused is nothing installed.
@@ -160,6 +161,18 @@ Shown without stopping: an optional recipe of another plugin that no longer matc
 
 > [!NOTE]
 > An update replaces the whole addon folder, `plugin.cfg` included. If you added `update_url` to a third-party plugin yourself, its next release usually does not contain it: the review reports **Update source changed: removed** and leaves the update unchecked until you trust it, and after installing, the plugin has no `update_url` until you add it again. Set a [project update site](#project-update-sites) for plugins whose releases do not declare an `update_url`; it stays in use across updates.
+
+## Plugins under version control
+
+The project's own repository does not matter: a plugin folder that is just part of it is updated like any other. A plugin folder that is a repository of its own, or part of another one, is different, because an update replaces the whole folder with a package that never contains `.git`:
+
+| Plugin folder | Updates |
+|---|---|
+| A cloned working copy or a worktree (its own `.git`, not registered as a submodule) | Refused; update it with git in that folder. |
+| Inside another repository below the project root, for example an `addons` folder that is a submodule | Refused; update that repository with git. |
+| Contains a repository, such as a nested submodule | Refused; update it with git. |
+
+Checks still show an update a release offers for such a plugin, with the reason it cannot be installed in its details, and the **Update** button leaves it out. Packages from local directories are not offered for it. If the editor stopped during an update and early recovery would have to restore a backup over a folder that holds a repository, it asks for a manual repair instead.
 
 ## Builds, restart, and recovery
 

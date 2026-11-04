@@ -217,7 +217,15 @@ packages made for Godot 3 (R27, `Godot3Evidence`: GDNative files or GDScript tha
 reason for a release of the same version. The manager deletes a staged batch it does not install (`UpdateFlow.Clear`); since an assembly reload or a
 crash forgets it, `ResumeUpdates` deletes folders without a journal last written more than six hours ago
 (`UpdateJournals.AbandonedStaging`). A plugin folder that is a link (to a working copy) is refused for every kind (R20), and both swaps refuse it
-too (`AddonFiles.RefuseLink`), since moving it would replace the link with the downloaded copy. Version control systems such as Perforce sync files
+too (`AddonFiles.RefuseLink`), since moving it would replace the link with the downloaded copy. Packages never contain
+`.git` (`PackageFiles.Skip`), so a swap would move a repository in the folder into the backup that the commit deletes:
+`PluginRepository.Detect` (pure, file reads only) tells a submodule (a `.git` registered in the superproject's
+`.gitmodules`), a clone or worktree (any other `.git` of its own), a folder inside another repository below the project
+root, and one that contains a repository. `PluginUpdateTarget.Repository` carries it; every kind but `None` is refused
+for packages by the validator (R29, which looks at the folder itself when the target has none), by `UpdateApplier.Apply`
+before the marker, by the manager's rows and by `LocalDirectorySource`, and both swaps refuse a folder holding a `.git`
+(`AddonFiles.RefuseRepository`) on install and restore; early recovery asks for a manual repair instead of copying a
+backup over one. Version control systems such as Perforce sync files
 read-only, which Windows refuses to delete or overwrite: plugin, project, backup and staging files are deleted and
 overwritten only through `AddonFiles.DeleteTree`, `DeleteFile` and `Overwrite`, which clear that attribute first. `IUpdateHost.Preflight` refuses to start while a scene is running, an untitled scene is open (detectable only
 from Godot 4.5) or an ePlugin of the batch is not `Activated`. Then save and close all open scenes

@@ -32,10 +32,20 @@ internal sealed record LocalZipPackageRef(string Path) : UpdatePackageRef;
 /// What the editor knows of the installed plugin: <see cref="PluginKind.Framework"/>, <see cref="PluginKind.EPlugin"/>, or
 /// <see cref="PluginKind.Unknown"/> for every other plugin, whose kind validation reads from its files.
 /// </param>
+/// <param name="Repository">
+/// How the plugin folder is under git version control (<see cref="PluginRepository.Detect"/>); null when it was not looked
+/// at, in which case validation looks at the folder itself.
+/// </param>
 internal sealed record PluginUpdateTarget(string Slug, string Name, string InstalledVersion, string? UpdateUrl,
     string Directory, bool IsBlocked = false, bool StoreReadOnly = false, string? RecordedVersion = null,
-    string? OverrideUrl = null, string? KnownUrl = null, PluginKind Kind = PluginKind.Unknown)
+    string? OverrideUrl = null, string? KnownUrl = null, PluginKind Kind = PluginKind.Unknown, PluginRepository? Repository = null)
 {
+    /// <summary>
+    /// Whether packages may replace the plugin folder: not when it is a git submodule, a clone, part of another repository
+    /// or holds one (see <see cref="PluginRepository"/>).
+    /// </summary>
+    public bool PackagesAllowed => Repository is null or { Kind: RepositoryKind.None };
+
     /// <summary>
     /// The update sites to try, in order: the project's, the plugin.cfg update_url, then the built-in one. A candidate
     /// found at any of them belongs to the plugin. Empty when only local directories can update the plugin.
