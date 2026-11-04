@@ -137,9 +137,16 @@ uid map and the interim bridge, `AfterSwap`; on rollback `Swap.Restore` and `Aft
 and rollback. `Validate` adds the kind's findings to `AddonPackageValidator`.
 
 `PluginKinds.Classify` is the manager's classification (an ePlugin by its compiled script type, a GDExtension plugin by
-a `.gdextension` file below its folder, otherwise by the entry script); a folder without `plugin.cfg` whose
+a `.gdextension` file below its folder, otherwise by the entry script); a folder without `plugin.cfg` in or below it whose
 `.gdextension` lies outside hidden folders is a GDExtension add-on (`PluginKinds.IsExtensionAddon`,
-`EGlobal.ExtensionAddons.cs`). Updates use `ForPackage` (the installed framework, ePlugin or GDExtension add-on keeps its
+`EGlobal.ExtensionAddons.cs`). `AddonLayout` finds both like Godot's Plugins list finds plugins, also in subfolders of
+`res://addons` (slug `acme/tool`). Updates leave out every plugin and add-on whose slug has a `/`
+(`CollectUpdateTargets`): staging (`SafeZipExtractor`, `GitSource`, the local index), the validator's R5, journals and
+early recovery find and install a package's folder by its slug directly below `res://addons`. Journals and recovery still
+accept such a slug as a recipe owner, since every activated ePlugin's recipe is recorded. A `plugin.cfg` below a plugin's
+own is a sub-plugin that the plugin's package carries: R31 (`AddonPackageValidator.SubPluginFindings`) warns about each
+one the new version drops, which the swap deletes, refuses that while it is enabled (`PluginUpdateTarget.EnabledSubPlugins`),
+and warns that an enabled one it keeps is replaced without being disabled. Updates use `ForPackage` (the installed framework, ePlugin or GDExtension add-on keeps its
 kind, a `.gdextension` in the installed or staged version makes it a GDExtension plugin) and record the kind by name in
 `UpdatePluginJournal.Kind`. Journals without it, or with a kind this version does not know, fall back to `IsEPlugin`
 (Framework, EPlugin or Unknown). The swap is chosen per plugin (`Swap(plugin)`): both

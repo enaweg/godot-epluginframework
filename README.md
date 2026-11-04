@@ -44,7 +44,7 @@ The NuGet packages, projects, autoloads and [managed directories](docs/creating-
 
 ## Features
 
-ePlugin works with plugins that have a `plugin.cfg` in their folder below `res://addons` (`res://addons/<slug>/plugin.cfg`), whatever their type: ePlugins, plain C#, GDScript and GDExtension plugins, and with GDExtensions in their own folder without one. Other add-ons without a `plugin.cfg`, such as a script library or an asset pack, are not supported.
+ePlugin works with plugins that have a `plugin.cfg` in their folder below `res://addons` (`res://addons/<slug>/plugin.cfg`, also in a subfolder such as `res://addons/acme/my_plugin`, as Godot's Plugins list finds them), whatever their type: ePlugins, plain C#, GDScript and GDExtension plugins, and with GDExtensions in their own folder without one. Plugins in subfolders are not updated. Other add-ons without a `plugin.cfg`, such as a script library or an asset pack, are not supported.
 
 For plugin authors:
 

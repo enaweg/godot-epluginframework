@@ -1,6 +1,6 @@
 # ePlugin for GDScript plugins
 
-ePlugin Framework is written in C#, but most of what it offers works for every plugin below `res://addons`, GDScript plugins included. Like every plugin, a GDScript plugin needs a `plugin.cfg` in its folder; scripts without one are not supported. A GDScript plugin needs no code for it: it opts in with keys in `plugin.cfg` and with files in its folder. Godot ignores keys it does not know, so the same plugin keeps working unchanged in projects without ePlugin.
+ePlugin Framework is written in C#, but most of what it offers works for every plugin below `res://addons`, GDScript plugins included. Like every plugin, a GDScript plugin needs a `plugin.cfg` in its folder; scripts without one are not supported. The folder can be in a subfolder of `res://addons`, such as `res://addons/acme/my_tool`, as Godot's Plugins list allows; such a plugin's slug is `acme/my_tool` and it is not updated (see [Plugins in subfolders](creating-plugins.md#plugins-in-subfolders)). A GDScript plugin needs no code for it: it opts in with keys in `plugin.cfg` and with files in its folder. Godot ignores keys it does not know, so the same plugin keeps working unchanged in projects without ePlugin.
 
 The project using the plugin needs the Godot .NET editor and a .NET SDK, because ePlugin itself is a C# plugin (see [Requirements and installation](../README.md#requirements-and-installation)). The GDScript plugin stays pure GDScript.
 
@@ -75,7 +75,7 @@ Every key below `script` is optional. Leave out what the plugin does not need: w
 
 ## In the ePlugin Manager
 
-The [ePlugin Manager](eplugin-manager.md) lists every plugin below `res://addons`, enabled or not. A plugin whose `script` ends in `.gd` has the type *GDScript plugin*. Its details show the author, version, description, license, welcome page, documentation and source links, update site and any earlier failures.
+The [ePlugin Manager](eplugin-manager.md) lists every plugin below `res://addons` that Godot's Plugins list shows, also in subfolders, enabled or not. A plugin whose `script` ends in `.gd` has the type *GDScript plugin*. Its details show the author, version, description, license, welcome page, documentation and source links, update site and any earlier failures.
 
 Enabling or disabling it, in the manager or in **Project Settings > Plugins**, is handled like for an ePlugin: a required [license](#license) is asked for first, ePlugins that require it are disabled with it, and optional recipes that depend on it are installed or removed (see [Using a GDScript plugin from an ePlugin](#using-a-gdscript-plugin-from-an-eplugin)). Longer work shows the [progress window](progress-dialog.md). Toggles made while ePlugin Framework itself is disabled are not handled when it is enabled again: dependants are not disabled and optional recipes are not changed; only a required license is asked for once the framework has started again.
 
@@ -120,7 +120,8 @@ zip -r my_tool-1.2.0.zip addons/my_tool
 Attach the ZIP to a GitHub, GitLab, Forgejo or Gitea (Codeberg) release, or put it in a [local directory](updating-plugins.md#local-directories). Without a ZIP asset, the release's source archive is used; repositories that only tag their versions use the tag source above.
 
 - Raise `version` in `plugin.cfg` for every release. Versions have two to four numbers (`1.2`, `1.2.0`, `1.2.0.1`), optionally a leading `v` and a prerelease suffix such as `-beta.1`. Name the release or tag after the same version.
-- Keep the folder name stable. It is the plugin's slug, which update sites and dependencies refer to.
+- Keep the folder name stable. It is the plugin's slug, which update sites and dependencies refer to. Updates install the plugin directly in `res://addons`, so a plugin meant to be updated must not be installed in a subfolder.
+- A `plugin.cfg` deeper in the plugin folder is a sub-plugin, which ships and updates with the plugin; Godot does not list it.
 - Do not include `project.godot`, `nuget.config`, symlinks or submodules. A plugin with a GDExtension (`.gdextension` files) is a [GDExtension plugin](gdextension-plugins.md), which has a few more rules.
 
 All rules are in [Publish an updatable release](updating-plugins.md#publish-an-updatable-release).
