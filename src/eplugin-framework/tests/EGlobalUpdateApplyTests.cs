@@ -208,6 +208,65 @@ public class EGlobalUpdateApplyTests : IDisposable
         Assertions.AssertObject(UpdateJournal.Load(asked!.Directory).State).IsEqual(UpdatePhase.RolledBack);
     }
 
+    /// <summary>Installs the staged batch and returns why it was refused; asserts that nothing was changed.</summary>
+    private async Task<string> RefusedInstall((IReadOnlyList<ValidatedPackage> Packages, IReadOnlyList<RefusedPackage> Refused, string Directory) staged)
+    {
+        string? refused = null;
+        try { await _fixture.Global.ApplyUpdatesAsync(staged.Packages, staged.Directory, false); }
+        catch (InvalidOperationException ex) { refused = ex.Message; }
+
+        Assertions.AssertString(refused).IsNotNull();
+        Assertions.AssertString(Installed("tool")).Contains("version=\"1.0.0\"");
+        // refused before the transaction: no journal, no local marker, the plain plugin was never turned off
+        Assertions.AssertBool(File.Exists(Path.Combine(staged.Directory, "journal.json"))).IsFalse();
+        Assertions.AssertObject(_fixture.Store.GetLocal("tool")).IsNull();
+        Assertions.AssertThat(_updates.Toggles).IsEmpty();
+        Assertions.AssertInt(_fixture.Host.UnfocusedImports.Suspended).IsEqual(0);
+        return refused!;
+    }
+
+    [TestCase]
+    public async Task ABuildFinishedWhileTheUpdateWasPreparedInstallsNothing()
+    {
+        PluginWithNewerPackage("tool");
+        await Index();
+        var staged = await _fixture.Global.StageUpdatesAsync(_fixture.Global.PendingUpdates, null, CancellationToken.None);
+        Assertions.AssertObject(_fixture.Global.UpdateApplyBlocker).IsNull();
+        // e.g. an IDE built the project while the review dialog was open: the editor is about to reload the assembly
+        _fixture.Host.IsAssemblyReloadPending = true;
+
+        var refused = await RefusedInstall(staged);
+
+        Assertions.AssertString(refused).StartsWith("A C# build finished while the update was prepared.");
+        Assertions.AssertString(refused).EndsWith("Addon files were not changed.");
+        Assertions.AssertString(_fixture.Global.UpdateApplyBlocker).StartsWith("A C# build finished");
+
+        // installed once the reload is done
+        _fixture.Host.IsAssemblyReloadPending = false;
+        var results = await _fixture.Global.ApplyUpdatesAsync(staged.Packages, staged.Directory, false);
+        Assertions.AssertObject(results.Single().Outcome).IsEqual(UpdateOutcome.Completed);
+        Assertions.AssertString(Installed("tool")).Contains("version=\"2.0.0\"");
+    }
+
+    [TestCase]
+    public async Task AnUpdateWaitsForPluginsBeingEnabled()
+    {
+        PluginWithNewerPackage("tool");
+        await Index();
+        var staged = await _fixture.Global.StageUpdatesAsync(_fixture.Global.PendingUpdates, null, CancellationToken.None);
+        // an activation that waits for its dependency keeps its transition open
+        _fixture.AddEPlugin("base", b => b.AddNuget("Base.Package"));
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package").AddPluginDependency("base"));
+        _fixture.Enable("base");
+        _fixture.Context("base")!.State = EEditorPluginState.Created;
+        _fixture.Enable("app");
+        Assertions.AssertBool(_fixture.Global.IsChangingPlugins).IsTrue();
+
+        var refused = await RefusedInstall(staged);
+
+        Assertions.AssertString(refused).StartsWith("Plugins are being enabled or disabled.");
+    }
+
     /// <summary>Does what an update transaction asks of the editor, without one: builds are recorded and succeed unless told.</summary>
     private sealed class RecordingUpdateHost(LifecycleFixture fixture) : IUpdateHost
     {

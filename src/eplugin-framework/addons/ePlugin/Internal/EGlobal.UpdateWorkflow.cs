@@ -14,6 +14,8 @@ internal sealed partial class EGlobal : IUpdateWorkflowHost
 {
     bool IUpdateWorkflowHost.IsRestartPending => IsRestartPending;
 
+    string? IUpdateWorkflowHost.UpdateApplyBlocker => UpdateApplyBlocker;
+
     Task<UpdateCheckResult> IUpdateWorkflowHost.CheckForUpdatesAsync(bool force) => CheckForUpdatesAsync(force);
 
     Task<IReadOnlyList<UpdateCandidate>> IUpdateWorkflowHost.ListRemoteVersionsAsync(PluginUpdateTarget target,

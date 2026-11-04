@@ -208,6 +208,9 @@ internal sealed class FakeEditorHost(LifecycleFixture fixture) : IEditorHost
 
     public bool IsScanningFilesystem { get; set; }
 
+    /// <summary>A build of the assembly waits for the editor's reload, e.g. one an IDE started.</summary>
+    public bool IsAssemblyReloadPending { get; set; }
+
     /// <summary>How often "Import Resources When Unfocused" was turned off, and how often back on.</summary>
     public (int Suspended, int Restored) UnfocusedImports { get; private set; }
 

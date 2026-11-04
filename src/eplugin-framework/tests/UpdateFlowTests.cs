@@ -28,6 +28,7 @@ public class UpdateFlowTests : IDisposable
     private readonly List<string> _progress = [];
     private readonly List<string> _status = [];
     private int _swaps;
+    private bool _canSwap = true;
     private bool _alive = true;
 
     [BeforeTest]
@@ -38,7 +39,7 @@ public class UpdateFlowTests : IDisposable
         _askedReview = null;
         _review = _ => true;
         _decide = review => review.AcceptAll();
-        _progress.Clear(); _status.Clear(); _swaps = 0; _alive = true;
+        _progress.Clear(); _status.Clear(); _swaps = 0; _canSwap = true; _alive = true;
     }
 
     [AfterTest]
@@ -65,7 +66,11 @@ public class UpdateFlowTests : IDisposable
     {
         Alive = () => _alive,
         Status = _status.Add,
-        Swapping = () => _swaps++
+        Swapping = () =>
+        {
+            _swaps++;
+            return _canSwap;
+        }
     };
 
     private static UpdateCandidate Candidate(string slug) =>
@@ -292,6 +297,47 @@ public class UpdateFlowTests : IDisposable
         Assertions.AssertObject(license.Step).IsEqual(InstallStep.Abandoned);
         // nothing is installed, so the installed versions' licenses stay as they were accepted
         Assertions.AssertInt(_host.Applied.Count).IsEqual(0);
+        Assertions.AssertBool(Directory.Exists(_host.StagingDirectory)).IsFalse();
+    }
+
+    [TestCase]
+    public async Task ABuildFinishedWhileTheReviewWaitedInstallsNothing()
+    {
+        _host.Packages["a"] = [Warning()];
+        // e.g. an IDE built the project while the Review updates dialog was open
+        _review = _ =>
+        {
+            _host.UpdateApplyBlocker = "A C# build finished while the update was prepared.";
+            return true;
+        };
+        var flow = Flow();
+
+        var outcome = await flow.InstallAsync(new([Candidate("a")]), View(), CancellationToken.None);
+
+        Assertions.AssertObject(outcome.Step).IsEqual(InstallStep.Canceled);
+        Assertions.AssertString(outcome.Notice)
+            .IsEqual("Update not installed. A C# build finished while the update was prepared. Addon files were not changed.");
+        // the manager was not locked for an installation, and nothing was installed
+        Assertions.AssertInt(_swaps).IsEqual(0);
+        Assertions.AssertInt(_host.Applied.Count).IsEqual(0);
+        // the batch has no journal yet, so it is dropped like a refusal
+        Assertions.AssertObject(flow.Staged).IsNull();
+        Assertions.AssertBool(Directory.Exists(_host.StagingDirectory)).IsFalse();
+    }
+
+    [TestCase]
+    public async Task AnInstallationTheManagerCannotBeginInstallsNothing()
+    {
+        _host.Packages["a"] = [];
+        _canSwap = false;
+        var flow = Flow();
+
+        var outcome = await flow.InstallAsync(new([Candidate("a")]), View(), CancellationToken.None);
+
+        Assertions.AssertObject(outcome.Step).IsEqual(InstallStep.Canceled);
+        Assertions.AssertString(outcome.Notice).StartsWith("Update not installed: another plugin operation is running.");
+        Assertions.AssertInt(_host.Applied.Count).IsEqual(0);
+        Assertions.AssertObject(flow.Staged).IsNull();
         Assertions.AssertBool(Directory.Exists(_host.StagingDirectory)).IsFalse();
     }
 
@@ -719,6 +765,7 @@ public class UpdateFlowTests : IDisposable
 
         public IReadOnlyList<UpdateCandidate> PendingUpdates => [];
         public bool IsRestartPending => false;
+        public string? UpdateApplyBlocker { get; set; }
 
         public Task<UpdateCheckResult> CheckForUpdatesAsync(bool force) => CheckThrows
             ? Task.FromException<UpdateCheckResult>(new InvalidOperationException("offline"))
