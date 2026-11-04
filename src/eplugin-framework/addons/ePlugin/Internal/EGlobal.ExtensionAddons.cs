@@ -18,7 +18,7 @@ internal sealed partial class EGlobal
 {
     /// <summary>Whether <paramref name="slug"/> is a GDExtension add-on, see <see cref="PluginKinds.IsExtensionAddon"/>.</summary>
     internal bool IsExtensionAddon(string slug) =>
-        slug.Length > 0 && PluginKinds.IsExtensionAddon(ProjectSettings.GlobalizePath(_host.PluginDirectory(slug)));
+        slug.Length > 0 && PluginKinds.IsExtensionAddon(ProjectSettings.GlobalizePath(_host.AddonsDirectory), slug);
 
     /// <summary>
     /// Whether a plugin a recipe depends on is there for it: enabled, or a GDExtension add-on, which Godot always runs.
