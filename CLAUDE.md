@@ -153,7 +153,14 @@ unfocused, restarting the editor, whether dialogs can show, loading/unloading GD
 keep new lifecycle code behind it so it stays testable. Recipes are created through `TryEnsureRecipe`, which puts the
 plugin in error and discards a half-built recipe when `CreateRecipe` throws. Scans that only read other plugins' recipes pass `scan: true`, which logs
 the failure but leaves that plugin's state alone, since no attempt of its own could resolve that error. `FindDependencyCycle` fails an activation
-whose hard dependencies lead back to the plugin (otherwise it waits for itself forever). Godot frees a plugin's instance
+whose hard dependencies lead back to the plugin (otherwise it waits for itself forever). A plugin waiting on
+`_toCheckEnable` has installed nothing: disabling it cancels its activation (`CancelWaitingActivation` takes it out of the
+transition and its `.user` entry), and disabling what it waits for fails it (`FailPluginsWaitingFor`, `dependency_disabled`),
+since resumed it would enable that plugin again. `CheckStalledTransition`, polled from `EPluginPlugin._Process` with the
+time and frame passed in, fails a transition without progress for `StallTimeout` (30 s) and `StallFrames` (`dependency_timed_out`,
+or `operation_timed_out` with nothing waiting), not while a decision dialog, license review, hold, update or reload holds it.
+Both fail the waiting plugins in an attempt of their own (`FailWaitingPlugins`), so the rest still builds and completes.
+Godot frees a plugin's instance
 on disable, so `AddContext` replaces a deactivated or freed context of the same slug. A transition has one participant
 per slug. Its target changes only when one that joined to stay activated (its optional recipe on a plugin disabled
 before it was removed) is then disabled. When a manual retry re-enables a plugin whose failed activation disabled it, the new instance's

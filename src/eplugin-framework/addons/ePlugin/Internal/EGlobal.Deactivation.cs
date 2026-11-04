@@ -35,9 +35,13 @@ internal sealed partial class EGlobal
 
         if (_toCheckEnable.Contains(context))
         {
-            // plugin in process of enablement, skip disable
+            // Disabled while it waits for a dependency: it installed nothing yet, and resumed it would be enabled again.
+            CancelWaitingActivation(context, refreshAtEnd);
             return;
         }
+
+        // A plugin that waits for this one would enable it again once resumed, overriding the user.
+        FailPluginsWaitingFor(context.Slug);
 
         if (context.State == EEditorPluginState.Deactivated && !manualRetry)
         {
@@ -196,6 +200,67 @@ internal sealed partial class EGlobal
 
         ReverseRecipe(context, recipe);
         context.AppliedOptionalDependencies = null;
+    }
+
+    /// <summary>
+    /// Cancels the activation of a plugin disabled while it waits for a dependency: it stops waiting and leaves the
+    /// transition, which records nothing for it, since nothing of its recipe was installed. The plugins that wait for it
+    /// fail like for any dependency that did not activate; the others of the transition finish without it.
+    /// </summary>
+    private void CancelWaitingActivation(PluginContext context, bool refreshAtEnd)
+    {
+        StopWaiting(context);
+        // also keeps a callback that still comes for it from activating it, see EnableEPlugin
+        context.State = EEditorPluginState.Deactivated;
+        context.ErrorDetail = null;
+        context.Logger?.Log($"{context.Slug} was disabled while it waited for its dependencies; its activation is canceled.");
+        if (_transition is { } transition && transition.Participants.Remove(context))
+        {
+            if (_stateStore?.TryRemoveParticipant(transition.AttemptId, context.Slug) == false)
+            {
+                // its attempt_in_progress entry would keep the others from completing
+                context.State = EEditorPluginState.Error;
+                context.ErrorDetail = new InvalidOperationException(RecordFailedDetail);
+                transition.Participants[context] = PersistedPluginState.Deactivated;
+                FailTransition("cannot_record_participant", RecordFailedDetail);
+                return;
+            }
+
+            if (transition.Participants.Count == 0)
+            {
+                _transition = null;
+            }
+        }
+
+        if (FailPluginsWaitingFor(context.Slug) || !refreshAtEnd || _transition is null)
+        {
+            return;
+        }
+
+        if (FinishTransition())
+        {
+            RefreshEditor(rebuild: false);
+        }
+    }
+
+    /// <summary>
+    /// Fails the plugins that wait for <paramref name="slug"/> to activate, because it is being disabled. Resumed, they
+    /// would enable it again. Returns whether there were any.
+    /// </summary>
+    private bool FailPluginsWaitingFor(string slug)
+    {
+        var dependants = _toCheckEnable.Where(c => c.Slug != slug && c.IsRecipeCreated &&
+                                                   c.Builder.PluginRecipe.PluginDependencies.Any(d => d.Slug == slug))
+            .Select(c => c.Slug).Distinct(StringComparer.Ordinal).ToArray();
+        if (dependants.Length == 0)
+        {
+            return false;
+        }
+
+        var names = string.Join(", ", dependants);
+        FailWaitingPlugins($"Plugin dependency {slug} was disabled while {names} waited for it to activate. " +
+                           $"Enable {slug} again and retry, or disable {names}.", "dependency_disabled");
+        return true;
     }
 
     /// <summary>Takes a plugin off the plugins that wait for the framework to be initialized.</summary>

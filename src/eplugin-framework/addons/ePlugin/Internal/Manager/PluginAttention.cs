@@ -135,6 +135,9 @@ internal sealed record AttentionItem(PluginRow Row, UpdateJournal? Journal, Upda
         {
             "attempt_in_progress" => $"{verb} the plugin was interrupted, for example by an editor crash or a restart.",
             "dependency_resolution_failed" => $"{verb} failed: a plugin it depends on is missing or has a version that does not match.",
+            "dependency_disabled" => "Enabling failed: a plugin it depends on was disabled before it finished activating.",
+            "dependency_timed_out" => "Enabling failed: a plugin it depends on did not activate in time. Its _EnablePlugin may not call this.EnableEPlugin().",
+            "operation_timed_out" => $"{verb} failed: the plugin operation made no progress and was given up on.",
             "recipe_creation_failed" => $"{verb} failed: the plugin's CreateRecipe threw an exception.",
             "dependent_recipe_creation_failed" => $"{verb} failed: CreateRecipe of a plugin that depends on it threw an exception.",
             "recipe_operation_failed" => $"{verb} failed: installing or removing what its recipe declares (NuGet packages, projects, autoloads, directories) failed.",

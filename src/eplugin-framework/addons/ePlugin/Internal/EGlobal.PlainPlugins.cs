@@ -169,6 +169,8 @@ internal sealed partial class EGlobal
     private void OnPlainPluginDisabled(string slug)
     {
         _contexts.RemoveAll(c => c.Slug == slug && c.Plugin is null);
+        // resumed, a plugin still waiting for another dependency would enable this one again
+        FailPluginsWaitingFor(slug);
         var dependants = _contexts.Where(c => c.Plugin is not null && c.State == EEditorPluginState.Activated &&
                                               RecipeOf(c.Slug)?.PluginDependencies.Any(d => d.Slug == slug) == true)
             .ToArray();

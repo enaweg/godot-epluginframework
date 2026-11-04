@@ -486,6 +486,50 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
         return true;
     }
 
+    /// <summary>
+    /// Takes a participant that changed nothing out of a running attempt, e.g. a plugin disabled while it waited for its
+    /// dependencies. The others complete without it; when it was the last one, the attempt is gone.
+    /// </summary>
+    public bool TryRemoveParticipant(Guid attemptId, string slug)
+    {
+        if (IsReadOnly || !_local.TryGetValue(slug, out var existing) || existing.AttemptId != attemptId) return false;
+        var next = new Dictionary<string, LocalPluginAttempt>(_local, StringComparer.Ordinal);
+        next.Remove(slug);
+        if (!SaveLocal(next)) return false;
+        _local = next;
+        return true;
+    }
+
+    /// <summary>
+    /// Fails some participants of a running attempt in an attempt of their own, in one write, so the others can still
+    /// complete without them; e.g. plugins that waited for a dependency that never activated, and installed nothing.
+    /// </summary>
+    /// <param name="details">What went wrong for each of them, see <see cref="LocalPluginAttempt.Detail"/>.</param>
+    public bool TrySplitFailed(Guid attemptId, IReadOnlyCollection<string> slugs, string reason,
+        IReadOnlyDictionary<string, string>? details = null)
+    {
+        if (IsReadOnly || slugs.Count == 0 || string.IsNullOrWhiteSpace(reason) ||
+            slugs.Any(s => !_local.TryGetValue(s, out var existing) || existing.AttemptId != attemptId))
+        {
+            return false;
+        }
+
+        var failedId = Guid.NewGuid();
+        var next = new Dictionary<string, LocalPluginAttempt>(_local, StringComparer.Ordinal);
+        foreach (var slug in slugs)
+        {
+            next[slug] = _local[slug] with
+            {
+                AttemptId = failedId, State = PersistedPluginState.Failed, Reason = reason,
+                Detail = details?.GetValueOrDefault(slug), Log = null
+            };
+        }
+
+        if (!SaveLocal(next)) return false;
+        _local = next;
+        return true;
+    }
+
     private bool Complete(Guid attemptId, IEnumerable<SharedPluginState> completedStates, bool acknowledgeVersions)
     {
         if (IsReadOnly)
