@@ -1,8 +1,8 @@
 {
- "commit": "cc27a963a81ec9920dea1c1ffc4cb6c309321ca6",
- "date": "2026-11-04T10:27:36Z",
- "covered": 12082,
- "coverable": 13363,
+ "commit": "4b8c5cf451cc67425852ed6875e9bc5cdc215f66",
+ "date": "2026-11-04T10:31:58Z",
+ "covered": 12113,
+ "coverable": 13391,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -157,8 +157,8 @@
    189
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateApply.cs": [
-   187,
-   291
+   199,
+   303
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateRecipes.cs": [
    188,
@@ -169,8 +169,8 @@
    28
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateWorkflow.cs": [
-   7,
-   8
+   8,
+   9
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Updates.cs": [
    139,
@@ -181,8 +181,8 @@
    75
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.cs": [
-   267,
-   309
+   276,
+   314
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EPluginProgress.cs": [
    1,
@@ -190,7 +190,7 @@
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EditorHost.cs": [
    52,
-   86
+   87
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/ExportExclusions.cs": [
    9,
@@ -277,8 +277,8 @@
    149
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.Updates.cs": [
-   47,
-   58
+   49,
+   60
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.Versions.cs": [
    81,
@@ -353,8 +353,8 @@
    79
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateFlow.cs": [
-   227,
-   236
+   234,
+   243
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/UpdateReview.cs": [
    71,
