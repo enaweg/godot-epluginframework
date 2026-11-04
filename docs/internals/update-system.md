@@ -219,7 +219,12 @@ crash forgets it, `ResumeUpdates` deletes folders without a journal last written
 (`UpdateJournals.AbandonedStaging`). A plugin folder that is a link (to a working copy) is refused for every kind (R20), and both swaps refuse it
 too (`AddonFiles.RefuseLink`), since moving it would replace the link with the downloaded copy. Version control systems such as Perforce sync files
 read-only, which Windows refuses to delete or overwrite: plugin, project, backup and staging files are deleted and
-overwritten only through `AddonFiles.DeleteTree`, `DeleteFile` and `Overwrite`, which clear that attribute first. `IUpdateHost.Preflight` refuses to start while a scene is running, an untitled scene is open (detectable only
+overwritten only through `AddonFiles.DeleteTree`, `DeleteFile` and `Overwrite`, which clear that attribute first. Staging and
+the reviews can take minutes, so `EGlobal.UpdateApplyBlocker` is asked again before anything is written: by `UpdateFlow`
+before it locks the manager (`InstallView.Swapping`, false when the manager's plugin operation gate is taken), and by
+`ApplyUpdatesAsync` on entry and after waiting for the filesystem scan (it processes frames there). It refuses while a
+build of the assembly waits for its reload (`IEditorHost.IsAssemblyReloadPending`), a restart is pending or plugins are
+changing; the batch has no journal then, so `UpdateFlow.Clear` drops it. `IUpdateHost.Preflight` refuses to start while a scene is running, an untitled scene is open (detectable only
 from Godot 4.5) or an ePlugin of the batch is not `Activated`. Then save and close all open scenes
 (`IUpdateHost.CloseScenes`; `close_scene` exists only from Godot 4.5) before the swap.
 
