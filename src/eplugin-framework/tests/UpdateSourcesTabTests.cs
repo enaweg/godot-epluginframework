@@ -125,6 +125,18 @@ public class UpdateSourcesTabTests : IDisposable
     }
 
     [TestCase]
+    public void APluginInASubfolderIsNotOfferedAnUpdateSite()
+    {
+        // updates never install a plugin in a subfolder of res://addons
+        _fixture.AddPlainPlugin("acme/nested");
+
+        Press("%AddSiteButton");
+
+        var slug = _dialog.GetNode<OptionButton>("%SiteSlug");
+        Assertions.AssertThat(Enumerable.Range(0, slug.ItemCount).Select(slug.GetItemText).ToArray()).ContainsExactly("other", "tool");
+    }
+
+    [TestCase]
     public void ASiteOfAPluginThatWasRemovedIsStillListed()
     {
         Assertions.AssertBool(_fixture.Global.SetUpdateSite("gone", Site)).IsTrue();

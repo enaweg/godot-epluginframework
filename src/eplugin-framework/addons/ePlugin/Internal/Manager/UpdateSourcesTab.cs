@@ -269,7 +269,8 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
         var taken = _global.UpdateSites.Select(s => s.Slug).ToHashSet(StringComparer.Ordinal);
         var all = _global.CollectPlugins();
         _configuredUrls = all.ToDictionary(p => p.Slug, p => p.UpdateUrl, StringComparer.Ordinal);
-        var plugins = all.Where(p => !p.Missing)
+        // a plugin in a subfolder of res://addons is never updated, see EGlobal.CollectUpdateTargets
+        var plugins = all.Where(p => !p.Missing && !AddonLayout.IsNested(p.Slug))
             .Where(p => slug is null ? !taken.Contains(p.Slug) : p.Slug == slug)
             .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
         // A site of a plugin that was removed from res://addons can still be edited.
