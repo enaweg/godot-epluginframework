@@ -416,7 +416,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _detailsName.Text = row is null ? "No plugin selected" : PluginManagerViewModel.DetailsTitle(row.Plugin);
         _keptUpdate = row is null ? null : _global.KeptUpdate(row.Plugin.Slug);
         _detailsText.Text = row is null ? "Select a plugin to see its details." : PluginManagerViewModel.Describe(row, LicenseOf(row), WelcomeOf(row), _keptUpdate);
-        _release.Visible = IsSafeUrl(row?.Update?.Candidate.ReleaseUrl);
+        // the same links the details text offers
+        _release.Visible = PluginManagerViewModel.IsWebUrl(row?.Update?.Candidate.ReleaseUrl);
         _locationRow.Visible = row is not null;
         if (row is not null)
         {
@@ -535,11 +536,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private void OpenRelease()
     {
         var url = _selectedSlug is null ? null : _model.Find(_selectedSlug)?.Update?.Candidate.ReleaseUrl;
-        if (IsSafeUrl(url)) OS.ShellOpen(url);
+        if (PluginManagerViewModel.IsWebUrl(url)) OS.ShellOpen(url);
     }
-
-    private static bool IsSafeUrl(string? url) =>
-        Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == "https" && uri.UserInfo.Length == 0;
 
     /// <summary>A new local index can add or remove local versions and updates, so the lists are read again.</summary>
     private void LocalIndexChanged()
