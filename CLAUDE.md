@@ -409,7 +409,7 @@ Update sources lists the project's update sites, the user's local directories (e
 it; a local directory is one update source for any number of plugins) and the built-in list in one tree. Tab titles are the tab nodes' names, because Godot 4.4 ignores
 `metadata/_tab_name`. The General tab shows every `eplugin/*` project setting: a control names its setting in its
 `setting` metadata (an OptionButton its item values in `values`) and is saved to `project.godot` on change, so a new
-setting needs only a control in the scene; `SettingsDialogTests` checks that every registered setting is bound. Close dialogs with `EditorWindows.Release`, never `QueueFree` in the frame that hides them: freeing a window from its
+setting needs only a control in the scene (and its registration through `EPluginSettings.Register`); `SettingsDialogTests` checks that every registered setting is bound. Close dialogs with `EditorWindows.Release`, never `QueueFree` in the frame that hides them: freeing a window from its
 own button, or right after a reload while it has focus and the mouse, crashed Godot 4.7.2 on the next window message
 (use-after-free in its message handling). Release hides it now and frees it 0.25 s later through a native callable.
 Scene roots set `auto_translate_mode = 2`,
