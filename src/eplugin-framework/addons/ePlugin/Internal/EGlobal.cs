@@ -14,7 +14,6 @@ namespace Enaweg.Plugin.Internal;
 /// This is an internally used class by Enaweg.Plugin and should not be used by anything else. It manages plugin states
 /// as well as provides some global values.
 /// </summary>
-[Tool]
 [SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable",
     Justification = "The singleton lives as long as the assembly; its indexing token sources have no timer or wait handle to release.")]
 internal sealed partial class EGlobal
