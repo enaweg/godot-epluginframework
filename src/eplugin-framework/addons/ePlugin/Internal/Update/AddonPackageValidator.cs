@@ -85,7 +85,7 @@ internal sealed partial class AddonPackageValidator(IEnumerable<IAddonRule>? ext
         // its author forgot to raise it. It is installed only after the review confirms it; an older framework never is,
         // because it cannot finish or recover the update transaction that installs it.
         var mislabeled = validNew && validOld && validAnnounced && announced.CompareTo(old) > 0 && version.CompareTo(old) <= 0 &&
-                         !context.AllowReinstall && !context.AllowDowngrade && (version.CompareTo(old) == 0 || installed.Slug != "ePlugin");
+                         !context.AllowReinstall && !context.AllowDowngrade && (version.CompareTo(old) == 0 || installed.Slug != Framework.Slug);
         if (context.NewInstall)
         {
             if (configless) Add("R6", FindingSeverity.Info, "The add-on has no plugin.cfg, so its version stays unknown until an update installs a release of it.");
@@ -114,7 +114,7 @@ internal sealed partial class AddonPackageValidator(IEnumerable<IAddonRule>? ext
         else if (version.CompareTo(old) < 0)
         {
             // Older framework releases cannot finish or recover the update transaction that installs them.
-            if (!context.AllowDowngrade || installed.Slug == "ePlugin") Add("R6", FindingSeverity.Error, versionProblem);
+            if (!context.AllowDowngrade || installed.Slug == Framework.Slug) Add("R6", FindingSeverity.Error, versionProblem);
             else Add("R6", FindingSeverity.Info, $"Downgrade from {installed.InstalledVersion} to {version}.");
         }
         // The R6 warning of a mislabeled release already says how the versions differ.

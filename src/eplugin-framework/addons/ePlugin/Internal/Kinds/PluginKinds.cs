@@ -11,8 +11,6 @@ namespace Enaweg.Plugin.Internal.Kinds;
 /// <summary>Tells which <see cref="PluginKind"/> a plugin is and hands out the workflow of each kind.</summary>
 internal static class PluginKinds
 {
-    private const string FrameworkSlug = "ePlugin";
-
     public static PluginKindWorkflow Workflow(PluginKind kind) => kind switch
     {
         PluginKind.Framework => FrameworkPluginWorkflow.Instance,
@@ -30,7 +28,7 @@ internal static class PluginKinds
     /// </summary>
     public static PluginKindWorkflow Workflow(UpdatePluginJournal plugin) => Workflow(
         Enum.TryParse<PluginKind>(plugin.Kind, out var kind) && Enum.IsDefined(kind) ? kind
-        : plugin.Slug == FrameworkSlug ? PluginKind.Framework : plugin.IsEPlugin ? PluginKind.EPlugin : PluginKind.Unknown);
+        : plugin.Slug == Framework.Slug ? PluginKind.Framework : plugin.IsEPlugin ? PluginKind.EPlugin : PluginKind.Unknown);
 
     public static string Name(PluginKind kind) => Workflow(kind).Name;
 
@@ -59,7 +57,7 @@ internal static class PluginKinds
     /// </summary>
     public static PluginKind ForPackage(PluginUpdateTarget installed, string? stagedScript, IEnumerable<string> stagedFiles, IEnumerable<string> installedFiles)
     {
-        if (installed.Kind == PluginKind.Framework || installed.Slug == FrameworkSlug) return PluginKind.Framework;
+        if (installed.Kind == PluginKind.Framework || installed.Slug == Framework.Slug) return PluginKind.Framework;
         if (installed.Kind is PluginKind.EPlugin or PluginKind.GDExtensionAddon) return installed.Kind;
         if (stagedFiles.Concat(installedFiles).Any(GDExtensionConfig.IsExtensionFile)) return PluginKind.GDExtension;
         return ByScript(stagedScript);
@@ -70,7 +68,7 @@ internal static class PluginKinds
     /// validation found.
     /// </summary>
     public static PluginKind ForJournal(string slug, bool managed, PluginKind validated) =>
-        slug == FrameworkSlug ? PluginKind.Framework
+        slug == Framework.Slug ? PluginKind.Framework
         : managed ? PluginKind.EPlugin
         : validated is PluginKind.Framework or PluginKind.EPlugin ? PluginKind.Unknown : validated;
 

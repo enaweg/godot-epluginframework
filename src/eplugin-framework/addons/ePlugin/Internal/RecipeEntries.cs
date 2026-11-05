@@ -59,7 +59,7 @@ internal static class RecipeEntries
     {
         RequireSlug(pluginSlug);
         RequireConstraint(version);
-        if (pluginSlug == "ePlugin") recipe.PluginDependencies.RemoveAll(d => d.Slug == pluginSlug && d.Version is null);
+        if (pluginSlug == Framework.Slug) recipe.PluginDependencies.RemoveAll(d => d.Slug == pluginSlug && d.Version is null);
         if (recipe.OptionalPluginDependencies.Any(d => d.Slug == pluginSlug))
             throw new ArgumentException($"Plugin {pluginSlug} cannot be both a required and an optional dependency.", nameof(pluginSlug));
         Add(recipe.PluginDependencies, new EEditorPluginRecipe.Plugin(pluginSlug, version), d => d.Slug == pluginSlug,

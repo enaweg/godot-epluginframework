@@ -55,9 +55,9 @@ internal static class UpdateRecovery
             try
             {
                 var json = JsonNode.Parse(File.ReadAllText(path)) as JsonObject ?? throw new InvalidDataException("Empty journal.");
-                if (json["plugins"] is not JsonArray plugins || !plugins.Any(p => p?["slug"]?.GetValue<string>() == "ePlugin")) continue;
+                if (json["plugins"] is not JsonArray plugins || !plugins.Any(p => p?["slug"]?.GetValue<string>() == Framework.Slug)) continue;
                 var journal = json.Deserialize<Journal>(Options) ?? throw new InvalidDataException("Empty journal.");
-                if (!journal.Plugins.Any(p => p.Slug == "ePlugin")) continue;
+                if (!journal.Plugins.Any(p => p.Slug == Framework.Slug)) continue;
                 if (journal.Schema != 1 || journal.AttemptId == Guid.Empty) throw new InvalidDataException("Unsupported recovery journal schema.");
                 if (journal.State is "Committed" or "RolledBack" or "Failed" or "Verified" || File.Exists(Path.Combine(folder, "healthy.marker"))) continue;
                 // Staged has not touched addon files. Normal recovery can abandon it.

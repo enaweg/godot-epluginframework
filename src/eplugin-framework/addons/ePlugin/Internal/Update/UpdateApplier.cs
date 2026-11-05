@@ -331,7 +331,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                 return Rollback(journal, "Final build failed.");
             }
             if (journal.Plugins.Any(p => !host.Verify(p))) return Rollback(journal, "Updated plugin verification failed.");
-            if (journal.Plugins.Any(p => p.Slug == "ePlugin")) File.WriteAllText(Path.Combine(journal.Directory, "healthy.marker"), "verified");
+            if (journal.Plugins.Any(p => p.Slug == Framework.Slug)) File.WriteAllText(Path.Combine(journal.Directory, "healthy.marker"), "verified");
             journal.Save(UpdatePhase.Verified);
             return Commit(journal);
         }
@@ -611,7 +611,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         return build;
     }
     private string Decision(UpdateJournal journal) =>
-        UpdateFailureDecision.Choose(journal.Plugins.Any(p => p.Slug == "ePlugin"),
+        UpdateFailureDecision.Choose(journal.Plugins.Any(p => p.Slug == Framework.Slug),
             UpdateFailureDecision.Policy(host.BuildFailurePolicy, journal.Group is not null, journal.AskOnBuildFailure, journal.KeptForProjectCode), host.UiAvailable);
 
     /// <summary>
@@ -644,7 +644,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
     /// so do headless runs; the plugins-only build is skipped when the settings would roll back anyway.
     /// </summary>
     private bool MayKeepForProjectCode(UpdateJournal journal) =>
-        host.KeepOnProjectErrors && host.UiAvailable && host.BuildFailurePolicy != "rollback" && journal.Plugins.All(p => p.Slug != "ePlugin");
+        host.KeepOnProjectErrors && host.UiAvailable && host.BuildFailurePolicy != "rollback" && journal.Plugins.All(p => p.Slug != Framework.Slug);
 
     private bool BuildPluginsOnly(UpdateJournal journal, string name, IReadOnlyList<string> roots)
     {

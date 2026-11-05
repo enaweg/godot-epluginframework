@@ -135,7 +135,7 @@ internal sealed partial class EGlobal
     internal string DetailsBuildFailurePolicy(string slug)
     {
         var host = UpdateHost;
-        return UpdateFailureDecision.Choose(slug == "ePlugin", UpdateFailureDecision.Policy(host.BuildFailurePolicy, false, true), host.UiAvailable);
+        return UpdateFailureDecision.Choose(slug == Framework.Slug, UpdateFailureDecision.Policy(host.BuildFailurePolicy, false, true), host.UiAvailable);
     }
 
     private static string GroupNames(IReadOnlyList<ValidatedPackage> group) => string.Join(", ", group.Select(p => p.Candidate.PluginName));
@@ -144,7 +144,7 @@ internal sealed partial class EGlobal
     {
         var dependencies = _contexts.Where(c => c.Plugin is not null && c.State == EEditorPluginState.Activated).DistinctBy(c => c.Slug)
             .ToDictionary(c => c.Slug, c => (IReadOnlyCollection<string>)Snapshot(c).PluginDependencies.Select(d => d.Slug).ToArray(), StringComparer.Ordinal);
-        return UpdateGroups.Plan(packages.Select(p => p.Candidate.Slug).ToArray(), dependencies, "ePlugin")
+        return UpdateGroups.Plan(packages.Select(p => p.Candidate.Slug).ToArray(), dependencies, Framework.Slug)
             .Select(group => (IReadOnlyList<ValidatedPackage>)group.Select(slug => packages.First(p => p.Candidate.Slug == slug)).ToArray()).ToArray();
     }
 
@@ -456,7 +456,7 @@ internal sealed partial class EGlobal
             if (PluginKinds.Workflow(plugin) is GDExtensionAddonWorkflow)
                 return global.IsExtensionAddon(plugin.Slug) || File.Exists(Path.Combine(ProjectSettings.GlobalizePath(global._host.PluginDirectory(plugin.Slug)), "plugin.cfg"));
             var metadata = EditorPluginExtensions.ReadMetadata($"{global._host.PluginDirectory(plugin.Slug)}/plugin.cfg");
-            return (plugin.Slug != "ePlugin" || global.IsValid()) && IsEnabled(plugin.Slug) && SemVer.Same(metadata?.Version, plugin.NewVersion) &&
+            return (plugin.Slug != Framework.Slug || global.IsValid()) && IsEnabled(plugin.Slug) && SemVer.Same(metadata?.Version, plugin.NewVersion) &&
                 global._contexts.FirstOrDefault(c => c.Slug == plugin.Slug)?.State != EEditorPluginState.Error;
         }
         public void Log(string message) => global._ePluginContext?.Logger.Log(message);
