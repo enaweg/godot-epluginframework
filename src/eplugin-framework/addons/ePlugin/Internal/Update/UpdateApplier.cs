@@ -685,7 +685,10 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
     {
         try
         {
-            foreach (var pending in new UpdateJournals(Path.Combine(projectRoot, ".godot/eplugin/updates")).Read()
+            // a pending update that cannot be read keeps its old backup, which is what the warning below is about too
+            var journals = new UpdateJournals(Path.Combine(projectRoot, ".godot/eplugin/updates"), message => host.Log(message +
+                " (its backups are not refreshed: rolling it back may undo this update's project changes)"));
+            foreach (var pending in journals.Read()
                          .Where(j => j.Id != finished.Id && j.State is UpdatePhase.Staged or UpdatePhase.Swapped or UpdatePhase.InterimBuilt))
             {
                 if (committed)
