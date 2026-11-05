@@ -134,7 +134,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _installZip = GetNode<Button>("%InstallZipButton"); _zipDialog = GetNode<FileDialog>("%InstallZipDialog");
         _installConfirm = GetNode<ConfirmationDialog>("%InstallConfirm"); _installText = GetNode<RichTextLabel>("%InstallText");
         _settings = GetNode<SettingsDialog>("%SettingsDialog"); _settings.Initialize(global);
-        _attention = GetNode<AttentionDialog>("%AttentionDialog"); _attention.Initialize();
+        _attention = GetNode<AttentionDialog>("%AttentionDialog"); _attention.Initialize(global.Host.PluginDirectory);
         _locationRow = GetNode<Control>("%LocationRow"); _locationLink = GetNode<LinkButton>("%LocationLink"); _openFolder = GetNode<Button>("%OpenFolderButton");
         RefreshTheme();
         _signals.Connect(this, Control.SignalName.ThemeChanged, Callable.From(() => CallDeferred(MethodName.RefreshTheme)));
@@ -365,7 +365,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         if (_noticeLog is not null) OS.ShellShowInFileManager(_noticeLog);
     }
 
-    private static string PluginDirectory(string slug) => "res://addons/" + slug;
+    private string PluginDirectory(string slug) => _global.Host.PluginDirectory(slug);
 
     /// <summary>
     /// Tree draws cell buttons at the right edge of the cell. Sizing the Plugin column to its longest title keeps the

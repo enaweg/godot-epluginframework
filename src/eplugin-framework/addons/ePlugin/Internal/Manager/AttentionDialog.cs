@@ -35,12 +35,15 @@ internal sealed partial class AttentionDialog : AcceptDialog, ISerializationList
     // The plugin and kept update the rollback confirmation names; the list may change while it is open.
     private (string Slug, string Journal)? _confirming;
     private bool _busy;
+    private Func<string, string> _pluginDirectory = null!;
 
     /// <summary>Raised for a decision; the item is null for <see cref="AttentionAction.RetryAll"/>.</summary>
     public event Action<AttentionAction, AttentionItem?>? Requested;
 
-    public void Initialize()
+    /// <param name="pluginDirectory">The res:// folder of a plugin, see <see cref="IEditorHost.PluginDirectory"/>.</param>
+    public void Initialize(Func<string, string> pluginDirectory)
     {
+        _pluginDirectory = pluginDirectory;
         _list = GetNode<ItemList>("%AttentionList"); _name = GetNode<Label>("%AttentionName"); _text = GetNode<RichTextLabel>("%AttentionText");
         _retry = GetNode<Button>("%RetryPluginButton"); _rollback = GetNode<Button>("%RollbackButton"); _disable = GetNode<Button>("%DisablePluginButton");
         _log = GetNode<Button>("%OpenLogButton"); _folder = GetNode<Button>("%OpenPluginFolderButton");
@@ -62,7 +65,7 @@ internal sealed partial class AttentionDialog : AcceptDialog, ISerializationList
         _signals.Connect(_log, BaseButton.SignalName.Pressed, Callable.From(() => { if (Selected?.Log is { } log) OS.ShellOpen(log); }));
         _signals.Connect(_folder, BaseButton.SignalName.Pressed, Callable.From(() =>
         {
-            if (Selected is { } item) OS.ShellShowInFileManager(ProjectSettings.GlobalizePath("res://addons/" + item.Slug), true);
+            if (Selected is { } item) OS.ShellShowInFileManager(ProjectSettings.GlobalizePath(_pluginDirectory(item.Slug)), true);
         }));
         _signals.Connect(this, AcceptDialog.SignalName.CustomAction, Callable.From<StringName>(action =>
         {
