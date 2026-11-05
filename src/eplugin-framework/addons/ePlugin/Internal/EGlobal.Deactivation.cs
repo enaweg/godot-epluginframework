@@ -236,6 +236,26 @@ internal sealed partial class EGlobal
         return true;
     }
 
+    /// <summary>Takes a plugin off the plugins that wait for the framework to be initialized.</summary>
+    private void StopWaiting(PluginContext context)
+    {
+        _enabledWithFramework.Remove(context);
+        if (!_toCheckEnable.Contains(context)) return;
+        var waiting = _toCheckEnable.Where(c => c != context).Reverse().ToArray();
+        _toCheckEnable.Clear();
+        foreach (var plugin in waiting) _toCheckEnable.Push(plugin);
+    }
+
+    private void ReverseRecipe(PluginContext context, EEditorPluginRecipe recipe)
+    {
+        var remaining = RemainingRecipes(context, recipe);
+        var ownRemaining = InstalledRecipes(context).Where(r => !ReferenceEquals(r, recipe)).ToArray();
+        foreach (var autoload in recipe.Autoloads) ReverseAutoload(context, autoload, remaining);
+        foreach (var directory in recipe.Directories) ReverseDirectory(context, directory, remaining);
+        foreach (var project in recipe.Projects) ReverseProject(context, project, remaining);
+        foreach (var nuget in recipe.Nugets) ReverseNuget(context, nuget, remaining, ownRemaining);
+    }
+
     /// <summary>
     /// The activated ePlugins whose recipe requires <paramref name="slug"/> as a hard dependency. A recipe that cannot be
     /// read is logged, and the first such plugin is <paramref name="unreadable"/>; the caller decides what that means.
@@ -256,26 +276,6 @@ internal sealed partial class EGlobal
         }
 
         return dependants;
-    }
-
-    /// <summary>Takes a plugin off the plugins that wait for the framework to be initialized.</summary>
-    private void StopWaiting(PluginContext context)
-    {
-        _enabledWithFramework.Remove(context);
-        if (!_toCheckEnable.Contains(context)) return;
-        var waiting = _toCheckEnable.Where(c => c != context).Reverse().ToArray();
-        _toCheckEnable.Clear();
-        foreach (var plugin in waiting) _toCheckEnable.Push(plugin);
-    }
-
-    private void ReverseRecipe(PluginContext context, EEditorPluginRecipe recipe)
-    {
-        var remaining = RemainingRecipes(context, recipe);
-        var ownRemaining = InstalledRecipes(context).Where(r => !ReferenceEquals(r, recipe)).ToArray();
-        foreach (var autoload in recipe.Autoloads) ReverseAutoload(context, autoload, remaining);
-        foreach (var directory in recipe.Directories) ReverseDirectory(context, directory, remaining);
-        foreach (var project in recipe.Projects) ReverseProject(context, project, remaining);
-        foreach (var nuget in recipe.Nugets) ReverseNuget(context, nuget, remaining, ownRemaining);
     }
 }
 #endif
