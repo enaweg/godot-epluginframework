@@ -38,7 +38,7 @@ internal sealed partial class EGlobal
         InitializeUpdateSites();
         InitializeLocalSources();
         _remoteUpdates = UpdateScheduler.CurrentCached(_updateCache.State, CollectUpdateTargets());
-        var check = _updateJournals?.Read().Any(j => j.IsActive) != true;
+        var check = !IsUpdateActive;
         var engine = Engine.GetSingleton("Engine");
         if (engine.HasMeta("eplugin_update_check_ran")) check = false;
         else if (check) engine.SetMeta("eplugin_update_check_ran", true);

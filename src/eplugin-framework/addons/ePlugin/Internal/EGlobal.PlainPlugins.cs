@@ -72,7 +72,7 @@ internal sealed partial class EGlobal
 
         // Updates disable and enable plain plugins while they replace them, and reconcile recipes themselves.
         if (_recipeUpdateJournal is not null || _updateRefreshSuppression > 0 ||
-            _updateJournals?.Read().Any(j => j.IsActive) == true)
+            IsUpdateActive)
         {
             return true;
         }

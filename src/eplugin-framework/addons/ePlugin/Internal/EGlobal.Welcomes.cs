@@ -58,7 +58,7 @@ internal sealed partial class EGlobal
                            _pendingWelcomes.All(w => w.Slug != slug) && IsInstalled(slug))
             .Order(StringComparer.Ordinal).ToArray();
         // read from disk only when there is something to show
-        if (ready.Length == 0 || _updateJournals?.Read().Any(j => j.IsActive) == true)
+        if (ready.Length == 0 || IsUpdateActive)
         {
             return;
         }

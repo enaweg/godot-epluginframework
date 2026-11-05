@@ -276,7 +276,7 @@ internal sealed partial class EGlobal
         }
 
         // These read files, so only once the time is up; the next attempt counts the whole timeout again.
-        if (_host.IsAssemblyReloadPending || _updateJournals?.Read().Any(j => j.IsActive) == true)
+        if (_host.IsAssemblyReloadPending || IsUpdateActive)
         {
             _stallSignature = null;
             return false;

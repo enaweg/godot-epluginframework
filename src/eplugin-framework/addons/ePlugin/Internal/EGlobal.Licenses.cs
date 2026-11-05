@@ -275,7 +275,7 @@ internal sealed partial class EGlobal
     /// </summary>
     internal void ReviewEnabledLicenses()
     {
-        if (_stateStore is null || _stateStore.IsReadOnly || _updateJournals?.Read().Any(j => j.IsActive) == true)
+        if (_stateStore is null || _stateStore.IsReadOnly || IsUpdateActive)
         {
             return;
         }
