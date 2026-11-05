@@ -42,7 +42,9 @@ internal sealed partial class EGlobal
         }
 
         var names = string.Join(", ", pending.Select(e => e.Name));
-        if (_toCheckEnable.Count > 0)
+        // Only a plugin waited for is enabled by a chain: an unrelated plugin enabled while others wait (e.g. before the
+        // stall timeout fails them) gets its review like any other.
+        if (PluginsWaitingFor(context.Slug).Any())
         {
             // A dependency whose license was not reviewed with the plugin that enables it, because its recipe could
             // not be read beforehand. The waiting chain cannot pause for a dialog, so it fails like a missing dependency.

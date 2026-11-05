@@ -72,6 +72,27 @@ public class WaitingDependencyTests : IDisposable
     }
 
     [TestCase]
+    public void AnUnrelatedPluginEnabledWhileOthersWaitHasItsLicenseReviewed()
+    {
+        _fixture.AddEPlugin("base", b => b.AddNuget("Base.Package"));
+        _fixture.AddEPlugin("app", b => b.AddNuget("App.Package").AddPluginDependency("base"));
+        _fixture.AddEPlugin("other", b => b.AddNuget("Other.Package"), extraConfig: "license_required=true");
+        System.IO.File.WriteAllText(System.IO.Path.Combine(_fixture.Addon("other"), "LICENSE"), "Terms");
+        _fixture.Host.Dialogs = true;
+        EnableSilently("base");
+        _fixture.Enable("app");
+
+        _fixture.Enable("other");
+        EGlobal.RunPosted();
+
+        // other is not part of app's chain: it waits for its review instead of failing app's operation
+        Assertions.AssertThat(_fixture.Global.PendingLicenseReview!.Entries.Select(e => e.Slug).ToArray()).ContainsExactly("other");
+        Assertions.AssertBool(Logged("error", "has to be accepted first")).IsFalse();
+        Assertions.AssertObject(_fixture.State("app")).IsEqual(EEditorPluginState.Created);
+        Assertions.AssertString(_fixture.Store.GetLocal("app")!.Reason).IsEqual("attempt_in_progress");
+    }
+
+    [TestCase]
     public void DisablingAWaitingPluginLetsTheOthersOfItsOperationFinish()
     {
         _fixture.AddEPlugin("base", b => b.AddNuget("Base.Package"));
