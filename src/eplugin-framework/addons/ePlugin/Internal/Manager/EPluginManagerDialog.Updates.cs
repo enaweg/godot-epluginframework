@@ -34,12 +34,12 @@ internal sealed partial class EPluginManagerDialog
     {
         if (Busy) return;
         ClearNotice();
-        _working = true; RenderError(); Buttons(); _status.Text = "Checking for updates...";
+        _session.Working = true; RenderError(); Buttons(); _status.Text = "Checking for updates...";
         // Remote sites and local ZIPs can take a while; the scope ends after the list is read again.
         using var progress = ActivationProgress.Begin("Checking for updates...");
         CheckOutcome outcome;
         try { outcome = await _updates.CheckAsync(); }
-        finally { _working = false; }
+        finally { _session.Working = false; }
         if (!IsShown) return;
         SetNotice(outcome.Notice, outcome.IsError);
         Refresh();
@@ -60,7 +60,7 @@ internal sealed partial class EPluginManagerDialog
     {
         if (Busy || request.Batch.Count == 0) return;
         ClearNotice();
-        _working = _installing = true; _cancel?.Dispose(); _cancel = CancellationTokenSource.CreateLinkedTokenSource(_lifetime);
+        _session.Working = _session.Installing = true; _cancel?.Dispose(); _cancel = CancellationTokenSource.CreateLinkedTokenSource(_lifetime);
         Render();
         InstallOutcome outcome;
         try
@@ -72,14 +72,14 @@ internal sealed partial class EPluginManagerDialog
                 Swapping = BeginApply
             }, _cancel.Token);
         }
-        finally { _working = _installing = _swapping = false; }
+        finally { _session.EndWork(); }
         if (!IsShown || outcome.Step == InstallStep.Abandoned) return;
         // The build-failure dialog takes over the decision. Otherwise the manager stays open: an update that needs no
         // restart is finished here, and a restart reopens it.
         if (outcome.Step == InstallStep.AwaitingDecision) Hide();
         else SetNotice(outcome.Notice, outcome.IsError, outcome.Log);
         // A build the update left for the editor to load keeps the manager locked like a plugin operation's.
-        if (_pluginOperation.IsRunning) CompletePluginOperation(outcome.Refresh);
+        if (_session.Operation.IsRunning) CompletePluginOperation(outcome.Refresh);
         else if (outcome.Refresh) Refresh();
         else Render();
     }
@@ -92,18 +92,18 @@ internal sealed partial class EPluginManagerDialog
     private bool BeginApply()
     {
         // InstallAsync starts only while no operation runs, and none starts while it works; this keeps it that way.
-        if (!_pluginOperation.TryBegin()) return false;
+        if (!_session.Operation.TryBegin()) return false;
         AssemblyReload.Capture();
-        _swapping = true;
+        _session.Swapping = true;
         Buttons();
         return true;
     }
 
     private void Cancel()
     {
-        if (_swapping || _pluginOperation.IsBusy || _global.IsChangingPlugins || AssemblyReload.IsPending) return;
+        if (!_session.CanClose(_global.IsChangingPlugins, AssemblyReload.IsPending)) return;
         _cancel?.Cancel();
-        if (!_working) _updates.Clear();
+        if (!_session.Working) _updates.Clear();
         Hide();
     }
 }

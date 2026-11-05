@@ -65,10 +65,10 @@ internal sealed partial class EPluginManagerDialog
         if (!IsInitialized) return;
         var row = SlugOf(item) is { } slug ? _model.Find(slug) : null;
         if (item is null || row is null) return;
-        if (Busy)
+        if (PollBusy())
         {
             // Undo the click; the tree is rebuilt outside its own edit signal.
-            if (_reloadPending) _status.Text = PluginManagerViewModel.ReloadNotice;
+            if (_session.ReloadPending) _status.Text = PluginManagerViewModel.ReloadNotice;
             CallDeferred(MethodName.Render);
             return;
         }
@@ -93,9 +93,9 @@ internal sealed partial class EPluginManagerDialog
 
     private bool BeginPluginOperation()
     {
-        if (Busy || !_pluginOperation.TryBegin()) return false;
+        if (Busy || !_session.Operation.TryBegin()) return false;
         AssemblyReload.Capture();
-        _working = true;
+        _session.Working = true;
         Buttons();
         return true;
     }
@@ -109,15 +109,14 @@ internal sealed partial class EPluginManagerDialog
         // the operation once it is done, as asked here.
         if (_global.IsChangingPlugins)
         {
-            _refreshOnCompletion = refresh;
-            _working = false;
+            _session.RefreshOnCompletion = refresh;
+            _session.Working = false;
             Buttons();
             return;
         }
-        _refreshOnCompletion = true;
-        _reloadPending = AssemblyReload.IsPending;
-        _pluginOperation.Complete(_reloadPending);
-        _working = false;
+        _session.RefreshOnCompletion = true;
+        _session.Operation.Complete(PollReload());
+        _session.Working = false;
         // A pending reload keeps the old native UI locked. Its replacement is initialized after the reload.
         // Do not reopen it if the timestamp guard times out: another operation would still run on the old code.
         if (!GodotObject.IsInstanceValid(this) || !IsInsideTree()) return;
@@ -131,7 +130,7 @@ internal sealed partial class EPluginManagerDialog
     private void EnableAfterLicenses(string slug, string name)
     {
         // An assembly reload replaced this dialog since the click; its successor shows the current state.
-        if (!IsInitialized || !_pluginOperation.IsRunning) return;
+        if (!IsInitialized || !_session.Operation.IsRunning) return;
         LicenseReview? review;
         try { review = _global.ReviewActivationLicenses(slug, name); }
         catch (Exception ex)
@@ -169,8 +168,8 @@ internal sealed partial class EPluginManagerDialog
                 CallDeferred(MethodName.EnableAccepted, slug, name);
                 return;
             }
-            _pluginOperation.Complete(false);
-            _working = false;
+            _session.Operation.Complete(false);
+            _session.Working = false;
             if (!GodotObject.IsInstanceValid(this) || !IsInsideTree()) return;
             Refresh();
             _status.Text = decided.UnreadableReason is { } unreadable
@@ -187,7 +186,7 @@ internal sealed partial class EPluginManagerDialog
     {
         // An assembly reload replaced this dialog since the click; Initialize enables the plugin as remembered.
         if (!IsInitialized) return;
-        if (_pluginOperation.IsRunning && !AssemblyReload.IsPending)
+        if (_session.Operation.IsRunning && !AssemblyReload.IsPending)
         {
             EGlobal.TakeLicenseEnable(slug);
             SetPluginEnabled(slug, name, true);
@@ -195,12 +194,12 @@ internal sealed partial class EPluginManagerDialog
         }
         // applied once the reload is done (posted work waits for it), or right away when nothing is pending
         _global.ResumeLicenseDecisions();
-        if (_pluginOperation.IsRunning && EndedByPendingReload()) _status.Text = $"{name} is enabled once the editor loaded the rebuilt C# code...";
+        if (_session.Operation.IsRunning && EndedByPendingReload()) _status.Text = $"{name} is enabled once the editor loaded the rebuilt C# code...";
     }
 
     private void SetPluginEnabled(string slug, string name, bool enable)
     {
-        if (!IsInitialized || !_pluginOperation.IsRunning || EndedByPendingReload()) return;
+        if (!IsInitialized || !_session.Operation.IsRunning || EndedByPendingReload()) return;
         // Also covers plain plugins; an ePlugin's own activation shares this window.
         using var progress = ActivationProgress.Begin((enable ? "Enabling " : "Disabling ") + name + "...");
         try

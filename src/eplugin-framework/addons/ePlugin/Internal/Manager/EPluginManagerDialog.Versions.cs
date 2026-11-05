@@ -89,7 +89,7 @@ internal sealed partial class EPluginManagerDialog
         if (changed && !Busy) Refresh();
         else
         {
-            if (changed) _refreshWhenIdle = true;
+            if (changed) _session.RefreshWhenIdle = true;
             if (_selectedSlug == slug) RenderVersions(_model.Find(slug));
         }
     }

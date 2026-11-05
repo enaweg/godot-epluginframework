@@ -75,16 +75,9 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private Texture2D? _logo;
     private Texture2D? _updateIcon;
     private PluginManagerViewModel _model = null!;
-    // Whether the operation that ended while plugins were still changing reads the list again once they are done.
-    private bool _refreshOnCompletion = true;
     private string? _selectedSlug;
-    private bool _working;
-    // Only an installation can be cancelled; the dialog has no Close button otherwise.
-    private bool _installing;
-    private bool _swapping;
-    private readonly PluginOperationGate _pluginOperation = new();
-    // A build of this assembly waits for Godot's hot reload; see AssemblyReload. Plugin operations wait for it.
-    private bool _reloadPending;
+    // Which work runs, whether it waits for a reload, and what is done once it ended.
+    private readonly ManagerSession _session = new();
     private double _reloadPoll;
     private const double ReloadPollSeconds = 0.25;
     // Rendering runs after async operations and on theme changes; keep their result until the next update operation.
@@ -93,11 +86,6 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private bool _noticeIsError;
     // The folder or file with the logs of the failure the notice reports; null when there are none.
     private string? _noticeLog;
-    // The notice of work that ended while the manager was closed: Escape and the window's close button hide it also
-    // while its work goes on, so the next Open shows how it ended instead of dropping it.
-    private bool _keepNotice;
-    // The local index or a setting changed while plugins were changing or work ran; the list is read again afterwards.
-    private bool _refreshWhenIdle;
 
     /// <summary>False once an assembly reload dropped the C# state of this still existing editor node.</summary>
     public bool IsInitialized => _global is not null;
@@ -106,8 +94,16 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     /// An operation runs, or the editor is about to reload the assembly an earlier one built. Asked directly rather than
     /// from the last poll, so a click right after an operation finished cannot slip in before the reload.
     /// </summary>
-    private bool Busy => !IsInitialized || _working || _pluginOperation.IsBusy || _global.IsChangingPlugins ||
-        (_reloadPending = AssemblyReload.IsPending);
+    private bool Busy => !IsInitialized || _session.IsBusy(_global.IsChangingPlugins, AssemblyReload.IsPending);
+
+    /// <summary>
+    /// <see cref="Busy"/>, also remembering whether a reload is due, which the status line and the locked input show and
+    /// <see cref="_Process"/> compares with to notice a change.
+    /// </summary>
+    private bool PollBusy() => !IsInitialized || _session.IsBusy(_global.IsChangingPlugins, PollReload());
+
+    /// <summary>Asks whether a reload is due and remembers it, see <see cref="ManagerSession.ReloadPending"/>.</summary>
+    private bool PollReload() => _session.ReloadPending = AssemblyReload.IsPending;
 
     public static EPluginManagerDialog Create(EGlobal global, CancellationToken lifetime)
     {
@@ -199,8 +195,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
 
     public void Open()
     {
-        if (!_keepNotice) ClearNotice();
-        _keepNotice = false;
+        if (!_session.KeepNotice) ClearNotice();
+        _session.KeepNotice = false;
         // Read on every open: the project may have been renamed in Project Settings since.
         Title = PluginManagerViewModel.WindowTitle(ProjectSettings.GetSetting("application/config/name").AsString(),
             ProjectSettings.GlobalizePath("res://"));
@@ -210,7 +206,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         if (_global.IsChangingPlugins || AssemblyReload.IsPending)
         {
             _model ??= new([], [], [], null, _ => []);
-            _refreshWhenIdle = true;
+            _session.RefreshWhenIdle = true;
             Render();
         }
         else Refresh();
@@ -240,8 +236,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
 
     public void Refresh()
     {
-        if (_working) return;
-        _refreshWhenIdle = false;
+        if (_session.Working) return;
+        _session.RefreshWhenIdle = false;
         // A new add-on staged by Install from ZIP waits for its confirmation, which clears it; e.g. the local index
         // finishing in the meantime must not drop it. Installing checks its folder again.
         if (_updates.StagedAddon is null) _updates.Clear();
@@ -261,7 +257,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     {
         _tree.Clear(); var root = _tree.CreateItem();
         TreeItem? selected = null;
-        var editable = !Busy;
+        var editable = !PollBusy();
         foreach (var row in _model.Plugins)
         {
             var plugin = row.Plugin;
@@ -294,7 +290,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         // An error is shown in full in the error area instead.
         _status.Text = PluginManagerViewModel.StatusLine(_noticeIsError ? null : _operationNotice, _model.Updates.Count,
             PluginManagerViewModel.CheckSchedule(_global.LastUpdateCheck, next, DateTimeOffset.UtcNow, CultureInfo.CurrentCulture),
-            _global.IsIndexingLocalSources, _reloadPending = AssemblyReload.IsPending, _pluginOperation.IsAwaitingReload);
+            _global.IsIndexingLocalSources, _session.ReloadPending, _session.Operation.IsAwaitingReload);
         _status.TooltipText = _status.Text + "\n" + PluginManagerViewModel.CheckScheduleHint(next);
         RenderError();
         Buttons();
@@ -319,7 +315,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _operationNotice = notice;
         _noticeIsError = isError && notice is not null;
         _noticeLog = _noticeIsError ? log : null;
-        _keepNotice = !Visible;
+        _session.KeepNotice = !Visible;
         if (_noticeIsError) GD.PushError(notice);
     }
 
@@ -464,22 +460,22 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     {
         // An assembly reload dropped this dialog's state since, so the work went with the old one; or work beside an
         // operation failed, whose status must not be replaced. Either is only logged.
-        if (!IsInitialized || (!ownsWork && _working))
+        if (!IsInitialized || (!ownsWork && _session.Working))
         {
             GD.PushError($"{what} failed: {message}");
             return;
         }
         // A plugin operation the work began is completed by _Process once nothing works any more.
-        if (ownsWork) _working = _installing = _swapping = false;
+        if (ownsWork) _session.EndWork();
         SetNotice($"{what} failed unexpectedly: {message}", true);
         if (_model is not null) Render();
     }
 
     private void Buttons()
     {
-        var busy = Busy;
+        var busy = PollBusy();
         // Set native input state before queuing the operation. It remains locked even while C# state is reloaded.
-        GuiDisableInput = _pluginOperation.IsBusy || _global.IsChangingPlugins || _reloadPending;
+        GuiDisableInput = _session.LocksInput(_global.IsChangingPlugins, _session.ReloadPending);
         var editable = !busy;
         for (var item = _tree.GetRoot()?.GetFirstChild(); item is not null; item = item.GetNext())
         {
@@ -492,8 +488,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         GetOkButton().Icon = EditorIcons.Upgrade;
         GetOkButton().Disabled = busy || !_model.CanApply;
         GetOkButton().Visible = _model.Updates.Count > 0;
-        GetCancelButton().Disabled = _swapping || _pluginOperation.IsBusy || _global.IsChangingPlugins || _reloadPending;
-        GetCancelButton().Visible = _installing && !_swapping;
+        GetCancelButton().Disabled = !_session.CanClose(_global.IsChangingPlugins, _session.ReloadPending);
+        GetCancelButton().Visible = _session.ShowsCancel;
         _check.Disabled = busy;
         _installZip.Disabled = busy;
         _attentionButton.Visible = _attentionItems.Count > 0;
@@ -517,7 +513,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         if (!IsShown || !Visible) return;
         // Never interrupt work or read the plugins while they change (reading them records plain plugins in the shared
         // state file); the list is read again once that ended.
-        if (Busy) _refreshWhenIdle = true;
+        if (Busy) _session.RefreshWhenIdle = true;
         else if (_global.IsIndexingLocalSources) Render();
         else Refresh();
     }
@@ -530,7 +526,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     {
         if (sourcesChanged) _updates.ClearVersions();
         if (!IsShown) return;
-        if (Busy) _refreshWhenIdle = true;
+        if (Busy) _session.RefreshWhenIdle = true;
         else Refresh();
     }
 
@@ -542,20 +538,20 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         base._Process(delta);
         if (!IsInitialized || !Visible || (_reloadPoll += delta) < ReloadPollSeconds) return;
         _reloadPoll = 0;
-        if (_pluginOperation.IsRunning && !_working && !_global.IsChangingPlugins) CompletePluginOperation(_refreshOnCompletion);
+        if (_session.CanCompleteOperation(_global.IsChangingPlugins)) CompletePluginOperation(_session.RefreshOnCompletion);
         var pending = AssemblyReload.IsPending;
-        var locked = _pluginOperation.IsBusy || _global.IsChangingPlugins || pending;
-        if (_refreshWhenIdle && !locked && !_working)
+        var locked = _session.LocksInput(_global.IsChangingPlugins, pending);
+        if (_session.ShouldRefresh(locked))
         {
-            _refreshWhenIdle = false;
-            _reloadPending = pending;
+            _session.RefreshWhenIdle = false;
+            _session.ReloadPending = pending;
             Refresh();
             return;
         }
-        if (pending == _reloadPending && locked == GuiDisableInput) return;
-        _reloadPending = pending;
+        if (pending == _session.ReloadPending && locked == GuiDisableInput) return;
+        _session.ReloadPending = pending;
         // Not while staging or installing: those render their own progress and refresh when done.
-        if (_working) Buttons();
+        if (_session.Working) Buttons();
         else Render();
     }
 
@@ -594,30 +590,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     public override void _ExitTree()
     {
         ReleaseCallbacks();
-        if (!_swapping) _updates?.Clear();
+        if (!_session.Swapping) _updates?.Clear();
         base._ExitTree();
-    }
-}
-
-/// <summary>A plugin operation ends only when it needs no reload; a reload creates a new gate with the new dialog.</summary>
-internal sealed class PluginOperationGate
-{
-    public bool IsRunning { get; private set; }
-    public bool IsAwaitingReload { get; private set; }
-    public bool IsBusy => IsRunning || IsAwaitingReload;
-
-    public bool TryBegin()
-    {
-        if (IsBusy) return false;
-        IsRunning = true;
-        return true;
-    }
-
-    public void Complete(bool reloadPending)
-    {
-        if (!IsRunning) return;
-        IsRunning = false;
-        IsAwaitingReload = reloadPending;
     }
 }
 #endif
