@@ -505,8 +505,11 @@ Readers skip fields they do not know, so a file written by a newer version does 
 fields they know: what an older version cannot represent is lost after a downgrade, and rolling the state back is not
 supported. Values older readers refuse go into new optional fields instead of existing ones: entries of plugins in
 subfolders (a slug with `/`) are written to `nestedPlugins`/`nestedLicenses`/`nestedWelcomes`/`nestedAttempts` and merged
-when read (`PluginStateStoreTests.PluginsInSubfoldersAreWrittenToListsOlderVersionsSkip`). A missing `plugins`/`attempts` list or another `schemaVersion` still makes the store read-only. A shared file that changed on disk since it was read (a git pull) is read again before a write
-(`PluginStateStore.Rebase`), which refuses only when the same entries changed there too, to other values than this write's. Licenses and welcome pages
+when read (`PluginStateStoreTests.PluginsInSubfoldersAreWrittenToListsOlderVersionsSkip`). A missing `plugins`/`attempts` list or another `schemaVersion` still makes the store read-only. The values of
+`PersistedPluginState` are frozen: they are written by name and read with `allowIntegerValues: false`, so an older
+reader fails on a value it does not know; a new state goes into a new optional field. The JSON documents are in
+`PluginStateDocuments`, the local attempts in `PluginStateStore.Attempts.cs`. A shared file that changed on disk since it was read (a git pull) is read again before a write
+(`PluginStateStore.Rebase`, merging through the pure `SharedStateMerge`), which refuses only when the same entries changed there too, to other values than this write's. Licenses and welcome pages
 recorded while the file could not be written stay recorded for the session, also when it is read again, and the next
 write that succeeds saves them; Engine metadata keeps them across assembly reloads (`RestoreUnsavedState`). Only an update's acknowledgement sets `lastCompletedAttemptId` (recovery and rollback compare
 it with the journal); lifecycle completions keep it and skip writing the shared file when no entry changed, because
