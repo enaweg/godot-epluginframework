@@ -539,7 +539,8 @@ skips the dialog.
 
 A plugin's welcome page comes from the recipe's `SetWelcome` (text, or a `res://` path), else `welcome_file` in
 `plugin.cfg`, else its root README (`README.md`, `README.txt`, `README`, case-insensitive); without any of these it has
-none. `Internal/Welcomes/PluginWelcome.cs` is pure and unit-tested and reuses `PluginLicense`'s path rules and display.
+none. `Internal/Welcomes/PluginWelcome.cs` is pure and unit-tested and shares the path rules, display and reading of files (at most 1 MiB) with `PluginLicense`
+(`Internal/PluginTextFile.cs`).
 Shown pages live in the optional `welcomes` list of the shared `eplugin-state.json` (`PluginStateStore.TryRecordWelcomes`),
 recorded by slug only, so a page is shown once per project and omitted while empty like `licenses`.
 `EGlobal.Welcomes.cs` has no lifecycle hook: `EPluginPlugin._Process` calls `TakeWelcomes` every frame, which every 30
