@@ -409,26 +409,39 @@ Update sources lists the project's update sites, the user's local directories (e
 it; a local directory is one update source for any number of plugins) and the built-in list in one tree. Tab titles are the tab nodes' names, because Godot 4.4 ignores
 `metadata/_tab_name`. The General tab shows every `eplugin/*` project setting: a control names its setting in its
 `setting` metadata (an OptionButton its item values in `values`) and is saved to `project.godot` on change, so a new
-setting needs only a control in the scene; `SettingsDialogTests` checks that every registered setting is bound. Close dialogs with `EditorWindows.Release`, never `QueueFree` in the frame that hides them: freeing a window from its
+setting needs only a control in the scene; `SettingsDialogTests` checks that every registered setting is bound. The
+settings read the plugins once when they open and share them with their tabs (`PluginSnapshot`). Close dialogs with `EditorWindows.Release`, never `QueueFree` in the frame that hides them: freeing a window from its
 own button, or right after a reload while it has focus and the mouse, crashed Godot 4.7.2 on the next window message
 (use-after-free in its message handling). Release hides it now and frees it 0.25 s later through a native callable.
+Every dialog keeps what they share in a `DialogLifetime` (composition, as they derive from different window types): its
+prepared windows and their title bar icons, its signal connections, the once-only `Finish` that hides, decides and
+releases, the release without a decision on an assembly reload, and opening web links of its texts. Godot calls only the
+dialog's own methods (its icon refresh is a deferred method callable), so each dialog keeps one-line forwarders for it and
+for its reload, dispose and exit hooks.
 Scene roots set `auto_translate_mode = 2`,
 otherwise the editor translates the English UI into its own language. An autowrapping Label needs a
 `custom_minimum_size` width, or the dialog measures it at zero width and pops up taller than the screen. Scenes are
-authored for 100% editor scale: `EditorWindows.Prepare` scales the window's size and its controls' minimum sizes, and
+authored for 100% editor scale: `EditorWindows.Prepare` scales the window's size, its controls' minimum sizes and the
+`separation`, `h_separation`, `v_separation` and `line_separation` the scene overrides (never scale them again by hand), and
 plugin BBCode pages go through `PluginManagerViewModel.ScaleFontSizes`. Status words in BBCode texts use `TextColors` (the editor theme's colors,
 taken by `EditorWindows.Prepare`), never hex literals, which are unreadable on a light theme; the pure models stay free
 of Godot calls, because their tests run without a Godot runtime. Read the editor's scale and theme through
-`EditorWindows.Scale`/`Theme` (1 and null without an editor) and open a parentless dialog with `EditorWindows.Popup`,
-never `EditorInterface.Singleton` directly, so tests can create the dialogs (`ManagerDialogTests`) and run the manager
+`EditorWindows.Scale`/`Theme` (1 and null without an editor), open a parentless dialog with `EditorWindows.Popup`,
+never `EditorInterface.Singleton` directly, and a window of a dialog's scene with `EditorWindows.PopupChild` (both at
+most 90% of the screen), so tests can create the dialogs (`ManagerDialogTests`) and run the manager
 on `LifecycleFixture` (`PluginManagerDialogTests`, which clicks check boxes through `CellEdited`). Icons come
 from `EditorIcons`, which renders the SVGs at the editor scale (a headless editor re-imports them at 100%) and maps
-their accent colors to the theme's status colors; draw new icons after `docs/internals/editor-icons.md`.
+their accent colors to the theme's status colors (`EditorIcons.Builtin` reads the editor's own); draw new icons after `docs/internals/editor-icons.md`.
+Log buttons open a build log with `EditorWindows.ShowLog`; the manager's Open log folder and the Open folder buttons use
+`EditorWindows.ShowInFileManager`.
 `EGlobal.CollectPlugins` scans every `res://addons/<slug>/plugin.cfg` and adds GDExtension add-ons and plugins left only
 as a failed local attempt; `PluginKinds.Classify` (through `PluginCatalog.ScriptPaths`) recognizes disabled ePlugins by
 the `ScriptPathAttribute` of their compiled type. `PluginManagerViewModel` is pure
-(rows, update selection, BBCode details) and unit-tested. The dialog's own code is split into partials (`EPluginManagerDialog.Operations.cs` for plugin
-operations, `.Versions.cs`, `.Updates.cs`). The update workflows (checking, loading versions, staging,
+(rows and their tooltips, update selection, the status line, version choice and confirmation, BBCode details) and
+unit-tested, and so is the manager's busy state, `ManagerSession` (which work runs, the `PluginOperationGate`, a
+pending reload, refreshes once idle); `Busy` has no side effects, `PollBusy`/`PollReload` remember the reload where it
+is shown. The dialog's own code is split into partials (`EPluginManagerDialog.Operations.cs` for plugin
+operations, `.Versions.cs`, `.Updates.cs`, `.Zip.cs`). The update workflows (checking, loading versions, staging,
 reviewing and installing) are in `UpdateFlow`, which the dialog only displays; it is tested without the editor in
 `UpdateFlowTests`. Decisions about a few plugins get a focused dialog that lists only those plugins, not the
 manager's list: `UpdateReviewDialog` (pure model `UpdateReview`) opens inside `UpdateFlow.InstallAsync` after staging
@@ -439,13 +452,14 @@ installs the checked and unlisted packages or nothing. **Install from ZIP** (`EP
 `AttentionDialog` (pure model `AttentionItem`/`PluginAttention`,
 child of the manager scene like `SettingsDialog`) lists plugins that `NeedsAttention` with Retry (`EGlobal.RetryFailedPlugins`
 with slugs, widened by `RetryScope` to the same attempt and failed hard dependencies), Disable (`DisableFailedPlugin`, a
-manual retry as a deactivation, also of the plugins of its attempt that require it), Roll back (a kept update), Open log and Retry all; the manager carries out the
-`Requested` decision and shows the list again. It opens from the manager's attention button, and by itself when the
+manual retry as a deactivation, also of the plugins of its attempt that require it), Roll back (a kept update), Open log,
+Open folder and Retry all; the manager carries out the `Requested` decision through `RunPluginOperation` (progress scope,
+a failure shown in its error area) and shows the list again. It opens from the manager's attention button, and by itself when the
 manager opens with a problem whose `AttentionItem.Key` is not in `EGlobal.ShownAttention`. Start asynchronous work from a signal with `ObservedTask.Run` on an `async Task` method, never as an
 `async void` handler, which would crash the editor on an unexpected exception. New user-facing actions belong in this dialog, not in
 additional Tools menu entries. Long-running actions (enabling/disabling, retries, Check for updates,
 downloading and installing) show their progress through an `ActivationProgress` scope, not through the dialog: the
-dialog has no progress bar and only puts the outcome in its status line.
+dialog has no progress bar; its status line shows only the running step and then the outcome.
 
 `ActivationProgress` is thread-safe. A `Begin` outside any scope starts a *user* of the progress window; nested scopes,
 Godot callbacks inside it and its async flow (tracked with an `AsyncLocal`) belong to the same user, and a
