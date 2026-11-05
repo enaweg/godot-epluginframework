@@ -160,6 +160,17 @@ public class GDExtensionPluginTests
         Assertions.AssertArray(GDExtensionConfig.DroppedPlatforms(after, before).ToArray()).IsEmpty();
         Assertions.AssertString(GDExtensionConfig.PlatformName("windows.template_debug.x86_64")).IsEqual("windows.x86_64");
         Assertions.AssertString(GDExtensionConfig.PlatformName("macos.debug")).IsEqual("macos");
+        // linuxbsd is the same platform as linux
+        var linuxbsd = GDExtensionConfig.Parse("""
+            [libraries]
+            linuxbsd.x86_64 = "bin/a.so"
+            """);
+        var linux = GDExtensionConfig.Parse("""
+            [libraries]
+            linux.x86_64 = "bin/a.so"
+            """);
+        Assertions.AssertArray(GDExtensionConfig.DroppedPlatforms(linux, linuxbsd).ToArray()).IsEmpty();
+        Assertions.AssertArray(GDExtensionConfig.DroppedPlatforms(linuxbsd, linux).ToArray()).IsEmpty();
     }
 
     [TestCase]
