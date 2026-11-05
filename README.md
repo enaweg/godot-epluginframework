@@ -4,18 +4,19 @@ Line coverage of `src/eplugin-framework/addons/ePlugin` on `main`, recorded by t
 
 ![Line coverage](badge.svg)
 
-**90.79%** (12971 of 14287 lines) at [0e1982b](https://github.com/enaweg/godot-epluginframework/commit/0e1982b1d490eda2a58a73a5b940cfaa2eea43f5), 2026-11-05.
+**90.82%** (12974 of 14285 lines) at [a795c63](https://github.com/enaweg/godot-epluginframework/commit/a795c63e7f365824f05f8417961256e8f7b56580), 2026-11-05.
 
 ```mermaid
 xychart-beta
     title "Line coverage on main (last 30 pushes)"
-    x-axis ["5237cbd", "7e4d62b", "391098c", "15bd724", "a44cb96", "5055ec0", "49f0047", "35f1ab2", "1011c5a", "a95f309", "f925263", "1eb920f", "ff45b6c", "7837a44", "cc27a96", "4b8c5cf", "35146b8", "c4eadb2", "8f57090", "ccff29c", "16e234a", "6656105", "7108433", "2489f40", "f7af6d5", "470e378", "46e62bd", "416075b", "a35cca1", "0e1982b"]
+    x-axis ["7e4d62b", "391098c", "15bd724", "a44cb96", "5055ec0", "49f0047", "35f1ab2", "1011c5a", "a95f309", "f925263", "1eb920f", "ff45b6c", "7837a44", "cc27a96", "4b8c5cf", "35146b8", "c4eadb2", "8f57090", "ccff29c", "16e234a", "6656105", "7108433", "2489f40", "f7af6d5", "470e378", "46e62bd", "416075b", "a35cca1", "0e1982b", "a795c63"]
     y-axis "Line coverage (%)" 88 --> 94
-    line [91.10, 91.10, 91.10, 91.10, 91.11, 91.14, 91.15, 91.15, 90.58, 90.33, 90.33, 90.31, 90.31, 90.35, 90.41, 90.46, 90.49, 90.59, 90.66, 90.42, 90.74, 90.73, 90.73, 90.67, 90.67, 90.67, 90.67, 90.67, 90.67, 90.79]
+    line [91.10, 91.10, 91.10, 91.11, 91.14, 91.15, 91.15, 90.58, 90.33, 90.33, 90.31, 90.31, 90.35, 90.41, 90.46, 90.49, 90.59, 90.66, 90.42, 90.74, 90.73, 90.73, 90.67, 90.67, 90.67, 90.67, 90.67, 90.67, 90.79, 90.82]
 ```
 
 | Date | Commit | Line coverage | Change |
 |:--|:--|--:|--:|
+| 2026-11-05 | [a795c63](https://github.com/enaweg/godot-epluginframework/commit/a795c63e7f365824f05f8417961256e8f7b56580) | 90.82% | +0.03 pp |
 | 2026-11-05 | [0e1982b](https://github.com/enaweg/godot-epluginframework/commit/0e1982b1d490eda2a58a73a5b940cfaa2eea43f5) | 90.79% | +0.12 pp |
 | 2026-11-05 | [a35cca1](https://github.com/enaweg/godot-epluginframework/commit/a35cca15f866ff195b15f17b8c9ef6f5e518a526) | 90.67% | +0.00 pp |
 | 2026-11-05 | [416075b](https://github.com/enaweg/godot-epluginframework/commit/416075b4705fe3066db5a84c32a8b8f2c1173be2) | 90.67% | +0.00 pp |
@@ -45,11 +46,10 @@ xychart-beta
 | 2026-10-26 | [15bd724](https://github.com/enaweg/godot-epluginframework/commit/15bd724bedf34f9f33929ba566dc188b53f4e2c5) | 91.10% | +0.00 pp |
 | 2026-10-26 | [391098c](https://github.com/enaweg/godot-epluginframework/commit/391098c5badca5f2ce7155f5332658f7fd268380) | 91.10% | +0.00 pp |
 | 2026-10-25 | [7e4d62b](https://github.com/enaweg/godot-epluginframework/commit/7e4d62b8e2a38bbecd4d4a1fe3dc8c3d395e6174) | 91.10% | +0.00 pp |
-| 2026-10-25 | [5237cbd](https://github.com/enaweg/godot-epluginframework/commit/5237cbdf3003cc691fe9f4f1a9111186558155b1) | 91.10% | +0.01 pp |
 
 All measurements: [history.csv](history.csv).
 
-<details><summary>Files at 0e1982b (145)</summary>
+<details><summary>Files at a795c63 (146)</summary>
 
 | File | Line coverage | Covered lines |
 |:--|--:|--:|
@@ -87,9 +87,9 @@ All measurements: [history.csv](history.csv).
 | `Internal/Manager/UpdateFailureDialog.cs` | 87.3% | 69 of 79 |
 | `Internal/Welcomes/PluginWelcome.cs` | 87.9% | 29 of 33 |
 | `Internal/Manager/EPluginManagerDialog.cs` | 88.0% | 380 of 432 |
-| `Internal/EGlobal.cs` | 88.0% | 278 of 316 |
 | `Internal/Kinds/GDExtensionRules.cs` | 88.2% | 30 of 34 |
 | `Internal/Manager/SettingsDialog.cs` | 88.5% | 46 of 52 |
+| `Internal/EGlobal.cs` | 88.6% | 273 of 308 |
 | `Internal/EGlobal.UpdateWorkflow.cs` | 88.9% | 8 of 9 |
 | `Internal/EGlobal.Activation.cs` | 89.1% | 327 of 367 |
 | `Internal/Manager/ToolsTab.cs` | 89.3% | 208 of 233 |
@@ -98,7 +98,7 @@ All measurements: [history.csv](history.csv).
 | `Internal/ShowHideHelper.cs` | 90.2% | 111 of 123 |
 | `Internal/Update/PluginRepository.cs` | 90.6% | 135 of 149 |
 | `Internal/EGlobal.MissingPlugins.cs` | 90.6% | 29 of 32 |
-| `Internal/EGlobal.PlainPlugins.cs` | 90.9% | 130 of 143 |
+| `Internal/EGlobal.PlainPlugins.cs` | 90.8% | 128 of 141 |
 | `Internal/Licenses/PluginLicense.cs` | 91.1% | 41 of 45 |
 | `Internal/Update/UpdateApplier.cs` | 91.9% | 453 of 493 |
 | `Internal/Update/AddonSwap.cs` | 92.0% | 126 of 137 |
@@ -108,23 +108,23 @@ All measurements: [history.csv](history.csv).
 | `Internal/EGlobal.PluginManager.cs` | 93.2% | 96 of 103 |
 | `Internal/EGlobal.Welcomes.cs` | 93.3% | 70 of 75 |
 | `Internal/Update/SubmoduleSwap.cs` | 93.3% | 42 of 45 |
-| `Internal/Manager/AttentionDialog.cs` | 93.5% | 115 of 123 |
+| `Internal/Manager/AttentionDialog.cs` | 93.6% | 117 of 125 |
 | `Internal/Manager/ManagerReopenMarker.cs` | 94.1% | 16 of 17 |
 | `Internal/AddonLayout.cs` | 94.3% | 100 of 106 |
 | `Internal/Update/GitSource.cs` | 94.4% | 204 of 216 |
 | `Internal/Update/PluginCode.cs` | 94.7% | 18 of 19 |
 | `Internal/Manager/EditorIcons.cs` | 94.8% | 55 of 58 |
-| `Internal/EGlobal.Deactivation.cs` | 94.9% | 167 of 176 |
 | `Internal/Dotnet/ProjectReferences.cs` | 95.0% | 38 of 40 |
 | `Internal/Update/SubmoduleSource.cs` | 95.1% | 97 of 102 |
 | `Internal/Update/PackageFetcher.cs` | 95.6% | 108 of 113 |
 | `Internal/Update/InterimBridge.cs` | 95.7% | 45 of 47 |
 | `Internal/Update/UpdateModels.cs` | 95.8% | 68 of 71 |
+| `Internal/EGlobal.Deactivation.cs` | 95.9% | 165 of 172 |
 | `Internal/Update/LocalIndexCache.cs` | 96.0% | 24 of 25 |
 | `Internal/Dotnet/NugetConfigManager.cs` | 96.2% | 200 of 208 |
 | `Internal/EGlobal.Licenses.cs` | 96.2% | 326 of 339 |
-| `Internal/Kinds/GDExtensionPluginWorkflow.cs` | 96.3% | 78 of 81 |
 | `Internal/Update/BuildDiagnostics.cs` | 96.3% | 52 of 54 |
+| `Internal/Kinds/GDExtensionPluginWorkflow.cs` | 96.3% | 79 of 82 |
 | `Internal/Manager/UpdateFlow.cs` | 96.4% | 238 of 247 |
 | `Internal/EGlobal.OptionalDependencies.cs` | 96.4% | 108 of 112 |
 | `Internal/Dotnet/XmlFile.cs` | 96.5% | 55 of 57 |
@@ -148,11 +148,12 @@ All measurements: [history.csv](history.csv).
 | `Internal/EGlobal.UpdateRecipes.cs` | 98.9% | 188 of 190 |
 | `Internal/Update/ReleaseSources.cs` | 99.0% | 195 of 197 |
 | `Internal/Update/LocalCleanup.cs` | 99.0% | 98 of 99 |
-| `Internal/Update/PackageFiles.cs` | 99.0% | 104 of 105 |
+| `Internal/Update/PackageFiles.cs` | 99.1% | 105 of 106 |
 | `Internal/Update/UpdateHttp.cs` | 99.2% | 120 of 121 |
 | `Internal/Kinds/GDExtensionConfig.cs` | 99.4% | 166 of 167 |
 | `EEditorPluginMetadata.cs` | 100.0% | 4 of 4 |
 | `IEEditorPluginExtensions.cs` | 100.0% | 15 of 15 |
+| `Internal/AttemptReasons.cs` | 100.0% | 7 of 7 |
 | `Internal/Dotnet/DotnetCliBase.cs` | 100.0% | 80 of 80 |
 | `Internal/Dotnet/DotnetVersionManager.cs` | 100.0% | 39 of 39 |
 | `Internal/Dotnet/ICheckedDotnetCli.cs` | 100.0% | 1 of 1 |
@@ -169,7 +170,7 @@ All measurements: [history.csv](history.csv).
 | `Internal/Kinds/EPluginWorkflow.cs` | 100.0% | 14 of 14 |
 | `Internal/Kinds/FrameworkPluginWorkflow.cs` | 100.0% | 7 of 7 |
 | `Internal/Kinds/GDScriptPluginWorkflow.cs` | 100.0% | 4 of 4 |
-| `Internal/Kinds/PluginKindWorkflow.cs` | 100.0% | 13 of 13 |
+| `Internal/Kinds/PluginKindWorkflow.cs` | 100.0% | 14 of 14 |
 | `Internal/Kinds/UnknownPluginWorkflow.cs` | 100.0% | 4 of 4 |
 | `Internal/Licenses/LicenseReview.cs` | 100.0% | 68 of 68 |
 | `Internal/Licenses/LicenseSettings.cs` | 100.0% | 9 of 9 |

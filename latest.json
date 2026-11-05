@@ -1,8 +1,8 @@
 {
- "commit": "0e1982b1d490eda2a58a73a5b940cfaa2eea43f5",
- "date": "2026-11-05T18:35:45Z",
- "covered": 12971,
- "coverable": 14287,
+ "commit": "a795c63e7f365824f05f8417961256e8f7b56580",
+ "date": "2026-11-05T18:36:21Z",
+ "covered": 12974,
+ "coverable": 14285,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -39,6 +39,10 @@
   "src/eplugin-framework/addons/ePlugin/Internal/AssemblyUnloadCleanup.cs": [
    7,
    18
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/AttemptReasons.cs": [
+   7,
+   7
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/BuildOutputGuard.cs": [
    52,
@@ -113,8 +117,8 @@
    34
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Deactivation.cs": [
-   167,
-   176
+   165,
+   172
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.ExtensionAddons.cs": [
    17,
@@ -141,8 +145,8 @@
    112
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.PlainPlugins.cs": [
-   130,
-   143
+   128,
+   141
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.PluginManager.cs": [
    96,
@@ -185,8 +189,8 @@
    75
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.cs": [
-   278,
-   316
+   273,
+   308
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EPluginProgress.cs": [
    1,
@@ -221,8 +225,8 @@
    167
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Kinds/GDExtensionPluginWorkflow.cs": [
-   78,
-   81
+   79,
+   82
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Kinds/GDExtensionRules.cs": [
    30,
@@ -237,8 +241,8 @@
    29
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Kinds/PluginKindWorkflow.cs": [
-   13,
-   13
+   14,
+   14
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Kinds/PluginKinds.cs": [
    44,
@@ -269,8 +273,8 @@
    58
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/AttentionDialog.cs": [
-   115,
-   123
+   117,
+   125
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/CleanupSuggestionDialog.cs": [
    30,
@@ -473,8 +477,8 @@
    113
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/PackageFiles.cs": [
-   104,
-   105
+   105,
+   106
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/PluginCode.cs": [
    18,
