@@ -200,10 +200,11 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
         var file = _sharedPath;
         try
         {
-            _sharedBytes = File.Exists(_sharedPath) ? File.ReadAllBytes(_sharedPath) : null;
-            var shared = _sharedBytes is null
+            // kept only once both files are valid: a failed read must not mix the new file with the state read before
+            var sharedBytes = File.Exists(_sharedPath) ? File.ReadAllBytes(_sharedPath) : null;
+            var shared = sharedBytes is null
                 ? new SharedDocument { SchemaVersion = SchemaVersion, Plugins = [] }
-                : JsonSerializer.Deserialize<SharedDocument>(_sharedBytes, JsonOptions)?.Unnested()
+                : JsonSerializer.Deserialize<SharedDocument>(sharedBytes, JsonOptions)?.Unnested()
                   ?? throw new InvalidDataException("The file contains no plugin state.");
             ValidateShared(shared);
             file = _localPath;
@@ -213,6 +214,7 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
                 : JsonSerializer.Deserialize<LocalDocument>(localBytes, JsonOptions)?.Unnested()
                   ?? throw new InvalidDataException("The file contains no plugin state.");
             ValidateLocal(local);
+            _sharedBytes = sharedBytes;
             UseShared(shared);
             _local = local.Attempts!.ToDictionary(x => x.Slug!, x =>
                 new LocalPluginAttempt(x.AttemptId!.Value, x.Slug!, x.InstalledVersion,
