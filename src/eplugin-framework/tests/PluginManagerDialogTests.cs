@@ -288,6 +288,8 @@ public class PluginManagerDialogTests : IDisposable
         // a problem the session has not shown yet opens the list by itself
         _dialog.Open();
         await Frames();
+        // the title names the project (this repository's own), so similar projects open side by side are told apart
+        Assertions.AssertString(_dialog.Title).IsEqual("ePlugin Manager - EPlugin Framework");
         var attention = _dialog.GetNode<AttentionDialog>("%AttentionDialog");
         Assertions.AssertBool(attention.Visible).IsTrue();
         Assertions.AssertString(_dialog.GetNode<Button>("%AttentionButton").Text).IsEqual("1 plugin needs attention");
