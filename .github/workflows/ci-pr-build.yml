@@ -29,7 +29,7 @@ jobs:
 
       - name: Setup .NET for the tools
         # tools/ci-reports needs .NET 10. A separate installation, so the SDK below still builds the package.
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         env:
           DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet-tools
         with:
@@ -37,7 +37,7 @@ jobs:
 
       - name: Setup .NET
         # Its own installation directory: the runner image's has newer SDKs, and dotnet always picks the newest one.
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         env:
           DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
         with:
