@@ -654,7 +654,7 @@ public class GDExtensionPluginTests
         public int Restarts;
         public int Builds;
         public bool UiAvailable => false;
-        public string BuildFailurePolicy => "rollback";
+        public BuildFailurePolicy BuildFailurePolicy => BuildFailurePolicy.Rollback;
         public bool RestartAlways => false;
         public bool IsEnabled(string slug) => true;
         public bool Managed;

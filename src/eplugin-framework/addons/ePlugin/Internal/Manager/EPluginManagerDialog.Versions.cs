@@ -150,8 +150,8 @@ internal sealed partial class EPluginManagerDialog
                 : "") +
             "Open scenes are saved first; files and project references are backed up" + _global.DetailsBuildFailurePolicy(row.Plugin.Slug) switch
             {
-                "ask" => ". If the project does not build with it, you choose whether to keep it and fix the errors yourself or to restore the previous version.",
-                "keep" => ". If the project does not build with it, it is kept so you can fix the errors (project setting eplugin/updates/on_build_failure).",
+                BuildFailurePolicy.Ask => ". If the project does not build with it, you choose whether to keep it and fix the errors yourself or to restore the previous version.",
+                BuildFailurePolicy.Keep => ". If the project does not build with it, it is kept so you can fix the errors (project setting eplugin/updates/on_build_failure).",
                 _ => " and restored if installation fails.",
             };
         _versionConfirm.PopupCentered();

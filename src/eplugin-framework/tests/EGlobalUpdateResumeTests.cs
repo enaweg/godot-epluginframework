@@ -402,7 +402,7 @@ public class EGlobalUpdateResumeTests : IDisposable
     private sealed class RecordingUpdateHost(LifecycleFixture fixture) : IUpdateHost
     {
         public bool UiAvailable { get; set; }
-        public string BuildFailurePolicy => "ask";
+        public BuildFailurePolicy BuildFailurePolicy => BuildFailurePolicy.Ask;
         public bool RestartAlways => false;
         public List<string> Toggles { get; } = [];
         public int Builds { get; private set; }

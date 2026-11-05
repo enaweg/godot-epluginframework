@@ -131,8 +131,8 @@ internal sealed partial class EGlobal
         if (UpdateApplyBlocker is { } reason) throw new InvalidOperationException(reason + " Addon files were not changed.");
     }
 
-    /// <summary>What a build failure does to an update of this plugin started from its details: ask, keep or rollback.</summary>
-    internal string DetailsBuildFailurePolicy(string slug)
+    /// <summary>What a build failure does to an update of this plugin started from its details.</summary>
+    internal BuildFailurePolicy DetailsBuildFailurePolicy(string slug)
     {
         var host = UpdateHost;
         return UpdateFailureDecision.Choose(slug == Framework.Slug, UpdateFailureDecision.Policy(host.BuildFailurePolicy, false, true), host.UiAvailable);
@@ -366,7 +366,7 @@ internal sealed partial class EGlobal
         private static readonly StringName GetOpenSceneRoots = "get_open_scene_roots";
         private const int MaxClosedScenes = 1000;
         public bool UiAvailable => global.LicenseUiAvailable;
-        public string BuildFailurePolicy => ProjectSettings.GetSetting("eplugin/updates/on_build_failure", "ask").AsString();
+        public BuildFailurePolicy BuildFailurePolicy => UpdateFailureDecision.Parse(ProjectSettings.GetSetting("eplugin/updates/on_build_failure", "ask").AsString());
         public bool RestartAlways => ProjectSettings.GetSetting("eplugin/updates/restart_policy", "auto").AsString() == "always";
         // A GDExtension add-on is never enabled, but Godot always runs it.
         public bool IsEnabled(string slug) => global._host.IsPluginEnabled(slug) || global.IsExtensionAddon(slug);

@@ -261,7 +261,8 @@ null and behaves exactly as before).
 A grouped journal never asks or keeps on a build failure; it rolls back. Only an update started from a plugin's details
 (`ApplyUpdatesAsync(askOnBuildFailure: true)`, persisted as `UpdateJournal.AskOnBuildFailure`) asks, for the interim and
 the final build (`UpdateFailureDecision.Policy`); the batch **Update** rolls back, unless `on_build_failure=keep` keeps a
-single group. The exception is a build that fails only in project code while the plugins compile on their own (below):
+single group. `IUpdateHost.BuildFailurePolicy` reads the setting once into the `BuildFailurePolicy` enum
+(`UpdateFailureDecision.Parse`: the stored values stay `ask`, `rollback` and `keep`, and any other value rolls back). The exception is a build that fails only in project code while the plugins compile on their own (below):
 it is kept, in a group too, because a later group then fails with the same project errors and is kept the same way.
 
 ## Build failures in project code

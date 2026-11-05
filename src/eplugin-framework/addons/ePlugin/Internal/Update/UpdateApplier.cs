@@ -19,7 +19,7 @@ internal sealed record UpdateGroupResult(IReadOnlyList<ValidatedPackage> Package
 internal interface IUpdateHost
 {
     bool UiAvailable { get; }
-    string BuildFailurePolicy { get; }
+    BuildFailurePolicy BuildFailurePolicy { get; }
     bool RestartAlways { get; }
     bool IsEnabled(string slug);
     bool IsManaged(string slug);
@@ -53,10 +53,23 @@ internal interface IUpdateHost
     bool Verify(UpdatePluginJournal plugin);
     void Log(string message);
 }
+/// <summary>
+/// What an update does when the project does not build with it: the values of the <c>eplugin/updates/on_build_failure</c>
+/// setting, which stores them in lowercase (<see cref="UpdateFailureDecision.Parse"/>).
+/// </summary>
+internal enum BuildFailurePolicy { Ask, Rollback, Keep }
 internal static class UpdateFailureDecision
 {
-    public static string Choose(bool selfUpdate, string policy, bool uiAvailable) =>
-        selfUpdate || !uiAvailable ? "rollback" : policy is "keep" or "ask" ? policy : "rollback";
+    /// <summary>The policy a stored <c>on_build_failure</c> value names; a value that names none rolls back.</summary>
+    public static BuildFailurePolicy Parse(string? setting) => setting switch
+    {
+        "ask" => BuildFailurePolicy.Ask,
+        "keep" => BuildFailurePolicy.Keep,
+        _ => BuildFailurePolicy.Rollback,
+    };
+
+    public static BuildFailurePolicy Choose(bool selfUpdate, BuildFailurePolicy policy, bool uiAvailable) =>
+        selfUpdate || !uiAvailable ? BuildFailurePolicy.Rollback : policy;
 
     /// <summary>
     /// The project's <c>on_build_failure</c> setting for one transaction: <c>ask</c> asks only for an update started from
@@ -66,9 +79,11 @@ internal static class UpdateFailureDecision
     /// <param name="projectCodeOnly">The build failed only in the project's own code and the plugins compile on their
     /// own: the update is kept unless the setting is <c>rollback</c>. That holds for a group, too: later groups fail with
     /// the same project errors and are kept the same way. An update from a plugin's details still asks.</param>
-    public static string Policy(string setting, bool grouped, bool askOnBuildFailure, bool projectCodeOnly = false) =>
-        projectCodeOnly && setting != "rollback" ? (setting == "ask" && askOnBuildFailure && !grouped ? "ask" : "keep")
-        : grouped ? "rollback" : setting == "keep" ? "keep" : setting == "ask" && askOnBuildFailure ? "ask" : "rollback";
+    public static BuildFailurePolicy Policy(BuildFailurePolicy setting, bool grouped, bool askOnBuildFailure, bool projectCodeOnly = false) =>
+        projectCodeOnly && setting != BuildFailurePolicy.Rollback
+            ? setting == BuildFailurePolicy.Ask && askOnBuildFailure && !grouped ? BuildFailurePolicy.Ask : BuildFailurePolicy.Keep
+            : grouped ? BuildFailurePolicy.Rollback
+            : setting == BuildFailurePolicy.Ask && !askOnBuildFailure ? BuildFailurePolicy.Rollback : setting;
 }
 /// <param name="git">Runs git in the plugin folders that are git submodules; only local commands.</param>
 internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, IUpdateHost host, IUpdateStateStore cache, IGitRunner? git = null)
@@ -607,15 +622,14 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
     private UpdateOutcome BuildFailed(UpdateJournal journal, string rollbackReason, bool beforeReconcile, string failure)
     {
         var decision = Decision(journal);
-        if (decision == "rollback") return Rollback(journal, rollbackReason);
+        if (decision == BuildFailurePolicy.Rollback) return Rollback(journal, rollbackReason);
         if (beforeReconcile)
         {
             RestorePlainPlugins(journal);
             journal.BeforeReconcile = true;
         }
         journal.Failure = journal.KeptForProjectCode ? ProjectCodeFailure(journal) : failure;
-        if (decision == "ask") { journal.Save(UpdatePhase.AwaitingDecision); return UpdateOutcome.AwaitingDecision; }
-        if (decision != "keep") return Rollback(journal, rollbackReason);
+        if (decision == BuildFailurePolicy.Ask) { journal.Save(UpdatePhase.AwaitingDecision); return UpdateOutcome.AwaitingDecision; }
         if (beforeReconcile) journal.Save();
         return Keep(journal);
     }
@@ -629,7 +643,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         journal.Save();
         return build;
     }
-    private string Decision(UpdateJournal journal) =>
+    private BuildFailurePolicy Decision(UpdateJournal journal) =>
         UpdateFailureDecision.Choose(journal.Plugins.Any(p => p.Slug == Framework.Slug),
             UpdateFailureDecision.Policy(host.BuildFailurePolicy, journal.Group is not null, journal.AskOnBuildFailure, journal.KeptForProjectCode), host.UiAvailable);
 
@@ -663,7 +677,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
     /// so do headless runs; the plugins-only build is skipped when the settings would roll back anyway.
     /// </summary>
     private bool MayKeepForProjectCode(UpdateJournal journal) =>
-        host.KeepOnProjectErrors && host.UiAvailable && host.BuildFailurePolicy != "rollback" && journal.Plugins.All(p => p.Slug != Framework.Slug);
+        host.KeepOnProjectErrors && host.UiAvailable && host.BuildFailurePolicy != BuildFailurePolicy.Rollback && journal.Plugins.All(p => p.Slug != Framework.Slug);
 
     private bool BuildPluginsOnly(UpdateJournal journal, string name, IReadOnlyList<string> roots)
     {
