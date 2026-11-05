@@ -117,10 +117,10 @@ internal sealed class UpdateJournal
     /// <summary>Where files go that were still in use and could only be moved, not deleted; removed with the journal.</summary>
     public string Discarded(string slug) => PackageFiles.Inside(Path.Combine(Directory, "discarded"), slug);
     public bool IsActive => State is not (UpdatePhase.RolledBack or UpdatePhase.Committed or UpdatePhase.CommittedWithErrors or UpdatePhase.Failed);
-    public void Save(UpdatePhase? state = null) { if (state is not null) State = state.Value; AtomicJson.Write(Path.Combine(Directory, "journal.json"), this); }
+    public void Save(UpdatePhase? state = null) { if (state is not null) State = state.Value; AtomicJson.Write(UpdatePaths.JournalIn(Directory), this); }
     public static UpdateJournal Load(string directory)
     {
-        var journal = JsonSerializer.Deserialize<UpdateJournal>(File.ReadAllText(Path.Combine(directory, "journal.json")), UpdateStateStore.JsonOptions) ?? throw new InvalidDataException("Empty update journal.");
+        var journal = JsonSerializer.Deserialize<UpdateJournal>(File.ReadAllText(UpdatePaths.JournalIn(directory)), UpdateStateStore.JsonOptions) ?? throw new InvalidDataException("Empty update journal.");
         // The serializer accepts an explicit null for any entry, which the checks below would otherwise dereference.
         try { Validate(journal, directory); }
         catch (NullReferenceException) { throw new InvalidDataException("Update journal has missing entries; restore its backups manually."); }
@@ -172,7 +172,7 @@ internal sealed class UpdateJournals(string root, Action<string>? log = null)
             // scanner holds it), so it cannot stop every other update or the framework's start that resumes them.
             try
             {
-                if (!File.Exists(Path.Combine(folder, "journal.json"))) continue;
+                if (!File.Exists(UpdatePaths.JournalIn(folder))) continue;
                 result.Add(UpdateJournal.Load(folder));
             }
             catch (Exception ex) when (IsUnreadable(ex)) { log?.Invoke($"Cannot read update journal {folder}: {ex.Message}"); }
@@ -189,7 +189,7 @@ internal sealed class UpdateJournals(string root, Action<string>? log = null)
     /// </summary>
     public IReadOnlyList<string> AbandonedStaging(DateTime before) => !System.IO.Directory.Exists(root) ? []
         : System.IO.Directory.GetDirectories(root)
-            .Where(folder => !File.Exists(Path.Combine(folder, "journal.json")) && System.IO.Directory.GetLastWriteTimeUtc(folder) < before).ToArray();
+            .Where(folder => !File.Exists(UpdatePaths.JournalIn(folder)) && System.IO.Directory.GetLastWriteTimeUtc(folder) < before).ToArray();
     public bool OwnsAttempt(Guid? id) => id is not null && Read().Any(j => j.IsActive && j.AttemptId == id);
     public IReadOnlySet<string> OwnedSlugs => Read().Where(j => j.IsActive).SelectMany(j => j.Plugins.Select(p => p.Slug).Concat(j.AdditionalVersions.Keys)).ToHashSet(StringComparer.Ordinal);
     public string NewDirectory() => Path.Combine(root, DateTimeOffset.UtcNow.ToString("yyyyMMddTHHmmss", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N")[..8]);

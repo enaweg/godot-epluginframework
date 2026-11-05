@@ -9,6 +9,8 @@ How ePlugin's updater is built, for maintainers of the framework. The user-facin
 transaction applier, recipe snapshots and diffs, journal and cache persistence, and early self-update recovery.
 `EGlobal.Updates.cs`, `EGlobal.UpdateApply.cs`, `EGlobal.UpdateRecipes.cs`, `EGlobal.RecipeOperations.cs`,
 `EGlobal.UpdateWorkflow.cs` (`IUpdateWorkflowHost`) and `EGlobal.AddonInstall.cs` (new add-ons) connect them to Godot. HTTP and git work runs off the editor thread; lifecycle and recipe changes stay on it.
+`UpdatePaths` names the updater's files (`.godot/eplugin/updates/<transaction>/journal.json`, `healthy.marker`, the
+`update-state.json` cache); early recovery reads them in another framework version, so they never move.
 
 The ePlugin Manager's workflows (checking, loading a plugin's versions, staging, reviewing and installing a batch) are in
 `Internal/Manager/UpdateFlow.cs`, which reaches the framework through `IUpdateWorkflowHost` and is tested without the

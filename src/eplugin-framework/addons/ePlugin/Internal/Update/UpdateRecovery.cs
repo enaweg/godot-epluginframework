@@ -45,11 +45,11 @@ internal static class UpdateRecovery
     private static readonly JsonSerializerOptions Options = new() { PropertyNameCaseInsensitive = true, WriteIndented = true };
     public static Outcome RunIfNeeded(string projectRoot, ILogger logger, Func<bool> rebuild, Action restoreSettings)
     {
-        var root = Path.Combine(projectRoot, ".godot/eplugin/updates");
+        var root = UpdatePaths.TransactionsOf(projectRoot);
         if (!Directory.Exists(root)) return Outcome.Continue;
         foreach (var folder in Directory.GetDirectories(root))
         {
-            var path = Path.Combine(folder, "journal.json");
+            var path = UpdatePaths.JournalIn(folder);
             if (!File.Exists(path)) continue;
             Guid? recoveringAttempt = null;
             try
@@ -59,7 +59,7 @@ internal static class UpdateRecovery
                 var journal = json.Deserialize<Journal>(Options) ?? throw new InvalidDataException("Empty journal.");
                 if (!journal.Plugins.Any(p => p.Slug == Framework.Slug)) continue;
                 if (journal.Schema != 1 || journal.AttemptId == Guid.Empty) throw new InvalidDataException("Unsupported recovery journal schema.");
-                if (journal.State is "Committed" or "RolledBack" or "Failed" or "Verified" || File.Exists(Path.Combine(folder, "healthy.marker"))) continue;
+                if (journal.State is "Committed" or "RolledBack" or "Failed" or "Verified" || File.Exists(Path.Combine(folder, UpdatePaths.HealthyMarker))) continue;
                 // Staged has not touched addon files. Normal recovery can abandon it.
                 if (journal.State == "Staged") continue;
                 json["startCount"] = ++journal.StartCount;
@@ -137,7 +137,7 @@ internal static class UpdateRecovery
                 Write(path, json);
                 try
                 {
-                    var cachePath = Path.Combine(projectRoot, ".godot/eplugin/update-state.json");
+                    var cachePath = UpdatePaths.CacheOf(projectRoot);
                     var cache = File.Exists(cachePath) ? JsonNode.Parse(File.ReadAllText(cachePath)) as JsonObject : null;
                     cache ??= new JsonObject { ["schema"] = 1 };
                     var failures = cache["failedUpdates"] as JsonObject;

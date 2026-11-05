@@ -130,11 +130,11 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             UpdateGroupResult result;
             try { result = Result(packages, directory, Apply(packages, directory, trustChangedSources, i)); }
             // Once its journal exists the transaction began and its marker blocks the plugins, so it needs recovery.
-            catch (Exception ex) { result = new(packages, directory, File.Exists(Path.Combine(directory, "journal.json")) ? UpdateOutcome.KeptWithErrors : null, ex.Message); }
+            catch (Exception ex) { result = new(packages, directory, File.Exists(UpdatePaths.JournalIn(directory)) ? UpdateOutcome.KeptWithErrors : null, ex.Message); }
             try
             {
                 // A group refused before its marker leaves only its staging behind.
-                if (!File.Exists(Path.Combine(directory, "journal.json"))) AddonFiles.DeleteTree(directory);
+                if (!File.Exists(UpdatePaths.JournalIn(directory))) AddonFiles.DeleteTree(directory);
             }
             catch (Exception ex) { host.Log($"Cannot remove the staging folder {directory}: {ex.Message}"); }
             results.Add(result);
@@ -295,7 +295,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             if (managedCSharp && !finalBuild) host.Log("The updated recipes do not change the build; the editor keeps the interim build without another restart.");
             if (finalBuild && !_builds.Passes(journal, "final")) return BuildFailed(journal, "Final build failed.", beforeReconcile: false, "Final build failed.");
             if (journal.Plugins.Any(p => !host.Verify(p))) return Rollback(journal, "Updated plugin verification failed.");
-            if (journal.Plugins.Any(p => p.Slug == Framework.Slug)) File.WriteAllText(Path.Combine(journal.Directory, "healthy.marker"), "verified");
+            if (journal.Plugins.Any(p => p.Slug == Framework.Slug)) File.WriteAllText(Path.Combine(journal.Directory, UpdatePaths.HealthyMarker), "verified");
             journal.Save(UpdatePhase.Verified);
             return Commit(journal);
         }
@@ -607,7 +607,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         try
         {
             // a pending update that cannot be read keeps its old backup, which is what the warning below is about too
-            var journals = new UpdateJournals(Path.Combine(projectRoot, ".godot/eplugin/updates"), message => host.Log(message +
+            var journals = new UpdateJournals(UpdatePaths.TransactionsOf(projectRoot), message => host.Log(message +
                 " (its backups are not refreshed: rolling it back may undo this update's project changes)"));
             foreach (var pending in journals.Read()
                          .Where(j => j.Id != finished.Id && j.State is UpdatePhase.Staged or UpdatePhase.Swapped or UpdatePhase.InterimBuilt))

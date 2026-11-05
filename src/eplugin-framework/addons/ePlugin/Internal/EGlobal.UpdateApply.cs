@@ -37,7 +37,7 @@ internal sealed partial class EGlobal
         get => _updateHost ??= new GodotUpdateHost(this);
         set => _updateHost = value;
     }
-    internal void InitializeUpdateJournals() => _updateJournals = new(Path.Combine(UpdateProjectRoot, ".godot/eplugin/updates"), message => _ePluginContext?.Logger.Error(message));
+    internal void InitializeUpdateJournals() => _updateJournals = new(UpdatePaths.TransactionsOf(UpdateProjectRoot), message => _ePluginContext?.Logger.Error(message));
     private UpdateApplier Applier()
     {
         if (_stateStore is null || _updateCache is null) throw new InvalidOperationException("Update system is not initialized.");
@@ -225,7 +225,7 @@ internal sealed partial class EGlobal
     {
         if (_updateJournals is null || _stateStore is null) return;
         // Cache is needed by recovery before the first scheduled check.
-        _updateCache ??= new UpdateStateStore(Path.Combine(UpdateProjectRoot, ".godot/eplugin/update-state.json"), m => _ePluginContext?.Logger?.Warn(m));
+        _updateCache ??= new UpdateStateStore(UpdatePaths.CacheOf(UpdateProjectRoot), m => _ePluginContext?.Logger?.Warn(m));
         _updateCache.Load();
         // A batch is staged within minutes, so a folder this old without a journal is no longer in use.
         foreach (var folder in _updateJournals.AbandonedStaging(DateTime.UtcNow - TimeSpan.FromHours(6)))

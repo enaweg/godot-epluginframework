@@ -65,13 +65,21 @@ internal sealed class PackageFetcher(UpdateHttp http, IGitRunner git, IGitRunner
             if (result.Count == 0) throw new InvalidDataException(string.Join(" ", refused.Select(r => r.Reason)));
             return new(result, refused);
         }
-        catch { AddonFiles.DeleteTree(transactionDirectory); throw; }
+        catch
+        {
+            // The batch failed for its own reason; a staging folder that cannot be deleted now is deleted at a later start
+            // (UpdateJournals.AbandonedStaging).
+            try { AddonFiles.DeleteTree(transactionDirectory); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            throw;
+        }
     }
 
     private async Task<ValidatedPackage> StageAsync(UpdateCandidate candidate, IReadOnlyList<PluginUpdateTarget> targets, string stage,
         string transactionDirectory, IProgress<double> relay, bool allowDowngrade, bool allowReinstall, CancellationToken ct)
     {
-        var target = targets.First(t => t.Slug == candidate.Slug);
+        var target = targets.FirstOrDefault(t => t.Slug == candidate.Slug)
+            ?? throw new InvalidOperationException("the plugin is no longer installed and enabled; check for updates again.");
         Directory.CreateDirectory(Path.GetDirectoryName(stage)!);
         if (candidate.Package is ZipPackageRef zip)
         {
