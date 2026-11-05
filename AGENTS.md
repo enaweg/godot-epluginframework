@@ -72,9 +72,9 @@ Alternative test runner: gdUnit4's `src/eplugin-framework/addons/gdUnit4/runtest
   version matches. `EGlobal` re-evaluates them in both directions (enabling a plugin applies newly
   satisfied recipes, disabling one reverses the recipes that depended on it), so activation order does
   not matter. They never enable a plugin, never fail an activation, and never cascade a disable.
-- Recipe changes should go through the `IDotnetCli` abstraction; new CLI operations must be
-  implemented for both .NET 9 and .NET 10 CLI implementations (`DotnetCli9`, `DotnetCli10`), with arguments checked
-  in `IDotnetCliTests`. Pass arguments one per element and unquoted, and project paths through `ProjectFile`.
+- Recipe changes should go through the `IDotnetCli` abstraction; new CLI operations are
+  implemented once in `DotnetCliBase`; only argument lists that differ between the .NET 9 and .NET 10 CLIs are
+  abstract and implemented in both (`DotnetCli9`, `DotnetCli10`). Check the arguments of both in `IDotnetCliTests`. Pass arguments one per element and unquoted, and project paths through `ProjectFile`.
 - Read `docs/internals/update-system.md` before changing the update system under `Internal/Update/`.
 - `EGlobal` reaches the editor only through `IEditorHost`; lifecycle tests use `tests/LifecycleFixture.cs` with a fake
   editor. Tests use `internal` members, not reflection.

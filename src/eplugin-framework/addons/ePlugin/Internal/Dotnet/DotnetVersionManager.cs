@@ -12,7 +12,6 @@ namespace Enaweg.Plugin.Internal.Dotnet;
 [Tool]
 internal sealed class DotnetVersionManager : ExecuteCliBase
 {
-    private const string CmdDotNet = "dotnet";
     private static readonly object ProbeLock = new();
     // Starting dotnet takes a while; Initialize, SwitchLogging and early recovery all ask for it.
     private static Probe? _cachedProbe;

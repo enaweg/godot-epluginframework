@@ -46,6 +46,9 @@ internal sealed class GodotProcessRunner : IProcessRunner
 
 internal abstract class ExecuteCliBase(ILogger? logger, bool enableDebugLogging, IProcessRunner? runner = null)
 {
+    /// <summary>The dotnet executable, found on <c>PATH</c>.</summary>
+    protected const string CmdDotNet = "dotnet";
+
     private readonly IProcessRunner _runner = runner ?? GodotProcessRunner.Instance;
 
     /// <summary>The project directory, which the debug log shortens to <c>&lt;project&gt;</c>; null for commands without one.</summary>
