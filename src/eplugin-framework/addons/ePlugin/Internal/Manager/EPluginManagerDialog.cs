@@ -216,8 +216,14 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         Title = PluginManagerViewModel.WindowTitle(ProjectSettings.GetSetting("application/config/name").AsString(),
             ProjectSettings.GlobalizePath("res://"));
         // Reading the plugins while they change would record plain plugins in the middle of the operation, e.g. when the
-        // manager was closed during it; the list shown last is read again once the operation is done.
-        if (_model is not null && (_global.IsChangingPlugins || AssemblyReload.IsPending)) { _refreshWhenIdle = true; Render(); }
+        // manager was closed during it; the list shown last is read again once the operation is done. A manager opened
+        // for the first time then (e.g. reopened right after an assembly reload) shows an empty list until then.
+        if (_global.IsChangingPlugins || AssemblyReload.IsPending)
+        {
+            _model ??= new([], [], [], null, _ => []);
+            _refreshWhenIdle = true;
+            Render();
+        }
         else Refresh();
         PopupCenteredClamped(Size, 0.9f);
         _tree.GrabFocus();

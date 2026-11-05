@@ -278,6 +278,31 @@ public class PluginManagerDialogTests : IDisposable
     }
 
     [TestCase]
+    public void AManagerOpenedForTheFirstTimeWhileAReloadIsDueReadsThePluginsAfterIt()
+    {
+        // the manager an assembly reload reopens is new: it has no list it could show instead
+        var fresh = EPluginManagerDialog.Create(_fixture.Global, CancellationToken.None);
+        Root.AddChild(fresh);
+        try
+        {
+            AssemblyReload.Simulated = true;
+            fresh.Open();
+            Assertions.AssertInt(fresh.GetNode<Tree>("%PluginTree").GetRoot().GetChildCount()).IsEqual(0);
+            AssemblyReload.Simulated = null;
+
+            fresh._Process(1);
+
+            Assertions.AssertBool(fresh.GetNode<Tree>("%PluginTree").GetRoot().GetChildren()
+                .Any(i => i.GetMetadata(NameColumn).AsString() == "tool")).IsTrue();
+        }
+        finally
+        {
+            AssemblyReload.Simulated = null;
+            fresh.Free();
+        }
+    }
+
+    [TestCase]
     public async Task AFailedPluginIsRetriedOrDisabledFromNeedsAttention()
     {
         _fixture.AddEPlugin("broken", b => b.AddNuget("Bad.Package"));
