@@ -25,7 +25,7 @@ internal sealed partial class EGlobal
 
         if (FinishTransition())
         {
-            RefreshEditor(rebuild: false);
+            RefreshEditor();
         }
     }
 
@@ -208,7 +208,7 @@ internal sealed partial class EGlobal
 
             if (FinishTransition())
             {
-                RefreshEditor(rebuild: false);
+                RefreshEditor();
             }
         }
     }
@@ -397,7 +397,7 @@ internal sealed partial class EGlobal
         FailTransition(code);
         DisableFailedLater(failed);
         // nothing of the failed activation is built: it is retried as a whole
-        RefreshEditor(rebuild: false);
+        RefreshEditor();
     }
 
     /// <summary>
@@ -422,7 +422,7 @@ internal sealed partial class EGlobal
         {
             FailTransition("cannot_record_participant", RecordFailedDetail);
             DisableFailedLater(failed);
-            RefreshEditor(rebuild: false);
+            RefreshEditor();
             return;
         }
 
@@ -434,7 +434,7 @@ internal sealed partial class EGlobal
         DisableFailedLater(failed);
         if (FinishTransition())
         {
-            RefreshEditor(rebuild: false);
+            RefreshEditor();
         }
     }
 

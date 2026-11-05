@@ -179,7 +179,7 @@ internal sealed partial class EGlobal
 
             if (FinishTransition())
             {
-                RefreshEditor(rebuild: false);
+                RefreshEditor();
             }
         }
     }
@@ -239,7 +239,7 @@ internal sealed partial class EGlobal
 
         if (FinishTransition())
         {
-            RefreshEditor(rebuild: false);
+            RefreshEditor();
         }
     }
 
