@@ -18,15 +18,7 @@ internal static class UpdateSettings
         // ePlugin's built-in list of add-on update sites, see KnownPlugins.
         Add("builtin_update_sites", true, Variant.Type.Bool);
     }
-    private static void Add(string name, Variant value, Variant.Type type, PropertyHint hint = PropertyHint.None, string hintString = "")
-    {
-        var key = "eplugin/updates/" + name;
-        if (!ProjectSettings.HasSetting(key)) ProjectSettings.SetSetting(key, value);
-        ProjectSettings.SetInitialValue(key, value);
-        ProjectSettings.AddPropertyInfo(new Godot.Collections.Dictionary
-        {
-            { "name", key }, { "type", (int)type }, { "hint", (int)hint }, { "hint_string", hintString }
-        });
-    }
+    private static void Add(string name, Variant value, Variant.Type type, PropertyHint hint = PropertyHint.None, string hintString = "") =>
+        EPluginSettings.Register("eplugin/updates/" + name, value, type, hint, hintString);
 }
 #endif
