@@ -208,7 +208,12 @@ internal static class UpdateRecovery
             if (Directory.Exists(entry)) Copy(entry, to); else AddonFiles.Overwrite(entry, to);
         }
     }
-    private static bool HasVersion(string path, string version) => File.ReadLines(path).Any(line => line.Trim() == "version=\"" + version + "\"" || line.Trim() == "version = \"" + version + "\"");
+    // read like the applier reads it, so recovery does not refuse what the applier accepts
+    private static bool HasVersion(string path, string version)
+    {
+        try { return PluginIni.Parse(File.ReadAllText(path)).GetValueOrDefault("version") == version; }
+        catch (InvalidDataException) { return false; }
+    }
     private static void Visibility(string addon, string slug, string path, bool show)
     {
         var prefix = "res://addons/" + slug + "/";
