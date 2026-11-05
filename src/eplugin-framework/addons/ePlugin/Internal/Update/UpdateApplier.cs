@@ -281,26 +281,14 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             {
                 var managed = journal.Plugins.Any(p => p.IsEPlugin);
                 if (!BuildPasses(journal, managed ? "interim" : "final"))
-                {
-                    var decision = Decision(journal);
-                    if (decision == "rollback") return Rollback(journal, "Build failed.");
-                    foreach (var plugin in journal.Plugins.Where(p => PluginKinds.Workflow(p).DisabledDuringSwap)) host.SetPlainEnabled(plugin.Slug, true);
-                    // The editor cannot load the new code, so the recipes are reconciled once the project builds again.
-                    journal.BeforeReconcile = true;
-                    journal.Failure = journal.KeptForProjectCode ? ProjectCodeFailure(journal)
-                        : (managed ? "Interim build failed" : "Plain C# addon build failed") + "; the assembly cannot reload until the project compiles.";
-                    if (decision == "ask") { journal.Save(UpdatePhase.AwaitingDecision); return UpdateOutcome.AwaitingDecision; }
-                    // Saved before Keep marks it kept: a Retry of a kept update the editor stopped between the two then still
-                    // reconciles its recipes, rather than committing it without them.
-                    journal.Save();
-                    return Keep(journal);
-                }
+                    return BuildFailed(journal, "Build failed.", beforeReconcile: true,
+                        (managed ? "Interim build failed" : "Plain C# addon build failed") + "; the assembly cannot reload until the project compiles.");
                 journal.Save(UpdatePhase.InterimBuilt);
-                foreach (var plugin in journal.Plugins.Where(p => PluginKinds.Workflow(p).DisabledDuringSwap)) host.SetPlainEnabled(plugin.Slug, true);
+                RestorePlainPlugins(journal);
                 host.RequestReload(journal);
                 return UpdateOutcome.AwaitingReload;
             }
-            foreach (var plugin in journal.Plugins.Where(p => PluginKinds.Workflow(p).DisabledDuringSwap)) host.SetPlainEnabled(plugin.Slug, true);
+            RestorePlainPlugins(journal);
             journal.Save(UpdatePhase.InterimBuilt);
             return Resume(journal);
         }
@@ -314,22 +302,14 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             journal.Save(UpdatePhase.Reconciling);
             host.Reconcile(journal, false);
             journal.Save(UpdatePhase.Reconciled);
-            foreach (var plugin in journal.Plugins.Where(p => PluginKinds.Workflow(p).DisabledDuringSwap))
-                if (!host.IsEnabled(plugin.Slug)) host.SetPlainEnabled(plugin.Slug, true);
+            RestorePlainPlugins(journal, onlyDisabled: true);
             host.Scan();
             // A plain C# batch already passed its single build gate. Managed recipes need a final build, unless reconciling
             // left the build inputs of the interim build the editor runs unchanged.
             var managedCSharp = journal.Plugins.Any(p => p.IsEPlugin && p.ContainsCSharp);
             var finalBuild = managedCSharp && (host.RestartAlways || !RunsInterimBuild(journal) || ChangedSinceInterimBuild(journal));
             if (managedCSharp && !finalBuild) host.Log("The updated recipes do not change the build; the editor keeps the interim build without another restart.");
-            if (finalBuild && !BuildPasses(journal, "final"))
-            {
-                var decision = Decision(journal);
-                if (decision != "rollback") journal.Failure = journal.KeptForProjectCode ? ProjectCodeFailure(journal) : "Final build failed.";
-                if (decision == "ask") { journal.Save(UpdatePhase.AwaitingDecision); return UpdateOutcome.AwaitingDecision; }
-                if (decision == "keep") return Keep(journal);
-                return Rollback(journal, "Final build failed.");
-            }
+            if (finalBuild && !BuildPasses(journal, "final")) return BuildFailed(journal, "Final build failed.", beforeReconcile: false, "Final build failed.");
             if (journal.Plugins.Any(p => !host.Verify(p))) return Rollback(journal, "Updated plugin verification failed.");
             if (journal.Plugins.Any(p => p.Slug == Framework.Slug)) File.WriteAllText(Path.Combine(journal.Directory, "healthy.marker"), "verified");
             journal.Save(UpdatePhase.Verified);
@@ -473,7 +453,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                     journal.Save();
                 }
             }
-            foreach (var plugin in journal.Plugins.Where(p => PluginKinds.Workflow(p).DisabledDuringSwap)) host.SetPlainEnabled(plugin.Slug, plugin.WasEnabled);
+            RestorePlainPlugins(journal, rollback: true);
             host.Scan();
             if (journal.Plugins.Any(p => p.ContainsCSharp) && Build(journal, "rollback").ExitCode != 0) throw new IOException("Restored project failed to build.");
             if (store.LocalAttempts.Any(a => a.AttemptId == journal.AttemptId) && !store.TryAbandonAttempt(journal.AttemptId)) throw new IOException("Cannot clear the rollback marker.");
@@ -600,6 +580,45 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
     private static bool ChangedSinceInterimBuild(UpdateJournal journal) =>
         journal.Plugins.Any(p => p.Preserved.Count > 0) ||
         journal.Recipes.Values.Any(r => r.Target is null || RecipeReconciler.ChangesBuild(r.Old, r.Target));
+
+    /// <summary>
+    /// Enables the plugins whose kind is disabled while its files are swapped (<see cref="PluginKindWorkflow.DisabledDuringSwap"/>)
+    /// again; a rollback restores whether each was enabled before the update instead.
+    /// </summary>
+    /// <param name="onlyDisabled">Leaves a plugin that is enabled already alone.</param>
+    private void RestorePlainPlugins(UpdateJournal journal, bool rollback = false, bool onlyDisabled = false)
+    {
+        foreach (var plugin in journal.Plugins.Where(p => PluginKinds.Workflow(p).DisabledDuringSwap))
+        {
+            if (onlyDisabled && host.IsEnabled(plugin.Slug)) continue;
+            host.SetPlainEnabled(plugin.Slug, !rollback || plugin.WasEnabled);
+        }
+    }
+
+    /// <summary>
+    /// What becomes of a transaction whose build failed, as the build-failure policy decides (<see cref="Decision"/>):
+    /// rolled back for <paramref name="rollbackReason"/>, left for the user to decide, or kept with
+    /// <paramref name="failure"/> (or the project's own errors, when only they failed) as the reason.
+    /// </summary>
+    /// <param name="beforeReconcile">The interim or plain C# build failed: the editor cannot load the new code, so the
+    /// recipes are reconciled once the project builds again. The plain plugins are enabled again first, and the journal
+    /// is saved before <see cref="Keep"/> marks it kept, so a Retry of a kept update the editor stopped between the two
+    /// still reconciles its recipes rather than committing it without them.</param>
+    private UpdateOutcome BuildFailed(UpdateJournal journal, string rollbackReason, bool beforeReconcile, string failure)
+    {
+        var decision = Decision(journal);
+        if (decision == "rollback") return Rollback(journal, rollbackReason);
+        if (beforeReconcile)
+        {
+            RestorePlainPlugins(journal);
+            journal.BeforeReconcile = true;
+        }
+        journal.Failure = journal.KeptForProjectCode ? ProjectCodeFailure(journal) : failure;
+        if (decision == "ask") { journal.Save(UpdatePhase.AwaitingDecision); return UpdateOutcome.AwaitingDecision; }
+        if (decision != "keep") return Rollback(journal, rollbackReason);
+        if (beforeReconcile) journal.Save();
+        return Keep(journal);
+    }
 
     private BuildOutcome Build(UpdateJournal journal, string name)
     {
