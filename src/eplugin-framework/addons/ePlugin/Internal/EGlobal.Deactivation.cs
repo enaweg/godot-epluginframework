@@ -71,38 +71,11 @@ internal sealed partial class EGlobal
         }
 
         // disable plugins dependent on this one
-        var pluginsToDisable = new List<PluginContext>();
-        foreach (var plugin in _contexts)
+        var pluginsToDisable = ActivatedDependantsOf(context.Slug, out var unreadable);
+        if (unreadable is not null)
         {
-            if (plugin == context)
-            {
-                continue;
-            }
-
-            if (plugin.State is not EEditorPluginState.Activated)
-            {
-                continue;
-            }
-
-            if (plugin.Plugin is null)
-            {
-                // not an ePlugin plugin.
-                continue;
-            }
-
-            if (!TryEnsureRecipe(plugin, scan: true))
-            {
-                FailTransition("dependent_recipe_creation_failed");
-                return;
-            }
-
-            var isDependant = plugin.Builder.PluginRecipe.PluginDependencies.Any(d => d.Slug == context.Slug);
-            if (!isDependant)
-            {
-                continue;
-            }
-
-            pluginsToDisable.Add(plugin);
+            FailTransition("dependent_recipe_creation_failed");
+            return;
         }
 
         // A dependant the editor already disabled runs no DisableEPlugin that would resume this plugin, e.g. because its
@@ -261,6 +234,28 @@ internal sealed partial class EGlobal
         FailWaitingPlugins($"Plugin dependency {slug} was disabled while {names} waited for it to activate. " +
                            $"Enable {slug} again and retry, or disable {names}.", "dependency_disabled");
         return true;
+    }
+
+    /// <summary>
+    /// The activated ePlugins whose recipe requires <paramref name="slug"/> as a hard dependency. A recipe that cannot be
+    /// read is logged, and the first such plugin is <paramref name="unreadable"/>; the caller decides what that means.
+    /// </summary>
+    private List<PluginContext> ActivatedDependantsOf(string slug, out PluginContext? unreadable)
+    {
+        unreadable = null;
+        var dependants = new List<PluginContext>();
+        foreach (var plugin in _contexts.Where(c => c.Slug != slug && c.Plugin is not null && c.State == EEditorPluginState.Activated).ToArray())
+        {
+            if (!TryEnsureRecipe(plugin, scan: true))
+            {
+                unreadable ??= plugin;
+                continue;
+            }
+
+            if (plugin.Builder.PluginRecipe.PluginDependencies.Any(d => d.Slug == slug)) dependants.Add(plugin);
+        }
+
+        return dependants;
     }
 
     /// <summary>Takes a plugin off the plugins that wait for the framework to be initialized.</summary>

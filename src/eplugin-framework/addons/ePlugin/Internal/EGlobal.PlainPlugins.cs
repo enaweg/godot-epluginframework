@@ -170,10 +170,10 @@ internal sealed partial class EGlobal
         _contexts.RemoveAll(c => c.Slug == slug && c.Plugin is null);
         // resumed, a plugin still waiting for another dependency would enable this one again
         FailPluginsWaitingFor(slug);
-        var dependants = _contexts.Where(c => c.Plugin is not null && c.State == EEditorPluginState.Activated &&
-                                              RecipeOf(c.Slug)?.PluginDependencies.Any(d => d.Slug == slug) == true)
-            .ToArray();
-        if (dependants.Length == 0 && !PluginsWithOptionalDependencyOn(slug).Any())
+        // The plugin is gone already, so nothing is refused for a dependant whose recipe cannot be read (it is logged); only
+        // disabling an ePlugin itself can still be stopped by one.
+        var dependants = ActivatedDependantsOf(slug, out _);
+        if (dependants.Count == 0 && !PluginsWithOptionalDependencyOn(slug).Any())
         {
             return;
         }
