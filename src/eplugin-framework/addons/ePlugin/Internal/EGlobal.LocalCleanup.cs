@@ -36,7 +36,7 @@ internal sealed partial class EGlobal
     }
 
     /// <summary>Checks the sizes once the startup indexing and update check are done.</summary>
-    internal void ScheduleCleanupCheck() => Post(() => _cleanupCheckDue = true);
+    internal void ScheduleCleanupCheck() => PostForInstance(() => _cleanupCheckDue = true);
 
     /// <summary>
     /// The local directory to suggest a cleanup for, at most once per scheduled check; null while plugins change or

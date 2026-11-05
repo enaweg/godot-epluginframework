@@ -132,6 +132,7 @@ internal sealed partial class UpdateFailureDialog : AcceptDialog, ISerialization
     private void QueueWindowIcon() => CallDeferred(nameof(RefreshWindowIcon));
     private void RefreshWindowIcon() => EditorWindows.ApplyIcon(this);
 
-    public void Open() { PopupCentered(); (_projectCode && _keep is not null ? _keep : GetOkButton()).GrabFocus(); }
+    /// <summary>Opens above whatever exclusive editor window is open, e.g. Project Settings or the ePlugin Manager.</summary>
+    public void Open() { EditorWindows.Popup(this); (_projectCode && _keep is not null ? _keep : GetOkButton()).GrabFocus(); }
 }
 #endif

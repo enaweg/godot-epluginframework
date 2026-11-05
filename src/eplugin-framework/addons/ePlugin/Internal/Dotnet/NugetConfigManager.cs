@@ -276,7 +276,8 @@ internal static partial class NugetConfigManager
         var fullSourcePath = Path.GetFullPath(Path.Combine(root, isResource ? rawSource[projectScheme.Length..] : rawSource));
 
         var relative = Path.GetRelativePath(root, fullSourcePath);
-        if (relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative))
+        // ".." alone or followed by a separator leaves the project; a folder named "..feed" inside it does not
+        if (relative == ".." || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) || Path.IsPathRooted(relative))
         {
             // outside the project tree; cannot be represented portably.
             return null;

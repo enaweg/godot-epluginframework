@@ -198,6 +198,14 @@ public class UpdatePackageTests
         catch (IOException ex) { Assertions.AssertString(ex.Message).Contains("is a link"); }
         Assertions.AssertBool((File.GetAttributes(installed) & FileAttributes.ReparsePoint) != 0).IsTrue();
         Assertions.AssertBool(Directory.Exists(stage)).IsTrue();
+        // a rollback does not delete through the link either
+        try
+        {
+            AddonFolderSwap.Instance.Restore(installed, stage, Path.Combine(_root, "discarded"));
+            throw new InvalidOperationException("A linked plugin folder was restored.");
+        }
+        catch (IOException ex) { Assertions.AssertString(ex.Message).Contains("is a link"); }
+        Assertions.AssertBool(File.Exists(Path.Combine(checkout, "plugin.gd"))).IsTrue();
     }
 
     [TestCase]
@@ -419,6 +427,17 @@ public class UpdatePackageTests
         File.WriteAllText(Path.Combine(staged, "Code.cs.uid"), "uid://author");
         UidMap.Restore(Path.Combine(_root, "plugin"), map);
         Assertions.AssertString(File.ReadAllText(Path.Combine(staged, "Code.cs.uid"))).IsEqual("uid://author");
+    }
+
+    [TestCase]
+    public void AHiddenAndAShownUidOfTheSameVisiblePathKeepTheShownOne()
+    {
+        var backup = Path.Combine(_root, "backup");
+        Directory.CreateDirectory(Path.Combine(backup, "src")); Directory.CreateDirectory(Path.Combine(backup, ".src"));
+        File.WriteAllText(Path.Combine(backup, ".src/Code.cs.uid"), "uid://hidden");
+        File.WriteAllText(Path.Combine(backup, "src/Code.cs.uid"), "uid://shown");
+        var map = UidMap.Collect(backup);
+        Assertions.AssertString(map["src/Code.cs.uid"]).IsEqual("uid://shown");
     }
 
     [TestCase]

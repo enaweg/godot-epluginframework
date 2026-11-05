@@ -124,6 +124,14 @@ public class UpdateRecoveryTests
         Assertions.AssertObject(Recover()).IsEqual(UpdateRecovery.Outcome.ManualRepair);
     }
     [TestCase]
+    public void AMissingBackupOfAPluginBackAtItsOldVersionIsReadLikeTheApplierReadsIt()
+    {
+        // restored already: the version is read from plugin.cfg whatever its spacing or a comment after it
+        File.WriteAllText(Path.Combine(_root, "addons/ePlugin/plugin.cfg"), "[plugin]\nversion =  \"1.0.0\" ; restored\n");
+        _journal.StartCount = 1; _journal.Save(); Directory.Delete(_journal.Backup("ePlugin"), true);
+        Assertions.AssertObject(Recover()).IsEqual(UpdateRecovery.Outcome.Restart);
+    }
+    [TestCase]
     public void FailedRecoveryBuildRetainsMarkerAndBackupsForRepeatableRetry()
     {
         _journal.StartCount = 1; _journal.Save();

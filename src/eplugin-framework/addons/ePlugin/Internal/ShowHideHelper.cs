@@ -41,15 +41,16 @@ internal static class ShowHideHelper
         if (shown.Exists && hidden.Exists) throw Conflict(shown, hidden, baseDirectory);
         if (shown.Exists)
         {
-            shown.Attributes = FileAttributes.Normal;
+            SetHidden(shown, false);
             plugin.Logger?.Log($"Already shown: <plugin>{Relative(shown, baseDirectory)}");
         }
         else if (hidden.Exists)
         {
             RefuseFixedExtensions(hidden, baseDirectory);
-            hidden.Attributes = FileAttributes.Normal;
             plugin.Logger?.Log($"Showing: <plugin>{Relative(hidden, baseDirectory)} (to <plugin>{Relative(shown, baseDirectory)})");
+            // renamed before its attribute changes, so a rename that fails leaves it hidden in both ways
             Move(hidden, shown.FullName);
+            SetHidden(shown, false);
             if (host is null) return;
             // The editor's next file system scan would load them too; loading them now lets the plugin use them at once.
             foreach (var (file, _) in Extensions(shown).Where(e => !host.IsExtensionLoaded(e.File)))
@@ -79,26 +80,39 @@ internal static class ShowHideHelper
         if (shown.Exists && hidden.Exists) throw Conflict(shown, hidden, baseDirectory);
         if (hidden.Exists)
         {
-            hidden.Attributes = FileAttributes.Hidden;
+            SetHidden(hidden, true);
             plugin.Logger?.Log($"Already hidden: <plugin>{Relative(hidden, baseDirectory)}");
         }
         else if (shown.Exists)
         {
-            if (host is not null)
+            var unloaded = new List<string>();
+            try
             {
-                var loaded = Extensions(shown).Where(e => host.IsExtensionLoaded(e.File)).ToArray();
-                var fixedExtension = loaded.FirstOrDefault(e => e.Config is not { Reloadable: true }).File;
-                if (fixedExtension is not null) throw FixedExtension(fixedExtension, baseDirectory);
-                foreach (var (file, _) in loaded)
+                if (host is not null)
                 {
-                    if (!host.UnloadExtension(file))
-                        throw new InvalidOperationException($"Godot could not unload the GDExtension <plugin>{Relative(new FileInfo(file), baseDirectory)}, so its directory cannot be hidden.");
-                    plugin.Logger?.Log($"Unloaded the GDExtension <plugin>{Relative(new FileInfo(file), baseDirectory)}");
+                    var loaded = Extensions(shown).Where(e => host.IsExtensionLoaded(e.File)).ToArray();
+                    var fixedExtension = loaded.FirstOrDefault(e => e.Config is not { Reloadable: true }).File;
+                    if (fixedExtension is not null) throw FixedExtension(fixedExtension, baseDirectory);
+                    foreach (var (file, _) in loaded)
+                    {
+                        if (!host.UnloadExtension(file))
+                            throw new InvalidOperationException($"Godot could not unload the GDExtension <plugin>{Relative(new FileInfo(file), baseDirectory)}, so its directory cannot be hidden.");
+                        unloaded.Add(file);
+                        plugin.Logger?.Log($"Unloaded the GDExtension <plugin>{Relative(new FileInfo(file), baseDirectory)}");
+                    }
                 }
+                plugin.Logger?.Log($"Hiding: <plugin>{Relative(shown, baseDirectory)} (to <plugin>{Relative(hidden, baseDirectory)})");
+                // renamed before its attribute changes, so a rename that fails leaves it shown in both ways
+                Move(shown, hidden.FullName);
             }
-            shown.Attributes = FileAttributes.Hidden;
-            plugin.Logger?.Log($"Hiding: <plugin>{Relative(shown, baseDirectory)} (to <plugin>{Relative(hidden, baseDirectory)})");
-            Move(shown, hidden.FullName);
+            catch when (host is not null && unloaded.Count > 0)
+            {
+                // the directory stays shown, so what was unloaded for hiding it is loaded again
+                foreach (var file in unloaded.Where(f => !host.LoadExtension(f)))
+                    plugin.Logger?.Warn($"Godot could not load the GDExtension <plugin>{Relative(new FileInfo(file), baseDirectory)} again; it tries again when it scans the project.");
+                throw;
+            }
+            SetHidden(shown, true);
         }
         else
         {
@@ -177,6 +191,17 @@ internal static class ShowHideHelper
 
     private static string Relative(FileSystemInfo directory, string? baseDirectory) =>
         baseDirectory is null ? directory.FullName : directory.FullName.Replace(baseDirectory, "");
+
+    /// <summary>
+    /// Sets or clears the Windows hidden attribute of a managed directory and keeps its other attributes (elsewhere the
+    /// leading dot alone hides it).
+    /// </summary>
+    private static void SetHidden(DirectoryInfo directory, bool hidden)
+    {
+        // the info may still describe the directory before it was renamed onto this path
+        directory.Refresh();
+        directory.Attributes = hidden ? directory.Attributes | FileAttributes.Hidden : directory.Attributes & ~FileAttributes.Hidden;
+    }
 
     /// <summary>Renames a managed directory, telling what usually keeps it from being renamed when that fails.</summary>
     private static void Move(DirectoryInfo directory, string destination)

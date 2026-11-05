@@ -181,6 +181,16 @@ internal sealed partial class EGlobal
     /// <summary>Runs <paramref name="action"/> on the editor thread in a later frame. Callable from any thread.</summary>
     internal static void Post(Action action) => Posted.Enqueue(action);
 
+    // Set by Detach: the framework was disabled and Godot freed its plugin.
+    private bool _detached;
+
+    /// <summary>
+    /// Like <see cref="Post"/>, for work on this instance's plugins: skipped when the framework was disabled before it
+    /// ran. The queue outlives the instance, and an instance created when the framework is enabled again picks up the
+    /// state itself while it initializes.
+    /// </summary>
+    internal void PostForInstance(Action action) => Post(() => { if (!_detached) action(); });
+
     /// <summary>Drops the work posted so far, as an assembly reload does.</summary>
     internal static void DiscardPosted() => Posted.Clear();
 

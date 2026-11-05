@@ -42,7 +42,9 @@ internal sealed partial class EGlobal
         }
 
         var names = string.Join(", ", pending.Select(e => e.Name));
-        if (_toCheckEnable.Count > 0)
+        // Only a plugin waited for is enabled by a chain: an unrelated plugin enabled while others wait (e.g. before the
+        // stall timeout fails them) gets its review like any other.
+        if (PluginsWaitingFor(context.Slug).Any())
         {
             // A dependency whose license was not reviewed with the plugin that enables it, because its recipe could
             // not be read beforehand. The waiting chain cannot pause for a dialog, so it fails like a missing dependency.
@@ -71,7 +73,7 @@ internal sealed partial class EGlobal
         // Godot is still running this plugin's _EnablePlugin. Disabling it right away would free the plugin inside its
         // own callback. Deactivated makes the DisableEPlugin it triggers a no-op, as nothing was installed.
         context.State = EEditorPluginState.Deactivated;
-        Post(() =>
+        PostForInstance(() =>
         {
             if (_host.IsPluginEnabled(context.Slug))
             {
@@ -501,7 +503,7 @@ internal sealed partial class EGlobal
         if (toggles.Length > 0)
         {
             RememberLicenseDecisions(toggles);
-            Post(ApplyLicenseDecisions);
+            PostForInstance(ApplyLicenseDecisions);
         }
     }
 
@@ -550,7 +552,7 @@ internal sealed partial class EGlobal
     /// <summary>Applies the decisions of a license review that an assembly reload interrupted; called by Initialize.</summary>
     internal void ResumeLicenseDecisions()
     {
-        if (Engine.Singleton.HasMeta(LicenseDecisionsMeta)) Post(ApplyLicenseDecisions);
+        if (Engine.Singleton.HasMeta(LicenseDecisionsMeta)) PostForInstance(ApplyLicenseDecisions);
     }
 
     /// <summary>
@@ -561,7 +563,7 @@ internal sealed partial class EGlobal
     {
         if (AssemblyReload.IsPending)
         {
-            Post(ApplyLicenseDecisions);
+            PostForInstance(ApplyLicenseDecisions);
             return;
         }
 

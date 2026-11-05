@@ -253,6 +253,9 @@ public class UpdateFlowTests : IDisposable
         Assertions.AssertObject(failed.Step).IsEqual(InstallStep.Failed);
         Assertions.AssertBool(failed.IsError).IsTrue();
         Assertions.AssertString(failed.Notice).IsEqual("Update failed: no space left");
+        // installing had begun, so the list is read again: installed versions may have changed
+        Assertions.AssertBool(failed.Refresh).IsTrue();
+        Assertions.AssertBool(cancel.Refresh).IsFalse();
         // a refusal before the transaction leaves no journal, so the staged batch is dropped
         Assertions.AssertObject(flow.Staged).IsNull();
         Assertions.AssertBool(Directory.Exists(_host.StagingDirectory)).IsFalse();

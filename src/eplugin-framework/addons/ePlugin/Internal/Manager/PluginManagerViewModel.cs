@@ -1,6 +1,7 @@
 #if TOOLS
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -453,7 +454,6 @@ internal sealed class PluginManagerViewModel
         FindingSeverity.Error => TextColors.Error, FindingSeverity.Warning => TextColors.Warning, _ => TextColors.Info
     };
     internal static string Escape(string value) => value.Replace("[", "[lb]");
-    /// <summary>An http(s) URL without credentials that can be embedded in a BBCode url tag and opened in a browser.</summary>
     /// <summary>
     /// Scales the <c>[font_size]</c> of a plugin's BBCode page by the editor scale. Its sizes are pixels written for 100%,
     /// while the default font of the dialog is scaled, so a heading would otherwise be smaller than the text at 200%.
@@ -462,7 +462,11 @@ internal sealed class PluginManagerViewModel
         : FontSize.Replace(bbcode, m => $"[font_size={Math.Max(1, (int)Math.Round(int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture) * scale))}]");
     private static readonly Regex FontSize = new(@"\[font_size=(\d{1,4})\]", RegexOptions.CultureInvariant);
 
-    internal static bool IsWebUrl(string? value) =>
+    /// <summary>
+    /// An http(s) URL without credentials that can be embedded in a BBCode url tag and opened in a browser; the manager
+    /// opens no other links, from its details or its Release button.
+    /// </summary>
+    internal static bool IsWebUrl([NotNullWhen(true)] string? value) =>
         Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme is "https" or "http" && uri.UserInfo.Length == 0 &&
         value!.IndexOfAny(['[', ']']) < 0;
 }

@@ -65,6 +65,36 @@ public class ShowHideHelperTests : IDisposable
     }
 
     [TestCase]
+    public void TheHiddenAttributeFollowsTheRenameAndKeepsTheOthers()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var directory = Directory.CreateDirectory(Path.Combine(_root, ".src"));
+        directory.Attributes |= FileAttributes.NotContentIndexed;
+        ShowHideHelper.ShowDirectory(_context, Path.Combine(_root, ".src"));
+        var shown = File.GetAttributes(Path.Combine(_root, "src"));
+        Assertions.AssertBool(shown.HasFlag(FileAttributes.Hidden)).IsFalse();
+        Assertions.AssertBool(shown.HasFlag(FileAttributes.NotContentIndexed)).IsTrue();
+        ShowHideHelper.HideDirectory(_context, Path.Combine(_root, ".src"));
+        var hidden = File.GetAttributes(Path.Combine(_root, ".src"));
+        Assertions.AssertBool(hidden.HasFlag(FileAttributes.Hidden)).IsTrue();
+        Assertions.AssertBool(hidden.HasFlag(FileAttributes.NotContentIndexed)).IsTrue();
+    }
+
+    [TestCase]
+    public void AFailedRenameLeavesTheDirectoryInItsFormerState()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Directory.CreateDirectory(Path.Combine(_root, "src"));
+        // an open file keeps Windows from renaming the directory holding it
+        using (File.Open(Path.Combine(_root, "src", "locked.txt"), FileMode.Create, System.IO.FileAccess.ReadWrite, FileShare.None))
+        {
+            Assertions.AssertThrown(() => ShowHideHelper.HideDirectory(_context, Path.Combine(_root, ".src"))).IsInstanceOf<IOException>();
+        }
+        Assertions.AssertBool(Directory.Exists(Path.Combine(_root, "src"))).IsTrue();
+        Assertions.AssertBool(File.GetAttributes(Path.Combine(_root, "src")).HasFlag(FileAttributes.Hidden)).IsFalse();
+    }
+
+    [TestCase]
     public void BothFormsExistingFailsWithoutRenamingEither()
     {
         Directory.CreateDirectory(Path.Combine(_root, ".src"));

@@ -179,6 +179,8 @@ internal sealed partial record GDExtensionConfig(bool Reloadable, IReadOnlyList<
     {
         var tags = feature.Split('.');
         var os = tags.FirstOrDefault(t => !Architectures.Contains(t, StringComparer.Ordinal) && !BuildTags.Contains(t, StringComparer.Ordinal));
+        // Godot's linuxbsd feature tag names the same platform as linux (see IsEditorFeature)
+        if (os == "linuxbsd") os = "linux";
         var architecture = tags.FirstOrDefault(t => Architectures.Contains(t, StringComparer.Ordinal));
         var release = !tags.Any(t => t is "debug" or "editor" or "template_debug");
         return (os, architecture, release);

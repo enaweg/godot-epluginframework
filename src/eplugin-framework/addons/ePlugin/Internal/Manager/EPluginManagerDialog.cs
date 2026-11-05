@@ -216,8 +216,14 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         Title = PluginManagerViewModel.WindowTitle(ProjectSettings.GetSetting("application/config/name").AsString(),
             ProjectSettings.GlobalizePath("res://"));
         // Reading the plugins while they change would record plain plugins in the middle of the operation, e.g. when the
-        // manager was closed during it; the list shown last is read again once the operation is done.
-        if (_model is not null && (_global.IsChangingPlugins || AssemblyReload.IsPending)) { _refreshWhenIdle = true; Render(); }
+        // manager was closed during it; the list shown last is read again once the operation is done. A manager opened
+        // for the first time then (e.g. reopened right after an assembly reload) shows an empty list until then.
+        if (_global.IsChangingPlugins || AssemblyReload.IsPending)
+        {
+            _model ??= new([], [], [], null, _ => []);
+            _refreshWhenIdle = true;
+            Render();
+        }
         else Refresh();
         PopupCenteredClamped(Size, 0.9f);
         _tree.GrabFocus();
@@ -410,7 +416,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _detailsName.Text = row is null ? "No plugin selected" : PluginManagerViewModel.DetailsTitle(row.Plugin);
         _keptUpdate = row is null ? null : _global.KeptUpdate(row.Plugin.Slug);
         _detailsText.Text = row is null ? "Select a plugin to see its details." : PluginManagerViewModel.Describe(row, LicenseOf(row), WelcomeOf(row), _keptUpdate);
-        _release.Visible = IsSafeUrl(row?.Update?.Candidate.ReleaseUrl);
+        // the same links the details text offers
+        _release.Visible = PluginManagerViewModel.IsWebUrl(row?.Update?.Candidate.ReleaseUrl);
         _locationRow.Visible = row is not null;
         if (row is not null)
         {
@@ -529,11 +536,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private void OpenRelease()
     {
         var url = _selectedSlug is null ? null : _model.Find(_selectedSlug)?.Update?.Candidate.ReleaseUrl;
-        if (IsSafeUrl(url)) OS.ShellOpen(url);
+        if (PluginManagerViewModel.IsWebUrl(url)) OS.ShellOpen(url);
     }
-
-    private static bool IsSafeUrl(string? url) =>
-        Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == "https" && uri.UserInfo.Length == 0;
 
     /// <summary>A new local index can add or remove local versions and updates, so the lists are read again.</summary>
     private void LocalIndexChanged()

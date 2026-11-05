@@ -37,10 +37,13 @@ public class NugetConfigManagerTests
         NugetConfigManager.RegisterSource(Root, "plugin_a", "addons/a/.nuget", new NullLogger());
         NugetConfigManager.RegisterSource(Root, "plugin_b", Path.Combine(Root, "addons", "b", ".nuget"), new NullLogger());
         Assertions.AssertBool(NugetConfigManager.RegisterSource(Root, "plugin_c", "user://feed", new RecordingLogger(log, "nuget"))).IsTrue();
+        // inside the project, although its name starts with ..
+        NugetConfigManager.RegisterSource(Root, "plugin_d", "..feed", new NullLogger());
 
         var content = File.ReadAllText(ConfigPath);
         Assertions.AssertThat(content).Contains("value=\"./addons/a/.nuget\"");
         Assertions.AssertThat(content).Contains("value=\"./addons/b/.nuget\"");
+        Assertions.AssertThat(content).Contains("value=\"./..feed\"");
         Assertions.AssertThat(content).NotContains("plugin_c");
         Assertions.AssertInt(log.Count(l => l.Contains("is outside the project"))).IsEqual(1);
     }

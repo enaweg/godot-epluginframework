@@ -249,9 +249,7 @@ internal sealed partial class EGlobal
     /// </summary>
     private bool FailPluginsWaitingFor(string slug)
     {
-        var dependants = _toCheckEnable.Where(c => c.Slug != slug && c.IsRecipeCreated &&
-                                                   c.Builder.PluginRecipe.PluginDependencies.Any(d => d.Slug == slug))
-            .Select(c => c.Slug).Distinct(StringComparer.Ordinal).ToArray();
+        var dependants = PluginsWaitingFor(slug).Select(c => c.Slug).Distinct(StringComparer.Ordinal).ToArray();
         if (dependants.Length == 0)
         {
             return false;
@@ -262,6 +260,11 @@ internal sealed partial class EGlobal
                            $"Enable {slug} again and retry, or disable {names}.", "dependency_disabled");
         return true;
     }
+
+    /// <summary>The plugins on <see cref="_toCheckEnable"/> that wait for <paramref name="slug"/> as a hard dependency.</summary>
+    private IEnumerable<PluginContext> PluginsWaitingFor(string slug) =>
+        _toCheckEnable.Where(c => c.Slug != slug && c.IsRecipeCreated &&
+                                  c.Builder.PluginRecipe.PluginDependencies.Any(d => d.Slug == slug));
 
     /// <summary>Takes a plugin off the plugins that wait for the framework to be initialized.</summary>
     private void StopWaiting(PluginContext context)

@@ -248,6 +248,8 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
     /// </summary>
     public async Task<InstallOutcome> InstallAsync(InstallRequest request, InstallView view, CancellationToken ct)
     {
+        // once installing began, addon files and installed versions may have changed whatever happens next
+        var swapping = false;
         try
         {
             var first = request.Batch[0];
@@ -352,6 +354,7 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
                 return new(InstallStep.Canceled, "Update not installed: another plugin operation is running. Install it again once it is done. Addon files were not changed.");
             }
 
+            swapping = true;
             view.Status(request.VersionInstall ? "Installing the selected version..." : "Installing selected addons...");
             // Independent groups are installed one after another; a failing group is rolled back without the others.
             // Only an update started from the plugin's details asks whether to keep a version that does not build.
@@ -374,7 +377,7 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
             return new(InstallStep.Installed, PluginManagerViewModel.UpdateSummary(results, host.IsRestartPending, skipped, leftOut),
                 PluginManagerViewModel.AnyUpdateFailed(results) || skipped.Count > 0, refresh, log);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (!swapping)
         {
             Clear();
             return new(InstallStep.Canceled, "Download canceled. Addon files were not changed.");
@@ -384,7 +387,8 @@ internal sealed class UpdateFlow(IUpdateWorkflowHost host, Func<UpdateReview, Ta
             // A refusal before the transaction leaves no journal; keeping the staged batch would lock the selection and
             // make every later Update retry it. Clear keeps a directory that already has a journal.
             Clear();
-            return new(InstallStep.Failed, "Update failed: " + ex.Message, true);
+            // Failing while installing, the list is read again rather than only redrawn: versions may have changed.
+            return new(InstallStep.Failed, "Update failed: " + ex.Message, true, Refresh: swapping);
         }
     }
 

@@ -290,8 +290,9 @@ internal sealed partial class EGlobal
     internal static void Detach(EPluginPlugin plugin)
     {
         if (_instance is null || !ReferenceEquals(_instance._ePluginContext, plugin)) return;
-        // work still posted by the old instance finds it invalid instead of using the freed plugin
+        // work still posted by the old instance is skipped (PostForInstance) instead of using the freed plugin
         _instance._ePluginContext = null;
+        _instance._detached = true;
         _instance = null;
     }
 

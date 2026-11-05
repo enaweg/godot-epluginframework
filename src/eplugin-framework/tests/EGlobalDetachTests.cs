@@ -57,5 +57,33 @@ public class EGlobalDetachTests
             other.Free();
         }
     }
+
+    [TestCase]
+    public static void WorkPostedForADetachedInstanceIsSkipped()
+    {
+        var framework = new EPluginPlugin();
+        try
+        {
+            EGlobal.DiscardPosted();
+            var global = EGlobal.Instance;
+            global.Attach(framework, new GenericLoggerFactory(null), null);
+            var ran = 0;
+            global.PostForInstance(() => ran++);
+            EGlobal.RunPosted();
+            Assertions.AssertInt(ran).IsEqual(1);
+
+            // e.g. failed plugins to disable: the framework is disabled before the next frame runs it
+            global.PostForInstance(() => ran++);
+            EGlobal.Detach(framework);
+            EGlobal.RunPosted();
+
+            Assertions.AssertInt(ran).IsEqual(1);
+        }
+        finally
+        {
+            EGlobal.Detach(framework);
+            framework.Free();
+        }
+    }
 }
 #endif
