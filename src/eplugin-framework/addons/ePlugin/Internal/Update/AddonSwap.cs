@@ -94,20 +94,9 @@ internal sealed class AddonFileSwap : IAddonSwap
         AddonFiles.RefuseRepository(installed);
         var discarded = AddonFiles.RemoveContents(installed, discard);
         AddonFiles.CopyTree(backup, installed);
-        // Moved aside in one step before it is deleted: a delete that stops halfway would leave a partial backup that a
-        // repeated restore copies back over the complete one. The journal's folder is removed with whatever remains.
-        var restored = Restored(backup);
-        Directory.CreateDirectory(Path.GetDirectoryName(restored)!);
-        for (var n = 1; Directory.Exists(restored); n++) restored = Restored(backup) + "." + n;
-        AddonFiles.MoveDirectory(backup, restored);
-        try { AddonFiles.DeleteTree(restored); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        AddonFiles.DiscardBackup(backup);
         return discarded;
     }
-
-    /// <summary>Where a backup goes once it was restored: next to the journal's <c>backup</c> folder, not inside it.</summary>
-    internal static string Restored(string backup) =>
-        Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(backup))!, "restored", Path.GetFileName(backup));
 }
 
 internal static class AddonFiles
@@ -153,6 +142,25 @@ internal static class AddonFiles
         if (git is not null)
             throw new IOException($"{directory} holds the git repository {git}, which replacing its files would delete; update it with git.");
     }
+
+    /// <summary>
+    /// Removes a backup that was restored. It is moved aside in one step before it is deleted: a delete that stops halfway
+    /// would leave a partial backup that a repeated restore copies back over the complete one. What cannot be deleted yet
+    /// stays next to the journal's <c>backup</c> folder and is removed with the journal's folder.
+    /// </summary>
+    public static void DiscardBackup(string backup)
+    {
+        var restored = Restored(backup);
+        Directory.CreateDirectory(Path.GetDirectoryName(restored)!);
+        for (var n = 1; Directory.Exists(restored); n++) restored = Restored(backup) + "." + n;
+        MoveDirectory(backup, restored);
+        try { DeleteTree(restored); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+    }
+
+    /// <summary>Where a backup goes once it was restored: next to the journal's <c>backup</c> folder, not inside it.</summary>
+    private static string Restored(string backup) =>
+        Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(backup))!, "restored", Path.GetFileName(backup));
 
     /// <summary>Deletes a file when it exists, also a read-only one (see <see cref="DeleteTree"/>).</summary>
     public static void DeleteFile(string file)

@@ -176,12 +176,8 @@ internal static class UpdateRecovery
     private static void RestoreSubmodule(string installed, IReadOnlyList<string> preserved, string commit)
     {
         var git = new GitRunner(allowFileProtocol: true);
-        foreach (var path in preserved.OrderByDescending(p => p.Length))
-        {
-            var full = Inside(installed, path);
-            if (Directory.Exists(full)) AddonFiles.DeleteTree(full);
-            else AddonFiles.DeleteFile(full);
-        }
+        // Old files the interim bridge kept are untracked in the new version, and would keep the old one from being checked out.
+        InterimBridge.Remove(installed, preserved);
         if (SubmoduleGit.Head(git, installed).Equals(commit, StringComparison.OrdinalIgnoreCase)) return;
         if (SubmoduleGit.Changes(git, installed) is { Count: > 0 } changes) throw new IOException(SubmoduleSource.LocalChanges(installed, changes).Message);
         SubmoduleGit.Checkout(git, installed, commit);
