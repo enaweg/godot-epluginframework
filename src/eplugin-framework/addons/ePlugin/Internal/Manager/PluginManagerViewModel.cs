@@ -181,6 +181,17 @@ internal sealed class PluginManagerViewModel
     public static string VersionText(PluginInfo plugin) =>
         plugin.Version.Length == 0 && plugin.Kind == PluginKind.GDExtensionAddon ? "unknown" : plugin.Version;
 
+    /// <summary>
+    /// The manager's window title, followed by the project's name (else its folder's), so editors of similar projects
+    /// side by side can be told apart.
+    /// </summary>
+    public static string WindowTitle(string? projectName, string projectRoot)
+    {
+        var name = projectName?.Trim();
+        if (string.IsNullOrEmpty(name)) name = System.IO.Path.GetFileName(System.IO.Path.TrimEndingDirectorySeparator(projectRoot));
+        return string.IsNullOrEmpty(name) ? "ePlugin Manager" : $"ePlugin Manager - {name}";
+    }
+
     /// <summary>The heading of the details: the plugin's name followed by its installed version.</summary>
     public static string DetailsTitle(PluginInfo plugin) =>
         plugin.Version.Length > 0 ? $"{plugin.Name} {plugin.Version}"

@@ -399,6 +399,15 @@ public class PluginManagerViewModelTests
         Assertions.AssertString(PluginManagerViewModel.ListName(plugin with { Author = " " })).IsEqual("Alpha");
     }
     [TestCase]
+    public static void TheWindowTitleNamesTheProject()
+    {
+        Assertions.AssertString(PluginManagerViewModel.WindowTitle(" taxigame ", "/games/taxi/")).IsEqual("ePlugin Manager - taxigame");
+        // an unnamed project is named by its folder
+        Assertions.AssertString(PluginManagerViewModel.WindowTitle("", "/games/taxi2/")).IsEqual("ePlugin Manager - taxi2");
+        Assertions.AssertString(PluginManagerViewModel.WindowTitle(null, "/games/taxi2")).IsEqual("ePlugin Manager - taxi2");
+        Assertions.AssertString(PluginManagerViewModel.WindowTitle(" ", "/")).IsEqual("ePlugin Manager");
+    }
+    [TestCase]
     public static void TheStatusLineShowsTheLastAndTheNextScheduledCheck()
     {
         var culture = System.Globalization.CultureInfo.InvariantCulture;

@@ -212,6 +212,9 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     {
         if (!_keepNotice) ClearNotice();
         _keepNotice = false;
+        // Read on every open: the project may have been renamed in Project Settings since.
+        Title = PluginManagerViewModel.WindowTitle(ProjectSettings.GetSetting("application/config/name").AsString(),
+            ProjectSettings.GlobalizePath("res://"));
         // Reading the plugins while they change would record plain plugins in the middle of the operation, e.g. when the
         // manager was closed during it; the list shown last is read again once the operation is done.
         if (_model is not null && (_global.IsChangingPlugins || AssemblyReload.IsPending)) { _refreshWhenIdle = true; Render(); }
