@@ -68,7 +68,7 @@ internal sealed partial class EPluginManagerDialog
         if (Busy)
         {
             // Undo the click; the tree is rebuilt outside its own edit signal.
-            if (_reloadPending) _status.Text = ReloadNotice;
+            if (_reloadPending) _status.Text = PluginManagerViewModel.ReloadNotice;
             CallDeferred(MethodName.Render);
             return;
         }
@@ -248,7 +248,7 @@ internal sealed partial class EPluginManagerDialog
     {
         if (!AssemblyReload.IsPending) return false;
         CompletePluginOperation(refresh: false);
-        if (GodotObject.IsInstanceValid(this)) _status.Text = ReloadNotice;
+        if (GodotObject.IsInstanceValid(this)) _status.Text = PluginManagerViewModel.ReloadNotice;
         return true;
     }
 

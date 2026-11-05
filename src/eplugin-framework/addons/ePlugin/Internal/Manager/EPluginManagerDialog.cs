@@ -87,8 +87,6 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private bool _reloadPending;
     private double _reloadPoll;
     private const double ReloadPollSeconds = 0.25;
-    private const string ReloadNotice = "Waiting for the editor to load the rebuilt C# code...";
-    private const string ReloadFailedNotice = "The editor has not finished loading the rebuilt C# code. Restart the editor to continue.";
     // Rendering runs after async operations and on theme changes; keep their result until the next update operation.
     private string? _operationNotice;
     // The notice reports a failure: it is shown in the error area, where it wraps and can be selected and copied.
@@ -272,13 +270,10 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             item.SetCellMode(EnabledColumn, TreeItem.TreeCellMode.Check);
             item.SetChecked(EnabledColumn, plugin.Enabled);
             item.SetEditable(EnabledColumn, row.CanToggle && editable);
-            item.SetTooltipText(EnabledColumn, plugin.Kind == PluginKind.GDExtensionAddon ? "Godot always loads a GDExtension without plugin.cfg; there is nothing to enable or disable."
-                : !row.CanToggle ? "The plugin folder or its plugin.cfg is missing."
-                : plugin.Enabled ? "Enabled. Uncheck to disable the plugin." : "Disabled. Check to enable the plugin.");
+            item.SetTooltipText(EnabledColumn, PluginManagerViewModel.EnabledTooltip(row));
             item.SetText(NameColumn, PluginManagerViewModel.ListName(plugin));
             var updateState = PluginManagerViewModel.UpdateState(row);
-            item.SetTooltipText(NameColumn, $"{PluginManagerViewModel.ListName(plugin)} ({PluginDirectory(plugin.Slug)})\n{PluginCatalog.KindName(plugin.Kind)}" +
-                (updateState is null ? "" : "\n" + updateState));
+            item.SetTooltipText(NameColumn, PluginManagerViewModel.NameTooltip(row, PluginDirectory(plugin.Slug)));
             if (row.IsEPlugin && _ePluginIcon is not null) item.SetIcon(NameColumn, _ePluginIcon);
             if (updateState is not null && _updateIcon is not null)
             {
@@ -287,34 +282,19 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             }
             if (!plugin.Enabled) item.SetCustomColor(NameColumn, EditorIcons.DisabledColor);
             if (row.NeedsAttention) item.SetCustomColor(NameColumn, EditorIcons.ErrorColor);
-            if (row.Update is { } update)
-            {
-                item.SetText(VersionColumn, $"{PluginManagerViewModel.VersionText(plugin)} → {update.Candidate.NewVersion}");
-                if (update.HasError) item.SetCustomColor(VersionColumn, EditorIcons.ErrorColor);
-                item.SetTooltipText(VersionColumn, update.HasError ? "This update cannot be installed, see details." : "Update installs this update.");
-            }
-            else
-            {
-                item.SetText(VersionColumn, PluginManagerViewModel.VersionText(plugin));
-                item.SetTooltipText(VersionColumn, PluginManagerViewModel.StatusText(plugin));
-            }
+            item.SetText(VersionColumn, PluginManagerViewModel.VersionColumnText(row));
+            item.SetTooltipText(VersionColumn, PluginManagerViewModel.VersionColumnTooltip(row));
+            if (row.Update is { HasError: true }) item.SetCustomColor(VersionColumn, EditorIcons.ErrorColor);
             if (plugin.Slug == _selectedSlug) selected = item;
         }
         FitColumns();
         if (selected is not null) { selected.Select(NameColumn); _tree.ScrollToItem(selected); }
         else ShowDetails(null);
-        var count = _model.Updates.Count;
         var next = _global.NextUpdateCheck;
-        // An error is shown in full in the error area; the status line keeps counting the updates, also those a check
-        // found while it failed for other plugins.
-        var notice = _noticeIsError ? null : _operationNotice;
-        var available = count == 0 ? null : $"{count} update{(count == 1 ? "" : "s")} available";
-        _status.Text = (notice is not null ? notice + (available is null ? "" : " · " + available)
-                           : (available is null ? "" : available + " · ") +
-                             PluginManagerViewModel.CheckSchedule(_global.LastUpdateCheck, next, DateTimeOffset.UtcNow, CultureInfo.CurrentCulture) +
-                             (_global.IsIndexingLocalSources ? " · Indexing local directories..." : "")) +
-                       ((_reloadPending = AssemblyReload.IsPending) ? " · " + ReloadNotice
-                           : _pluginOperation.IsAwaitingReload ? " · " + ReloadFailedNotice : "");
+        // An error is shown in full in the error area instead.
+        _status.Text = PluginManagerViewModel.StatusLine(_noticeIsError ? null : _operationNotice, _model.Updates.Count,
+            PluginManagerViewModel.CheckSchedule(_global.LastUpdateCheck, next, DateTimeOffset.UtcNow, CultureInfo.CurrentCulture),
+            _global.IsIndexingLocalSources, _reloadPending = AssemblyReload.IsPending, _pluginOperation.IsAwaitingReload);
         _status.TooltipText = _status.Text + "\n" + PluginManagerViewModel.CheckScheduleHint(next);
         RenderError();
         Buttons();
@@ -507,7 +487,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             item.SetEditable(EnabledColumn, editable && row is { CanToggle: true });
         }
         GetNode<Button>("%SettingsButton").Disabled = busy;
-        _versionSelect.Disabled = busy || _versionOptions.Count < 2;
+        _versionSelect.Disabled = busy || !PluginManagerViewModel.CanChooseVersion(_versionOptions);
         GetOkButton().Text = _model.OkText;
         GetOkButton().Icon = EditorIcons.Upgrade;
         GetOkButton().Disabled = busy || !_model.CanApply;

@@ -59,7 +59,7 @@ internal sealed partial class EPluginManagerDialog
                 // A GDExtension add-on of unknown version lists no installed version; the latest is preselected instead.
                 var installed = _versionOptions.Any(o => o.Installed);
                 if (!installed && latest is not null) _versionSelect.Select(_versionOptions.ToList().IndexOf(latest));
-                _versionSelect.Disabled = Busy || installed && _versionOptions.Count < 2 || _versionOptions.Count == 0;
+                _versionSelect.Disabled = Busy || !PluginManagerViewModel.CanChooseVersion(_versionOptions);
                 _versionNote = missing;
             }
         }
@@ -114,9 +114,7 @@ internal sealed partial class EPluginManagerDialog
         var blocked = PluginManagerViewModel.VersionChangeBlocked(row, option);
         _installVersion.Text = option.Action; _installVersion.Icon = VersionIcon(option.IsDowngrade, option.IsReinstall);
         _installVersion.Disabled = blocked is not null || Busy;
-        _installVersion.TooltipText = blocked ?? (option.IsReinstall
-            ? $"Install version {option.Version} of {row.Plugin.Name} again, replacing its files."
-            : $"Install version {option.Version} of {row.Plugin.Name}.");
+        _installVersion.TooltipText = PluginManagerViewModel.VersionInstallTooltip(row, option);
         ShowVersionHint((option.Installed ? null : blocked) ?? _versionNote);
     }
 
@@ -138,22 +136,7 @@ internal sealed partial class EPluginManagerDialog
         _pendingVersion = option.Candidate with { InstalledVersion = row.Plugin.Version };
         _pendingDowngrade = option.IsDowngrade; _pendingReinstall = option.IsReinstall;
         _versionConfirm.OkButtonText = option.Action; _versionConfirm.GetOkButton().Icon = VersionIcon(option.IsDowngrade, option.IsReinstall);
-        _versionConfirm.DialogText = (option.IsReinstall
-                ? $"Reinstall {row.Plugin.Name} {row.Plugin.Version}?\n\n{PluginManagerViewModel.VersionSource(option)}. Its files replace the installed ones: " +
-                  "this brings in new commits of a git branch and undoes changes made to the plugin's folder in the project.\n\n"
-                : option.ReplacesUnknown
-                ? $"Install {row.Plugin.Name} {option.Version}?\n\n{PluginManagerViewModel.VersionSource(option)}. Its files replace the installed ones, " +
-                  "whose version ePlugin does not know because it did not install them. From then on, updates are found.\n\n"
-                : $"Replace {row.Plugin.Name} {row.Plugin.Version} with version {option.Version}?\n\n") +
-            (option.IsDowngrade
-                ? "Use this to undo an update that broke the project. Project code or saved data that already relies on the newer version may stop working. "
-                : "") +
-            "Open scenes are saved first; files and project references are backed up" + _global.DetailsBuildFailurePolicy(row.Plugin.Slug) switch
-            {
-                "ask" => ". If the project does not build with it, you choose whether to keep it and fix the errors yourself or to restore the previous version.",
-                "keep" => ". If the project does not build with it, it is kept so you can fix the errors (project setting eplugin/updates/on_build_failure).",
-                _ => " and restored if installation fails.",
-            };
+        _versionConfirm.DialogText = PluginManagerViewModel.VersionConfirmText(row, option, _global.DetailsBuildFailurePolicy(row.Plugin.Slug));
         EditorWindows.PopupChild(_versionConfirm);
     }
 }
