@@ -45,6 +45,18 @@ internal static class EditorWindows
     /// </summary>
     public static void PopupChild(Window window) => window.PopupCenteredClamped(window.Size, 0.9f);
 
+    /// <summary>
+    /// Opens a log for the Open log buttons of the dialogs: a log file in the application the system opens it with, a log
+    /// folder (an update's, when it has no build log) in the system file manager.
+    /// </summary>
+    public static void ShowLog(string path) => OS.ShellOpen(path);
+
+    /// <summary>
+    /// Shows a folder, or the folder of a file with the file selected, in the system file manager; <paramref name="path"/>
+    /// may be a res:// path.
+    /// </summary>
+    public static void ShowInFileManager(string path) => OS.ShellShowInFileManager(ProjectSettings.GlobalizePath(path), true);
+
     /// <summary>Opens <paramref name="url"/> in the system browser if it is a web link, see <see cref="PluginManagerViewModel.IsWebUrl"/>.</summary>
     public static void OpenWebLink(string? url)
     {

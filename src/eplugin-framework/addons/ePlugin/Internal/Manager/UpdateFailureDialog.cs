@@ -95,7 +95,7 @@ internal sealed partial class UpdateFailureDialog : AcceptDialog, ISerialization
     private void HandleCustomAction(StringName action)
     {
         if (action == "keep") Choose(true);
-        else if (action == "log" && _log is not null) OS.ShellOpen(_log);
+        else if (action == "log" && _log is not null) EditorWindows.ShowLog(_log);
     }
 
     // The journal still awaits the decision after the dialog went with a reload; the reloaded framework asks for it again.

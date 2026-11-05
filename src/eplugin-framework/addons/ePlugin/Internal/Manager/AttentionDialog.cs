@@ -58,11 +58,8 @@ internal sealed partial class AttentionDialog : AcceptDialog, ISerializationList
         signals.Connect(_disable, BaseButton.SignalName.Pressed, Callable.From(() => Request(AttentionAction.Disable)));
         signals.Connect(_rollback, BaseButton.SignalName.Pressed, Callable.From(ConfirmRollback));
         signals.Connect(_rollbackConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(RollbackConfirmed));
-        signals.Connect(_log, BaseButton.SignalName.Pressed, Callable.From(() => { if (Selected?.Log is { } log) OS.ShellOpen(log); }));
-        signals.Connect(_folder, BaseButton.SignalName.Pressed, Callable.From(() =>
-        {
-            if (Selected is { } item) OS.ShellShowInFileManager(ProjectSettings.GlobalizePath(_pluginDirectory(item.Slug)), true);
-        }));
+        signals.Connect(_log, BaseButton.SignalName.Pressed, Callable.From(() => { if (Selected?.Log is { } log) EditorWindows.ShowLog(log); }));
+        signals.Connect(_folder, BaseButton.SignalName.Pressed, Callable.From(() => { if (Selected is { } item) EditorWindows.ShowInFileManager(_pluginDirectory(item.Slug)); }));
         signals.Connect(this, AcceptDialog.SignalName.CustomAction, Callable.From<StringName>(action =>
         {
             if (action == RetryAllAction && !_busy) Requested?.Invoke(AttentionAction.RetryAll, null);

@@ -152,7 +152,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _dialogLifetime.Signals.Connect(_attentionButton, BaseButton.SignalName.Pressed, Callable.From(() => OpenAttention(null)));
         _dialogLifetime.Signals.Connect(_release, BaseButton.SignalName.Pressed, Callable.From(OpenRelease));
         _dialogLifetime.Signals.Connect(_locationLink, BaseButton.SignalName.Pressed, Callable.From(() => { if (_selectedSlug is not null) EditorWindows.SelectFile(PluginDirectory(_selectedSlug)); }));
-        _dialogLifetime.Signals.Connect(_openFolder, BaseButton.SignalName.Pressed, Callable.From(() => { if (_selectedSlug is not null) OS.ShellShowInFileManager(ProjectSettings.GlobalizePath(PluginDirectory(_selectedSlug)), true); }));
+        _dialogLifetime.Signals.Connect(_openFolder, BaseButton.SignalName.Pressed, Callable.From(() => { if (_selectedSlug is not null) EditorWindows.ShowInFileManager(PluginDirectory(_selectedSlug)); }));
         _dialogLifetime.Signals.Connect(_detailsText, RichTextLabel.SignalName.MetaClicked, Callable.From<Variant>(DetailsLinkClicked));
         _dialogLifetime.Signals.Connect(_tree, Tree.SignalName.ItemEdited, Callable.From(ItemEdited));
         _dialogLifetime.Signals.Connect(_disableFrameworkConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(DisableFramework));
@@ -357,9 +357,11 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         return _noticeLog is not null && !error.Contains(_noticeLog, StringComparison.Ordinal) ? error + "\nLogs: " + _noticeLog : error;
     }
 
+    // Its button is Open log folder: it shows where the failure's logs are, while the Open log buttons of the Needs
+    // attention and update failure dialogs open the build log itself (docs/eplugin-manager.md).
     private void OpenLog()
     {
-        if (_noticeLog is not null) OS.ShellShowInFileManager(_noticeLog);
+        if (_noticeLog is not null) EditorWindows.ShowInFileManager(_noticeLog);
     }
 
     private string PluginDirectory(string slug) => _global.Host.PluginDirectory(slug);
