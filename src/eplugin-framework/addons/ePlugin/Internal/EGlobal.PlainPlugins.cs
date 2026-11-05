@@ -61,7 +61,7 @@ internal sealed partial class EGlobal
         }
 
         // Handled once the new assembly is loaded: work started now would run on the old code.
-        if (AssemblyReload.IsPending)
+        if (_host.IsAssemblyReloadPending)
         {
             return false;
         }
@@ -235,7 +235,7 @@ internal sealed partial class EGlobal
     {
         if (_transition is not null && FinishTransition())
         {
-            RefreshEditor(rebuild: false);
+            RefreshEditor();
         }
     }
 }

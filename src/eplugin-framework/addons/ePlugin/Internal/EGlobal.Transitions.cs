@@ -276,7 +276,7 @@ internal sealed partial class EGlobal
         }
 
         // These read files, so only once the time is up; the next attempt counts the whole timeout again.
-        if (AssemblyReload.IsPending || _updateJournals?.Read().Any(j => j.IsActive) == true)
+        if (_host.IsAssemblyReloadPending || _updateJournals?.Read().Any(j => j.IsActive) == true)
         {
             _stallSignature = null;
             return false;
@@ -320,7 +320,7 @@ internal sealed partial class EGlobal
         FailTransition("operation_timed_out", detail);
         // also without a transition to fail, e.g. a deactivation that never joined one
         _toCheckDisable.Clear();
-        RefreshEditor(rebuild: false);
+        RefreshEditor();
     }
 
     internal bool FinishTransition()

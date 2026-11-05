@@ -559,7 +559,7 @@ internal sealed partial class EGlobal
     /// </summary>
     private void ApplyLicenseDecisions()
     {
-        if (AssemblyReload.IsPending)
+        if (_host.IsAssemblyReloadPending)
         {
             Post(ApplyLicenseDecisions);
             return;
