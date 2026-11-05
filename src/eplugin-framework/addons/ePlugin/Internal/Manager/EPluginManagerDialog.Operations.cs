@@ -19,39 +19,67 @@ internal sealed partial class EPluginManagerDialog
     {
         switch (action)
         {
-            case AttentionAction.RetryAll: RetryFailed(null, "Retrying failed plugins..."); break;
-            case AttentionAction.Retry when item is not null: RetryFailed([item.Slug], $"Retrying {item.Plugin.Name}..."); break;
-            case AttentionAction.Rollback when item?.Kept is { } kept:
-                if (!BeginPluginOperation()) return;
-                try { _global.RollbackKeptUpdate(kept); }
-                finally { CompletePluginOperation(); }
+            case AttentionAction.RetryAll:
+                RunPluginOperation("Retrying failed plugins...", "Cannot retry the failed plugins", () => Retry(null));
                 break;
-            case AttentionAction.Disable when item is not null: DisableFailed(item.Slug, item.Plugin.Name); break;
+            case AttentionAction.Retry when item is not null:
+                RunPluginOperation($"Retrying {item.Plugin.Name}...", $"Cannot retry {item.Slug}", () => Retry([item.Slug]));
+                break;
+            case AttentionAction.Rollback when item?.Kept is { } kept:
+                RunPluginOperation($"Rolling back the update of {item.Plugin.Name}...", $"Cannot roll back the update of {item.Slug}", () =>
+                {
+                    _global.RollbackKeptUpdate(kept);
+                    return true;
+                });
+                break;
+            case AttentionAction.Disable when item is not null:
+                RunPluginOperation($"Disabling {item.Plugin.Name}...", $"Cannot disable {item.Slug}", () => DisableFailed(item.Slug, item.Plugin.Name));
+                break;
         }
     }
 
-    private void DisableFailed(string slug, string name)
+    /// <summary>
+    /// Runs a decision of the Needs attention dialog as a plugin operation, in a progress scope of <paramref name="text"/>,
+    /// which the status line shows too. A failure is shown in the error area, starting with <paramref name="failure"/>,
+    /// rather than escaping through the dialog's signal, and completes the operation.
+    /// </summary>
+    /// <param name="work">False when it left the operation to a deferred step, which completes it.</param>
+    private void RunPluginOperation(string text, string failure, Func<bool> work)
     {
         if (!BeginPluginOperation()) return;
-        _status.Text = "Disabling " + name + "...";
-        bool handled;
+        ClearNotice();
+        _status.Text = text;
+        bool complete;
         try
         {
-            using (ActivationProgress.Begin("Disabling " + name + "..."))
-            {
-                handled = _global.DisableFailedPlugin(slug);
-                // a plain plugin's dependants and optional recipes
-                if (handled) _global.ObservePluginToggles();
-            }
+            using (ActivationProgress.Begin(text)) complete = work();
         }
         catch (Exception ex)
         {
-            GD.PushError($"Cannot disable {slug}: {ex.Message}");
-            handled = true;
+            SetNotice($"{failure}: {ex.Message}", true);
+            complete = true;
+        }
+        if (complete) CompletePluginOperation();
+    }
+
+    /// <param name="slugs">The plugins to retry with what they need; null retries every failed attempt.</param>
+    private bool Retry(IReadOnlyCollection<string>? slugs)
+    {
+        _global.RetryFailedPlugins(slugs);
+        return true;
+    }
+
+    private bool DisableFailed(string slug, string name)
+    {
+        if (_global.DisableFailedPlugin(slug))
+        {
+            // a plain plugin's dependants and optional recipes
+            _global.ObservePluginToggles();
+            return true;
         }
         // Without a failed attempt of its own it is disabled like from the list, outside this signal.
-        if (handled) CompletePluginOperation();
-        else CallDeferred(MethodName.SetPluginEnabled, slug, name, false);
+        CallDeferred(MethodName.SetPluginEnabled, slug, name, false);
+        return false;
     }
 
     private void ItemEdited() => CellEdited(_tree.GetEdited(), _tree.GetEditedColumn());
@@ -249,17 +277,6 @@ internal sealed partial class EPluginManagerDialog
         CompletePluginOperation(refresh: false);
         if (GodotObject.IsInstanceValid(this)) _status.Text = PluginManagerViewModel.ReloadNotice;
         return true;
-    }
-
-    /// <param name="slugs">The plugins to retry with what they need; null retries every failed attempt.</param>
-    private void RetryFailed(IReadOnlyCollection<string>? slugs, string text)
-    {
-        if (!BeginPluginOperation()) return;
-        try
-        {
-            using (ActivationProgress.Begin(text)) _global.RetryFailedPlugins(slugs);
-        }
-        finally { CompletePluginOperation(); }
     }
 }
 #endif
