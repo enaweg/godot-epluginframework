@@ -453,7 +453,7 @@ internal sealed partial class EGlobal
         public bool Verify(UpdatePluginJournal plugin)
         {
             // An add-on has no version in its files; what is there to check is that it is still a GDExtension or became a plugin.
-            if (PluginKinds.Workflow(plugin) is GDExtensionAddonWorkflow)
+            if (!PluginKinds.Workflow(plugin).HasPluginConfig)
                 return global.IsExtensionAddon(plugin.Slug) || File.Exists(Path.Combine(ProjectSettings.GlobalizePath(global._host.PluginDirectory(plugin.Slug)), "plugin.cfg"));
             var metadata = EditorPluginExtensions.ReadMetadata($"{global._host.PluginDirectory(plugin.Slug)}/plugin.cfg");
             return (plugin.Slug != Framework.Slug || global.IsValid()) && IsEnabled(plugin.Slug) && SemVer.Same(metadata?.Version, plugin.NewVersion) &&

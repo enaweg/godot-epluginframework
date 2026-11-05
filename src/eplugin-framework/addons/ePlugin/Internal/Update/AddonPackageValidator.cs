@@ -50,7 +50,7 @@ internal sealed partial class AddonPackageValidator(IEnumerable<IAddonRule>? ext
         var files = Directory.Exists(stage) ? PackageFiles.Files(stage).ToArray() : [];
         if (files.Length == 0) Add("R1", FindingSeverity.Error, "The package has no files for the plugin. " + ReportToAuthor);
         // A GDExtension add-on has no plugin.cfg: its version is the announced one, and it has no entry script.
-        var addon = installed.Kind == PluginKind.GDExtensionAddon;
+        var addon = !PluginKinds.Workflow(installed.Kind).HasPluginConfig;
         var configless = addon && !File.Exists(Path.Combine(stage, "plugin.cfg"));
         if (configless)
         {

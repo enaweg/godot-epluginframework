@@ -7,10 +7,10 @@ using Enaweg.Plugin.Internal.Update;
 namespace Enaweg.Plugin.Internal.Kinds;
 
 /// <summary>
-/// The validation every kind that ships a GDExtension shares (<see cref="GDExtensionPluginWorkflow"/> and
-/// <see cref="EPluginWorkflow"/>): an update can replace only native libraries inside the plugin folder, the package must
-/// contain the library the editor here loads and suit its Godot version, and it should not drop a platform the installed
-/// version supports.
+/// The validation every kind that ships a GDExtension shares (<see cref="NativeExtensionWorkflow"/> for GDExtension plugins
+/// and add-ons, and <see cref="EPluginWorkflow"/>): an update can replace only native libraries inside the plugin folder,
+/// the package must contain the library the editor here loads and suit its Godot version, and it should not drop a
+/// platform the installed version supports.
 /// </summary>
 internal static class GDExtensionRules
 {

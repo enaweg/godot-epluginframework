@@ -47,7 +47,7 @@ internal interface IUpdateHost
     void RequestReload(UpdateJournal journal);
     /// <summary>
     /// Reloads the reloadable GDExtension at <paramref name="resourcePath"/> in place (loads it when it is not loaded);
-    /// false when Godot could not, so the editor has to restart. Used by <see cref="GDExtensionPluginWorkflow"/>.
+    /// false when Godot could not, so the editor has to restart. Used by <see cref="NativeExtensionWorkflow"/>.
     /// </summary>
     bool ReloadExtension(string resourcePath) => false;
     bool Verify(UpdatePluginJournal plugin);
@@ -110,7 +110,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
     /// recorded when ePlugin installed it ("" when it did not).
     /// </summary>
     private string? InstalledVersion(string slug, PluginKind kind) =>
-        kind == PluginKind.GDExtensionAddon ? store.GetShared(slug)?.Version ?? ""
+        !PluginKinds.Workflow(kind).HasPluginConfig ? store.GetShared(slug)?.Version ?? ""
         : PluginIni.Parse(File.ReadAllText(Path.Combine(Installed(slug), "plugin.cfg"))).GetValueOrDefault("version");
 
     /// <summary>The version a package installs: its plugin.cfg's, or the announced one of an add-on without plugin.cfg.</summary>
@@ -458,7 +458,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                     journal.Save();
                 }
                 // A GDExtension add-on has no plugin.cfg to tell; its file swap backs up everything before it changes a file.
-                else if (plugin.SwapStarted && PluginKinds.Workflow(plugin) is not GDExtensionAddonWorkflow && (!File.Exists(Path.Combine(installed, "plugin.cfg")) ||
+                else if (plugin.SwapStarted && PluginKinds.Workflow(plugin).HasPluginConfig && (!File.Exists(Path.Combine(installed, "plugin.cfg")) ||
                     PluginIni.Parse(File.ReadAllText(Path.Combine(installed, "plugin.cfg"))).GetValueOrDefault("version") != plugin.OldVersion))
                     throw new IOException($"Backup for {plugin.Slug} is missing; restore manually.");
             }

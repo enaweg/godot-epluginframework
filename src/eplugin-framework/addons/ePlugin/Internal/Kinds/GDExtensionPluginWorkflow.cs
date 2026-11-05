@@ -151,5 +151,6 @@ internal sealed class GDExtensionAddonWorkflow : NativeExtensionWorkflow
     public override PluginKind Kind => PluginKind.GDExtensionAddon;
     public override string Name => "GDExtension add-on";
     public override bool DisabledDuringSwap => false;
+    public override bool HasPluginConfig => false;
 }
 #endif
