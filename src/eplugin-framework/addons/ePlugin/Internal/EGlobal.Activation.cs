@@ -278,7 +278,7 @@ internal sealed partial class EGlobal
         var plain = managed is null ? _contexts.FirstOrDefault(c => c.Slug == slug) : null;
         if (dependency.Version is not null)
         {
-            var version = (managed ?? plain)?.Metadata?.Version ?? InstalledVersion(slug);
+            var version = DependencyVersion(slug);
             if (version is null)
             {
                 var unknown = $"The version of the GDExtension {slug} is unknown, so it cannot be checked against {dependency.Version}. Install a version of it in the ePlugin Manager.";
@@ -378,6 +378,14 @@ internal sealed partial class EGlobal
 
         return true;
     }
+
+    /// <summary>
+    /// The version a hard or optional dependency is checked with: the one its context holds (an ePlugin's editor instance
+    /// first, else a plain plugin's; a plain plugin enabled in this session has none), else <see cref="InstalledVersion"/>.
+    /// Null when none is known; each caller decides what that means.
+    /// </summary>
+    private string? DependencyVersion(string slug) =>
+        (ManagedContext(slug) ?? _contexts.FirstOrDefault(c => c.Slug == slug))?.Metadata?.Version ?? InstalledVersion(slug);
 
     /// <summary>The version in a plugin's plugin.cfg, or the recorded one of a GDExtension add-on; null when neither is known.</summary>
     private string? InstalledVersion(string slug) => ReadInstalledMetadata(slug)?.Version ?? (IsExtensionAddon(slug) ? ExtensionAddonVersion(slug) : null);
