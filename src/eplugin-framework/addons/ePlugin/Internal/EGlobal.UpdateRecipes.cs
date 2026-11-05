@@ -18,11 +18,7 @@ internal sealed partial class EGlobal
         var recipe = context.Builder.PluginRecipe;
         var optionals = context.AppliedOptionalDependencies ?? ResolveOptionalRecipes(context, recipe);
         if (retain is not null)
-        {
-            optionals = retain.Select(o => recipe.OptionalPluginDependencies.FirstOrDefault(p => p.Slug == o.Slug && p.Version == o.Version)
-                ?? new EEditorPluginRecipe.OptionalPlugin(o.Slug, o.Version, o.Recipe.ToRecipe()))
-                .Concat(ResolveOptionalRecipes(context, recipe)).DistinctBy(o => (o.Slug, o.Version)).ToList();
-        }
+            optionals = OptionalRecipes(recipe, retain).Concat(ResolveOptionalRecipes(context, recipe)).DistinctBy(o => (o.Slug, o.Version)).ToList();
         var snapshot = RecipeSnapshot.Capture(recipe, optionals);
         RecipeReconciler.Validate(snapshot);
         return snapshot;
@@ -67,7 +63,9 @@ internal sealed partial class EGlobal
             journal.Recipes[context.Slug] = new() { Old = snapshot, Applied = snapshot.Clone(), WasEnabled = true };
         }
         var order = RecipeReconciler.DependencyOrder(journal.Recipes.ToDictionary(p => p.Key, p => p.Value.Old));
-        journal.Plugins = journal.Plugins.OrderBy(p => { var i = order.ToList().IndexOf(p.Slug); return i < 0 ? int.MaxValue : i; }).ToList();
+        var positions = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var i = 0; i < order.Count; i++) positions.TryAdd(order[i], i);
+        journal.Plugins = journal.Plugins.OrderBy(p => positions.GetValueOrDefault(p.Slug, int.MaxValue)).ToList();
     }
 
     /// <summary>
@@ -86,115 +84,150 @@ internal sealed partial class EGlobal
         }
     }
 
+    /// <summary>
+    /// Brings every recipe of the journal to what it is after the update (<see cref="ApplyUpdateRecipes"/>) or, on
+    /// rollback, back to what it was before (<see cref="ReverseUpdateRecipes"/>), one tracked operation at a time.
+    /// </summary>
     internal void ReconcileUpdateRecipes(UpdateJournal journal, bool rollback)
     {
         _recipeUpdateJournal = journal;
         _updateRefreshSuppression++;
         try
         {
-            var untouched = UntouchedRecipes(journal);
-            foreach (var context in _contexts) context.RefreshMetadata(ReadInstalledMetadata(context.Slug));
-            foreach (var entry in journal.Recipes.ToArray())
-            {
-                var record = entry.Value;
-                var context = _contexts.FirstOrDefault(c => c.Slug == entry.Key);
-                if (rollback)
-                {
-                    if (record.Pending is not null) RecipeReconciler.Record(record.Applied, record.Pending);
-                    record.Pending = null;
-                    record.Target = record.Old.Clone();
-                }
-                else if (untouched.Contains(entry.Key)) record.Target = record.Applied.Clone();
-                else if (context is not null)
-                {
-                    var updated = journal.Plugins.Any(p => p.Slug == entry.Key);
-                    if (updated) context.AppliedOptionalDependencies = null;
-                    record.Target = Snapshot(context, updated ? null : record.Old.AppliedOptionals);
-                }
-                else if (record.WasEnabled) throw new InvalidOperationException($"Enabled plugin {entry.Key} has no instance after the update.");
-                else record.Target = new();
-            }
-            var snapshots = journal.Recipes.ToDictionary(p => p.Key, p => p.Value.Target!);
-            var conflicts = snapshots.Values.SelectMany(s => s.Nugets).GroupBy(n => n.Name, StringComparer.OrdinalIgnoreCase).Any(g => g.Select(n => (n.Version, n.Source)).Distinct().Count() > 1);
-            if (!rollback && conflicts) throw new InvalidOperationException("Updated recipes declare conflicting versions or sources for a shared NuGet package.");
-            journal.Save();
-            var order = RecipeReconciler.DependencyOrder(snapshots);
-            if (rollback) order = order.Reverse().ToArray();
-            foreach (var slug in order)
-            {
-                var record = journal.Recipes[slug];
-                var context = _contexts.FirstOrDefault(c => c.Slug == slug);
-                if (context is null && record.WasEnabled) throw new InvalidOperationException($"Cannot reconcile {slug}: editor instance is missing.");
-                if (context is null) continue;
-                var plugin = journal.Plugins.FirstOrDefault(p => p.Slug == slug);
-                if (!rollback && record.Pending is { } pending)
-                    TrackRecipeOperation(context, pending, () => ExecuteUpdateOperation(context, pending, journal, plugin));
-                var prepare = !rollback && plugin is not null && !record.TreePrepared;
-                foreach (var operation in RecipeReconciler.Plan(record.Applied, record.Target!, prepare))
-                {
-                    if (rollback && operation.Kind == RecipeOperationKind.EnsureDependency) continue;
-                    TrackRecipeOperation(context, operation, () => ExecuteUpdateOperation(context, operation, journal, plugin));
-                }
-                record.Applied.PluginDependencies = record.Target!.PluginDependencies.ToList();
-                record.Applied.AppliedOptionals = record.Target.AppliedOptionals.ToList();
-                context.AppliedOptionalDependencies = record.Target.AppliedOptionals.Select(o =>
-                    context.Builder.PluginRecipe.OptionalPluginDependencies.FirstOrDefault(p => p.Slug == o.Slug && p.Version == o.Version)
-                    ?? new EEditorPluginRecipe.OptionalPlugin(o.Slug, o.Version, o.Recipe.ToRecipe())).ToList();
-                context.State = record.WasEnabled || !rollback ? EEditorPluginState.Activated : EEditorPluginState.Deactivated;
-                context.ErrorDetail = null;
-                journal.Save();
-            }
-            if (!rollback)
-            {
-                // Enabling a new hard dependency can satisfy optional recipes during the first pass.
-                // Recompute from the now-enabled set and retain the operation-tracked resource state.
-                foreach (var entry in journal.Recipes.ToArray())
-                {
-                    var context = _contexts.FirstOrDefault(c => c.Slug == entry.Key);
-                    // A newly enabled plain dependency has no editor context and contributes no new recipe.
-                    if (context is null) { entry.Value.Target ??= entry.Value.Applied.Clone(); continue; }
-                    if (untouched.Contains(entry.Key)) { entry.Value.Target = entry.Value.Applied.Clone(); continue; }
-                    var updated = journal.Plugins.Any(p => p.Slug == entry.Key);
-                    if (updated) context.AppliedOptionalDependencies = null;
-                    entry.Value.Target = Snapshot(context, updated ? null : entry.Value.Old.AppliedOptionals);
-                }
-                if (journal.Recipes.Values.SelectMany(r => r.Target!.Nugets).GroupBy(n => n.Name, StringComparer.OrdinalIgnoreCase).Any(g => g.Select(n => (n.Version, n.Source)).Distinct().Count() > 1))
-                    throw new InvalidOperationException("Newly enabled dependencies declare conflicting versions or sources for a shared NuGet package.");
-                journal.Save();
-                foreach (var slug in RecipeReconciler.DependencyOrder(journal.Recipes.ToDictionary(p => p.Key, p => p.Value.Target!)))
-                {
-                    var context = _contexts.FirstOrDefault(c => c.Slug == slug);
-                    if (context is null) continue;
-                    var record = journal.Recipes[slug];
-                    foreach (var operation in RecipeReconciler.Plan(record.Applied, record.Target!))
-                        TrackRecipeOperation(context, operation, () => ExecuteUpdateOperation(context, operation, journal, journal.Plugins.FirstOrDefault(p => p.Slug == slug)));
-                    record.Applied = record.Target!.Clone();
-                    context.AppliedOptionalDependencies = record.Target.AppliedOptionals.Select(o =>
-                        context.Builder.PluginRecipe.OptionalPluginDependencies.FirstOrDefault(p => p.Slug == o.Slug && p.Version == o.Version)
-                        ?? new EEditorPluginRecipe.OptionalPlugin(o.Slug, o.Version, o.Recipe.ToRecipe())).ToList();
-                    journal.Save();
-                }
-            }
-            if (rollback)
-            {
-                foreach (var entry in journal.Recipes.Where(r => !r.Value.WasEnabled).Reverse())
-                {
-                    var context = _contexts.FirstOrDefault(c => c.Slug == entry.Key);
-                    if (context is not null) context.State = EEditorPluginState.Deactivated;
-                    if (_host.IsPluginEnabled(entry.Key)) _host.SetPluginEnabled(entry.Key, false);
-                }
-            }
-            else
-            {
-                foreach (var plugin in journal.Plugins)
-                {
-                    var context = _contexts.FirstOrDefault(c => c.Slug == plugin.Slug);
-                    if (context is not null) context.State = EEditorPluginState.Activated;
-                }
-            }
+            if (rollback) ReverseUpdateRecipes(journal);
+            else ApplyUpdateRecipes(journal);
         }
         finally { _recipeUpdateJournal = null; _updateRefreshSuppression--; }
     }
+
+    private void ApplyUpdateRecipes(UpdateJournal journal)
+    {
+        var untouched = UntouchedRecipes(journal);
+        foreach (var context in _contexts) context.RefreshMetadata(ReadInstalledMetadata(context.Slug));
+        foreach (var (slug, record) in journal.Recipes.ToArray())
+        {
+            var context = _contexts.FirstOrDefault(c => c.Slug == slug);
+            if (untouched.Contains(slug)) record.Target = record.Applied.Clone();
+            else if (context is not null) record.Target = UpdateTarget(context, journal, record);
+            else if (record.WasEnabled) throw new InvalidOperationException($"Enabled plugin {slug} has no instance after the update.");
+            else record.Target = new();
+        }
+        var snapshots = journal.Recipes.ToDictionary(p => p.Key, p => p.Value.Target!);
+        if (HasNugetConflict(snapshots.Values)) throw new InvalidOperationException("Updated recipes declare conflicting versions or sources for a shared NuGet package.");
+        journal.Save();
+        foreach (var slug in RecipeReconciler.DependencyOrder(snapshots))
+        {
+            var record = journal.Recipes[slug];
+            if (ReconciledContext(slug, record) is not { } context) continue;
+            var plugin = journal.Plugins.FirstOrDefault(p => p.Slug == slug);
+            if (record.Pending is { } pending)
+                TrackRecipeOperation(context, pending, () => ExecuteUpdateOperation(context, pending, journal, plugin));
+            foreach (var operation in RecipeReconciler.Plan(record.Applied, record.Target!, prepareTree: plugin is not null && !record.TreePrepared))
+                TrackRecipeOperation(context, operation, () => ExecuteUpdateOperation(context, operation, journal, plugin));
+            MarkReconciled(context, record, EEditorPluginState.Activated);
+            journal.Save();
+        }
+        // Enabling a new hard dependency can satisfy optional recipes during the first pass.
+        // Recompute from the now-enabled set and retain the operation-tracked resource state.
+        foreach (var (slug, record) in journal.Recipes.ToArray())
+        {
+            var context = _contexts.FirstOrDefault(c => c.Slug == slug);
+            // A newly enabled plain dependency has no editor context and contributes no new recipe.
+            if (context is null) record.Target ??= record.Applied.Clone();
+            else record.Target = untouched.Contains(slug) ? record.Applied.Clone() : UpdateTarget(context, journal, record);
+        }
+        if (HasNugetConflict(journal.Recipes.Values.Select(r => r.Target!)))
+            throw new InvalidOperationException("Newly enabled dependencies declare conflicting versions or sources for a shared NuGet package.");
+        journal.Save();
+        foreach (var slug in RecipeReconciler.DependencyOrder(journal.Recipes.ToDictionary(p => p.Key, p => p.Value.Target!)))
+        {
+            var context = _contexts.FirstOrDefault(c => c.Slug == slug);
+            if (context is null) continue;
+            var record = journal.Recipes[slug];
+            var plugin = journal.Plugins.FirstOrDefault(p => p.Slug == slug);
+            foreach (var operation in RecipeReconciler.Plan(record.Applied, record.Target!))
+                TrackRecipeOperation(context, operation, () => ExecuteUpdateOperation(context, operation, journal, plugin));
+            record.Applied = record.Target!.Clone();
+            context.AppliedOptionalDependencies = OptionalRecipes(context.Builder.PluginRecipe, record.Target.AppliedOptionals).ToList();
+            journal.Save();
+        }
+        foreach (var plugin in journal.Plugins)
+        {
+            var context = _contexts.FirstOrDefault(c => c.Slug == plugin.Slug);
+            if (context is not null) context.State = EEditorPluginState.Activated;
+        }
+    }
+
+    private void ReverseUpdateRecipes(UpdateJournal journal)
+    {
+        foreach (var context in _contexts) context.RefreshMetadata(ReadInstalledMetadata(context.Slug));
+        foreach (var record in journal.Recipes.Values.ToArray())
+        {
+            if (record.Pending is not null) RecipeReconciler.Record(record.Applied, record.Pending);
+            record.Pending = null;
+            record.Target = record.Old.Clone();
+        }
+        var snapshots = journal.Recipes.ToDictionary(p => p.Key, p => p.Value.Target!);
+        journal.Save();
+        foreach (var slug in RecipeReconciler.DependencyOrder(snapshots).Reverse())
+        {
+            var record = journal.Recipes[slug];
+            if (ReconciledContext(slug, record) is not { } context) continue;
+            var plugin = journal.Plugins.FirstOrDefault(p => p.Slug == slug);
+            // A rollback never enables a plugin.
+            foreach (var operation in RecipeReconciler.Plan(record.Applied, record.Target!, prepareTree: false).Where(o => o.Kind != RecipeOperationKind.EnsureDependency))
+                TrackRecipeOperation(context, operation, () => ExecuteUpdateOperation(context, operation, journal, plugin));
+            MarkReconciled(context, record, record.WasEnabled ? EEditorPluginState.Activated : EEditorPluginState.Deactivated);
+            journal.Save();
+        }
+        foreach (var entry in journal.Recipes.Where(r => !r.Value.WasEnabled).Reverse())
+        {
+            var context = _contexts.FirstOrDefault(c => c.Slug == entry.Key);
+            if (context is not null) context.State = EEditorPluginState.Deactivated;
+            if (_host.IsPluginEnabled(entry.Key)) _host.SetPluginEnabled(entry.Key, false);
+        }
+    }
+
+    /// <summary>
+    /// What a plugin's recipe is reconciled to after the update: an updated plugin's new recipe with its optional recipes
+    /// resolved again, any other plugin's recipe keeping the optional recipes it had applied.
+    /// </summary>
+    private RecipeSnapshot UpdateTarget(PluginContext context, UpdateJournal journal, RecipeJournal record)
+    {
+        var updated = journal.Plugins.Any(p => p.Slug == context.Slug);
+        if (updated) context.AppliedOptionalDependencies = null;
+        return Snapshot(context, updated ? null : record.Old.AppliedOptionals);
+    }
+
+    /// <summary>The context whose recipe is reconciled; null for a plugin that was not enabled and has none.</summary>
+    private PluginContext? ReconciledContext(string slug, RecipeJournal record)
+    {
+        var context = _contexts.FirstOrDefault(c => c.Slug == slug);
+        if (context is null && record.WasEnabled) throw new InvalidOperationException($"Cannot reconcile {slug}: editor instance is missing.");
+        return context;
+    }
+
+    /// <summary>Records that a plugin's dependencies and optional recipes are those of its target now.</summary>
+    private static void MarkReconciled(PluginContext context, RecipeJournal record, EEditorPluginState state)
+    {
+        record.Applied.PluginDependencies = record.Target!.PluginDependencies.ToList();
+        record.Applied.AppliedOptionals = record.Target.AppliedOptionals.ToList();
+        context.AppliedOptionalDependencies = OptionalRecipes(context.Builder.PluginRecipe, record.Target.AppliedOptionals).ToList();
+        context.State = state;
+        context.ErrorDetail = null;
+    }
+
+    /// <summary>
+    /// The optional dependencies of <paramref name="recipe"/> that <paramref name="applied"/> names, or the recipes the
+    /// snapshot recorded for those it no longer declares.
+    /// </summary>
+    private static IEnumerable<EEditorPluginRecipe.OptionalPlugin> OptionalRecipes(EEditorPluginRecipe recipe, IEnumerable<OptionalRecipeSnapshot> applied) =>
+        applied.Select(o => recipe.OptionalPluginDependencies.FirstOrDefault(p => p.Slug == o.Slug && p.Version == o.Version)
+            ?? new EEditorPluginRecipe.OptionalPlugin(o.Slug, o.Version, o.Recipe.ToRecipe()));
+
+    /// <summary>Whether the recipes declare one NuGet package with different versions or sources.</summary>
+    private static bool HasNugetConflict(IEnumerable<RecipeSnapshot> snapshots) =>
+        snapshots.SelectMany(s => s.Nugets).GroupBy(n => n.Name, StringComparer.OrdinalIgnoreCase).Any(g => g.Select(n => (n.Version, n.Source)).Distinct().Count() > 1);
     /// <summary>
     /// Plugins this journal must leave as they are: those another update has swapped but not reconciled yet (another
     /// group of the batch, or an update kept before reconciling that Retry still resumes), whose loaded code may already
