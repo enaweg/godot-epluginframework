@@ -22,30 +22,32 @@ internal static class VersionConstraint
             return false;
         }
 
-        var text = constraint.Trim();
-        var minimum = text.StartsWith(">=", System.StringComparison.Ordinal) ? 2 : text.StartsWith('>') ? 1 : 0;
+        var (isMinimum, number) = Split(constraint);
         if (!SemVer.TryParse(version, out var given))
         {
             error = $"'{version}' is not a version (needed: [major].[minor][.patch][.revision])";
             return false;
         }
 
-        if (!SemVer.TryParse(text[minimum..], out var required))
+        if (!SemVer.TryParse(number, out var required))
         {
             error = $"'{constraint}' is not a version constraint (needed: [>=][major].[minor][.patch][.revision])";
             return false;
         }
 
         var comparison = Numbers(given).CompareTo(Numbers(required));
-        return minimum > 0 ? comparison >= 0 : comparison == 0;
+        return isMinimum ? comparison >= 0 : comparison == 0;
     }
 
     /// <summary>Whether <paramref name="constraint"/> can be compared with versions.</summary>
-    public static bool IsValid(string? constraint)
+    public static bool IsValid(string? constraint) => SemVer.TryParse(Split(constraint).Version, out _);
+
+    /// <summary>The trimmed constraint without its <c>&gt;=</c> or <c>&gt;</c> prefix, and whether it had one.</summary>
+    private static (bool IsMinimum, string Version) Split(string? constraint)
     {
         var text = constraint?.Trim() ?? "";
-        var minimum = text.StartsWith(">=", System.StringComparison.Ordinal) ? 2 : text.StartsWith('>') ? 1 : 0;
-        return SemVer.TryParse(text[minimum..], out _);
+        var prefix = text.StartsWith(">=", System.StringComparison.Ordinal) ? 2 : text.StartsWith('>') ? 1 : 0;
+        return (prefix > 0, text[prefix..]);
     }
 
     private static SemVer Numbers(SemVer version) => new(version.Major, version.Minor, version.Patch, null, version.Revision);
