@@ -267,7 +267,8 @@ it is kept, in a group too, because a later group then fails with the same proje
 
 ## Build failures in project code
 
-`UpdateApplier.BuildPasses` wraps the interim, plain C# and final builds (not rollback and Retry builds). On failure,
+`UpdateBuildGate` runs every build of a transaction (its log in the journal folder, its result in `journal.Builds`) and
+decides what a failure means (`Decision`). Its `Passes` wraps the interim, plain C# and final builds (not rollback and Retry builds). On failure,
 `BuildDiagnostics.Classify` (pure) reads MSBuild's canonical `file(line,col): error CODE: message` lines; the `error`
 keyword is not localized. An error below `addons/` or `IUpdateHost.PluginCodeRoots` (link targets of addons, directories
 of recipe projects, never the project directory itself) is `PluginCode`; one without a `.cs` file, in `.godot/`, below
