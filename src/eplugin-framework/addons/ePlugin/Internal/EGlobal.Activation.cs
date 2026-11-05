@@ -234,7 +234,7 @@ internal sealed partial class EGlobal
             // Godot cannot enable what is not there; saying so tells the user what to do.
             if (!HasPluginConfig(slug))
             {
-                return FailDependency(context, NotInstalled(context, dependency), NotInstalled(context, dependency));
+                return FailDependency(context, NotInstalled(context, dependency));
             }
 
             if (IsManagedPlugin(slug))
@@ -282,25 +282,25 @@ internal sealed partial class EGlobal
             if (version is null)
             {
                 var unknown = $"The version of the GDExtension {slug} is unknown, so it cannot be checked against {dependency.Version}. Install a version of it in the ePlugin Manager.";
-                if (IsExtensionAddon(slug)) return FailDependency(context, unknown, unknown);
-                if (!HasPluginConfig(slug)) return FailDependency(context, NotInstalled(context, dependency), NotInstalled(context, dependency));
+                if (IsExtensionAddon(slug)) return FailDependency(context, unknown);
+                if (!HasPluginConfig(slug)) return FailDependency(context, NotInstalled(context, dependency));
                 var noVersion = $"Plugin dependency {slug} has no version in {_host.PluginDirectory(slug)}/plugin.cfg, so it cannot be checked " +
                                 $"against {dependency.Version}, which {context.Slug} requires. Install a released version of {slug}, then retry.";
-                return FailDependency(context, noVersion, noVersion);
+                return FailDependency(context, noVersion);
             }
 
             if (!MatchesVersion(version, dependency.Version, context.Logger))
             {
                 var mismatch = $"Dependency {slug} {version} does not match needed {dependency.Version} of {context.Slug}! " +
                                $"Install a matching version of {slug} in the ePlugin Manager (its details offer every version), then retry.";
-                return FailDependency(context, mismatch, mismatch);
+                return FailDependency(context, mismatch);
             }
         }
 
         if ((managed ?? plain)?.State == EEditorPluginState.Error)
         {
             var failed = $"Plugin dependency {slug} failed. Fix {slug} under Needs attention first; retrying {context.Slug} retries it too.";
-            return FailDependency(context, failed, failed);
+            return FailDependency(context, failed);
         }
 
         // A plain plugin is ready while the editor has it enabled; an ePlugin once its activation completed.
@@ -308,7 +308,7 @@ internal sealed partial class EGlobal
         {
             case EEditorPluginState.Deactivated:
                 var notReady = $"Plugin dependency {slug} not ready but needed by {context.Slug}!";
-                return FailDependency(context, notReady, notReady);
+                return FailDependency(context, notReady);
             case EEditorPluginState.Created:
                 _toCheckEnable.Push(context);
                 return DependencyReadiness.Wait; // its activation callback will resume the waiting plugin
@@ -334,10 +334,13 @@ internal sealed partial class EGlobal
         $"Plugin dependency {slug} cannot be enabled: Godot refused it, which {context.Slug} needs. The Output panel shows Godot's " +
         $"error, usually a script of {slug} that does not load.";
 
-    /// <summary>Fails the activation of <paramref name="context"/> and of every plugin waiting with it.</summary>
-    private DependencyReadiness FailDependency(PluginContext context, string warning, string reason)
+    /// <summary>
+    /// Fails the activation of <paramref name="context"/> and of every plugin waiting with it; <paramref name="reason"/> is
+    /// logged and becomes the error of each of them that has none of its own.
+    /// </summary>
+    private DependencyReadiness FailDependency(PluginContext context, string reason)
     {
-        context.Logger?.Warn(warning);
+        context.Logger?.Warn(reason);
         _toCheckEnable.Push(context);
         FailAllUncheckedPluginsAndRefresh(reason);
         return DependencyReadiness.Failed;
