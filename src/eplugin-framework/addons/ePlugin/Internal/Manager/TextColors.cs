@@ -1,4 +1,5 @@
 #if TOOLS
+using Enaweg.Plugin.Internal.Update;
 using Godot;
 
 namespace Enaweg.Plugin.Internal.Manager;
@@ -23,6 +24,12 @@ internal static class TextColors
         Success = Of(theme, "success_color", "#70e070");
         Info = Of(theme, "accent_color", "#a0c0ff");
     }
+
+    /// <summary>The color of a finding's severity word, e.g. "Warning:" before an update's finding.</summary>
+    public static string For(FindingSeverity severity) => severity switch
+    {
+        FindingSeverity.Error => Error, FindingSeverity.Warning => Warning, _ => Info
+    };
 
     /// <summary>The theme's color <paramref name="name"/> of the editor as a BBCode color, else <paramref name="fallback"/>.</summary>
     internal static string Of(Theme? theme, string name, string fallback) =>

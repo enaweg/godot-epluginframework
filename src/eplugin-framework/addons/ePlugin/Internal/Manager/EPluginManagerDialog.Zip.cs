@@ -39,6 +39,10 @@ internal sealed partial class EPluginManagerDialog
         finally { _session.Working = _session.Installing = false; }
     }
 
+    /// <summary>
+    /// The work of <see cref="InstallZipAsync"/>, which ends it whatever happened. Where its outcome is rendered, the work
+    /// ends first, so the manager is not drawn locked.
+    /// </summary>
     private async Task ReadZipAsync(string path, string file)
     {
         // Closing the manager while the file is read or staged cancels; nothing is asked afterwards.
@@ -46,7 +50,7 @@ internal sealed partial class EPluginManagerDialog
         var ct = _cancel.Token;
         AddonArchive archive;
         try { archive = await Task.Run(() => AddonArchive.Read(path), ct); }
-        catch (OperationCanceledException) { _session.Working = false; return; }
+        catch (OperationCanceledException) { return; }
         // any file can be chosen, so reading it may fail in more ways than a damaged ZIP file
         catch (Exception ex)
         {
@@ -54,7 +58,7 @@ internal sealed partial class EPluginManagerDialog
             if (IsShown) ShowZipNotice(new(InstallStep.Failed, $"Cannot install {file}: {ex.Message}", true));
             return;
         }
-        if (!IsShown || ct.IsCancellationRequested) { _session.Working = false; return; }
+        if (!IsShown || ct.IsCancellationRequested) return;
         var sameExceptCase = _model.Plugins.FirstOrDefault(p => p.Plugin.Slug != archive.Slug &&
                                                                 p.Plugin.Slug.Equals(archive.Slug, StringComparison.OrdinalIgnoreCase))?.Plugin.Slug;
         var choice = ZipInstall.Choose(archive, _model.Find(archive.Slug), _targets.FirstOrDefault(t => t.Slug == archive.Slug), sameExceptCase);

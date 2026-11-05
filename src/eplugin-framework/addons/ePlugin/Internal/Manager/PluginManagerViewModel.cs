@@ -120,7 +120,7 @@ internal sealed class PluginManagerViewModel
     /// <summary>The tooltip of a plugin's name in the list: its name and folder, its type and its update state.</summary>
     /// <param name="directory">The plugin's folder, see <see cref="IEditorHost.PluginDirectory"/>.</param>
     public static string NameTooltip(PluginRow row, string directory) =>
-        $"{ListName(row.Plugin)} ({directory})\n{PluginCatalog.KindName(row.Plugin.Kind)}" + (UpdateState(row) is { } state ? "\n" + state : "");
+        $"{ListName(row.Plugin)} ({directory})\n{PluginKinds.Name(row.Plugin.Kind)}" + (UpdateState(row) is { } state ? "\n" + state : "");
 
     /// <summary>The Version column of a plugin: its installed version, followed by the version an update installs.</summary>
     public static string VersionColumnText(PluginRow row) =>
@@ -445,7 +445,7 @@ internal sealed class PluginManagerViewModel
         }
         if (row.NeedsAttention) text.Append(CultureInfo.CurrentCulture, $"[color={TextColors.Error}]This plugin needs attention.[/color] [url={AttentionMeta}]See what happened and what you can do[/url]\n\n");
         if (!string.IsNullOrWhiteSpace(plugin.Description)) text.Append(Escape(plugin.Description.Trim())).Append("\n\n");
-        Line("Type", PluginCatalog.KindName(plugin.Kind));
+        Line("Type", PluginKinds.Name(plugin.Kind));
         Line("Status", StatusText(plugin));
         Line("Author", plugin.Author);
         // ePlugin's built-in list fills in what plugin.cfg does not set
@@ -474,7 +474,7 @@ internal sealed class PluginManagerViewModel
             else if (update.Candidate.Package is SubmodulePackageRef tag) Line("Tag", $"{tag.Tag} ({SubmoduleSource.Short(tag.Commit)})");
             else Link("Update site", update.Candidate.SourceUrl);
             if (update.Candidate.ReleaseUrl is not null) Link("Release", update.Candidate.ReleaseUrl);
-            foreach (var finding in update.Findings) text.Append(CultureInfo.CurrentCulture, $"[color={Color(finding.Severity)}]{finding.Severity}:[/color] {Escape(finding.Message)}\n");
+            foreach (var finding in update.Findings) text.Append(CultureInfo.CurrentCulture, $"[color={TextColors.For(finding.Severity)}]{finding.Severity}:[/color] {Escape(finding.Message)}\n");
             if (update.Failed is { } failed) text.Append(CultureInfo.CurrentCulture, $"[color={TextColors.Error}]Previously failed {failed.Utc:u}:[/color] {Escape(failed.Reason)}\n");
         }
         else if (submodule) { /* RepositoryLine named its remote. */ }
@@ -526,10 +526,6 @@ internal sealed class PluginManagerViewModel
         }
     }
     private static string Version(string? version) => string.IsNullOrWhiteSpace(version) ? "" : " " + version;
-    private static string Color(FindingSeverity severity) => severity switch
-    {
-        FindingSeverity.Error => TextColors.Error, FindingSeverity.Warning => TextColors.Warning, _ => TextColors.Info
-    };
     internal static string Escape(string value) => value.Replace("[", "[lb]");
     /// <summary>
     /// Scales the <c>[font_size]</c> of a plugin's BBCode page by the editor scale. Its sizes are pixels written for 100%,

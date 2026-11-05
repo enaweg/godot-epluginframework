@@ -30,6 +30,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private Tree _tree = null!;
     private Label _status = null!;
     private Button _check = null!;
+    private Button _settingsButton = null!;
     private Button _attentionButton = null!;
     private Button _release = null!;
     private ConfirmationDialog _disableFrameworkConfirm = null!;
@@ -117,7 +118,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _global = global; _lifetime = lifetime;
         _updates = new UpdateFlow(global, ReviewUpdates, ReviewLicenses, text => ActivationProgress.Begin(text));
         _tree = GetNode<Tree>("%PluginTree"); _status = GetNode<Label>("%Status");
-        _check = GetNode<Button>("%CheckButton"); _attentionButton = GetNode<Button>("%AttentionButton"); _release = GetNode<Button>("%ReleaseButton");
+        _check = GetNode<Button>("%CheckButton"); _settingsButton = GetNode<Button>("%SettingsButton"); _attentionButton = GetNode<Button>("%AttentionButton"); _release = GetNode<Button>("%ReleaseButton");
         _disableFrameworkConfirm = GetNode<ConfirmationDialog>("%DisableFrameworkConfirm");
         _detailsIcon = GetNode<TextureRect>("%DetailsIcon"); _detailsName = GetNode<Label>("%DetailsName"); _detailsText = GetNode<RichTextLabel>("%DetailsText");
         _versionSeparator = GetNode<Control>("%VersionSeparator"); _versionRow = GetNode<Control>("%VersionRow");
@@ -142,7 +143,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _tree.SetColumnCustomMinimumWidth(VersionColumn, (int)(VersionMinimumWidth * scale));
 
         _dialogLifetime.Signals.Connect(_check, BaseButton.SignalName.Pressed, Callable.From(CheckNow));
-        _dialogLifetime.Signals.Connect(GetNode<Button>("%SettingsButton"), BaseButton.SignalName.Pressed, Callable.From(() => OpenSettings(null)));
+        _dialogLifetime.Signals.Connect(_settingsButton, BaseButton.SignalName.Pressed, Callable.From(() => OpenSettings(null)));
         _dialogLifetime.Signals.Connect(_attentionButton, BaseButton.SignalName.Pressed, Callable.From(() => OpenAttention(null)));
         _dialogLifetime.Signals.Connect(_release, BaseButton.SignalName.Pressed, Callable.From(OpenRelease));
         _dialogLifetime.Signals.Connect(_locationLink, BaseButton.SignalName.Pressed, Callable.From(() => { if (_selectedSlug is not null) EditorWindows.SelectFile(PluginDirectory(_selectedSlug)); }));
@@ -186,7 +187,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _check.Icon = EditorIcons.Rescan;
         _installZip.Icon = EditorIcons.Install;
         _attentionButton.Icon = EditorIcons.Retry;
-        GetNode<Button>("%SettingsButton").Icon = EditorIcons.Settings;
+        _settingsButton.Icon = EditorIcons.Settings;
         _settings.RefreshTheme();
         TextColors.Use(EditorWindows.Theme);
         // Render the existing model rather than refreshing it: a theme change must preserve a staged update.
@@ -482,7 +483,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             var row = SlugOf(item) is { } slug ? _model.Find(slug) : null;
             item.SetEditable(EnabledColumn, editable && row is { CanToggle: true });
         }
-        GetNode<Button>("%SettingsButton").Disabled = busy;
+        _settingsButton.Disabled = busy;
         _versionSelect.Disabled = busy || !PluginManagerViewModel.CanChooseVersion(_versionOptions);
         GetOkButton().Text = _model.OkText;
         GetOkButton().Icon = EditorIcons.Upgrade;
@@ -521,12 +522,13 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     /// <summary>
     /// A plugin's update site or a setting changed: versions loaded from a source no longer used are dropped, and the
     /// list is read again so updates found there are no longer offered and the status line shows the next scheduled check.
+    /// While the settings are open, that waits until they close: every click on a number's arrows changes a setting.
     /// </summary>
     private void SettingsChanged(bool sourcesChanged)
     {
         if (sourcesChanged) _updates.ClearVersions();
         if (!IsShown) return;
-        if (Busy) _session.RefreshWhenIdle = true;
+        if (Busy || _settings.Visible) _session.RefreshWhenIdle = true;
         else Refresh();
     }
 
@@ -541,7 +543,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         if (_session.CanCompleteOperation(_global.IsChangingPlugins)) CompletePluginOperation(_session.RefreshOnCompletion);
         var pending = AssemblyReload.IsPending;
         var locked = _session.LocksInput(_global.IsChangingPlugins, pending);
-        if (_session.ShouldRefresh(locked))
+        // not while the settings are open, which change what the list shows (see SettingsChanged)
+        if (_session.ShouldRefresh(locked) && !_settings.Visible)
         {
             _session.RefreshWhenIdle = false;
             _session.ReloadPending = pending;

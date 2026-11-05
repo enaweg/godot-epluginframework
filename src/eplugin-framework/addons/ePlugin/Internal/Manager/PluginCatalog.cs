@@ -53,8 +53,6 @@ internal sealed record PluginInfo(string Slug, string Name, PluginKind Kind, boo
 
 internal static class PluginCatalog
 {
-    public static string KindName(PluginKind kind) => PluginKinds.Name(kind);
-
     /// <summary>The <c>script</c> key of plugin.cfg is relative to the plugin directory unless it is a res:// path.</summary>
     public static string? ResolveScript(string directory, string script)
     {
