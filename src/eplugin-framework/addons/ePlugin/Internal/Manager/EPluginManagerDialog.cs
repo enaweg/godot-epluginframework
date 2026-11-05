@@ -23,7 +23,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private const int EnabledColumn = 0, NameColumn = 1, VersionColumn = 2;
     private const int VersionMinimumWidth = 150;
 
-    private readonly EditorSignalConnections _signals = new();
+    private readonly DialogLifetime _dialogLifetime = new();
     private EGlobal _global = null!;
     private CancellationToken _lifetime;
     private CancellationTokenSource? _cancel;
@@ -137,63 +137,56 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _attention = GetNode<AttentionDialog>("%AttentionDialog"); _attention.Initialize(global.Host.PluginDirectory);
         _locationRow = GetNode<Control>("%LocationRow"); _locationLink = GetNode<LinkButton>("%LocationLink"); _openFolder = GetNode<Button>("%OpenFolderButton");
         RefreshTheme();
-        _signals.Connect(this, Control.SignalName.ThemeChanged, Callable.From(() => CallDeferred(MethodName.RefreshTheme)));
+        _dialogLifetime.Signals.Connect(this, Control.SignalName.ThemeChanged, Callable.From(() => CallDeferred(MethodName.RefreshTheme)));
 
         // Column titles and sizing are not scene properties of Tree.
         _tree.SetColumnTitle(EnabledColumn, "On"); _tree.SetColumnTitle(NameColumn, "Plugin"); _tree.SetColumnTitle(VersionColumn, "Version");
         _tree.SetColumnExpand(EnabledColumn, false); _tree.SetColumnExpand(NameColumn, false); _tree.SetColumnExpand(VersionColumn, true);
-        foreach (var window in Windows) EditorWindows.Prepare(window, _signals, this, MethodName.QueueWindowIcons);
+        _dialogLifetime.Prepare(this, MethodName.RefreshWindowIcons, _versionConfirm, _disableFrameworkConfirm, _zipDialog, _installConfirm);
         var scale = EditorWindows.Scale;
         _tree.SetColumnCustomMinimumWidth(EnabledColumn, (int)(40 * scale));
         _tree.SetColumnCustomMinimumWidth(VersionColumn, (int)(VersionMinimumWidth * scale));
         // The scene's line spacing of the details, which keeps their links apart, is for 100% editor scale.
         _detailsText.AddThemeConstantOverride("line_separation", (int)(_detailsText.GetThemeConstant("line_separation") * scale));
 
-        _signals.Connect(_check, BaseButton.SignalName.Pressed, Callable.From(CheckNow));
-        _signals.Connect(GetNode<Button>("%SettingsButton"), BaseButton.SignalName.Pressed, Callable.From(() => OpenSettings(null)));
-        _signals.Connect(_attentionButton, BaseButton.SignalName.Pressed, Callable.From(() => OpenAttention(null)));
-        _signals.Connect(_release, BaseButton.SignalName.Pressed, Callable.From(OpenRelease));
-        _signals.Connect(_locationLink, BaseButton.SignalName.Pressed, Callable.From(() => { if (_selectedSlug is not null) EditorWindows.SelectFile(PluginDirectory(_selectedSlug)); }));
-        _signals.Connect(_openFolder, BaseButton.SignalName.Pressed, Callable.From(() => { if (_selectedSlug is not null) OS.ShellShowInFileManager(ProjectSettings.GlobalizePath(PluginDirectory(_selectedSlug)), true); }));
-        _signals.Connect(_detailsText, RichTextLabel.SignalName.MetaClicked, Callable.From<Variant>(DetailsLinkClicked));
-        _signals.Connect(_tree, Tree.SignalName.ItemEdited, Callable.From(ItemEdited));
-        _signals.Connect(_disableFrameworkConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(DisableFramework));
-        _signals.Connect(_versionSelect, OptionButton.SignalName.ItemSelected, Callable.From<long>(_ => VersionButtons()));
-        _signals.Connect(_installVersion, BaseButton.SignalName.Pressed, Callable.From(ConfirmVersion));
-        _signals.Connect(_retryVersions, BaseButton.SignalName.Pressed, Callable.From(RetryVersions));
-        _signals.Connect(GetNode<Button>("%CopyErrorButton"), BaseButton.SignalName.Pressed, Callable.From(() => DisplayServer.ClipboardSet(ErrorDetails())));
-        _signals.Connect(_openLog, BaseButton.SignalName.Pressed, Callable.From(OpenLog));
-        _signals.Connect(_versionConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(() =>
+        _dialogLifetime.Signals.Connect(_check, BaseButton.SignalName.Pressed, Callable.From(CheckNow));
+        _dialogLifetime.Signals.Connect(GetNode<Button>("%SettingsButton"), BaseButton.SignalName.Pressed, Callable.From(() => OpenSettings(null)));
+        _dialogLifetime.Signals.Connect(_attentionButton, BaseButton.SignalName.Pressed, Callable.From(() => OpenAttention(null)));
+        _dialogLifetime.Signals.Connect(_release, BaseButton.SignalName.Pressed, Callable.From(OpenRelease));
+        _dialogLifetime.Signals.Connect(_locationLink, BaseButton.SignalName.Pressed, Callable.From(() => { if (_selectedSlug is not null) EditorWindows.SelectFile(PluginDirectory(_selectedSlug)); }));
+        _dialogLifetime.Signals.Connect(_openFolder, BaseButton.SignalName.Pressed, Callable.From(() => { if (_selectedSlug is not null) OS.ShellShowInFileManager(ProjectSettings.GlobalizePath(PluginDirectory(_selectedSlug)), true); }));
+        _dialogLifetime.Signals.Connect(_detailsText, RichTextLabel.SignalName.MetaClicked, Callable.From<Variant>(DetailsLinkClicked));
+        _dialogLifetime.Signals.Connect(_tree, Tree.SignalName.ItemEdited, Callable.From(ItemEdited));
+        _dialogLifetime.Signals.Connect(_disableFrameworkConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(DisableFramework));
+        _dialogLifetime.Signals.Connect(_versionSelect, OptionButton.SignalName.ItemSelected, Callable.From<long>(_ => VersionButtons()));
+        _dialogLifetime.Signals.Connect(_installVersion, BaseButton.SignalName.Pressed, Callable.From(ConfirmVersion));
+        _dialogLifetime.Signals.Connect(_retryVersions, BaseButton.SignalName.Pressed, Callable.From(RetryVersions));
+        _dialogLifetime.Signals.Connect(GetNode<Button>("%CopyErrorButton"), BaseButton.SignalName.Pressed, Callable.From(() => DisplayServer.ClipboardSet(ErrorDetails())));
+        _dialogLifetime.Signals.Connect(_openLog, BaseButton.SignalName.Pressed, Callable.From(OpenLog));
+        _dialogLifetime.Signals.Connect(_versionConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(() =>
         {
             if (_pendingVersion is { } version) Install(new([version], true, _pendingDowngrade, _pendingReinstall));
         }));
-        _signals.Connect(_installZip, BaseButton.SignalName.Pressed, Callable.From(ChooseZip));
-        _signals.Connect(_zipDialog, FileDialog.SignalName.FileSelected, Callable.From<string>(ZipChosen));
-        _signals.Connect(_installConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(ConfirmAddon));
-        _signals.Connect(_installConfirm, AcceptDialog.SignalName.Canceled, Callable.From(CancelAddon));
-        _signals.Connect(_tree, Tree.SignalName.ItemSelected, Callable.From(() => ShowDetails(SlugOf(_tree.GetSelected()))));
-        _signals.Connect(_tree, Tree.SignalName.ItemActivated, Callable.From(OpenRelease));
-        _signals.Connect(_tree, Tree.SignalName.ButtonClicked, Callable.From<TreeItem, long, long, long>((item, _, _, _) => item.Select(NameColumn)));
-        _signals.Connect(_tree, Tree.SignalName.Resized, Callable.From(() => { if (_model is not null) FitColumns(); }));
-        _signals.Connect(this, AcceptDialog.SignalName.Confirmed, Callable.From(Confirm));
-        _signals.Connect(this, AcceptDialog.SignalName.Canceled, Callable.From(Cancel));
-        _signals.Connect(this, Window.SignalName.CloseRequested, Callable.From(Cancel));
+        _dialogLifetime.Signals.Connect(_installZip, BaseButton.SignalName.Pressed, Callable.From(ChooseZip));
+        _dialogLifetime.Signals.Connect(_zipDialog, FileDialog.SignalName.FileSelected, Callable.From<string>(ZipChosen));
+        _dialogLifetime.Signals.Connect(_installConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(ConfirmAddon));
+        _dialogLifetime.Signals.Connect(_installConfirm, AcceptDialog.SignalName.Canceled, Callable.From(CancelAddon));
+        _dialogLifetime.Signals.Connect(_tree, Tree.SignalName.ItemSelected, Callable.From(() => ShowDetails(SlugOf(_tree.GetSelected()))));
+        _dialogLifetime.Signals.Connect(_tree, Tree.SignalName.ItemActivated, Callable.From(OpenRelease));
+        _dialogLifetime.Signals.Connect(_tree, Tree.SignalName.ButtonClicked, Callable.From<TreeItem, long, long, long>((item, _, _, _) => item.Select(NameColumn)));
+        _dialogLifetime.Signals.Connect(_tree, Tree.SignalName.Resized, Callable.From(() => { if (_model is not null) FitColumns(); }));
+        _dialogLifetime.Signals.Connect(this, AcceptDialog.SignalName.Confirmed, Callable.From(Confirm));
+        _dialogLifetime.Signals.Connect(this, AcceptDialog.SignalName.Canceled, Callable.From(Cancel));
+        _dialogLifetime.Signals.Connect(this, Window.SignalName.CloseRequested, Callable.From(Cancel));
     }
 
-    private Window[] Windows => [this, _versionConfirm, _disableFrameworkConfirm, _zipDialog, _installConfirm];
-
-    private void QueueWindowIcons() => CallDeferred(MethodName.RefreshWindowIcons);
-    private void RefreshWindowIcons()
-    {
-        foreach (var window in Windows) EditorWindows.ApplyIcon(window);
-    }
+    private void RefreshWindowIcons() => _dialogLifetime.RefreshIcons();
 
     private void RefreshTheme()
     {
         if (!GodotObject.IsInstanceValid(this) || _global is null) return;
         var editorTheme = EditorWindows.Theme;
-        if (editorTheme is not null && editorTheme.HasIcon("Folder", "EditorIcons"))
-        { _openFolder.Icon = editorTheme.GetIcon("Folder", "EditorIcons"); _openFolder.Text = ""; }
+        if (EditorIcons.Builtin("Folder") is { } folder) { _openFolder.Icon = folder; _openFolder.Text = ""; }
         // The editor's labels indent their text; the details text starts where theirs does.
         var inset = editorTheme is not null && editorTheme.HasStylebox("normal", "Label") ? editorTheme.GetStylebox("normal", "Label").GetMargin(Side.Left) : 0;
         _detailsText.AddThemeStyleboxOverride("normal", new StyleBoxEmpty { ContentMarginLeft = inset });
@@ -449,7 +442,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private void DetailsLinkClicked(Variant meta)
     {
         var link = meta.AsString();
-        if (PluginManagerViewModel.IsWebUrl(link)) OS.ShellOpen(link);
+        if (PluginManagerViewModel.IsWebUrl(link)) EditorWindows.OpenWebLink(link);
         else if (link == PluginManagerViewModel.LicenseMeta && _selectedSlug is not null && _model.Find(_selectedSlug) is { } row &&
                  LicenseOf(row) is { Entry.Problem: null } license)
             LicenseDialog.CreateViewer(license).Open();
@@ -535,8 +528,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
 
     private void OpenRelease()
     {
-        var url = _selectedSlug is null ? null : _model.Find(_selectedSlug)?.Update?.Candidate.ReleaseUrl;
-        if (PluginManagerViewModel.IsWebUrl(url)) OS.ShellOpen(url);
+        EditorWindows.OpenWebLink(_selectedSlug is null ? null : _model.Find(_selectedSlug)?.Update?.Candidate.ReleaseUrl);
     }
 
     /// <summary>A new local index can add or remove local versions and updates, so the lists are read again.</summary>
@@ -597,7 +589,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
 
     private void ReleaseCallbacks()
     {
-        _signals.Dispose();
+        _dialogLifetime.ReleaseCallbacks();
         _cancel?.Cancel(); _cancel?.Dispose(); _cancel = null;
         if (_global is not null) _global.LocalIndexChanged -= LocalIndexChanged;
         if (_settings is not null) _settings.Changed -= SettingsChanged;

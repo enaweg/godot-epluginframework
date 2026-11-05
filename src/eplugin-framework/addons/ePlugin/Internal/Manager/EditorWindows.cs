@@ -39,11 +39,18 @@ internal static class EditorWindows
         dialog.PopupCenteredClamped(dialog.Size, 0.9f);
     }
 
+    /// <summary>Opens <paramref name="url"/> in the system browser if it is a web link, see <see cref="PluginManagerViewModel.IsWebUrl"/>.</summary>
+    public static void OpenWebLink(string? url)
+    {
+        if (PluginManagerViewModel.IsWebUrl(url)) OS.ShellOpen(url);
+    }
+
     /// <summary>
     /// Scales the sizes a scene authored for 100% editor scale, takes the theme's status colors for its texts, and shows the
-    /// ePlugin icon whenever it opens.
+    /// ePlugin icon whenever it opens: <paramref name="refreshIcons"/>, a method of <paramref name="owner"/>, runs deferred
+    /// after each visibility change, once Godot created the OS window.
     /// </summary>
-    public static void Prepare(Window window, EditorSignalConnections signals, GodotObject owner, StringName visibilityChanged)
+    public static void Prepare(Window window, EditorSignalConnections signals, GodotObject owner, StringName refreshIcons)
     {
         var scale = Scale;
         TextColors.Use(Theme);
@@ -52,7 +59,7 @@ internal static class EditorWindows
         ScaleMinimumSizes(window, scale);
         if (DisplayServer.Singleton.HasMethod(WindowSetIcon))
             // A closure capturing Window cannot be serialized by Godot on reload. Use a native method callable.
-            signals.Connect(window, Window.SignalName.VisibilityChanged, new Callable(owner, visibilityChanged));
+            signals.Connect(window, Window.SignalName.VisibilityChanged, new Callable(owner, refreshIcons), GodotObject.ConnectFlags.Deferred);
     }
 
     /// <summary>

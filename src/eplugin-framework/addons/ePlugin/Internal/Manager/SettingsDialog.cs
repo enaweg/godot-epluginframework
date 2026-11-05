@@ -13,13 +13,12 @@ namespace Enaweg.Plugin.Internal.Manager;
 [Tool]
 internal sealed partial class SettingsDialog : AcceptDialog, ISerializationListener
 {
-    private readonly EditorSignalConnections _signals = new();
+    private readonly DialogLifetime _lifetime = new();
     private TabContainer _tabs = null!;
     private GeneralSettingsTab _general = null!;
     private UpdateSourcesTab _updateSources = null!;
     private ToolsTab _tools = null!;
     private AboutTab _about = null!;
-    private Window[] _windows = [];
 
     /// <summary>
     /// Raised after a setting or an update source changed, so the plugin list can be read again: both decide where
@@ -35,8 +34,8 @@ internal sealed partial class SettingsDialog : AcceptDialog, ISerializationListe
         _updateSources = GetNode<UpdateSourcesTab>("%SettingsTabs/Update sources"); _updateSources.Initialize(global);
         _tools = GetNode<ToolsTab>("%SettingsTabs/Tools"); _tools.Initialize(global);
         _about = GetNode<AboutTab>("%SettingsTabs/About"); _about.Initialize();
-        _windows = [this, GetNode<Window>("%AutoAcceptConfirm"), GetNode<Window>("%CleanupConfirm"), GetNode<Window>("%SiteEditor"), GetNode<Window>("%LocalSourceFolderDialog")];
-        foreach (var window in _windows) EditorWindows.Prepare(window, _signals, this, MethodName.QueueWindowIcons);
+        _lifetime.Prepare(this, MethodName.RefreshWindowIcons, GetNode<Window>("%AutoAcceptConfirm"), GetNode<Window>("%CleanupConfirm"),
+            GetNode<Window>("%SiteEditor"), GetNode<Window>("%LocalSourceFolderDialog"));
     }
 
     /// <summary>
@@ -71,15 +70,11 @@ internal sealed partial class SettingsDialog : AcceptDialog, ISerializationListe
 
     private void SourcesChanged() => Changed?.Invoke(true);
 
-    private void QueueWindowIcons() => CallDeferred(MethodName.RefreshWindowIcons);
-    private void RefreshWindowIcons()
-    {
-        foreach (var window in _windows) EditorWindows.ApplyIcon(window);
-    }
+    private void RefreshWindowIcons() => _lifetime.RefreshIcons();
 
     private void ReleaseCallbacks()
     {
-        _signals.Dispose();
+        _lifetime.ReleaseCallbacks();
         if (_general is not null) _general.Changed -= GeneralChanged;
         if (_updateSources is not null) _updateSources.Changed -= SourcesChanged;
     }

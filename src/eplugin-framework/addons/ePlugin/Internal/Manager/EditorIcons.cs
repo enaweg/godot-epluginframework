@@ -64,6 +64,10 @@ internal static class EditorIcons
     public static Color DisabledColor => EditorWindows.Theme is { } theme && theme.HasColor("font_disabled_color", "Button")
         ? theme.GetColor("font_disabled_color", "Button") : new Color(0.5f, 0.5f, 0.5f);
 
+    /// <summary>An icon of the editor's own theme, e.g. <c>StatusError</c>; null without an editor or when its theme has none.</summary>
+    public static Texture2D? Builtin(string name) =>
+        EditorWindows.Theme is { } theme && theme.HasIcon(name, "EditorIcons") ? theme.GetIcon(name, "EditorIcons") : null;
+
     /// <summary>
     /// The ePlugin icon of the toolbar button: its puzzle piece is green while updates can be installed and red while an
     /// installed plugin needs attention.

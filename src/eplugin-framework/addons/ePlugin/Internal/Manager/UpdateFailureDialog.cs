@@ -17,8 +17,7 @@ namespace Enaweg.Plugin.Internal.Manager;
 internal sealed partial class UpdateFailureDialog : AcceptDialog, ISerializationListener
 {
     internal const string ScenePath = "res://addons/ePlugin/Internal/Manager/UpdateFailureDialog.tscn";
-    private readonly EditorSignalConnections _signals = new();
-    private bool _decided;
+    private readonly DialogLifetime _lifetime = new();
     private Action<bool> _decide = null!;
     private string? _log;
     // Only project code failed: keeping is the expected answer, so it gets the focus.
@@ -35,7 +34,7 @@ internal sealed partial class UpdateFailureDialog : AcceptDialog, ISerialization
     private void Initialize(UpdateJournal journal, Action<bool> decide)
     {
         _decide = decide;
-        EditorWindows.Prepare(this, _signals, this, MethodName.QueueWindowIcon);
+        _lifetime.Prepare(this, MethodName.RefreshWindowIcons);
         _projectCode = journal.KeptForProjectCode;
         var log = AttentionItem.FailedBuildLog(journal);
         _log = log;
@@ -46,10 +45,10 @@ internal sealed partial class UpdateFailureDialog : AcceptDialog, ISerialization
         location.Text = "Rolling back restores the previous addon files and rebuilds.\n" + (log ?? journal.Directory);
         location.TooltipText = log ?? journal.Directory;
         _keep = AddButton("Keep new version", false, "keep"); AddButton("Open build log", true, "log");
-        _signals.Connect(this, SignalName.Confirmed, Callable.From(Rollback));
-        _signals.Connect(this, SignalName.Canceled, Callable.From(Rollback));
-        _signals.Connect(this, SignalName.CloseRequested, Callable.From(Rollback));
-        _signals.Connect(this, SignalName.CustomAction, Callable.From<StringName>(HandleCustomAction));
+        _lifetime.Signals.Connect(this, SignalName.Confirmed, Callable.From(Rollback));
+        _lifetime.Signals.Connect(this, SignalName.Canceled, Callable.From(Rollback));
+        _lifetime.Signals.Connect(this, SignalName.CloseRequested, Callable.From(Rollback));
+        _lifetime.Signals.Connect(this, SignalName.CustomAction, Callable.From<StringName>(HandleCustomAction));
     }
 
     /// <summary>
@@ -92,45 +91,30 @@ internal sealed partial class UpdateFailureDialog : AcceptDialog, ISerialization
     }
 
     private void Rollback() => Choose(false);
-    private void Choose(bool keep)
-    {
-        if (_decided) return;
-        _decided = true; Hide();
-        // released also when the decision throws: a dialog left valid keeps others from opening
-        try { _decide(keep); }
-        finally { EditorWindows.Release(this); }
-    }
+    private void Choose(bool keep) => _lifetime.Finish(() => _decide(keep));
     private void HandleCustomAction(StringName action)
     {
         if (action == "keep") Choose(true);
         else if (action == "log" && _log is not null) OS.ShellOpen(_log);
     }
 
-    // Reload serializes every script before disposing any of them, so callback targets are still valid here. Its buttons
-    // would decide nothing afterwards, so the dialog goes with the reload; the journal still awaits the decision, which
-    // the reloaded framework asks for again.
-    public void OnBeforeSerialize()
-    {
-        _signals.Dispose();
-        if (_decided) return;
-        _decided = true; EditorWindows.Release(this);
-    }
+    // The journal still awaits the decision after the dialog went with a reload; the reloaded framework asks for it again.
+    public void OnBeforeSerialize() => _lifetime.ReleaseForReload();
     public void OnAfterDeserialize() { }
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) _signals.Dispose();
+        if (disposing) _lifetime.ReleaseCallbacks();
         base.Dispose(disposing);
     }
 
     public override void _ExitTree()
     {
-        _signals.Dispose();
+        _lifetime.ReleaseCallbacks();
         base._ExitTree();
     }
 
-    private void QueueWindowIcon() => CallDeferred(MethodName.RefreshWindowIcon);
-    private void RefreshWindowIcon() => EditorWindows.ApplyIcon(this);
+    private void RefreshWindowIcons() => _lifetime.RefreshIcons();
 
     /// <summary>Opens above whatever exclusive editor window is open, e.g. Project Settings or the ePlugin Manager.</summary>
     public void Open() { EditorWindows.Popup(this); (_projectCode && _keep is not null ? _keep : GetOkButton()).GrabFocus(); }

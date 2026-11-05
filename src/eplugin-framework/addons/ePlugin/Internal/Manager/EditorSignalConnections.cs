@@ -10,9 +10,9 @@ internal sealed class EditorSignalConnections : IDisposable
 {
     private readonly List<(GodotObject Source, StringName Signal, Callable Callback)> _connections = [];
 
-    public void Connect(GodotObject source, StringName signal, Callable callback)
+    public void Connect(GodotObject source, StringName signal, Callable callback, GodotObject.ConnectFlags flags = 0)
     {
-        var error = source.Connect(signal, callback);
+        var error = source.Connect(signal, callback, (uint)flags);
         if (error != Error.Ok) throw new InvalidOperationException($"Cannot connect {signal}: {error}");
         _connections.Add((source, signal, callback));
     }
