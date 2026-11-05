@@ -313,9 +313,10 @@ applied; resuming reloads each journal because an earlier group may have changed
 When a journal commits or rolls back, `RebasePending` refreshes the `backup-project` of every journal that has not
 reconciled yet and, on commit, its recipe baselines for plugins it does not update, so a later rollback keeps the earlier
 group's changes. A replaced `backup-project` is copied to `backup-project.new`, the old one moved to `.old` and the new
-one into place before the journal is saved; when a crash leaves neither in place, rollback and early recovery restore
-the new copy (`ProjectBackup.Find`). Both restore the files the backup folder holds rather than `ProjectFiles`, which the
-journal saved after the replacement may not list yet. Reconcile leaves the recipes of plugins in another active journal,
+one into place before the journal is saved (`ProjectBackup.Write`); when a crash leaves neither in place, rollback and
+early recovery restore the new copy (`ProjectBackup.Find`). Both restore the files the backup folder holds rather than
+`ProjectFiles`, which the journal saved after the replacement may not list yet, through `ProjectBackup.Restore` (only
+early recovery restores `project.godot`; a `nuget.config` the backup lacks is deleted). Reconcile leaves the recipes of plugins in another active journal,
 in a journal kept before reconciling whose marker Retry still resumes, or rolled back since the assembly was loaded
 alone (`UntouchedRecipes`).
 

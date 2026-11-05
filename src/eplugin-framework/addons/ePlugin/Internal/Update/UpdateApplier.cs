@@ -183,7 +183,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                 {
                     var staging = PackageFiles.Inside(Path.Combine(directory, "staging"), package.Candidate.Slug);
                     System.IO.Directory.CreateDirectory(Path.GetDirectoryName(staging)!);
-                    Move(package.StagingDir, staging);
+                    AddonFiles.MoveDirectory(package.StagingDir, staging);
                     moved.Add(package with { StagingDir = staging });
                 }
             }
@@ -222,7 +222,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                 Uids = UidMap.Collect(Installed(slug)), AcceptedLicense = package.AcceptedLicense, Submodule = submodule });
         }
         host.PrepareJournal(journal);
-        BackupProject(journal);
+        ProjectBackup.Write(projectRoot, journal);
         if (!store.TryBeginAttempt(journal.Plugins[0].Slug, journal.Plugins[0].OldVersion, PersistedPluginState.Activated, out var attempt))
             throw new IOException("Cannot write the update marker; addon files were not touched.");
         journal.AttemptId = attempt;
@@ -431,7 +431,8 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             {
                 if (!journal.KeepProjectFiles)
                 {
-                    RestoreProject(journal);
+                    var (backup, files) = ProjectBackup.Find(journal.Directory, journal.ProjectFiles);
+                    ProjectBackup.Restore(projectRoot, backup, files, projectSettings: false);
                     // Once only: a retry after the build below failed must not write the backup over the repairs made since.
                     journal.KeepProjectFiles = true;
                     journal.Save();
@@ -490,7 +491,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         if (journal.BeforeReconcile)
         {
             host.RebaseRecipes(journal);
-            BackupProject(journal, true);
+            ProjectBackup.Write(projectRoot, journal, true);
             journal.Save();
         }
         return Rollback(journal, "Rolled back on request after it was kept with build errors.");
@@ -532,7 +533,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         try
         {
             host.RebaseRecipes(journal);
-            BackupProject(journal, true);
+            ProjectBackup.Write(projectRoot, journal, true);
             journal.BeforeReconcile = false;
             journal.Failure = null;
             journal.FailureCause = null; journal.PluginsBuildAlone = null; journal.ProjectErrors = [];
@@ -615,45 +616,11 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                     foreach (var (slug, record) in finished.Recipes)
                         if (pending.Plugins.All(p => p.Slug != slug) && pending.Recipes.TryGetValue(slug, out var own))
                         { own.Old = record.Applied.Clone(); own.Applied = record.Applied.Clone(); }
-                BackupProject(pending, true);
+                ProjectBackup.Write(projectRoot, pending, true);
                 pending.Save();
             }
         }
         catch (Exception ex) { host.Log("Cannot refresh the backups of the remaining plugin updates; rolling one of them back may undo this update's project changes: " + ex.Message); }
     }
-
-    private void BackupProject(UpdateJournal journal, bool replace = false)
-    {
-        var backup = Path.Combine(journal.Directory, ProjectBackup.Folder);
-        // A replaced backup is written next to the old one and swapped in, so it is never half written; see ProjectBackup.
-        var target = replace ? backup + ".new" : backup;
-        if (replace) AddonFiles.DeleteTree(target);
-        System.IO.Directory.CreateDirectory(target);
-        var files = new List<string>();
-        foreach (var file in System.IO.Directory.GetFiles(projectRoot).Where(f => ProjectBackup.Includes(Path.GetFileName(f))))
-        {
-            files.Add(Path.GetFileName(file));
-            File.Copy(file, Path.Combine(target, Path.GetFileName(file)), false);
-        }
-        // Informational: restoring lists the backup folder itself (ProjectBackup.Find), as the caller saves the journal later.
-        journal.ProjectFiles = files;
-        if (replace)
-        {
-            var old = backup + ".old";
-            AddonFiles.DeleteTree(old);
-            if (System.IO.Directory.Exists(backup)) Move(backup, old);
-            Move(target, backup);
-            AddonFiles.DeleteTree(old);
-        }
-    }
-    private void RestoreProject(UpdateJournal journal)
-    {
-        // The live editor owns project.godot; normal rollback restores autoloads via recipe operations.
-        // Its backup is reserved for independent early recovery, which reloads settings before restart.
-        var (backup, files) = ProjectBackup.Find(journal.Directory, journal.ProjectFiles);
-        foreach (var file in files.Where(f => f != "project.godot")) AddonFiles.Overwrite(PackageFiles.Inside(backup, file), PackageFiles.Inside(projectRoot, file));
-        if (!files.Any(p => p.Equals("nuget.config", StringComparison.OrdinalIgnoreCase))) AddonFiles.DeleteFile(Path.Combine(projectRoot, "nuget.config"));
-    }
-    private static void Move(string from, string to) => AddonFiles.MoveDirectory(from, to);
 }
 #endif

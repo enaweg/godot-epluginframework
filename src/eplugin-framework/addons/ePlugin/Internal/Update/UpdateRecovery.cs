@@ -126,8 +126,7 @@ internal static class UpdateRecovery
                 }
                 if (!journal.KeepProjectFiles)
                 {
-                    foreach (var file in projectFiles) AddonFiles.Overwrite(Inside(projectBackup, file), Inside(projectRoot, file));
-                    if (!projectFiles.Any(f => f.Equals("nuget.config", StringComparison.OrdinalIgnoreCase))) AddonFiles.DeleteFile(Path.Combine(projectRoot, "nuget.config"));
+                    ProjectBackup.Restore(projectRoot, projectBackup, projectFiles, projectSettings: true);
                     json["keepProjectFiles"] = true; Write(path, json);
                     restoreSettings();
                 }
@@ -228,36 +227,6 @@ internal static class UpdateRecovery
             File.SetAttributes(from, show ? FileAttributes.Normal : FileAttributes.Hidden);
             Directory.Move(from, to);
         }
-    }
-}
-
-/// <summary>
-/// The copy of the project files (<c>.csproj</c>, <c>.sln</c>, <c>nuget.config</c>, <c>project.godot</c>) a journal restores
-/// on rollback. Replacing it writes the new copy to <c>backup-project.new</c>, moves the old one to <c>.old</c> and the new
-/// one into place, and only then saves the journal. Used by both the applier and early recovery.
-/// </summary>
-internal static class ProjectBackup
-{
-    public const string Folder = "backup-project";
-
-    /// <summary>Whether a file in the project root is one of the project files the backup holds.</summary>
-    public static bool Includes(string fileName) =>
-        Path.GetExtension(fileName) is ".csproj" or ".sln" or ".slnx" || fileName.Equals("nuget.config", StringComparison.OrdinalIgnoreCase) || fileName == "project.godot";
-
-    /// <summary>
-    /// The folder to restore from and its files. When a replacement stopped between its two moves, the new copy is
-    /// complete (the old one is moved aside only after it) and is used; without the new copy, the old one is. The files
-    /// are those the folder holds: each copy is complete before it is moved into place, while the journal listing them is
-    /// saved only afterwards, so after an interruption it may still list the previous copy's (<paramref name="recorded"/>
-    /// is used only when the folder is missing).
-    /// </summary>
-    public static (string Directory, IReadOnlyList<string> Files) Find(string journalDirectory, IReadOnlyList<string> recorded)
-    {
-        var backup = Path.Combine(journalDirectory, Folder);
-        var directory = Directory.Exists(backup) || !Directory.Exists(backup + ".old") ? backup
-            : Directory.Exists(backup + ".new") ? backup + ".new" : backup + ".old";
-        if (!Directory.Exists(directory)) return (directory, recorded);
-        return (directory, Directory.GetFiles(directory).Select(f => Path.GetFileName(f)).Where(Includes).ToArray());
     }
 }
 #endif
