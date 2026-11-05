@@ -12,7 +12,6 @@ namespace Enaweg.Plugin;
 /// from the plugin's on-disk layout (its <c>res://addons/&lt;slug&gt;/</c> directory, also in a subfolder, and
 /// <c>plugin.cfg</c>).
 /// </summary>
-[Tool]
 public static class EditorPluginExtensions
 {
     /// <summary>

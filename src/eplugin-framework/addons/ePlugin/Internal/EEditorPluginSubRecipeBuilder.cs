@@ -1,13 +1,10 @@
 #if TOOLS
-using Godot;
-
 namespace Enaweg.Plugin.Internal;
 
 /// <summary>
 /// Builder for the nested recipe of an optional plugin dependency. Unlike <see cref="EEditorPluginBuilder"/>
 /// it starts from a bare recipe (no implicit ePlugin self-dependency) and cannot declare dependencies.
 /// </summary>
-[Tool]
 internal sealed class EEditorPluginSubRecipeBuilder : IEEditorPluginRecipeBuilder
 {
     public static EEditorPluginSubRecipeBuilder Create()

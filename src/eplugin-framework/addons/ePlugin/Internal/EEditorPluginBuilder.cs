@@ -1,10 +1,8 @@
 #if TOOLS
 using System;
-using Godot;
 
 namespace Enaweg.Plugin.Internal;
 
-[Tool]
 internal sealed class EEditorPluginBuilder : IEEditorPluginBuilder
 {
     public static EEditorPluginBuilder Create()
