@@ -150,10 +150,7 @@ internal sealed partial class EGlobal
                 DisableEPlugin(nextPlugin, false);
             }
 
-            if (FinishTransition())
-            {
-                RefreshEditor();
-            }
+            CompleteTransition();
         }
     }
 
@@ -210,10 +207,7 @@ internal sealed partial class EGlobal
             return;
         }
 
-        if (FinishTransition())
-        {
-            RefreshEditor();
-        }
+        CompleteTransition();
     }
 
     /// <summary>

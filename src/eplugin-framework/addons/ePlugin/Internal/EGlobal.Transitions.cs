@@ -323,6 +323,15 @@ internal sealed partial class EGlobal
         RefreshEditor();
     }
 
+    /// <summary>Finishes the transition (<see cref="FinishTransition"/>) and refreshes the editor once it completed.</summary>
+    private void CompleteTransition()
+    {
+        if (FinishTransition())
+        {
+            RefreshEditor();
+        }
+    }
+
     internal bool FinishTransition()
     {
         if (_recipeUpdateJournal is not null) return false;

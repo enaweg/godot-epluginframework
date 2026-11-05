@@ -23,10 +23,7 @@ internal sealed partial class EGlobal
 
         ResumeWaitingInRounds();
 
-        if (FinishTransition())
-        {
-            RefreshEditor();
-        }
+        CompleteTransition();
     }
 
     /// <summary>
@@ -206,10 +203,7 @@ internal sealed partial class EGlobal
             // trigger install for waiting plugins
             ResumeWaitingInRounds();
 
-            if (FinishTransition())
-            {
-                RefreshEditor();
-            }
+            CompleteTransition();
         }
     }
 
@@ -432,10 +426,7 @@ internal sealed partial class EGlobal
         }
 
         DisableFailedLater(failed);
-        if (FinishTransition())
-        {
-            RefreshEditor();
-        }
+        CompleteTransition();
     }
 
     /// <summary>Puts the waiting plugins in error and takes them off the stack; returns them.</summary>

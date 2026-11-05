@@ -231,11 +231,15 @@ internal sealed partial class EGlobal
         }
     }
 
+    /// <summary>
+    /// Completes the transition the toggle started, if any: without one, <see cref="FinishTransition"/> would report the
+    /// last transition's outcome and refresh the editor for nothing.
+    /// </summary>
     private void FinishPlainPluginTransition()
     {
-        if (_transition is not null && FinishTransition())
+        if (_transition is not null)
         {
-            RefreshEditor();
+            CompleteTransition();
         }
     }
 }
