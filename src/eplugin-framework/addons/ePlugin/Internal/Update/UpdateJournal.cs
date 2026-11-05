@@ -163,16 +163,26 @@ internal sealed class UpdateJournals(string root, Action<string>? log = null)
     {
         var result = new List<UpdateJournal>();
         if (!System.IO.Directory.Exists(root)) return result;
-        foreach (var folder in System.IO.Directory.GetDirectories(root))
+        string[] folders;
+        try { folders = System.IO.Directory.GetDirectories(root); }
+        catch (Exception ex) when (IsUnreadable(ex)) { log?.Invoke($"Cannot read update journals in {root}: {ex.Message}"); return result; }
+        foreach (var folder in folders)
         {
-            if (!File.Exists(Path.Combine(folder, "journal.json"))) continue;
-            // A journal Load refuses is skipped like an unreadable one, so it cannot stop every other update.
-            try { result.Add(UpdateJournal.Load(folder)); }
-            catch (Exception ex) when (ex is IOException or JsonException or ArgumentException or InvalidDataException) { log?.Invoke($"Cannot read update journal {folder}: {ex.Message}"); }
+            // A journal Load refuses is skipped like an unreadable one (also one access is denied to, e.g. while a virus
+            // scanner holds it), so it cannot stop every other update or the framework's start that resumes them.
+            try
+            {
+                if (!File.Exists(Path.Combine(folder, "journal.json"))) continue;
+                result.Add(UpdateJournal.Load(folder));
+            }
+            catch (Exception ex) when (IsUnreadable(ex)) { log?.Invoke($"Cannot read update journal {folder}: {ex.Message}"); }
         }
         // Groups of one batch resume in the order they were applied: a later group built on top of the earlier ones.
         return result.OrderBy(j => j.CreatedUtc).ThenBy(j => j.Group ?? 0).ToList();
     }
+
+    private static bool IsUnreadable(Exception ex) =>
+        ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException or InvalidDataException;
     /// <summary>
     /// Folders without a journal last written before <paramref name="before"/>: batches the ePlugin Manager staged but did
     /// not install. It deletes those itself, but an assembly reload or a crash forgets them.
