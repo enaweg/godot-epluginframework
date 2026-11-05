@@ -139,8 +139,10 @@ because Godot otherwise asks to save modified resources first (plugins adding au
 
 `EGlobal` (`addons/ePlugin/Internal/EGlobal.cs`) is an internal singleton owning all plugin state. Its partials split it by
 concern: `EGlobal.Transitions.cs`, `.Activation.cs`, `.Deactivation.cs`, `.OptionalDependencies.cs` and `.Retry.cs` hold
-the plugin lifecycle, the others licenses, welcome pages, plain plugins, GDExtension add-ons and updates; put new code
-in the partial of its concern rather than in `EGlobal.cs`. It is the
+the plugin lifecycle; shared infrastructure has its own: `.EditorThread.cs` (`Post`, `PostForInstance`,
+`OnEditorThread`), `.Recipes.cs` (`RecipeOf`, the recipe of an enabled or disabled ePlugin) and `.UnsavedState.cs`
+(licenses and welcome pages the state file could not save yet); the others hold licenses, welcome pages, plain plugins,
+GDExtension add-ons and updates. Put new code in the partial of its concern rather than in `EGlobal.cs`. It is the
 brain of the framework: it tracks a `PluginContext` per managed `EditorPlugin`, drives the
 enable/disable state machine (`EEditorPluginState`: `Created → Activated`/`Deactivated`/`Error`), resolves
 plugin dependencies (enabling/version-checking them before the dependent plugin), and applies/reverses each

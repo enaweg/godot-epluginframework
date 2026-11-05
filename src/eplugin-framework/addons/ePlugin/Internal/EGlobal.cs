@@ -82,6 +82,12 @@ internal sealed partial class EGlobal
     /// <summary>The editor this instance works with, e.g. for the project's folder.</summary>
     internal IEditorHost Host => _host;
 
+    /// <summary>The framework's own slug, also before it is initialized.</summary>
+    private string FrameworkSlug => _ePluginContext?.GetPluginSlug() ?? Framework.Slug;
+
+    /// <summary>Whether the editor can show the framework's dialogs, e.g. a license review or welcome pages.</summary>
+    private bool LicenseUiAvailable => _ePluginContext is not null && _host.CanShowDialogs(_ePluginContext);
+
     /// <summary>The plugin contexts, for tests.</summary>
     internal List<PluginContext> Contexts => _contexts;
 

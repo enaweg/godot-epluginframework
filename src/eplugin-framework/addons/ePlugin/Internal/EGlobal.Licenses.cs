@@ -3,8 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
-using System.Text.Json;
 using Enaweg.Plugin.Internal.Licenses;
 using Enaweg.Plugin.Internal.Manager;
 using Enaweg.Plugin.Internal.Update;
@@ -19,10 +17,6 @@ internal sealed partial class EGlobal
 
     /// <summary>The license review waiting for its dialog, for tests; <see cref="TakeLicenseReview"/> hands it out.</summary>
     internal LicenseReview? PendingLicenseReview => _pendingLicenseReview;
-
-    private bool LicenseUiAvailable => _ePluginContext is not null && _host.CanShowDialogs(_ePluginContext);
-
-    private string FrameworkSlug => _ePluginContext?.GetPluginSlug() ?? Framework.Slug;
 
     /// <summary>
     /// Asks for the licenses a plugin needs before it is installed. Returns false when the activation has to wait: the
@@ -126,54 +120,6 @@ internal sealed partial class EGlobal
         return pending;
     }
 
-    /// <summary>
-    /// The recipe of an ePlugin: from its editor instance, or for a disabled ePlugin from a throw-away instance of its
-    /// compiled script type. Null for other plugins and when the recipe cannot be created.
-    /// </summary>
-    private EEditorPluginRecipe? RecipeOf(string slug)
-    {
-        var context = ManagedContext(slug);
-        if (context is null)
-        {
-            return ReadRecipeOfDisabledPlugin(slug);
-        }
-
-        if (context.IsRecipeCreated)
-        {
-            return context.Builder.PluginRecipe;
-        }
-
-        try
-        {
-            // a throw-away builder: a failing CreateRecipe must not leave a half-filled recipe on the context
-            var builder = EEditorPluginBuilder.Create();
-            context.Plugin!.CreateRecipe(builder);
-            return builder.PluginRecipe;
-        }
-        catch (Exception)
-        {
-            return null; // the activation itself reports the recipe failure
-        }
-    }
-
-    /// <summary>
-    /// A disabled ePlugin has no editor instance, but its script type is compiled. A throw-away instance creates the
-    /// recipe, which is deterministic and side-effect free.
-    /// </summary>
-    private EEditorPluginRecipe? ReadRecipeOfDisabledPlugin(string slug)
-    {
-        var builder = EEditorPluginBuilder.Create();
-        try
-        {
-            return _host.CreateRecipeOfDisabledPlugin(slug, builder) ? builder.PluginRecipe : null;
-        }
-        catch (Exception ex)
-        {
-            _ePluginContext?.Logger.Warn($"Cannot read the recipe of {slug} to collect its license and dependencies: {ex.Message}");
-            return null;
-        }
-    }
-
     private LicenseInfo? ReadInstalledLicense(string slug, EEditorPluginRecipe? recipe) =>
         ReadLicense(slug, recipe, $"{_host.PluginDirectory(slug)}/plugin.cfg", ProjectSettings.GlobalizePath(_host.PluginDirectory(slug)));
 
@@ -263,43 +209,6 @@ internal sealed partial class EGlobal
         Stash(UnsavedLicensesMeta, accepted);
         _ePluginContext?.Logger.Error(
             "Accepted licenses could not be saved to addons/eplugin-state.json; they are asked for again after the editor restarts.");
-    }
-
-    // Licenses and welcome pages the state file could not save, kept in Engine metadata until it can: the store is
-    // created anew by every assembly reload, which follows right after the build of an activation.
-    private const string UnsavedLicensesMeta = "eplugin_unsaved_licenses";
-    private const string UnsavedWelcomesMeta = "eplugin_unsaved_welcomes";
-
-    private static void Stash<T>(string key, IEnumerable<T> entries) =>
-        Engine.Singleton.SetMeta(key, JsonSerializer.Serialize(Unstash<T>(key).Concat(entries).ToArray()));
-
-    private static T[] Unstash<T>(string key)
-    {
-        if (!Engine.Singleton.HasMeta(key)) return [];
-        try { return JsonSerializer.Deserialize<T[]>(Engine.Singleton.GetMeta(key).AsString()) ?? []; }
-        catch (JsonException) { return []; }
-    }
-
-    /// <summary>
-    /// Records the licenses and welcome pages an earlier load of this assembly could not save, unless the file holds newer
-    /// ones; those it still cannot save stay stashed. Called by Initialize, after the store is loaded.
-    /// </summary>
-    internal void RestoreUnsavedState()
-    {
-        if (_stateStore is not { } store) return;
-        var licenses = Unstash<AcceptedLicense>(UnsavedLicensesMeta)
-            .Where(l => store.GetLicense(l.Slug) is not { } current || current.AcceptedUtc < l.AcceptedUtc).ToArray();
-        var welcomes = Unstash<ShownWelcome>(UnsavedWelcomesMeta).Where(w => !store.IsWelcomeShown(w.Slug)).ToArray();
-        ForgetUnsavedState();
-        if (licenses.Length > 0 && !store.TryRecordLicenses(licenses)) Stash(UnsavedLicensesMeta, licenses);
-        if (welcomes.Length > 0 && !store.TryRecordWelcomes(welcomes)) Stash(UnsavedWelcomesMeta, welcomes);
-    }
-
-    /// <summary>Drops the stashed licenses and welcome pages, e.g. when the framework is disabled.</summary>
-    internal static void ForgetUnsavedState()
-    {
-        foreach (var key in new[] { UnsavedLicensesMeta, UnsavedWelcomesMeta })
-            if (Engine.Singleton.HasMeta(key)) Engine.Singleton.RemoveMeta(key);
     }
 
     /// <summary>
