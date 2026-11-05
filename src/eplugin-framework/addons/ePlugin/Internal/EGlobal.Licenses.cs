@@ -73,7 +73,7 @@ internal sealed partial class EGlobal
         // Godot is still running this plugin's _EnablePlugin. Disabling it right away would free the plugin inside its
         // own callback. Deactivated makes the DisableEPlugin it triggers a no-op, as nothing was installed.
         context.State = EEditorPluginState.Deactivated;
-        Post(() =>
+        PostForInstance(() =>
         {
             if (_host.IsPluginEnabled(context.Slug))
             {
@@ -503,7 +503,7 @@ internal sealed partial class EGlobal
         if (toggles.Length > 0)
         {
             RememberLicenseDecisions(toggles);
-            Post(ApplyLicenseDecisions);
+            PostForInstance(ApplyLicenseDecisions);
         }
     }
 
@@ -552,7 +552,7 @@ internal sealed partial class EGlobal
     /// <summary>Applies the decisions of a license review that an assembly reload interrupted; called by Initialize.</summary>
     internal void ResumeLicenseDecisions()
     {
-        if (Engine.Singleton.HasMeta(LicenseDecisionsMeta)) Post(ApplyLicenseDecisions);
+        if (Engine.Singleton.HasMeta(LicenseDecisionsMeta)) PostForInstance(ApplyLicenseDecisions);
     }
 
     /// <summary>
@@ -563,7 +563,7 @@ internal sealed partial class EGlobal
     {
         if (AssemblyReload.IsPending)
         {
-            Post(ApplyLicenseDecisions);
+            PostForInstance(ApplyLicenseDecisions);
             return;
         }
 

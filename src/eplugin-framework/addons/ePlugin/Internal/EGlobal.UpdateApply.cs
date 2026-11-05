@@ -198,7 +198,7 @@ internal sealed partial class EGlobal
         if (result == UpdateOutcome.AwaitingDecision)
         {
             var journal = UpdateJournal.Load(directory);
-            Post(() =>
+            PostForInstance(() =>
             {
                 if (UpdateDecisionNeeded is null) Applier().Rollback(journal, "No build-failure dialog is available.");
                 else UpdateDecisionNeeded(journal);

@@ -459,7 +459,7 @@ internal sealed partial class EGlobal
     /// </summary>
     private void DisableFailedLater(PluginContext[] failed)
     {
-        Post(() =>
+        PostForInstance(() =>
         {
             foreach (var plugin in failed.Where(p => _host.IsPluginEnabled(p.Slug)))
             {
