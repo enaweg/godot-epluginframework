@@ -244,7 +244,7 @@ internal sealed partial class EGlobal
             var version = context.Metadata?.Version;
             if (string.IsNullOrWhiteSpace(version))
             {
-                _stateStore.TryRecordInvalid(context.Slug, version, "invalid_plugin_version");
+                _stateStore.TryRecordInvalid(context.Slug, version, AttemptReasons.InvalidPluginVersion);
                 context.State = EEditorPluginState.Error;
                 context.Logger?.Error($"Cannot record {context.Slug}: plugin.cfg has no usable version.");
                 continue;
@@ -268,7 +268,7 @@ internal sealed partial class EGlobal
         var version = context.Metadata?.Version;
         if (string.IsNullOrWhiteSpace(version))
         {
-            _stateStore.TryRecordInvalid(context.Slug, version, "invalid_plugin_version");
+            _stateStore.TryRecordInvalid(context.Slug, version, AttemptReasons.InvalidPluginVersion);
             return;
         }
 
@@ -313,7 +313,7 @@ internal sealed partial class EGlobal
         var version = context.Metadata?.Version;
         if (string.IsNullOrWhiteSpace(version))
         {
-            _stateStore.TryRecordInvalid(context.Slug, version, "invalid_plugin_version");
+            _stateStore.TryRecordInvalid(context.Slug, version, AttemptReasons.InvalidPluginVersion);
             return;
         }
 
@@ -386,26 +386,21 @@ internal sealed partial class EGlobal
         return CliService?.Create(logger, _host.ProjectRoot, _host.AssemblyName, _host.SolutionDirectory);
     }
 
-    private void RefreshEditor(bool rebuild = true)
+    /// <summary>
+    /// Scans the project once plugins changed, so the editor shows what their recipes added or removed. A transition
+    /// builds the solution itself before it completes (<see cref="FinishTransition"/>), so nothing is built here.
+    /// </summary>
+    private void RefreshEditor()
     {
         if (_updateRefreshSuppression > 0) return;
-        ActivationProgress.SetText("Refreshing editor and rebuilding solution...");
+        ActivationProgress.SetText("Refreshing editor...");
         _ePluginContext?.Logger.Log($"Refreshed Editor state.");
 
         // refresh what we can in Godot Editor UI.
         _host.ScanFilesystem();
 
-        if (_ePluginContext is not null)
-        {
-            var baseContext = GetOrCreateContext(_ePluginContext);
-            if (rebuild)
-            {
-                baseContext.Cli?.RebuildSolution();
-            }
-
-            _ePluginContext.Logger.Log(
-                $"Completed loading. {_contexts.Count(c => c.State == EEditorPluginState.Activated)} active plugins.");
-        }
+        _ePluginContext?.Logger.Log(
+            $"Completed loading. {_contexts.Count(c => c.State == EEditorPluginState.Activated)} active plugins.");
     }
 
     /// <summary>

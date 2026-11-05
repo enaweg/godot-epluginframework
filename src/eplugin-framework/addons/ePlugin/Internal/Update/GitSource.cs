@@ -276,7 +276,7 @@ internal sealed class GitSource(UpdateHttp http, IGitRunner git, GitUrl url) : I
     /// <summary>The candidate of <paramref name="commit"/>, announcing the version in its plugin.cfg.</summary>
     private async Task<UpdateCandidate> Candidate(string work, PluginUpdateTarget target, string commit, CancellationToken ct)
     {
-        if (target.Kind == Kinds.PluginKind.GDExtensionAddon)
+        if (!Kinds.PluginKinds.Workflow(target.Kind).HasPluginConfig)
             throw new IOException("A GDExtension without plugin.cfg has no version in its files; it can only be updated from version tags or releases.");
         string metadata;
         // Without a path, the plugin folder is only known from the repository's file list, so it is read with git.

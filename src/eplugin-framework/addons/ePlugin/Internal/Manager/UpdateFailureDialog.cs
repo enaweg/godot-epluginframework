@@ -35,7 +35,7 @@ internal sealed partial class UpdateFailureDialog : AcceptDialog, ISerialization
     private void Initialize(UpdateJournal journal, Action<bool> decide)
     {
         _decide = decide;
-        EditorWindows.Prepare(this, _signals, this, nameof(QueueWindowIcon));
+        EditorWindows.Prepare(this, _signals, this, MethodName.QueueWindowIcon);
         _projectCode = journal.KeptForProjectCode;
         var log = AttentionItem.FailedBuildLog(journal);
         _log = log;
@@ -129,7 +129,7 @@ internal sealed partial class UpdateFailureDialog : AcceptDialog, ISerialization
         base._ExitTree();
     }
 
-    private void QueueWindowIcon() => CallDeferred(nameof(RefreshWindowIcon));
+    private void QueueWindowIcon() => CallDeferred(MethodName.RefreshWindowIcon);
     private void RefreshWindowIcon() => EditorWindows.ApplyIcon(this);
 
     /// <summary>Opens above whatever exclusive editor window is open, e.g. Project Settings or the ePlugin Manager.</summary>

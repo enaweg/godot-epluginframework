@@ -194,16 +194,14 @@ public class DecisionDialogTests
     [TestCase]
     public static void EveryReasonALifecycleFailureRecordsHasItsOwnExplanation()
     {
-        // the reasons EGlobal passes to FailTransition and TryRecordInvalid
-        string[] reasons =
-        [
+        // the reasons EGlobal passes to FailTransition and TryRecordInvalid; the values are stored, so they stay as they are
+        Assertions.AssertThat(AttemptReasons.Lifecycle).ContainsExactlyInAnyOrder(
             "attempt_in_progress", "dependency_resolution_failed", "recipe_creation_failed", "dependent_recipe_creation_failed",
             "recipe_operation_failed", "solution_build_failed", "optional_recipe_failed", "invalid_plugin_version",
             "participant_blocked", "cannot_record_participant", "state_commit_failed", "deactivation_failed",
             "plugin_enable_refused", "retry_not_continued", "dotnet_unavailable", "dependency_disabled",
-            "dependency_timed_out", "operation_timed_out"
-        ];
-        foreach (var reason in reasons)
+            "dependency_timed_out", "operation_timed_out");
+        foreach (var reason in AttemptReasons.Lifecycle)
         {
             var summary = new AttentionItem(new PluginRow(Plugin("a") with { FailedAttempt = Attempt("a", reason) }, null), null, null, []).Summary;
             Assertions.AssertString(summary).NotContains(reason);

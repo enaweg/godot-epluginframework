@@ -61,7 +61,7 @@ internal sealed partial class EGlobal
         }
 
         // Handled once the new assembly is loaded: work started now would run on the old code.
-        if (AssemblyReload.IsPending)
+        if (_host.IsAssemblyReloadPending)
         {
             return false;
         }
@@ -154,7 +154,7 @@ internal sealed partial class EGlobal
         catch (Exception ex)
         {
             _ePluginContext?.Logger.Error($"Installing the optional recipes that {name} satisfies failed: {ex.Message}");
-            FailTransition("optional_recipe_failed");
+            FailTransition(AttemptReasons.OptionalRecipeFailed);
             return;
         }
 
@@ -170,10 +170,10 @@ internal sealed partial class EGlobal
         _contexts.RemoveAll(c => c.Slug == slug && c.Plugin is null);
         // resumed, a plugin still waiting for another dependency would enable this one again
         FailPluginsWaitingFor(slug);
-        var dependants = _contexts.Where(c => c.Plugin is not null && c.State == EEditorPluginState.Activated &&
-                                              RecipeOf(c.Slug)?.PluginDependencies.Any(d => d.Slug == slug) == true)
-            .ToArray();
-        if (dependants.Length == 0 && !PluginsWithOptionalDependencyOn(slug).Any())
+        // The plugin is gone already, so nothing is refused for a dependant whose recipe cannot be read (it is logged); only
+        // disabling an ePlugin itself can still be stopped by one.
+        var dependants = ActivatedDependantsOf(slug, out _);
+        if (dependants.Count == 0 && !PluginsWithOptionalDependencyOn(slug).Any())
         {
             return;
         }
@@ -201,7 +201,7 @@ internal sealed partial class EGlobal
         catch (Exception ex)
         {
             _ePluginContext?.Logger.Error($"Removing what needs {name} failed: {ex.Message}");
-            FailTransition("optional_recipe_failed");
+            FailTransition(AttemptReasons.OptionalRecipeFailed);
             return;
         }
         finally
@@ -235,7 +235,7 @@ internal sealed partial class EGlobal
     {
         if (_transition is not null && FinishTransition())
         {
-            RefreshEditor(rebuild: false);
+            RefreshEditor();
         }
     }
 }

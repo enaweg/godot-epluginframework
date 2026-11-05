@@ -134,15 +134,15 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _installZip = GetNode<Button>("%InstallZipButton"); _zipDialog = GetNode<FileDialog>("%InstallZipDialog");
         _installConfirm = GetNode<ConfirmationDialog>("%InstallConfirm"); _installText = GetNode<RichTextLabel>("%InstallText");
         _settings = GetNode<SettingsDialog>("%SettingsDialog"); _settings.Initialize(global);
-        _attention = GetNode<AttentionDialog>("%AttentionDialog"); _attention.Initialize();
+        _attention = GetNode<AttentionDialog>("%AttentionDialog"); _attention.Initialize(global.Host.PluginDirectory);
         _locationRow = GetNode<Control>("%LocationRow"); _locationLink = GetNode<LinkButton>("%LocationLink"); _openFolder = GetNode<Button>("%OpenFolderButton");
         RefreshTheme();
-        _signals.Connect(this, Control.SignalName.ThemeChanged, Callable.From(() => CallDeferred(nameof(RefreshTheme))));
+        _signals.Connect(this, Control.SignalName.ThemeChanged, Callable.From(() => CallDeferred(MethodName.RefreshTheme)));
 
         // Column titles and sizing are not scene properties of Tree.
         _tree.SetColumnTitle(EnabledColumn, "On"); _tree.SetColumnTitle(NameColumn, "Plugin"); _tree.SetColumnTitle(VersionColumn, "Version");
         _tree.SetColumnExpand(EnabledColumn, false); _tree.SetColumnExpand(NameColumn, false); _tree.SetColumnExpand(VersionColumn, true);
-        foreach (var window in Windows) EditorWindows.Prepare(window, _signals, this, nameof(QueueWindowIcons));
+        foreach (var window in Windows) EditorWindows.Prepare(window, _signals, this, MethodName.QueueWindowIcons);
         var scale = EditorWindows.Scale;
         _tree.SetColumnCustomMinimumWidth(EnabledColumn, (int)(40 * scale));
         _tree.SetColumnCustomMinimumWidth(VersionColumn, (int)(VersionMinimumWidth * scale));
@@ -182,7 +182,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
 
     private Window[] Windows => [this, _versionConfirm, _disableFrameworkConfirm, _zipDialog, _installConfirm];
 
-    private void QueueWindowIcons() => CallDeferred(nameof(RefreshWindowIcons));
+    private void QueueWindowIcons() => CallDeferred(MethodName.RefreshWindowIcons);
     private void RefreshWindowIcons()
     {
         foreach (var window in Windows) EditorWindows.ApplyIcon(window);
@@ -371,7 +371,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         if (_noticeLog is not null) OS.ShellShowInFileManager(_noticeLog);
     }
 
-    private static string PluginDirectory(string slug) => "res://addons/" + slug;
+    private string PluginDirectory(string slug) => _global.Host.PluginDirectory(slug);
 
     /// <summary>
     /// Tree draws cell buttons at the right edge of the cell. Sizing the Plugin column to its longest title keeps the

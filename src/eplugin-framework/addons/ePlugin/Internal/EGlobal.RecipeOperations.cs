@@ -79,7 +79,7 @@ internal sealed partial class EGlobal
 
     /// <summary>A recipe's project path made absolute, like <see cref="DotnetCliBase.ProjectFile"/>, so recipes naming it differently compare equal.</summary>
     private string ProjectPath(string path) =>
-        System.IO.Path.GetFullPath(System.IO.Path.Combine(_host.ProjectRoot, path.StartsWith("res://", StringComparison.Ordinal) ? path["res://".Length..] : path));
+        System.IO.Path.GetFullPath(System.IO.Path.Combine(_host.ProjectRoot, PackageFiles.ProjectRelative(path)));
 
     /// <summary>
     /// The recipes that stay installed while <paramref name="reversed"/>, one of <paramref name="context"/>'s recipes, is

@@ -35,7 +35,8 @@ internal sealed record LocalZipPackageRef(string Path) : UpdatePackageRef;
 /// <param name="OverrideUrl">The update site the project sets for the plugin, which is tried before the plugin.cfg one.</param>
 /// <param name="KnownUrl">The update site of ePlugin's built-in list, the last one tried.</param>
 /// <param name="Kind">
-/// What the editor knows of the installed plugin: <see cref="PluginKind.Framework"/>, <see cref="PluginKind.EPlugin"/>, or
+/// What the editor knows of the installed plugin: <see cref="PluginKind.Framework"/>, <see cref="PluginKind.EPlugin"/>,
+/// <see cref="PluginKind.GDExtensionAddon"/> for a GDExtension without plugin.cfg, or
 /// <see cref="PluginKind.Unknown"/> for every other plugin, whose kind validation reads from its files.
 /// </param>
 /// <param name="Repository">
@@ -73,7 +74,7 @@ internal sealed record PluginUpdateTarget(string Slug, string Name, string Insta
     /// A GDExtension add-on ePlugin did not install: nothing names its version, so no release counts as an update of it,
     /// but its latest release is still looked up so the ePlugin Manager can offer to install it.
     /// </summary>
-    public bool VersionUnknown => Kind == PluginKind.GDExtensionAddon && InstalledVersion.Length == 0;
+    public bool VersionUnknown => !PluginKinds.Workflow(Kind).HasPluginConfig && InstalledVersion.Length == 0;
 
     /// <summary>Which of the plugin's update sites <paramref name="url"/> is; the earliest when several are the same.</summary>
     public UpdateSite SiteOf(string url) =>

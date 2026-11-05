@@ -23,7 +23,7 @@ Where the implementation differs from the plan below:
   restoring the project backup. **Roll back** rebases (`RebaseRecipes`, `BackupProject(replace: true)`) only for an
   update kept before its recipes were reconciled; one kept after reconciling sets `KeepProjectFiles` instead, and
   `Reconcile` undoes its recipe changes. Either way the project files changed since the update stay.
-- `TryRebuildSolution` is in `EGlobal.Transitions.cs`, not `EGlobal.cs`.
+- The activation build (`TryBuild` in `FinishTransition`) is in `EGlobal.Transitions.cs`, not `EGlobal.cs`.
 - The classifier reads the failed build's own output; only the plugins-only build writes an errors-only file log.
   `CS2012` is transient too.
 - Not done: the review-step warning while another update is kept (corner case 26), and the group baseline follow-up.
@@ -76,7 +76,7 @@ the dll is gone too.
 
 Editor restart in that state (`--headless --editor`, Godot 4.7.2): no error, no build attempt, the plugin's
 `_EnterTree` never runs; the plugin stays listed as enabled in `project.godot`. For ePlugin this means after a restart
-while an update is kept (or after any failed activation build, `EGlobal.cs` uses the same `TryRebuildSolution`):
+while an update is kept (or after any failed activation build, which `FinishTransition` runs the same way):
 no framework, no ePlugin Manager, no **Retry**, no recovery, silently. The running editor is not affected,
 because it loaded the assembly into memory.
 

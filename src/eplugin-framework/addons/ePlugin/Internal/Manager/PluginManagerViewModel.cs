@@ -87,7 +87,7 @@ internal sealed class PluginManagerViewModel
             }
             if (SemVer.TryParse(candidate.InstalledVersion, out var old) && SemVer.TryParse(candidate.NewVersion, out var next) && next.Major != old.Major)
                 messages.Add(new("R14", FindingSeverity.Warning, "Major version change: your project code may need changes."));
-            if (candidate.Slug == "ePlugin") messages.Add(new("restart", FindingSeverity.Info, "The editor will restart after this update."));
+            if (candidate.Slug == Framework.Slug) messages.Add(new("restart", FindingSeverity.Info, "The editor will restart after this update."));
             var failure = cache?.LastFailure(candidate);
             Updates.Add(new(candidate, messages, failure));
         }
@@ -430,7 +430,7 @@ internal sealed class PluginManagerViewModel
 
         if (plugin.Recipe is { } recipe)
         {
-            var hard = recipe.PluginDependencies.Where(d => d.Slug != "ePlugin").Select(d => d.Slug + Version(d.Version)).ToArray();
+            var hard = recipe.PluginDependencies.Where(d => d.Slug != Framework.Slug).Select(d => d.Slug + Version(d.Version)).ToArray();
             List("Plugin dependencies", hard);
             List("Optional dependencies", recipe.OptionalPluginDependencies.Select(d => d.Slug + Version(d.Version)));
             List("NuGet packages", recipe.Nugets.Select(n => n.Name + Version(n.Version)));

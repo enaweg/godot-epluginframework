@@ -68,7 +68,7 @@ internal sealed partial class EGlobal
             if (!_stateStore.TryAddParticipant(_transition.AttemptId, context.Slug, context.Metadata?.Version, target))
             {
                 context.State = EEditorPluginState.Error;
-                FailTransition("cannot_record_participant", RecordFailedDetail);
+                FailTransition(AttemptReasons.CannotRecordParticipant, RecordFailedDetail);
                 return false;
             }
 
@@ -85,7 +85,7 @@ internal sealed partial class EGlobal
             context.ErrorDetail ??= new InvalidOperationException(_stateStore.LoadProblem is { } problem
                 ? $"ePlugin cannot read {problem.File}: {problem.Message}"
                 : $"An earlier operation of {context.Slug} failed ({DescribeLocalState(context.Slug)}) and has to be retried or given up on first.");
-            FailTransition("participant_blocked");
+            FailTransition(AttemptReasons.ParticipantBlocked);
             return false;
         }
 
@@ -95,12 +95,12 @@ internal sealed partial class EGlobal
             context.Logger?.Error(context.Metadata is null
                 ? $"Plugin {context.Slug}: {_host.PluginDirectory(context.Slug)}/plugin.cfg cannot be read. Repair it and use manual retry."
                 : $"Plugin {context.Slug} has no version in {_host.PluginDirectory(context.Slug)}/plugin.cfg. Add one (e.g. version=\"1.0.0\") and use manual retry.");
-            _stateStore.TryRecordInvalid(context.Slug, version, "invalid_plugin_version", manualRetry, target);
+            _stateStore.TryRecordInvalid(context.Slug, version, AttemptReasons.InvalidPluginVersion, manualRetry, target);
             context.State = EEditorPluginState.Error;
             context.ErrorDetail = new InvalidOperationException(context.Metadata is null
                 ? $"{_host.PluginDirectory(context.Slug)}/plugin.cfg cannot be read."
                 : $"{_host.PluginDirectory(context.Slug)}/plugin.cfg has no version. Add one, e.g. version=\"1.0.0\".");
-            FailTransition("invalid_plugin_version");
+            FailTransition(AttemptReasons.InvalidPluginVersion);
             return false;
         }
 
@@ -120,7 +120,7 @@ internal sealed partial class EGlobal
         else if (!_stateStore.TryAddParticipant(_transition.AttemptId, context.Slug, version, target))
         {
             context.State = EEditorPluginState.Error;
-            FailTransition("cannot_record_participant", RecordFailedDetail);
+            FailTransition(AttemptReasons.CannotRecordParticipant, RecordFailedDetail);
             return false;
         }
 
@@ -276,7 +276,7 @@ internal sealed partial class EGlobal
         }
 
         // These read files, so only once the time is up; the next attempt counts the whole timeout again.
-        if (AssemblyReload.IsPending || _updateJournals?.Read().Any(j => j.IsActive) == true)
+        if (_host.IsAssemblyReloadPending || _updateJournals?.Read().Any(j => j.IsActive) == true)
         {
             _stallSignature = null;
             return false;
@@ -310,17 +310,17 @@ internal sealed partial class EGlobal
             var reason = $"Plugin dependency {names} did not activate within {seconds} s: its _EnablePlugin may not call " +
                          $"this.EnableEPlugin(). Report it to the author of {names}, then retry.";
             _ePluginContext?.Logger.Error($"{string.Join(", ", waiting.Select(c => c.Slug).Distinct(StringComparer.Ordinal))} stopped waiting: {reason}");
-            FailWaitingPlugins(reason, "dependency_timed_out");
+            FailWaitingPlugins(reason, AttemptReasons.DependencyTimedOut);
             return;
         }
 
         // nothing waits for a dependency, but a participant never completed its callback
         var detail = $"The plugin operation made no progress for {seconds} s.";
         _ePluginContext?.Logger.Error($"{detail} It is given up on; retry it under Needs attention in the ePlugin Manager.");
-        FailTransition("operation_timed_out", detail);
+        FailTransition(AttemptReasons.OperationTimedOut, detail);
         // also without a transition to fail, e.g. a deactivation that never joined one
         _toCheckDisable.Clear();
-        RefreshEditor(rebuild: false);
+        RefreshEditor();
     }
 
     internal bool FinishTransition()
@@ -339,7 +339,7 @@ internal sealed partial class EGlobal
         var transition = _transition;
         if (transition.Participants.Any(x => x.Key.State == EEditorPluginState.Error))
         {
-            FailTransition("recipe_operation_failed");
+            FailTransition(AttemptReasons.RecipeOperationFailed);
             return false;
         }
 
@@ -358,7 +358,7 @@ internal sealed partial class EGlobal
             if (build is not { ExitCode: 0 })
             {
                 var output = build?.Output ?? ["The dotnet CLI is unavailable."];
-                FailTransition("solution_build_failed", BuildFailureDetail(build?.ExitCode ?? -1, output),
+                FailTransition(AttemptReasons.SolutionBuildFailed, BuildFailureDetail(build?.ExitCode ?? -1, output),
                     WriteBuildLog(transition.AttemptId, output));
                 return false;
             }
@@ -370,7 +370,7 @@ internal sealed partial class EGlobal
                 x.Value)).ToArray();
         if (_stateStore?.TryComplete(transition.AttemptId, completed) == false)
         {
-            FailTransition("state_commit_failed", $"Saving the result in {StateFilePath} failed. The Output panel shows why; check that the file is writable and has no merge conflict.");
+            FailTransition(AttemptReasons.StateCommitFailed, $"Saving the result in {StateFilePath} failed. The Output panel shows why; check that the file is writable and has no merge conflict.");
             return false;
         }
 

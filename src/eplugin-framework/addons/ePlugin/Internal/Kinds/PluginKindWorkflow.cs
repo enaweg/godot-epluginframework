@@ -30,6 +30,12 @@ internal abstract class PluginKindWorkflow
     /// </summary>
     public abstract bool DisabledDuringSwap { get; }
 
+    /// <summary>
+    /// Whether the plugin has a plugin.cfg naming its version. A GDExtension add-on has none: its version is the one the
+    /// shared state recorded when an update installed it, and its packages announce theirs.
+    /// </summary>
+    public virtual bool HasPluginConfig => true;
+
     /// <summary>How an update replaces the folder of <paramref name="plugin"/>.</summary>
     public virtual IAddonSwap Swap(UpdatePluginJournal plugin) => AddonFolderSwap.Instance;
 

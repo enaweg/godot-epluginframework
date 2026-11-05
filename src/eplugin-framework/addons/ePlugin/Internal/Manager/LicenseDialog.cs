@@ -58,7 +58,7 @@ internal sealed partial class LicenseDialog : AcceptDialog, ISerializationListen
         _list = GetNode<ItemList>("%LicenseList"); _summary = GetNode<Label>("%Summary");
         _name = GetNode<Label>("%LicenseName"); _source = GetNode<Label>("%LicenseSource");
         _neededBy = GetNode<Label>("%NeededBy"); _text = GetNode<RichTextLabel>("%LicenseText");
-        EditorWindows.Prepare(this, _signals, this, nameof(QueueWindowIcon));
+        EditorWindows.Prepare(this, _signals, this, MethodName.QueueWindowIcon);
         if (ViewOnly)
         {
             Title = "ePlugin — License";
@@ -235,7 +235,7 @@ internal sealed partial class LicenseDialog : AcceptDialog, ISerializationListen
         finally { EditorWindows.Release(this); }
     }
 
-    private void QueueWindowIcon() => CallDeferred(nameof(RefreshWindowIcon));
+    private void QueueWindowIcon() => CallDeferred(MethodName.RefreshWindowIcon);
     private void RefreshWindowIcon() => EditorWindows.ApplyIcon(this);
 
     // An assembly reload drops the review, so the dialog goes with it. A review the license gate queued is queued again

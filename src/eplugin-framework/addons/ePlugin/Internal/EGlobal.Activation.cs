@@ -25,7 +25,7 @@ internal sealed partial class EGlobal
 
         if (FinishTransition())
         {
-            RefreshEditor(rebuild: false);
+            RefreshEditor();
         }
     }
 
@@ -113,7 +113,7 @@ internal sealed partial class EGlobal
         {
             context.Logger?.Error($"{context.Slug} cannot be activated: the dotnet command could not be run.");
             context.ErrorDetail = new InvalidOperationException(DotnetFailure.DotnetMissingHint);
-            FailTransition("dotnet_unavailable");
+            FailTransition(AttemptReasons.DotnetUnavailable);
             return;
         }
 
@@ -125,7 +125,7 @@ internal sealed partial class EGlobal
             if (!_host.IsPluginEnabled(context.Slug))
             {
                 context.Logger?.Error($"{context.Slug} cannot be enabled again; Godot did not enable it.");
-                FailTransition("plugin_enable_refused");
+                FailTransition(AttemptReasons.PluginEnableRefused);
                 return;
             }
 
@@ -139,7 +139,7 @@ internal sealed partial class EGlobal
                 if (_transition?.Participants.ContainsKey(context) == true)
                 {
                     context.Logger?.Error($"{context.Slug} was enabled again, but did not continue its activation.");
-                    FailTransition("retry_not_continued");
+                    FailTransition(AttemptReasons.RetryNotContinued);
                 }
 
                 return;
@@ -148,7 +148,7 @@ internal sealed partial class EGlobal
 
         if (!TryEnsureRecipe(context))
         {
-            FailTransition("recipe_creation_failed");
+            FailTransition(AttemptReasons.RecipeCreationFailed);
             return;
         }
 
@@ -197,7 +197,7 @@ internal sealed partial class EGlobal
             {
                 context.State = EEditorPluginState.Error;
                 context.ErrorDetail = ex;
-                FailTransition("optional_recipe_failed");
+                FailTransition(AttemptReasons.OptionalRecipeFailed);
             }
         }
 
@@ -208,7 +208,7 @@ internal sealed partial class EGlobal
 
             if (FinishTransition())
             {
-                RefreshEditor(rebuild: false);
+                RefreshEditor();
             }
         }
     }
@@ -375,7 +375,7 @@ internal sealed partial class EGlobal
         {
             context.State = EEditorPluginState.Error;
             context.ErrorDetail = ex;
-            FailTransition("optional_recipe_failed");
+            FailTransition(AttemptReasons.OptionalRecipeFailed);
             return false;
         }
 
@@ -391,13 +391,13 @@ internal sealed partial class EGlobal
 
     /// <param name="reason">What went wrong, the detail of each waiting plugin without an error of its own.</param>
     /// <param name="code">The reason code recorded for the attempt.</param>
-    private void FailAllUncheckedPluginsAndRefresh(string reason, string code = "dependency_resolution_failed")
+    private void FailAllUncheckedPluginsAndRefresh(string reason, string code = AttemptReasons.DependencyResolutionFailed)
     {
         var failed = MarkWaitingFailed(reason);
         FailTransition(code);
         DisableFailedLater(failed);
         // nothing of the failed activation is built: it is retried as a whole
-        RefreshEditor(rebuild: false);
+        RefreshEditor();
     }
 
     /// <summary>
@@ -420,9 +420,9 @@ internal sealed partial class EGlobal
         var details = failed.ToDictionary(p => p.Slug, p => p.ErrorDetail!.Message, StringComparer.Ordinal);
         if (!_stateStore.TrySplitFailed(transition.AttemptId, details.Keys, code, details))
         {
-            FailTransition("cannot_record_participant", RecordFailedDetail);
+            FailTransition(AttemptReasons.CannotRecordParticipant, RecordFailedDetail);
             DisableFailedLater(failed);
-            RefreshEditor(rebuild: false);
+            RefreshEditor();
             return;
         }
 
@@ -434,7 +434,7 @@ internal sealed partial class EGlobal
         DisableFailedLater(failed);
         if (FinishTransition())
         {
-            RefreshEditor(rebuild: false);
+            RefreshEditor();
         }
     }
 

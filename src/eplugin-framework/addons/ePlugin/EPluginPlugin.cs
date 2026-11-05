@@ -266,7 +266,7 @@ public sealed partial class EPluginPlugin : EditorPlugin, IEPlugin, ISerializati
             Icon = EditorIcons.Manager(_managerStatus)
         };
         if (_managerButton.Icon is null) _managerButton.Text = "ePlugin";
-        _managerSignals.Connect(_managerButton, Control.SignalName.ThemeChanged, Callable.From(() => CallDeferred(nameof(RefreshManagerIcon))));
+        _managerSignals.Connect(_managerButton, Control.SignalName.ThemeChanged, Callable.From(() => CallDeferred(MethodName.RefreshManagerIcon)));
         _managerSignals.Connect(_managerButton, BaseButton.SignalName.Pressed, Callable.From(OpenManager));
         var settingsChanged = new Callable(this, MethodName.OnSettingsChanged);
         if (!ProjectSettings.Singleton.IsConnected(ProjectSettings.SignalName.SettingsChanged, settingsChanged))

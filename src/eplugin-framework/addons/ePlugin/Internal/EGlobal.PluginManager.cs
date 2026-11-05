@@ -120,7 +120,7 @@ internal sealed partial class EGlobal
         ReloadUpdateSites();
         var enabled = GetEnabledPluginSlugs();
         var types = PluginTypes.All;
-        var framework = _ePluginContext?.GetPluginSlug() ?? "ePlugin";
+        var framework = FrameworkSlug;
         var plugins = new List<PluginInfo>();
         var layout = ScanAddons();
         // Godot does not list a sub-plugin, but its plugin may enable it; its state is then shown too.

@@ -140,7 +140,7 @@ internal sealed partial class EGlobal
         catch (Exception ex)
         {
             await OnEditorThread(() => _ePluginContext?.Logger.Warn($"Update check failed: {ex.Message}"), ct).ConfigureAwait(false);
-            return new([], [new("ePlugin", ex.Message)], DateTimeOffset.UtcNow);
+            return new([], [new(Framework.Slug, ex.Message)], DateTimeOffset.UtcNow);
         }
     }
 
@@ -279,7 +279,7 @@ internal sealed class UpdateCheckGate
             {
                 // A waiting manual check reports the failure too, rather than throwing it a second time.
                 End(mine.Task);
-                mine.SetResult(new([], [new("ePlugin", ex.Message)], DateTimeOffset.UtcNow));
+                mine.SetResult(new([], [new(Framework.Slug, ex.Message)], DateTimeOffset.UtcNow));
                 throw;
             }
         }

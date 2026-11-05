@@ -39,7 +39,7 @@ internal sealed partial class UpdateReviewDialog : ConfirmationDialog, ISerializ
     {
         _review = review; _finished = finished;
         _tree = GetNode<Tree>("%ReviewTree"); _name = GetNode<Label>("%ReviewName"); _text = GetNode<RichTextLabel>("%ReviewText");
-        EditorWindows.Prepare(this, _signals, this, nameof(QueueWindowIcon));
+        EditorWindows.Prepare(this, _signals, this, MethodName.QueueWindowIcon);
         var scale = EditorWindows.Scale;
         _text.AddThemeConstantOverride("line_separation", (int)(_text.GetThemeConstant("line_separation") * scale));
         // Column titles and sizing are not scene properties of Tree.
@@ -115,7 +115,7 @@ internal sealed partial class UpdateReviewDialog : ConfirmationDialog, ISerializ
         finally { EditorWindows.Release(this); }
     }
 
-    private void QueueWindowIcon() => CallDeferred(nameof(RefreshWindowIcon));
+    private void QueueWindowIcon() => CallDeferred(MethodName.RefreshWindowIcon);
     private void RefreshWindowIcon() => EditorWindows.ApplyIcon(this);
 
     // An assembly reload drops the staged batch with the manager, so the dialog goes with it; nothing is installed.

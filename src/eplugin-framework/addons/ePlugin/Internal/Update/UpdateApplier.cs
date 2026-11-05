@@ -47,7 +47,7 @@ internal interface IUpdateHost
     void RequestReload(UpdateJournal journal);
     /// <summary>
     /// Reloads the reloadable GDExtension at <paramref name="resourcePath"/> in place (loads it when it is not loaded);
-    /// false when Godot could not, so the editor has to restart. Used by <see cref="GDExtensionPluginWorkflow"/>.
+    /// false when Godot could not, so the editor has to restart. Used by <see cref="NativeExtensionWorkflow"/>.
     /// </summary>
     bool ReloadExtension(string resourcePath) => false;
     bool Verify(UpdatePluginJournal plugin);
@@ -110,7 +110,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
     /// recorded when ePlugin installed it ("" when it did not).
     /// </summary>
     private string? InstalledVersion(string slug, PluginKind kind) =>
-        kind == PluginKind.GDExtensionAddon ? store.GetShared(slug)?.Version ?? ""
+        !PluginKinds.Workflow(kind).HasPluginConfig ? store.GetShared(slug)?.Version ?? ""
         : PluginIni.Parse(File.ReadAllText(Path.Combine(Installed(slug), "plugin.cfg"))).GetValueOrDefault("version");
 
     /// <summary>The version a package installs: its plugin.cfg's, or the announced one of an add-on without plugin.cfg.</summary>
@@ -331,7 +331,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                 return Rollback(journal, "Final build failed.");
             }
             if (journal.Plugins.Any(p => !host.Verify(p))) return Rollback(journal, "Updated plugin verification failed.");
-            if (journal.Plugins.Any(p => p.Slug == "ePlugin")) File.WriteAllText(Path.Combine(journal.Directory, "healthy.marker"), "verified");
+            if (journal.Plugins.Any(p => p.Slug == Framework.Slug)) File.WriteAllText(Path.Combine(journal.Directory, "healthy.marker"), "verified");
             journal.Save(UpdatePhase.Verified);
             return Commit(journal);
         }
@@ -344,7 +344,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         foreach (var plugin in journal.Plugins) versions[plugin.Slug] = plugin.NewVersion;
         if (!store.TryAcknowledgeVersions(journal.AttemptId, versions))
         {
-            store.TryFail(journal.AttemptId, PersistedPluginState.Failed, "update_commit_failed");
+            store.TryFail(journal.AttemptId, PersistedPluginState.Failed, AttemptReasons.UpdateCommitFailed);
             journal.Failure = "Healthy update could not be acknowledged; merge the shared state file and use Retry under Needs attention in the ePlugin Manager.";
             journal.Save(UpdatePhase.Verified);
             host.Log(journal.Failure);
@@ -422,7 +422,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
     public UpdateOutcome Keep(UpdateJournal journal)
     {
         // Retry and Roll back find a kept update by its marker; one that cannot be marked so is not kept.
-        if (!store.TryFail(journal.AttemptId, PersistedPluginState.Failed, "update_kept_build_failed"))
+        if (!store.TryFail(journal.AttemptId, PersistedPluginState.Failed, AttemptReasons.UpdateKeptBuildFailed))
             return Rollback(journal, "The new versions could not be kept: the local plugin state cannot record them.");
         journal.Save(UpdatePhase.CommittedWithErrors);
         host.Log($"New versions kept with build errors. Fix the project and use Retry under Needs attention in the ePlugin Manager. Backup: {journal.Directory}");
@@ -458,7 +458,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                     journal.Save();
                 }
                 // A GDExtension add-on has no plugin.cfg to tell; its file swap backs up everything before it changes a file.
-                else if (plugin.SwapStarted && PluginKinds.Workflow(plugin) is not GDExtensionAddonWorkflow && (!File.Exists(Path.Combine(installed, "plugin.cfg")) ||
+                else if (plugin.SwapStarted && PluginKinds.Workflow(plugin).HasPluginConfig && (!File.Exists(Path.Combine(installed, "plugin.cfg")) ||
                     PluginIni.Parse(File.ReadAllText(Path.Combine(installed, "plugin.cfg"))).GetValueOrDefault("version") != plugin.OldVersion))
                     throw new IOException($"Backup for {plugin.Slug} is missing; restore manually.");
             }
@@ -481,7 +481,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         }
         catch (Exception ex)
         {
-            store.TryFail(journal.AttemptId, PersistedPluginState.Failed, "update_rollback_failed");
+            store.TryFail(journal.AttemptId, PersistedPluginState.Failed, AttemptReasons.UpdateRollbackFailed);
             journal.Failure = reason + "; rollback failed: " + ex.Message;
             // The marker sends the update to Retry even when the journal cannot say why; throwing here would report it as
             // never begun.
@@ -536,8 +536,8 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
     {
         host.CloseScenes();
         var reason = store.LocalAttempts.FirstOrDefault(a => a.AttemptId == journal.AttemptId)?.Reason;
-        if (reason == "update_commit_failed") return journal.Plugins.All(host.Verify) ? Commit(journal) : Rollback(journal, "Retry verification failed.");
-        if (reason == "update_kept_build_failed")
+        if (reason == AttemptReasons.UpdateCommitFailed) return journal.Plugins.All(host.Verify) ? Commit(journal) : Rollback(journal, "Retry verification failed.");
+        if (reason == AttemptReasons.UpdateKeptBuildFailed)
         {
             var retry = Build(journal, "retry");
             if (retry.ExitCode != 0)
@@ -567,7 +567,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
     /// </summary>
     private UpdateOutcome ResumeAfterRestart(UpdateJournal journal)
     {
-        if (!store.TryFail(journal.AttemptId, PersistedPluginState.Failed, "attempt_in_progress"))
+        if (!store.TryFail(journal.AttemptId, PersistedPluginState.Failed, AttemptReasons.InProgress))
         {
             host.Log("Cannot clear the kept-update marker; the update stays kept. Backup: " + journal.Directory);
             return UpdateOutcome.KeptWithErrors;
@@ -611,7 +611,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         return build;
     }
     private string Decision(UpdateJournal journal) =>
-        UpdateFailureDecision.Choose(journal.Plugins.Any(p => p.Slug == "ePlugin"),
+        UpdateFailureDecision.Choose(journal.Plugins.Any(p => p.Slug == Framework.Slug),
             UpdateFailureDecision.Policy(host.BuildFailurePolicy, journal.Group is not null, journal.AskOnBuildFailure, journal.KeptForProjectCode), host.UiAvailable);
 
     /// <summary>
@@ -644,7 +644,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
     /// so do headless runs; the plugins-only build is skipped when the settings would roll back anyway.
     /// </summary>
     private bool MayKeepForProjectCode(UpdateJournal journal) =>
-        host.KeepOnProjectErrors && host.UiAvailable && host.BuildFailurePolicy != "rollback" && journal.Plugins.All(p => p.Slug != "ePlugin");
+        host.KeepOnProjectErrors && host.UiAvailable && host.BuildFailurePolicy != "rollback" && journal.Plugins.All(p => p.Slug != Framework.Slug);
 
     private bool BuildPluginsOnly(UpdateJournal journal, string name, IReadOnlyList<string> roots)
     {

@@ -468,7 +468,7 @@ public class ManagerDialogTests
         ((SceneTree)Engine.GetMainLoop()).Root.AddChild(dialog);
         try
         {
-            dialog.Initialize();
+            dialog.Initialize(slug => "res://addons/" + slug);
             var requested = new List<string>();
             dialog.Requested += (action, item) => requested.Add($"{action} {item?.Slug}");
             var kept = new UpdateJournal { Directory = "/updates/kept" };

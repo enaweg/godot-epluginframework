@@ -55,9 +55,9 @@ internal static class UpdateRecovery
             try
             {
                 var json = JsonNode.Parse(File.ReadAllText(path)) as JsonObject ?? throw new InvalidDataException("Empty journal.");
-                if (json["plugins"] is not JsonArray plugins || !plugins.Any(p => p?["slug"]?.GetValue<string>() == "ePlugin")) continue;
+                if (json["plugins"] is not JsonArray plugins || !plugins.Any(p => p?["slug"]?.GetValue<string>() == Framework.Slug)) continue;
                 var journal = json.Deserialize<Journal>(Options) ?? throw new InvalidDataException("Empty journal.");
-                if (!journal.Plugins.Any(p => p.Slug == "ePlugin")) continue;
+                if (!journal.Plugins.Any(p => p.Slug == Framework.Slug)) continue;
                 if (journal.Schema != 1 || journal.AttemptId == Guid.Empty) throw new InvalidDataException("Unsupported recovery journal schema.");
                 if (journal.State is "Committed" or "RolledBack" or "Failed" or "Verified" || File.Exists(Path.Combine(folder, "healthy.marker"))) continue;
                 // Staged has not touched addon files. Normal recovery can abandon it.
@@ -163,7 +163,7 @@ internal static class UpdateRecovery
                     try
                     {
                         var store = new PluginStateStore(Path.Combine(projectRoot, "addons/eplugin-state.json"), logger);
-                        store.Load(); store.TryFail(attempt, PersistedPluginState.Failed, "update_rollback_failed");
+                        store.Load(); store.TryFail(attempt, PersistedPluginState.Failed, AttemptReasons.UpdateRollbackFailed);
                     }
                     catch (Exception) { /* Preserve backups even if the marker cannot be written. */ }
                 }
@@ -195,7 +195,7 @@ internal static class UpdateRecovery
         if (string.IsNullOrWhiteSpace(relative) || Path.IsPathRooted(relative) || relative.Split('/', '\\').Any(p => p is "" or "." or "..")) throw new InvalidDataException("Unsafe recovery path.");
         var prefix = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         var path = Path.GetFullPath(Path.Combine(prefix, relative));
-        if (!path.StartsWith(prefix, StringComparison.Ordinal)) throw new InvalidDataException("Recovery path escapes its root.");
+        if (!path.StartsWith(prefix, PackageFiles.PathComparison)) throw new InvalidDataException("Recovery path escapes its root.");
         return path;
     }
     private static void Copy(string source, string target)

@@ -115,7 +115,7 @@ captures each window with its frame, and restores the project afterwards. Add ne
 assembly-reload behavior, which wipes static state (including `EGlobal`) without re-running
 `_EnterTree`/`_EnablePlugin`.
 
-Every build of the project assembly (an activation's `TryRebuildSolution`, but also Rider or `dotnet test`) makes
+Every build of the project assembly (an activation's `TryBuild` in `FinishTransition`, but also Rider or `dotnet test`) makes
 GodotTools' `HotReloadAssemblyWatcher` reload it in place within half a second, and Godot 4.7.2's in-place reload is
 fragile. Two rules follow. Never hand Godot a C# delegate for deferred or timed work: use `CallDeferred(MethodName.X,
 args)` or `new Callable(this, MethodName.X)` on a GodotObject (Godot resolves those on the reloaded instance, so guard
@@ -272,7 +272,8 @@ removing the last managed entry leaves nothing else in the file. It works on the
 
 `DotnetVersionManager` detects the installed `dotnet --version` and hands out either `DotnetCli10` or
 `DotnetCli9` (both `DotnetCliBase : ExecuteCliBase, IDotnetCli`) — the two dotnet CLI generations differ
-enough in `sln`/`nuget`/reference command behavior to need separate implementations. `ExecuteCliBase` runs commands
+in the argument order of their package and reference commands (`dotnet add <project> package` vs `dotnet package add
+... --project`); their `sln`, build and test commands are the same. `ExecuteCliBase` runs commands
 through an `IProcessRunner` (`GodotProcessRunner` uses `OS.Execute`); tests record the arguments instead. The
 `dotnet --version` probe is cached until the assembly reloads. A CLI is created for a project root, assembly name and solution directory
 (`IEditorHost.ProjectRoot`/`AssemblyName`/`SolutionDirectory`, the last read from `dotnet/project/solution_directory`
@@ -289,7 +290,8 @@ failed command leaves `ExecuteCliBase.LastFailure` (its error lines and a hint, 
 operations add to their exception, so the Needs attention dialog shows dotnet's cause rather than only the failed entry.
 `FailTransition` records each participant's error message as the attempt's `detail` in the `.user` file (and a failed
 build's output as `log`, below `.godot/eplugin/logs`), so the dialog explains failures after a restart; give a new reason
-code its text in `AttentionItem.Reason` (`DecisionDialogTests` checks every code).
+code a constant in `AttemptReasons` (stored values never change; lifecycle ones go into `Lifecycle`) and its text in
+`AttentionItem.Reason` (`DecisionDialogTests` checks every lifecycle code).
 
 Removals are idempotent: the CLI fails to remove a package, project reference or solution entry that is already gone,
 although that is the state the caller wants. Both CLIs therefore first ask `DotnetCliBase.Check*Removal`, which reads

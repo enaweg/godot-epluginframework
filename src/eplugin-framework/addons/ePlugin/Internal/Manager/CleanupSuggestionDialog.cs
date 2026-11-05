@@ -35,7 +35,7 @@ internal sealed partial class CleanupSuggestionDialog : ConfirmationDialog, ISer
     {
         _decided = decided;
         GetNode<Label>("%CleanupMessage").Text = Message(suggestion);
-        EditorWindows.Prepare(this, _signals, this, nameof(QueueWindowIcon));
+        EditorWindows.Prepare(this, _signals, this, MethodName.QueueWindowIcon);
         _signals.Connect(this, AcceptDialog.SignalName.Confirmed, Callable.From(() => Finish(true)));
         _signals.Connect(this, AcceptDialog.SignalName.Canceled, Callable.From(() => Finish(false)));
     }
@@ -52,7 +52,7 @@ internal sealed partial class CleanupSuggestionDialog : ConfirmationDialog, ISer
         finally { EditorWindows.Release(this); }
     }
 
-    private void QueueWindowIcon() => CallDeferred(nameof(RefreshWindowIcon));
+    private void QueueWindowIcon() => CallDeferred(MethodName.RefreshWindowIcon);
     private void RefreshWindowIcon() => EditorWindows.ApplyIcon(this);
 
     // Reload serializes every script before disposing any of them, so callback targets are still valid here. The dialog

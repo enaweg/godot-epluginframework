@@ -29,7 +29,7 @@ internal sealed record AttentionItem(PluginRow Row, UpdateJournal? Journal, Upda
     public string Key => string.Join("|", new[] { Slug, Attempt?.AttemptId.ToString() ?? "", Plugin.State?.ToString() ?? "" }
         .Concat(Plugin.Extensions.Select(e => e.Problem ?? "")));
 
-    public bool IsUpdate => Journal is not null || Attempt?.Reason.StartsWith("update_", StringComparison.Ordinal) == true;
+    public bool IsUpdate => Journal is not null || Attempt?.Reason.StartsWith(AttemptReasons.UpdatePrefix, StringComparison.Ordinal) == true;
     /// <summary>ePlugin changes no plugin while it cannot read its state files, so it offers no decision then.</summary>
     private bool StateReadable => Plugin.StateProblem is null;
     public bool CanRetry => Attempt is not null && StateReadable;
@@ -100,7 +100,7 @@ internal sealed record AttentionItem(PluginRow Row, UpdateJournal? Journal, Upda
                 ? "• [b]Disable[/b]: turns the plugin off until the problem is fixed.\n"
                 : "• [b]Disable[/b]: gives up on enabling it, removes what it installed and leaves it disabled.\n");
         if (Log is not null) text.Append(IsUpdate ? "• [b]Open log[/b]: shows the build output of the update.\n" : "• [b]Open log[/b]: shows the output of the build that failed.\n");
-        if (Attempt?.Reason == "dotnet_unavailable")
+        if (Attempt?.Reason == AttemptReasons.DotnetUnavailable)
             text.Append(CultureInfo.CurrentCulture, $"{Escape(Dotnet.DotnetFailure.DotnetMissingHint)}\n");
         if (!CanRetry && !CanRollback && !CanDisable)
             text.Append(Plugin.ConfigProblem is not null
@@ -110,14 +110,14 @@ internal sealed record AttentionItem(PluginRow Row, UpdateJournal? Journal, Upda
     }
 
     /// <summary>The plugin's own code failed: its user cannot fix that, its author can.</summary>
-    private bool IsPluginBug => Attempt?.Reason is "recipe_creation_failed" or "dependent_recipe_creation_failed";
+    private bool IsPluginBug => Attempt?.Reason is AttemptReasons.RecipeCreationFailed or AttemptReasons.DependentRecipeCreationFailed;
 
     /// <summary>Who can fix a bug in the plugin, and where to report it.</summary>
     private string AuthorHint()
     {
         var author = Plugin.Author.Length > 0 ? Escape(Plugin.Author) : "its author";
         var where = Plugin.SourceUrl is { } url && PluginManagerViewModel.IsWebUrl(url) ? $" at [url={url}]{Escape(url)}[/url]" : "";
-        var whose = Attempt?.Reason == "dependent_recipe_creation_failed" ? "a plugin that depends on it (see the Output panel for which)" : "the plugin";
+        var whose = Attempt?.Reason == AttemptReasons.DependentRecipeCreationFailed ? "a plugin that depends on it (see the Output panel for which)" : "the plugin";
         return $"\nThis is a bug in {whose}, not in your project. Report the error above to {author}{where}, or update the plugin to a version that fixes it.\n";
     }
 
@@ -133,27 +133,27 @@ internal sealed record AttentionItem(PluginRow Row, UpdateJournal? Journal, Upda
         var verb = attempt.TargetState == PersistedPluginState.Activated ? "Enabling" : "Disabling";
         return attempt.Reason switch
         {
-            "attempt_in_progress" => $"{verb} the plugin was interrupted, for example by an editor crash or a restart.",
-            "dependency_resolution_failed" => $"{verb} failed: a plugin it depends on is missing or has a version that does not match.",
-            "dependency_disabled" => "Enabling failed: a plugin it depends on was disabled before it finished activating.",
-            "dependency_timed_out" => "Enabling failed: a plugin it depends on did not activate in time. Its _EnablePlugin may not call this.EnableEPlugin().",
-            "operation_timed_out" => $"{verb} failed: the plugin operation made no progress and was given up on.",
-            "recipe_creation_failed" => $"{verb} failed: the plugin's CreateRecipe threw an exception.",
-            "dependent_recipe_creation_failed" => $"{verb} failed: CreateRecipe of a plugin that depends on it threw an exception.",
-            "recipe_operation_failed" => $"{verb} failed: installing or removing what its recipe declares (NuGet packages, projects, autoloads, directories) failed.",
-            "solution_build_failed" => $"{verb} failed: the project did not build afterwards.",
-            "optional_recipe_failed" => $"{verb} failed: applying or removing the recipe of an optional dependency failed.",
-            "invalid_plugin_version" => "plugin.cfg has no valid version. Add one before you retry.",
-            "participant_blocked" => $"{verb} failed: a plugin changed together with it is blocked by an earlier failure.",
-            "cannot_record_participant" or "state_commit_failed" => $"{verb} failed: its state could not be saved in eplugin-state.json.",
-            "deactivation_failed" => "Disabling the plugin failed.",
-            "plugin_enable_refused" => "Enabling failed: Godot did not enable the plugin, for example because its script does not load. The Output panel shows why.",
-            "retry_not_continued" => "Enabling failed: the plugin was enabled again, but did not continue its activation. Its _EnablePlugin has to call this.EnableEPlugin().",
-            "dotnet_unavailable" => $"{verb} failed: the dotnet command could not be run.",
-            "update_kept_build_failed" => "The update was kept although the project does not build with it.",
-            "update_commit_failed" => "The update was installed, but recording its new version failed.",
-            "update_rollback_failed" => "Rolling back a failed update did not finish.",
-            var other when other.StartsWith("update_", StringComparison.Ordinal) => $"The update failed ({other}).",
+            AttemptReasons.InProgress => $"{verb} the plugin was interrupted, for example by an editor crash or a restart.",
+            AttemptReasons.DependencyResolutionFailed => $"{verb} failed: a plugin it depends on is missing or has a version that does not match.",
+            AttemptReasons.DependencyDisabled => "Enabling failed: a plugin it depends on was disabled before it finished activating.",
+            AttemptReasons.DependencyTimedOut => "Enabling failed: a plugin it depends on did not activate in time. Its _EnablePlugin may not call this.EnableEPlugin().",
+            AttemptReasons.OperationTimedOut => $"{verb} failed: the plugin operation made no progress and was given up on.",
+            AttemptReasons.RecipeCreationFailed => $"{verb} failed: the plugin's CreateRecipe threw an exception.",
+            AttemptReasons.DependentRecipeCreationFailed => $"{verb} failed: CreateRecipe of a plugin that depends on it threw an exception.",
+            AttemptReasons.RecipeOperationFailed => $"{verb} failed: installing or removing what its recipe declares (NuGet packages, projects, autoloads, directories) failed.",
+            AttemptReasons.SolutionBuildFailed => $"{verb} failed: the project did not build afterwards.",
+            AttemptReasons.OptionalRecipeFailed => $"{verb} failed: applying or removing the recipe of an optional dependency failed.",
+            AttemptReasons.InvalidPluginVersion => "plugin.cfg has no valid version. Add one before you retry.",
+            AttemptReasons.ParticipantBlocked => $"{verb} failed: a plugin changed together with it is blocked by an earlier failure.",
+            AttemptReasons.CannotRecordParticipant or AttemptReasons.StateCommitFailed => $"{verb} failed: its state could not be saved in eplugin-state.json.",
+            AttemptReasons.DeactivationFailed => "Disabling the plugin failed.",
+            AttemptReasons.PluginEnableRefused => "Enabling failed: Godot did not enable the plugin, for example because its script does not load. The Output panel shows why.",
+            AttemptReasons.RetryNotContinued => "Enabling failed: the plugin was enabled again, but did not continue its activation. Its _EnablePlugin has to call this.EnableEPlugin().",
+            AttemptReasons.DotnetUnavailable => $"{verb} failed: the dotnet command could not be run.",
+            AttemptReasons.UpdateKeptBuildFailed => "The update was kept although the project does not build with it.",
+            AttemptReasons.UpdateCommitFailed => "The update was installed, but recording its new version failed.",
+            AttemptReasons.UpdateRollbackFailed => "Rolling back a failed update did not finish.",
+            var other when other.StartsWith(AttemptReasons.UpdatePrefix, StringComparison.Ordinal) => $"The update failed ({other}).",
             var other => $"{verb} failed ({other})."
         };
     }

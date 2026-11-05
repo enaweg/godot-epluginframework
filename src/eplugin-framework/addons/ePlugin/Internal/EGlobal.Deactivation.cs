@@ -66,43 +66,16 @@ internal sealed partial class EGlobal
 
         if (!TryEnsureRecipe(context))
         {
-            FailTransition("recipe_creation_failed");
+            FailTransition(AttemptReasons.RecipeCreationFailed);
             return;
         }
 
         // disable plugins dependent on this one
-        var pluginsToDisable = new List<PluginContext>();
-        foreach (var plugin in _contexts)
+        var pluginsToDisable = ActivatedDependantsOf(context.Slug, out var unreadable);
+        if (unreadable is not null)
         {
-            if (plugin == context)
-            {
-                continue;
-            }
-
-            if (plugin.State is not EEditorPluginState.Activated)
-            {
-                continue;
-            }
-
-            if (plugin.Plugin is null)
-            {
-                // not an ePlugin plugin.
-                continue;
-            }
-
-            if (!TryEnsureRecipe(plugin, scan: true))
-            {
-                FailTransition("dependent_recipe_creation_failed");
-                return;
-            }
-
-            var isDependant = plugin.Builder.PluginRecipe.PluginDependencies.Any(d => d.Slug == context.Slug);
-            if (!isDependant)
-            {
-                continue;
-            }
-
-            pluginsToDisable.Add(plugin);
+            FailTransition(AttemptReasons.DependentRecipeCreationFailed);
+            return;
         }
 
         // A dependant the editor already disabled runs no DisableEPlugin that would resume this plugin, e.g. because its
@@ -160,7 +133,7 @@ internal sealed partial class EGlobal
             context.State = EEditorPluginState.Error;
             context.ErrorDetail = ex;
             context.Logger?.Error($"Deactivating {context.Slug} failed: {ex.Message}");
-            FailTransition("deactivation_failed");
+            FailTransition(AttemptReasons.DeactivationFailed);
             return;
         }
 
@@ -179,7 +152,7 @@ internal sealed partial class EGlobal
 
             if (FinishTransition())
             {
-                RefreshEditor(rebuild: false);
+                RefreshEditor();
             }
         }
     }
@@ -222,7 +195,7 @@ internal sealed partial class EGlobal
                 context.State = EEditorPluginState.Error;
                 context.ErrorDetail = new InvalidOperationException(RecordFailedDetail);
                 transition.Participants[context] = PersistedPluginState.Deactivated;
-                FailTransition("cannot_record_participant", RecordFailedDetail);
+                FailTransition(AttemptReasons.CannotRecordParticipant, RecordFailedDetail);
                 return;
             }
 
@@ -239,7 +212,7 @@ internal sealed partial class EGlobal
 
         if (FinishTransition())
         {
-            RefreshEditor(rebuild: false);
+            RefreshEditor();
         }
     }
 
@@ -257,7 +230,7 @@ internal sealed partial class EGlobal
 
         var names = string.Join(", ", dependants);
         FailWaitingPlugins($"Plugin dependency {slug} was disabled while {names} waited for it to activate. " +
-                           $"Enable {slug} again and retry, or disable {names}.", "dependency_disabled");
+                           $"Enable {slug} again and retry, or disable {names}.", AttemptReasons.DependencyDisabled);
         return true;
     }
 
@@ -284,6 +257,28 @@ internal sealed partial class EGlobal
         foreach (var directory in recipe.Directories) ReverseDirectory(context, directory, remaining);
         foreach (var project in recipe.Projects) ReverseProject(context, project, remaining);
         foreach (var nuget in recipe.Nugets) ReverseNuget(context, nuget, remaining, ownRemaining);
+    }
+
+    /// <summary>
+    /// The activated ePlugins whose recipe requires <paramref name="slug"/> as a hard dependency. A recipe that cannot be
+    /// read is logged, and the first such plugin is <paramref name="unreadable"/>; the caller decides what that means.
+    /// </summary>
+    private List<PluginContext> ActivatedDependantsOf(string slug, out PluginContext? unreadable)
+    {
+        unreadable = null;
+        var dependants = new List<PluginContext>();
+        foreach (var plugin in _contexts.Where(c => c.Slug != slug && c.Plugin is not null && c.State == EEditorPluginState.Activated).ToArray())
+        {
+            if (!TryEnsureRecipe(plugin, scan: true))
+            {
+                unreadable ??= plugin;
+                continue;
+            }
+
+            if (plugin.Builder.PluginRecipe.PluginDependencies.Any(d => d.Slug == slug)) dependants.Add(plugin);
+        }
+
+        return dependants;
     }
 }
 #endif

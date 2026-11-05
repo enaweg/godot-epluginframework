@@ -15,11 +15,11 @@ internal static class InterimBridge
         var preserved = new List<string>();
         var paths = old.Directories.Select(RecipeReconciler.VisibleDirectory)
             .Concat(old.Projects.Select(p => p.Path)).Concat(old.Autoloads.Select(a => a.Path))
-            .Select(p => p.StartsWith("res://", StringComparison.Ordinal) ? p[6..] : p)
+            .Select(PackageFiles.ProjectRelative)
             .Where(p => p.StartsWith(prefix, StringComparison.Ordinal)).Select(p => p[prefix.Length..])
             .OrderBy(p => p.Count(c => c == '/')).ToArray();
         var directories = old.Directories.Select(RecipeReconciler.VisibleDirectory)
-            .Select(p => p.StartsWith("res://", StringComparison.Ordinal) ? p[6..] : p).ToHashSet(StringComparer.Ordinal);
+            .Select(PackageFiles.ProjectRelative).ToHashSet(StringComparer.Ordinal);
         foreach (var relative in paths)
         {
             var target = PackageFiles.Inside(installed, relative);

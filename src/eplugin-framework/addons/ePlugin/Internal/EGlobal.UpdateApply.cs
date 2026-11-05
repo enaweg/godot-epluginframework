@@ -135,7 +135,7 @@ internal sealed partial class EGlobal
     internal string DetailsBuildFailurePolicy(string slug)
     {
         var host = UpdateHost;
-        return UpdateFailureDecision.Choose(slug == "ePlugin", UpdateFailureDecision.Policy(host.BuildFailurePolicy, false, true), host.UiAvailable);
+        return UpdateFailureDecision.Choose(slug == Framework.Slug, UpdateFailureDecision.Policy(host.BuildFailurePolicy, false, true), host.UiAvailable);
     }
 
     private static string GroupNames(IReadOnlyList<ValidatedPackage> group) => string.Join(", ", group.Select(p => p.Candidate.PluginName));
@@ -144,7 +144,7 @@ internal sealed partial class EGlobal
     {
         var dependencies = _contexts.Where(c => c.Plugin is not null && c.State == EEditorPluginState.Activated).DistinctBy(c => c.Slug)
             .ToDictionary(c => c.Slug, c => (IReadOnlyCollection<string>)Snapshot(c).PluginDependencies.Select(d => d.Slug).ToArray(), StringComparer.Ordinal);
-        return UpdateGroups.Plan(packages.Select(p => p.Candidate.Slug).ToArray(), dependencies, "ePlugin")
+        return UpdateGroups.Plan(packages.Select(p => p.Candidate.Slug).ToArray(), dependencies, Framework.Slug)
             .Select(group => (IReadOnlyList<ValidatedPackage>)group.Select(slug => packages.First(p => p.Candidate.Slug == slug)).ToArray()).ToArray();
     }
 
@@ -272,7 +272,7 @@ internal sealed partial class EGlobal
             return;
         }
         var attempts = _stateStore.LocalAttempts.Where(a => a.AttemptId == journal.AttemptId).ToArray();
-        if (attempts.Any(a => a.Reason.StartsWith("update_", StringComparison.Ordinal)))
+        if (attempts.Any(a => a.Reason.StartsWith(AttemptReasons.UpdatePrefix, StringComparison.Ordinal)))
         {
             _ePluginContext?.Logger.Warn($"Update needs manual recovery: {journal.Directory}. Use Retry under Needs attention in the ePlugin Manager.");
             return;
@@ -327,7 +327,7 @@ internal sealed partial class EGlobal
     internal UpdateJournal? KeptUpdate(string slug)
     {
         if (_stateStore is null || _updateJournals is null) return null;
-        var attempts = _stateStore.LocalAttempts.Where(a => a.Reason == "update_kept_build_failed").Select(a => a.AttemptId).ToHashSet();
+        var attempts = _stateStore.LocalAttempts.Where(a => a.Reason == AttemptReasons.UpdateKeptBuildFailed).Select(a => a.AttemptId).ToHashSet();
         return _updateJournals.Read().LastOrDefault(j => j.State == UpdatePhase.CommittedWithErrors && attempts.Contains(j.AttemptId) && j.Plugins.Any(p => p.Slug == slug));
     }
 
@@ -453,10 +453,10 @@ internal sealed partial class EGlobal
         public bool Verify(UpdatePluginJournal plugin)
         {
             // An add-on has no version in its files; what is there to check is that it is still a GDExtension or became a plugin.
-            if (PluginKinds.Workflow(plugin) is GDExtensionAddonWorkflow)
+            if (!PluginKinds.Workflow(plugin).HasPluginConfig)
                 return global.IsExtensionAddon(plugin.Slug) || File.Exists(Path.Combine(ProjectSettings.GlobalizePath(global._host.PluginDirectory(plugin.Slug)), "plugin.cfg"));
             var metadata = EditorPluginExtensions.ReadMetadata($"{global._host.PluginDirectory(plugin.Slug)}/plugin.cfg");
-            return (plugin.Slug != "ePlugin" || global.IsValid()) && IsEnabled(plugin.Slug) && SemVer.Same(metadata?.Version, plugin.NewVersion) &&
+            return (plugin.Slug != Framework.Slug || global.IsValid()) && IsEnabled(plugin.Slug) && SemVer.Same(metadata?.Version, plugin.NewVersion) &&
                 global._contexts.FirstOrDefault(c => c.Slug == plugin.Slug)?.State != EEditorPluginState.Error;
         }
         public void Log(string message) => global._ePluginContext?.Logger.Log(message);

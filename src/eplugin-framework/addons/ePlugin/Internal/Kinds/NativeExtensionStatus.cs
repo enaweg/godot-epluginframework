@@ -61,7 +61,7 @@ internal sealed record NativeExtensionStatus(string File, GDExtensionConfig? Con
         try
         {
             library = library.Replace('\\', '/');
-            var path = library.StartsWith("res://", StringComparison.Ordinal) ? Path.Combine(projectRoot, library["res://".Length..])
+            var path = library.StartsWith(Update.PackageFiles.ResPrefix, StringComparison.Ordinal) ? Path.Combine(projectRoot, Update.PackageFiles.ProjectRelative(library))
                 : Path.IsPathRooted(library) ? library
                 : Path.Combine(directory, Path.GetDirectoryName(file) ?? "", library);
             return System.IO.File.Exists(path) || Directory.Exists(path);

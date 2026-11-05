@@ -22,7 +22,7 @@ internal sealed partial class EGlobal
 
     private bool LicenseUiAvailable => _ePluginContext is not null && _host.CanShowDialogs(_ePluginContext);
 
-    private string FrameworkSlug => _ePluginContext?.GetPluginSlug() ?? "ePlugin";
+    private string FrameworkSlug => _ePluginContext?.GetPluginSlug() ?? Framework.Slug;
 
     /// <summary>
     /// Asks for the licenses a plugin needs before it is installed. Returns false when the activation has to wait: the
@@ -561,7 +561,7 @@ internal sealed partial class EGlobal
     /// </summary>
     private void ApplyLicenseDecisions()
     {
-        if (AssemblyReload.IsPending)
+        if (_host.IsAssemblyReloadPending)
         {
             PostForInstance(ApplyLicenseDecisions);
             return;
