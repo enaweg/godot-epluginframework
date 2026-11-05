@@ -89,13 +89,11 @@ internal sealed partial class EGlobal
             return false;
         }
 
-        var version = context.Metadata?.Version;
-        if (string.IsNullOrWhiteSpace(version))
+        if (VersionOrRecordInvalid(_stateStore, context, manualRetry, target) is not { } version)
         {
             context.Logger?.Error(context.Metadata is null
                 ? $"Plugin {context.Slug}: {_host.PluginDirectory(context.Slug)}/plugin.cfg cannot be read. Repair it and use manual retry."
                 : $"Plugin {context.Slug} has no version in {_host.PluginDirectory(context.Slug)}/plugin.cfg. Add one (e.g. version=\"1.0.0\") and use manual retry.");
-            _stateStore.TryRecordInvalid(context.Slug, version, AttemptReasons.InvalidPluginVersion, manualRetry, target);
             context.State = EEditorPluginState.Error;
             context.ErrorDetail = new InvalidOperationException(context.Metadata is null
                 ? $"{_host.PluginDirectory(context.Slug)}/plugin.cfg cannot be read."
