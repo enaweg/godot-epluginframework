@@ -46,6 +46,8 @@ internal sealed class AddonFolderSwap : IAddonSwap
 
     public int Restore(string installed, string backup, string discard)
     {
+        // deleting a link would clear the attributes of the files where it points to
+        AddonFiles.RefuseLink(installed);
         AddonFiles.RefuseRepository(installed);
         AddonFiles.DeleteTree(installed);
         AddonFiles.MoveDirectory(backup, installed);
