@@ -38,7 +38,7 @@ internal sealed partial class EGlobal
         var names = string.Join(", ", pending.Select(e => e.Name));
         // Only a plugin waited for is enabled by a chain: an unrelated plugin enabled while others wait (e.g. before the
         // stall timeout fails them) gets its review like any other.
-        if (PluginsWaitingFor(context.Slug).Any())
+        if (_coordinator.WaitingFor(context.Slug).Any())
         {
             // A dependency whose license was not reviewed with the plugin that enables it, because its recipe could
             // not be read beforehand. The waiting chain cannot pause for a dialog, so it fails like a missing dependency.
@@ -48,7 +48,7 @@ internal sealed partial class EGlobal
             context.Logger?.Error(reason);
             context.State = EEditorPluginState.Error;
             context.ErrorDetail = new InvalidOperationException(reason);
-            _toCheckEnable.Push(context);
+            _coordinator.Activations.Push(context);
             FailAllUncheckedPluginsAndRefresh(reason);
             return false;
         }
@@ -479,8 +479,7 @@ internal sealed partial class EGlobal
         var toggles = RememberedLicenseDecisions();
         ForgetLicenseDecisions(reviews: false);
         if (toggles.Length == 0) return;
-        _transitionHold++;
-        try
+        using (_coordinator.Hold())
         {
             foreach (var (slug, enable) in toggles)
             {
@@ -489,10 +488,6 @@ internal sealed partial class EGlobal
                     _host.SetPluginEnabled(slug, enable);
                 }
             }
-        }
-        finally
-        {
-            _transitionHold--;
         }
 
         FinishPlainPluginTransition();

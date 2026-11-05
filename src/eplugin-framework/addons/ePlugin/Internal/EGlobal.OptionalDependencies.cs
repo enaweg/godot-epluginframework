@@ -148,7 +148,7 @@ internal sealed partial class EGlobal
 
     /// <summary>Whether the current transition disables the plugin, now or once its dependants are disabled.</summary>
     private bool IsBeingDeactivated(PluginContext context) =>
-        _transition?.Participants.GetValueOrDefault(context) == PersistedPluginState.Deactivated || _toCheckDisable.Contains(context);
+        _transition?.Participants.GetValueOrDefault(context) == PersistedPluginState.Deactivated || _coordinator.Deactivations.Contains(context);
 
     /// <summary>
     /// Reverses the nested recipes that other installed plugins got because the plugin

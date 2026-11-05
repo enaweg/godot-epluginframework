@@ -180,33 +180,32 @@ internal sealed partial class EGlobal
 
         var name = PluginName(slug);
         using var progress = ActivationProgress.Begin($"Deactivating what needs {name}...");
-        _transitionHold++;
-        try
+        using (_coordinator.Hold())
         {
-            // An uninstall resolves its optional recipes against the editor, where this plugin is gone already. That is also
-            // the uninstall of a plugin disabled further down, because it requires a dependant.
-            foreach (var plugin in PluginsWithOptionalDependencyOn(slug).Where(p => p.AppliedOptionalDependencies is null).ToArray())
+            try
             {
-                plugin.AppliedOptionalDependencies = ResolveOptionalRecipes(plugin, plugin.Builder.PluginRecipe, assumeEnabledSlug: slug);
-            }
+                // An uninstall resolves its optional recipes against the editor, where this plugin is gone already. That is
+                // also the uninstall of a plugin disabled further down, because it requires a dependant.
+                foreach (var plugin in PluginsWithOptionalDependencyOn(slug).Where(p => p.AppliedOptionalDependencies is null).ToArray())
+                {
+                    plugin.AppliedOptionalDependencies = ResolveOptionalRecipes(plugin, plugin.Builder.PluginRecipe, assumeEnabledSlug: slug);
+                }
 
-            foreach (var dependant in dependants.Where(d => _host.IsPluginEnabled(d.Slug)))
+                foreach (var dependant in dependants.Where(d => _host.IsPluginEnabled(d.Slug)))
+                {
+                    dependant.Logger?.Warn($"Disabling {dependant.Name}: it requires {name}, which was disabled.");
+                    _host.SetPluginEnabled(dependant.Slug, false);
+                }
+
+                UninstallOptionalDependenciesOn(slug);
+            }
+            catch (Exception ex)
             {
-                dependant.Logger?.Warn($"Disabling {dependant.Name}: it requires {name}, which was disabled.");
-                _host.SetPluginEnabled(dependant.Slug, false);
+                // still held: the failure ends the transition before anything could finish it
+                _ePluginContext?.Logger.Error($"Removing what needs {name} failed: {ex.Message}");
+                FailTransition(AttemptReasons.OptionalRecipeFailed);
+                return;
             }
-
-            UninstallOptionalDependenciesOn(slug);
-        }
-        catch (Exception ex)
-        {
-            _ePluginContext?.Logger.Error($"Removing what needs {name} failed: {ex.Message}");
-            FailTransition(AttemptReasons.OptionalRecipeFailed);
-            return;
-        }
-        finally
-        {
-            _transitionHold--;
         }
 
         FinishPlainPluginTransition();

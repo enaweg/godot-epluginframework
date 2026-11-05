@@ -33,7 +33,7 @@ internal sealed partial class EGlobal
             return;
         }
 
-        if (_toCheckEnable.Contains(context))
+        if (_coordinator.Activations.Contains(context))
         {
             // Disabled while it waits for a dependency: it installed nothing yet, and resumed it would be enabled again.
             CancelWaitingActivation(context, refreshAtEnd);
@@ -88,7 +88,7 @@ internal sealed partial class EGlobal
         pluginsToDisable.RemoveAll(p => !_host.IsPluginEnabled(p.Slug));
         if (pluginsToDisable.Count > 0)
         {
-            _toCheckDisable.Push(context);
+            _coordinator.Deactivations.Push(context);
 
             foreach (var plugin in pluginsToDisable)
             {
@@ -99,7 +99,7 @@ internal sealed partial class EGlobal
 
                 if (_host.IsPluginEnabled(plugin.Slug))
                 {
-                    _toCheckDisable.Push(plugin);
+                    _coordinator.Deactivations.Push(plugin);
                     _host.SetPluginEnabled(plugin.Slug, false);
                 }
             }
@@ -107,11 +107,9 @@ internal sealed partial class EGlobal
             // Godot runs a dependant's _DisablePlugin inside the toggle. One that never called DisableEPlugin (e.g. it threw
             // first) is disabled but still activated, and nothing would resume this plugin: it goes on without waiting.
             var silent = pluginsToDisable.Where(p => p.State == EEditorPluginState.Activated && !_host.IsPluginEnabled(p.Slug)).ToArray();
-            if (silent.Length > 0 && context.State == EEditorPluginState.Activated && _toCheckDisable.Contains(context))
+            if (silent.Length > 0 && context.State == EEditorPluginState.Activated && _coordinator.Deactivations.Contains(context))
             {
-                var waiting = _toCheckDisable.Where(c => !silent.Contains(c)).Reverse().ToArray();
-                _toCheckDisable.Clear();
-                foreach (var plugin in waiting) _toCheckDisable.Push(plugin);
+                _coordinator.Deactivations.RemoveWhere(c => silent.Contains(c));
                 DisableEPlugin(context, refreshAtEnd, manualRetry);
             }
 
@@ -143,9 +141,9 @@ internal sealed partial class EGlobal
         if (refreshAtEnd)
         {
             // trigger uninstall for waiting plugins
-            while (_toCheckDisable.Count > 0)
+            while (!_coordinator.Deactivations.IsEmpty)
             {
-                var nextPlugin = _toCheckDisable.Pop();
+                var nextPlugin = _coordinator.Deactivations.Pop();
 
                 DisableEPlugin(nextPlugin, false);
             }
@@ -216,7 +214,7 @@ internal sealed partial class EGlobal
     /// </summary>
     private bool FailPluginsWaitingFor(string slug)
     {
-        var dependants = PluginsWaitingFor(slug).Select(c => c.Slug).Distinct(StringComparer.Ordinal).ToArray();
+        var dependants = _coordinator.WaitingFor(slug).Select(c => c.Slug).Distinct(StringComparer.Ordinal).ToArray();
         if (dependants.Length == 0)
         {
             return false;
@@ -228,19 +226,11 @@ internal sealed partial class EGlobal
         return true;
     }
 
-    /// <summary>The plugins on <see cref="_toCheckEnable"/> that wait for <paramref name="slug"/> as a hard dependency.</summary>
-    private IEnumerable<PluginContext> PluginsWaitingFor(string slug) =>
-        _toCheckEnable.Where(c => c.Slug != slug && c.IsRecipeCreated &&
-                                  c.Builder.PluginRecipe.PluginDependencies.Any(d => d.Slug == slug));
-
     /// <summary>Takes a plugin off the plugins that wait for the framework to be initialized.</summary>
     private void StopWaiting(PluginContext context)
     {
-        _enabledWithFramework.Remove(context);
-        if (!_toCheckEnable.Contains(context)) return;
-        var waiting = _toCheckEnable.Where(c => c != context).Reverse().ToArray();
-        _toCheckEnable.Clear();
-        foreach (var plugin in waiting) _toCheckEnable.Push(plugin);
+        _coordinator.EnabledWithFramework.Remove(context);
+        _coordinator.Activations.RemoveWhere(c => c == context);
     }
 
     private void ReverseRecipe(PluginContext context, EEditorPluginRecipe recipe)

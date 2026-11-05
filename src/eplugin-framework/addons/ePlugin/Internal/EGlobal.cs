@@ -39,18 +39,13 @@ internal sealed partial class EGlobal
 
     private ILoggerFactory? _loggerFactory;
 
-    private readonly Stack<PluginContext> _toCheckEnable = new();
-    // Plugins that enabled the framework because it was disabled: unlike the ones a start finds enabled, they still
-    // have to be installed once the framework is initialized.
-    private readonly HashSet<PluginContext> _enabledWithFramework = [];
-    private readonly Stack<PluginContext> _toCheckDisable = new();
+    // The plugins waiting in a transition, its holds and its stall watchdog.
+    private readonly TransitionCoordinator _coordinator = new(StallTimeout, StallFrames);
     private readonly Queue<IInitialize> _toInitialize = new();
     // Set while Initialize runs: initializers wait for its end, also those registered or discovered meanwhile.
     private bool _starting;
     private PluginTransition? _transition;
     private bool _transitionFailed;
-    // While above zero the transition stays open, so several plugins toggled one after another are built once.
-    private int _transitionHold;
 
     private readonly IEditorHost _host;
 
@@ -103,12 +98,8 @@ internal sealed partial class EGlobal
         set => _plainPluginObserver = value;
     }
 
-    /// <summary>While above zero a transition stays open after its last participant finished.</summary>
-    internal int TransitionHold
-    {
-        get => _transitionHold;
-        set => _transitionHold = value;
-    }
+    /// <summary>Keeps a transition open after its last participant finished, until the result is disposed.</summary>
+    internal IDisposable HoldTransition() => _coordinator.Hold();
 
     /// <summary>
     /// Makes the instance valid without the editor: what <see cref="Initialize"/> does first, for tests of the plugin
@@ -160,7 +151,7 @@ internal sealed partial class EGlobal
     private void InitializeCore(EPluginPlugin plugin, ILoggerFactory loggerFactory)
     {
         AssemblyReload.Capture();
-        using var progress = _toCheckEnable.Count > 0 ? ActivationProgress.Begin("Activating plugins...") : null;
+        using var progress = !_coordinator.Activations.IsEmpty ? ActivationProgress.Begin("Activating plugins...") : null;
         _loggerFactory = loggerFactory;
         _ePluginContext = plugin;
         plugin.Logger = CreateLogger(loggerFactory, plugin);
@@ -459,7 +450,7 @@ internal sealed partial class EGlobal
 
                 var context = GetOrCreateContext(pluginBase);
 
-                context.State = _enabledWithFramework.Contains(context) || _toCheckEnable.Contains(context)
+                context.State = _coordinator.EnabledWithFramework.Contains(context) || _coordinator.Activations.Contains(context)
                     ?
                     // the plugin was enabled while the framework was not initialized and waits for its activation, so
                     // this is a new plugin need to bootstrap.

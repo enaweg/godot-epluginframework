@@ -391,7 +391,7 @@ internal sealed partial class EGlobal
             var findings = global.UpdatePreflightFindings(packages.Select(p => p.Candidate with { NewVersion = UpdateApplier.PackageVersion(p) }).ToArray());
             if (findings.Any(f => f.Severity == FindingSeverity.Error)) throw new InvalidOperationException(string.Join("; ", findings.Where(f => f.Severity == FindingSeverity.Error).Select(f => f.Message)));
             foreach (var warning in findings.Where(f => f.Severity == FindingSeverity.Warning)) Log(warning.Message);
-            if (global._toCheckEnable.Count > 0 || global._toCheckDisable.Count > 0) throw new InvalidOperationException("Finish plugin transitions before updating.");
+            if (global._coordinator.HasWaiting) throw new InvalidOperationException("Finish plugin transitions before updating.");
             if (packages.Any(p => p.ContainsCSharp) && global.GetOrCreateContext(global._ePluginContext!).Cli is not ICheckedDotnetCli)
                 throw new InvalidOperationException("A working dotnet CLI is required for C# updates.");
         }
