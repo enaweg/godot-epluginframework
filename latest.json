@@ -1,8 +1,8 @@
 {
- "commit": "416075b4705fe3066db5a84c32a8b8f2c1173be2",
- "date": "2026-11-05T06:53:59Z",
- "covered": 12906,
- "coverable": 14234,
+ "commit": "a35cca15f866ff195b15f17b8c9ef6f5e518a526",
+ "date": "2026-11-05T17:18:40Z",
+ "covered": 12913,
+ "coverable": 14241,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -293,8 +293,8 @@
    84
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.cs": [
-   364,
-   426
+   366,
+   428
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EditorIcons.cs": [
    55,
@@ -333,8 +333,8 @@
    11
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/PluginManagerViewModel.cs": [
-   294,
-   300
+   299,
+   305
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/SettingsDialog.cs": [
    46,
