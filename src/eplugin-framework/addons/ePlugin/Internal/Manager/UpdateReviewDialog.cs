@@ -40,7 +40,6 @@ internal sealed partial class UpdateReviewDialog : ConfirmationDialog, ISerializ
         _tree = GetNode<Tree>("%ReviewTree"); _name = GetNode<Label>("%ReviewName"); _text = GetNode<RichTextLabel>("%ReviewText");
         _lifetime.Prepare(this, MethodName.RefreshWindowIcons);
         var scale = EditorWindows.Scale;
-        _text.AddThemeConstantOverride("line_separation", (int)(_text.GetThemeConstant("line_separation") * scale));
         // Column titles and sizing are not scene properties of Tree.
         _tree.SetColumnTitle(InstallColumn, "Decision"); _tree.SetColumnTitle(NameColumn, "Plugin"); _tree.SetColumnTitle(VersionColumn, "Version");
         _tree.SetColumnExpand(InstallColumn, false); _tree.SetColumnCustomMinimumWidth(InstallColumn, (int)(150 * scale));

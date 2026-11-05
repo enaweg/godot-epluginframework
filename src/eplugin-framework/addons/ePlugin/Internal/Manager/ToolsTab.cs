@@ -210,7 +210,7 @@ internal sealed partial class ToolsTab : VBoxContainer, ISerializationListener
         _confirm.DialogText = $"Delete {Count(plan.Remove.Count, "plugin package")} ({LocalCleanup.FormatSize(plan.Bytes)}) from {_selected}?\n\n" +
                               $"Kept: {LocalCleanup.Describe(rule).ToLowerInvariant()}, the latest version of every plugin and the versions " +
                               "installed in this project. The files are deleted, not moved to the trash.";
-        _confirm.PopupCentered();
+        EditorWindows.PopupChild(_confirm);
     }
 
     private void CleanUp()

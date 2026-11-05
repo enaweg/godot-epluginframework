@@ -49,8 +49,6 @@ internal sealed partial class AttentionDialog : AcceptDialog, ISerializationList
         _log = GetNode<Button>("%OpenLogButton"); _folder = GetNode<Button>("%OpenPluginFolderButton");
         _rollbackConfirm = GetNode<ConfirmationDialog>("%RollbackConfirm");
         _lifetime.Prepare(this, MethodName.RefreshWindowIcons, _rollbackConfirm);
-        var scale = EditorWindows.Scale;
-        _text.AddThemeConstantOverride("line_separation", (int)(_text.GetThemeConstant("line_separation") * scale));
         _retryAll = AddButton("Retry all", false, RetryAllAction);
         _retryAll.TooltipText = "Retry every failed or interrupted plugin activation, deactivation and update.";
         var signals = _lifetime.Signals;
@@ -79,7 +77,7 @@ internal sealed partial class AttentionDialog : AcceptDialog, ISerializationList
         if (items.Count == 0) return;
         _selected = slug;
         Update(items);
-        PopupCentered();
+        EditorWindows.PopupChild(this);
     }
 
     /// <summary>
@@ -151,7 +149,7 @@ internal sealed partial class AttentionDialog : AcceptDialog, ISerializationList
                 ? "Project files you changed since then (.csproj, .sln, nuget.config) stay as they are. "
                 : "Project files (.csproj, .sln, nuget.config) stay as they are; only the changes of the new version's recipe are undone. ") +
             "If you already adapted the project's code to the new version, it will not build with the old one.";
-        _rollbackConfirm.PopupCentered();
+        EditorWindows.PopupChild(_rollbackConfirm);
     }
 
     /// <summary>Rolls back the update the confirmation named, if it is still the one selected and still kept.</summary>

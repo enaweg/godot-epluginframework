@@ -146,8 +146,6 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         var scale = EditorWindows.Scale;
         _tree.SetColumnCustomMinimumWidth(EnabledColumn, (int)(40 * scale));
         _tree.SetColumnCustomMinimumWidth(VersionColumn, (int)(VersionMinimumWidth * scale));
-        // The scene's line spacing of the details, which keeps their links apart, is for 100% editor scale.
-        _detailsText.AddThemeConstantOverride("line_separation", (int)(_detailsText.GetThemeConstant("line_separation") * scale));
 
         _dialogLifetime.Signals.Connect(_check, BaseButton.SignalName.Pressed, Callable.From(CheckNow));
         _dialogLifetime.Signals.Connect(GetNode<Button>("%SettingsButton"), BaseButton.SignalName.Pressed, Callable.From(() => OpenSettings(null)));
@@ -218,7 +216,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             Render();
         }
         else Refresh();
-        PopupCenteredClamped(Size, 0.9f);
+        EditorWindows.PopupChild(this);
         _tree.GrabFocus();
         // Problems shown already in this editor session wait for the button; new ones open the list on top.
         if (_attentionItems.Any(i => !_global.ShownAttention.Contains(i.Key))) CallDeferred(MethodName.OpenAttention, "");

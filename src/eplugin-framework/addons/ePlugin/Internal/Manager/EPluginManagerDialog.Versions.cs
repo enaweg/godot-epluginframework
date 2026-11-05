@@ -154,7 +154,7 @@ internal sealed partial class EPluginManagerDialog
                 "keep" => ". If the project does not build with it, it is kept so you can fix the errors (project setting eplugin/updates/on_build_failure).",
                 _ => " and restored if installation fails.",
             };
-        _versionConfirm.PopupCentered();
+        EditorWindows.PopupChild(_versionConfirm);
     }
 }
 #endif

@@ -78,7 +78,7 @@ internal sealed partial class EPluginManagerDialog
             if (!enable && row.Plugin.Kind == PluginKind.Framework)
             {
                 item.SetChecked(EnabledColumn, true);
-                _disableFrameworkConfirm.PopupCentered();
+                EditorWindows.PopupChild(_disableFrameworkConfirm);
                 return;
             }
             // Enabling or disabling runs the plugin's recipe and may rebuild; never do that, or rebuild the tree,

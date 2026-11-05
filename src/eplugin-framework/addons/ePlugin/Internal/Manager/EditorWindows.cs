@@ -39,6 +39,12 @@ internal static class EditorWindows
         dialog.PopupCenteredClamped(dialog.Size, 0.9f);
     }
 
+    /// <summary>
+    /// Opens a window of a dialog's scene, e.g. a confirmation or the Needs attention dialog, centered on its parent like
+    /// <see cref="Window.PopupCentered"/>, but never larger than 90% of it, so it fits on the screen at a high editor scale.
+    /// </summary>
+    public static void PopupChild(Window window) => window.PopupCenteredClamped(window.Size, 0.9f);
+
     /// <summary>Opens <paramref name="url"/> in the system browser if it is a web link, see <see cref="PluginManagerViewModel.IsWebUrl"/>.</summary>
     public static void OpenWebLink(string? url)
     {
@@ -62,17 +68,25 @@ internal static class EditorWindows
             signals.Connect(window, Window.SignalName.VisibilityChanged, new Callable(owner, refreshIcons), GodotObject.ConnectFlags.Deferred);
     }
 
+    // The spacing constants a scene overrides, e.g. between the boxes of a dialog or the lines of its details.
+    private static readonly StringName[] Separations = ["separation", "h_separation", "v_separation", "line_separation"];
+
     /// <summary>
-    /// The minimum sizes of the window's controls, e.g. a list's width or an autowrapping label's. A window inside the
-    /// scene is prepared on its own, so it is left out here.
+    /// The minimum sizes of the window's controls, e.g. a list's width or an autowrapping label's, and the spacing their
+    /// scene overrides. A window inside the scene is prepared on its own, so it is left out here.
     /// </summary>
-    private static void ScaleMinimumSizes(Node parent, float scale)
+    internal static void ScaleMinimumSizes(Node parent, float scale)
     {
         if (Math.Abs(scale - 1f) < 0.01f) return;
         foreach (var child in parent.GetChildren())
         {
             if (child is Window) continue;
-            if (child is Control control) control.CustomMinimumSize *= scale;
+            if (child is Control control)
+            {
+                control.CustomMinimumSize *= scale;
+                foreach (var name in Separations)
+                    if (control.HasThemeConstantOverride(name)) control.AddThemeConstantOverride(name, (int)(control.GetThemeConstant(name) * scale));
+            }
             ScaleMinimumSizes(child, scale);
         }
     }

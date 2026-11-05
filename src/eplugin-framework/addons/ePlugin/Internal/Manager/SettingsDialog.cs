@@ -47,7 +47,7 @@ internal sealed partial class SettingsDialog : AcceptDialog, ISerializationListe
         // Update sources reads the local directories again, which Tools then shows.
         _general.Open(); _updateSources.Open(); _tools.Open(cleanupDirectory); _about.Open(framework);
         _tabs.CurrentTab = cleanupDirectory is null ? 0 : _tools.GetIndex();
-        PopupCentered();
+        EditorWindows.PopupChild(this);
     }
 
     /// <summary>Renders the icons for the current editor theme; the manager calls it when its theme changes.</summary>

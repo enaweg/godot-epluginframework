@@ -19,7 +19,7 @@ internal sealed partial class EPluginManagerDialog
     private void ChooseZip()
     {
         if (Busy) return;
-        _zipDialog.PopupCentered();
+        EditorWindows.PopupChild(_zipDialog);
     }
 
     private void ZipChosen(string path) => Run(InstallZipAsync(path), "Installing from a ZIP file");
@@ -92,7 +92,7 @@ internal sealed partial class EPluginManagerDialog
         _installText.Text = ZipInstall.Describe(package, archive);
         _status.Text = $"Confirm the installation of {archive.Name}.";
         Buttons();
-        _installConfirm.PopupCentered();
+        EditorWindows.PopupChild(_installConfirm);
     }
 
     private void ConfirmAddon()

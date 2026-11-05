@@ -100,7 +100,7 @@ internal sealed partial class GeneralSettingsTab : VBoxContainer, ISerialization
     {
         if (!value) { Save(_autoAccept, false); return; }
         _autoAccept.SetPressedNoSignal(false);
-        _autoAcceptConfirm.PopupCentered();
+        EditorWindows.PopupChild(_autoAcceptConfirm);
     }
 
     private void Save(Control control, Variant value)

@@ -66,7 +66,7 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
             ObservedTask.Run(_global.RebuildLocalIndexAsync(), ex => GD.PushError($"Rescanning the local directories failed: {ex.Message}"));
         }));
         _signals.Connect(_addSite, BaseButton.SignalName.Pressed, Callable.From(() => OpenEditor(null)));
-        _signals.Connect(_addDirectory, BaseButton.SignalName.Pressed, Callable.From(() => _folderDialog.PopupCentered()));
+        _signals.Connect(_addDirectory, BaseButton.SignalName.Pressed, Callable.From(() => EditorWindows.PopupChild(_folderDialog)));
         _signals.Connect(_edit, BaseButton.SignalName.Pressed, Callable.From(() => OpenEditor(SelectedSlug())));
         _signals.Connect(_remove, BaseButton.SignalName.Pressed, Callable.From(RemoveSelected));
         _signals.Connect(_removeRepeated, BaseButton.SignalName.Pressed, Callable.From(RemoveRepeated));
@@ -288,7 +288,7 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
         _url.Text = slug is null ? "" : _global.UpdateSiteOf(slug) ?? "";
         _editor.Title = slug is null ? "Add update site" : "Edit update site";
         ShowHint(null);
-        _editor.PopupCentered();
+        EditorWindows.PopupChild(_editor);
         _url.GrabFocus();
         _url.CaretColumn = _url.Text.Length;
     }
