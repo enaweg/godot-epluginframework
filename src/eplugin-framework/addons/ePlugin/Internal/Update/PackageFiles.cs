@@ -99,6 +99,9 @@ internal static class PackageFiles
     /// <summary>How the local file system compares paths: case-insensitively on Windows only.</summary>
     public static readonly StringComparison PathComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
     public static readonly StringComparer PathComparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+    public const string ResPrefix = "res://";
+    /// <summary>A <c>res://</c> path relative to the project folder; any other path as it is.</summary>
+    public static string ProjectRelative(string path) => path.StartsWith(ResPrefix, StringComparison.Ordinal) ? path[ResPrefix.Length..] : path;
     public static string Normalize(string path)
     {
         path = path.Replace('\\', '/');

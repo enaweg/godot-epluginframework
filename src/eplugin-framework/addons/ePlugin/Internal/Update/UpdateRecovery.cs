@@ -195,7 +195,7 @@ internal static class UpdateRecovery
         if (string.IsNullOrWhiteSpace(relative) || Path.IsPathRooted(relative) || relative.Split('/', '\\').Any(p => p is "" or "." or "..")) throw new InvalidDataException("Unsafe recovery path.");
         var prefix = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         var path = Path.GetFullPath(Path.Combine(prefix, relative));
-        if (!path.StartsWith(prefix, StringComparison.Ordinal)) throw new InvalidDataException("Recovery path escapes its root.");
+        if (!path.StartsWith(prefix, PackageFiles.PathComparison)) throw new InvalidDataException("Recovery path escapes its root.");
         return path;
     }
     private static void Copy(string source, string target)

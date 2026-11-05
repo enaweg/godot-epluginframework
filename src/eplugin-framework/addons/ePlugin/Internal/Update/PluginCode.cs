@@ -9,8 +9,6 @@ namespace Enaweg.Plugin.Internal.Update;
 /// <summary>Where plugin code lives apart from <c>addons/</c>, so <see cref="BuildDiagnostics"/> does not take it for project code.</summary>
 internal static class PluginCode
 {
-    private const string ResPrefix = "res://";
-
     /// <summary>
     /// Directories outside <c>addons/</c> whose code is plugin code: the targets of linked addons and the folders of the
     /// projects the update's recipes declare (old, applied and new). Each ends with a separator. A project in the project
@@ -30,11 +28,11 @@ internal static class PluginCode
         foreach (var recipe in journal.Recipes.Values)
             foreach (var project in new[] { recipe.Old, recipe.Applied, recipe.Target }.Where(r => r is not null).SelectMany(r => r!.Projects))
             {
-                var relative = project.Path.StartsWith(ResPrefix, StringComparison.Ordinal) ? project.Path[ResPrefix.Length..] : project.Path;
+                var relative = PackageFiles.ProjectRelative(project.Path);
                 if (Path.GetDirectoryName(Path.GetFullPath(Path.Combine(projectRoot, relative))) is { } directory) roots.Add(directory);
             }
         var root = WithSeparator(projectRoot);
-        return roots.Select(WithSeparator).Where(r => !root.StartsWith(r, StringComparison.OrdinalIgnoreCase)).Distinct(StringComparer.Ordinal).ToArray();
+        return roots.Select(WithSeparator).Where(r => !root.StartsWith(r, PackageFiles.PathComparison)).Distinct(PackageFiles.PathComparer).ToArray();
     }
 
     private static string WithSeparator(string path) => Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)) + Path.DirectorySeparatorChar;

@@ -104,6 +104,8 @@ internal static partial class BuildDiagnostics
     private static bool IsIntermediate(string path) =>
         path.Replace('\\', '/').Split('/').Any(part => part.Equals("obj", StringComparison.OrdinalIgnoreCase));
 
+    // Looser than PackageFiles.PathComparison, which decides what an update may touch: this only attributes compiler
+    // output to plugins, and macOS file systems usually ignore case too.
     private static StringComparison PathComparison => OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
     private static string Directory(string path) => Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)) + Path.DirectorySeparatorChar;
