@@ -38,7 +38,7 @@ internal sealed partial class StartupFailureDialog : AcceptDialog, ISerializatio
         GetNode<TextEdit>("%StartupDetails").Text = details;
         AddButton("Copy details", false, CopyAction);
         AddButton("Retry now", true, RetryAction);
-        EditorWindows.Prepare(this, _signals, this, nameof(QueueWindowIcon));
+        EditorWindows.Prepare(this, _signals, this, MethodName.QueueWindowIcon);
         _signals.Connect(this, AcceptDialog.SignalName.Confirmed, Callable.From(() => Finish(false)));
         _signals.Connect(this, AcceptDialog.SignalName.Canceled, Callable.From(() => Finish(false)));
         _signals.Connect(this, AcceptDialog.SignalName.CustomAction, Callable.From<StringName>(action =>
@@ -58,7 +58,7 @@ internal sealed partial class StartupFailureDialog : AcceptDialog, ISerializatio
         finally { EditorWindows.Release(this); }
     }
 
-    private void QueueWindowIcon() => CallDeferred(nameof(RefreshWindowIcon));
+    private void QueueWindowIcon() => CallDeferred(MethodName.RefreshWindowIcon);
     private void RefreshWindowIcon() => EditorWindows.ApplyIcon(this);
 
     // Reload serializes every script before disposing any of them, so callback targets are still valid here.

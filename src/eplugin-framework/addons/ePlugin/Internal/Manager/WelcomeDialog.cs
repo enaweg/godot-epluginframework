@@ -46,7 +46,7 @@ internal sealed partial class WelcomeDialog : AcceptDialog, ISerializationListen
         _welcomes = welcomes; _closed = closed;
         _list = GetNode<ItemList>("%WelcomeList"); _summary = GetNode<Label>("%Summary");
         _name = GetNode<Label>("%WelcomeName"); _source = GetNode<Label>("%WelcomeSource"); _text = GetNode<RichTextLabel>("%WelcomeText");
-        EditorWindows.Prepare(this, _signals, this, nameof(QueueWindowIcon));
+        EditorWindows.Prepare(this, _signals, this, MethodName.QueueWindowIcon);
         _signals.Connect(this, AcceptDialog.SignalName.Confirmed, Callable.From(Finish));
         _signals.Connect(this, AcceptDialog.SignalName.Canceled, Callable.From(Finish));
         _signals.Connect(_list, ItemList.SignalName.ItemSelected, Callable.From<long>(index => Display((int)index)));
@@ -81,7 +81,7 @@ internal sealed partial class WelcomeDialog : AcceptDialog, ISerializationListen
         finally { EditorWindows.Release(this); }
     }
 
-    private void QueueWindowIcon() => CallDeferred(nameof(RefreshWindowIcon));
+    private void QueueWindowIcon() => CallDeferred(MethodName.RefreshWindowIcon);
     private void RefreshWindowIcon() => EditorWindows.ApplyIcon(this);
 
     // An assembly reload drops the dialog without counting the pages as read, so they are shown again afterwards.

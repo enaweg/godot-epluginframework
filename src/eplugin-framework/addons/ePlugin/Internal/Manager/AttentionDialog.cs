@@ -45,7 +45,7 @@ internal sealed partial class AttentionDialog : AcceptDialog, ISerializationList
         _retry = GetNode<Button>("%RetryPluginButton"); _rollback = GetNode<Button>("%RollbackButton"); _disable = GetNode<Button>("%DisablePluginButton");
         _log = GetNode<Button>("%OpenLogButton"); _folder = GetNode<Button>("%OpenPluginFolderButton");
         _rollbackConfirm = GetNode<ConfirmationDialog>("%RollbackConfirm");
-        foreach (var window in new Window[] { this, _rollbackConfirm }) EditorWindows.Prepare(window, _signals, this, nameof(QueueWindowIcons));
+        foreach (var window in new Window[] { this, _rollbackConfirm }) EditorWindows.Prepare(window, _signals, this, MethodName.QueueWindowIcons);
         var scale = EditorWindows.Scale;
         _text.AddThemeConstantOverride("line_separation", (int)(_text.GetThemeConstant("line_separation") * scale));
         _retryAll = AddButton("Retry all", false, RetryAllAction);
@@ -163,7 +163,7 @@ internal sealed partial class AttentionDialog : AcceptDialog, ISerializationList
         if (Selected is { Kept: { } kept } item && confirmed == (item.Slug, kept.Id)) Request(AttentionAction.Rollback);
     }
 
-    private void QueueWindowIcons() => CallDeferred(nameof(RefreshWindowIcons));
+    private void QueueWindowIcons() => CallDeferred(MethodName.RefreshWindowIcons);
     private void RefreshWindowIcons()
     {
         foreach (var window in new Window[] { this, _rollbackConfirm }) EditorWindows.ApplyIcon(window);

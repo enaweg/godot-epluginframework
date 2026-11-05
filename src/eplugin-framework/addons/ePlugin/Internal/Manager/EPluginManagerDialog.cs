@@ -137,12 +137,12 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _attention = GetNode<AttentionDialog>("%AttentionDialog"); _attention.Initialize();
         _locationRow = GetNode<Control>("%LocationRow"); _locationLink = GetNode<LinkButton>("%LocationLink"); _openFolder = GetNode<Button>("%OpenFolderButton");
         RefreshTheme();
-        _signals.Connect(this, Control.SignalName.ThemeChanged, Callable.From(() => CallDeferred(nameof(RefreshTheme))));
+        _signals.Connect(this, Control.SignalName.ThemeChanged, Callable.From(() => CallDeferred(MethodName.RefreshTheme)));
 
         // Column titles and sizing are not scene properties of Tree.
         _tree.SetColumnTitle(EnabledColumn, "On"); _tree.SetColumnTitle(NameColumn, "Plugin"); _tree.SetColumnTitle(VersionColumn, "Version");
         _tree.SetColumnExpand(EnabledColumn, false); _tree.SetColumnExpand(NameColumn, false); _tree.SetColumnExpand(VersionColumn, true);
-        foreach (var window in Windows) EditorWindows.Prepare(window, _signals, this, nameof(QueueWindowIcons));
+        foreach (var window in Windows) EditorWindows.Prepare(window, _signals, this, MethodName.QueueWindowIcons);
         var scale = EditorWindows.Scale;
         _tree.SetColumnCustomMinimumWidth(EnabledColumn, (int)(40 * scale));
         _tree.SetColumnCustomMinimumWidth(VersionColumn, (int)(VersionMinimumWidth * scale));
@@ -182,7 +182,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
 
     private Window[] Windows => [this, _versionConfirm, _disableFrameworkConfirm, _zipDialog, _installConfirm];
 
-    private void QueueWindowIcons() => CallDeferred(nameof(RefreshWindowIcons));
+    private void QueueWindowIcons() => CallDeferred(MethodName.RefreshWindowIcons);
     private void RefreshWindowIcons()
     {
         foreach (var window in Windows) EditorWindows.ApplyIcon(window);
