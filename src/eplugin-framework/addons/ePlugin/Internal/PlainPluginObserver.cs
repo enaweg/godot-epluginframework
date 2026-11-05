@@ -44,7 +44,7 @@ internal sealed class PlainPluginObserver(
             var saved = store.GetShared(slug);
             if (_previous is null && active && string.IsNullOrWhiteSpace(installedVersion(slug)))
             {
-                store.TryRecordInvalid(slug, installedVersion(slug), "invalid_plugin_version");
+                store.TryRecordInvalid(slug, installedVersion(slug), AttemptReasons.InvalidPluginVersion);
                 continue;
             }
 
@@ -74,7 +74,7 @@ internal sealed class PlainPluginObserver(
     public bool Retry(string slug)
     {
         if (isManaged(slug) || isOwned(slug) || store.GetLocal(slug) is not { } attempt ||
-            attempt.Reason != "invalid_plugin_version" && (attempt.Reason != "state_commit_failed" ||
+            attempt.Reason != AttemptReasons.InvalidPluginVersion && (attempt.Reason != AttemptReasons.StateCommitFailed ||
                 store.LocalAttempts.Any(a => a.AttemptId == attempt.AttemptId && a.Slug != slug)))
         {
             return false;
@@ -93,7 +93,7 @@ internal sealed class PlainPluginObserver(
         {
             if (!manualRetry)
             {
-                store.TryRecordInvalid(slug, version, "invalid_plugin_version");
+                store.TryRecordInvalid(slug, version, AttemptReasons.InvalidPluginVersion);
             }
 
             return false;
@@ -109,7 +109,7 @@ internal sealed class PlainPluginObserver(
             }
 
             _failedWrites[slug] = id;
-            store.TryFail(id, PersistedPluginState.Failed, "state_commit_failed");
+            store.TryFail(id, PersistedPluginState.Failed, AttemptReasons.StateCommitFailed);
         }
 
         logger?.Error($"Cannot record observed state for plain plugin {slug}; persisted state was preserved.");

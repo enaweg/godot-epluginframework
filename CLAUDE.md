@@ -290,7 +290,8 @@ failed command leaves `ExecuteCliBase.LastFailure` (its error lines and a hint, 
 operations add to their exception, so the Needs attention dialog shows dotnet's cause rather than only the failed entry.
 `FailTransition` records each participant's error message as the attempt's `detail` in the `.user` file (and a failed
 build's output as `log`, below `.godot/eplugin/logs`), so the dialog explains failures after a restart; give a new reason
-code its text in `AttentionItem.Reason` (`DecisionDialogTests` checks every code).
+code a constant in `AttemptReasons` (stored values never change; lifecycle ones go into `Lifecycle`) and its text in
+`AttentionItem.Reason` (`DecisionDialogTests` checks every lifecycle code).
 
 Removals are idempotent: the CLI fails to remove a package, project reference or solution entry that is already gone,
 although that is the state the caller wants. Both CLIs therefore first ask `DotnetCliBase.Check*Removal`, which reads

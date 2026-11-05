@@ -344,7 +344,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         foreach (var plugin in journal.Plugins) versions[plugin.Slug] = plugin.NewVersion;
         if (!store.TryAcknowledgeVersions(journal.AttemptId, versions))
         {
-            store.TryFail(journal.AttemptId, PersistedPluginState.Failed, "update_commit_failed");
+            store.TryFail(journal.AttemptId, PersistedPluginState.Failed, AttemptReasons.UpdateCommitFailed);
             journal.Failure = "Healthy update could not be acknowledged; merge the shared state file and use Retry under Needs attention in the ePlugin Manager.";
             journal.Save(UpdatePhase.Verified);
             host.Log(journal.Failure);
@@ -422,7 +422,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
     public UpdateOutcome Keep(UpdateJournal journal)
     {
         // Retry and Roll back find a kept update by its marker; one that cannot be marked so is not kept.
-        if (!store.TryFail(journal.AttemptId, PersistedPluginState.Failed, "update_kept_build_failed"))
+        if (!store.TryFail(journal.AttemptId, PersistedPluginState.Failed, AttemptReasons.UpdateKeptBuildFailed))
             return Rollback(journal, "The new versions could not be kept: the local plugin state cannot record them.");
         journal.Save(UpdatePhase.CommittedWithErrors);
         host.Log($"New versions kept with build errors. Fix the project and use Retry under Needs attention in the ePlugin Manager. Backup: {journal.Directory}");
@@ -481,7 +481,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         }
         catch (Exception ex)
         {
-            store.TryFail(journal.AttemptId, PersistedPluginState.Failed, "update_rollback_failed");
+            store.TryFail(journal.AttemptId, PersistedPluginState.Failed, AttemptReasons.UpdateRollbackFailed);
             journal.Failure = reason + "; rollback failed: " + ex.Message;
             // The marker sends the update to Retry even when the journal cannot say why; throwing here would report it as
             // never begun.
@@ -536,8 +536,8 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
     {
         host.CloseScenes();
         var reason = store.LocalAttempts.FirstOrDefault(a => a.AttemptId == journal.AttemptId)?.Reason;
-        if (reason == "update_commit_failed") return journal.Plugins.All(host.Verify) ? Commit(journal) : Rollback(journal, "Retry verification failed.");
-        if (reason == "update_kept_build_failed")
+        if (reason == AttemptReasons.UpdateCommitFailed) return journal.Plugins.All(host.Verify) ? Commit(journal) : Rollback(journal, "Retry verification failed.");
+        if (reason == AttemptReasons.UpdateKeptBuildFailed)
         {
             var retry = Build(journal, "retry");
             if (retry.ExitCode != 0)
@@ -567,7 +567,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
     /// </summary>
     private UpdateOutcome ResumeAfterRestart(UpdateJournal journal)
     {
-        if (!store.TryFail(journal.AttemptId, PersistedPluginState.Failed, "attempt_in_progress"))
+        if (!store.TryFail(journal.AttemptId, PersistedPluginState.Failed, AttemptReasons.InProgress))
         {
             host.Log("Cannot clear the kept-update marker; the update stays kept. Backup: " + journal.Directory);
             return UpdateOutcome.KeptWithErrors;

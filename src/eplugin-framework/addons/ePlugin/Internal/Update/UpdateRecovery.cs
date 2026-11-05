@@ -163,7 +163,7 @@ internal static class UpdateRecovery
                     try
                     {
                         var store = new PluginStateStore(Path.Combine(projectRoot, "addons/eplugin-state.json"), logger);
-                        store.Load(); store.TryFail(attempt, PersistedPluginState.Failed, "update_rollback_failed");
+                        store.Load(); store.TryFail(attempt, PersistedPluginState.Failed, AttemptReasons.UpdateRollbackFailed);
                     }
                     catch (Exception) { /* Preserve backups even if the marker cannot be written. */ }
                 }

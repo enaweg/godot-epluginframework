@@ -355,7 +355,7 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
 
         attemptId = Guid.NewGuid();
         next[slug] = new LocalPluginAttempt(attemptId, slug, installedVersion, targetState,
-            PersistedPluginState.Failed, "attempt_in_progress");
+            PersistedPluginState.Failed, AttemptReasons.InProgress);
         if (!SaveLocal(next))
         {
             attemptId = Guid.Empty;
@@ -394,7 +394,7 @@ internal sealed class PluginStateStore(string sharedPath, ILogger? logger)
             [slug] = existing is not null
                 ? existing with { TargetState = targetState }
                 : new LocalPluginAttempt(attemptId, slug, installedVersion, targetState,
-                    PersistedPluginState.Failed, "attempt_in_progress")
+                    PersistedPluginState.Failed, AttemptReasons.InProgress)
         };
         if (!SaveLocal(next))
         {

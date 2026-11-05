@@ -244,7 +244,7 @@ internal sealed partial class EGlobal
             var version = context.Metadata?.Version;
             if (string.IsNullOrWhiteSpace(version))
             {
-                _stateStore.TryRecordInvalid(context.Slug, version, "invalid_plugin_version");
+                _stateStore.TryRecordInvalid(context.Slug, version, AttemptReasons.InvalidPluginVersion);
                 context.State = EEditorPluginState.Error;
                 context.Logger?.Error($"Cannot record {context.Slug}: plugin.cfg has no usable version.");
                 continue;
@@ -268,7 +268,7 @@ internal sealed partial class EGlobal
         var version = context.Metadata?.Version;
         if (string.IsNullOrWhiteSpace(version))
         {
-            _stateStore.TryRecordInvalid(context.Slug, version, "invalid_plugin_version");
+            _stateStore.TryRecordInvalid(context.Slug, version, AttemptReasons.InvalidPluginVersion);
             return;
         }
 
@@ -312,7 +312,7 @@ internal sealed partial class EGlobal
         var version = context.Metadata?.Version;
         if (string.IsNullOrWhiteSpace(version))
         {
-            _stateStore.TryRecordInvalid(context.Slug, version, "invalid_plugin_version");
+            _stateStore.TryRecordInvalid(context.Slug, version, AttemptReasons.InvalidPluginVersion);
             return;
         }
 

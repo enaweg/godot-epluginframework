@@ -66,7 +66,7 @@ internal sealed partial class EGlobal
 
         if (!TryEnsureRecipe(context))
         {
-            FailTransition("recipe_creation_failed");
+            FailTransition(AttemptReasons.RecipeCreationFailed);
             return;
         }
 
@@ -74,7 +74,7 @@ internal sealed partial class EGlobal
         var pluginsToDisable = ActivatedDependantsOf(context.Slug, out var unreadable);
         if (unreadable is not null)
         {
-            FailTransition("dependent_recipe_creation_failed");
+            FailTransition(AttemptReasons.DependentRecipeCreationFailed);
             return;
         }
 
@@ -133,7 +133,7 @@ internal sealed partial class EGlobal
             context.State = EEditorPluginState.Error;
             context.ErrorDetail = ex;
             context.Logger?.Error($"Deactivating {context.Slug} failed: {ex.Message}");
-            FailTransition("deactivation_failed");
+            FailTransition(AttemptReasons.DeactivationFailed);
             return;
         }
 
@@ -195,7 +195,7 @@ internal sealed partial class EGlobal
                 context.State = EEditorPluginState.Error;
                 context.ErrorDetail = new InvalidOperationException(RecordFailedDetail);
                 transition.Participants[context] = PersistedPluginState.Deactivated;
-                FailTransition("cannot_record_participant", RecordFailedDetail);
+                FailTransition(AttemptReasons.CannotRecordParticipant, RecordFailedDetail);
                 return;
             }
 
@@ -232,7 +232,7 @@ internal sealed partial class EGlobal
 
         var names = string.Join(", ", dependants);
         FailWaitingPlugins($"Plugin dependency {slug} was disabled while {names} waited for it to activate. " +
-                           $"Enable {slug} again and retry, or disable {names}.", "dependency_disabled");
+                           $"Enable {slug} again and retry, or disable {names}.", AttemptReasons.DependencyDisabled);
         return true;
     }
 

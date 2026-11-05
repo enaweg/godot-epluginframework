@@ -154,7 +154,7 @@ internal sealed partial class EGlobal
         catch (Exception ex)
         {
             _ePluginContext?.Logger.Error($"Installing the optional recipes that {name} satisfies failed: {ex.Message}");
-            FailTransition("optional_recipe_failed");
+            FailTransition(AttemptReasons.OptionalRecipeFailed);
             return;
         }
 
@@ -201,7 +201,7 @@ internal sealed partial class EGlobal
         catch (Exception ex)
         {
             _ePluginContext?.Logger.Error($"Removing what needs {name} failed: {ex.Message}");
-            FailTransition("optional_recipe_failed");
+            FailTransition(AttemptReasons.OptionalRecipeFailed);
             return;
         }
         finally

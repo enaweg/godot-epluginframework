@@ -50,7 +50,7 @@ internal sealed partial class EGlobal
             return false;
         }
 
-        if (attempt.Reason == "invalid_plugin_version" && attempt.TargetState == PersistedPluginState.Activated)
+        if (attempt.Reason == AttemptReasons.InvalidPluginVersion && attempt.TargetState == PersistedPluginState.Activated)
         {
             // The version is checked before anything is installed, and a plugin without one cannot complete a transition.
             // A failed deactivation left its recipe installed: it is retried as one, which needs the version repaired.
@@ -107,7 +107,7 @@ internal sealed partial class EGlobal
     }
 
     private bool IsUpdateAttempt(LocalPluginAttempt attempt) =>
-        attempt.Reason.StartsWith("update_", StringComparison.Ordinal) ||
+        attempt.Reason.StartsWith(AttemptReasons.UpdatePrefix, StringComparison.Ordinal) ||
         _updateJournals?.Read().Any(j => j.AttemptId == attempt.AttemptId) == true;
 
     /// <param name="disable">The plugins whose failed attempts are retried as deactivations, whatever they aimed for.</param>
@@ -124,7 +124,7 @@ internal sealed partial class EGlobal
                      .Concat(ordered.Where(a => a.TargetState != PersistedPluginState.Deactivated)))
         {
             var updateJournal = _updateJournals?.Read().FirstOrDefault(j => j.AttemptId == attempt.AttemptId);
-            if (updateJournal is not null || attempt.Reason.StartsWith("update_", StringComparison.Ordinal))
+            if (updateJournal is not null || attempt.Reason.StartsWith(AttemptReasons.UpdatePrefix, StringComparison.Ordinal))
             {
                 if (retriedUpdates.Add(attempt.AttemptId)) RetryUpdate(updateJournal);
                 continue;
@@ -138,11 +138,11 @@ internal sealed partial class EGlobal
                 continue; // an earlier retry of this loop already completed it, e.g. as a dependency
             }
 
-            if (context is null && attempt.Reason is "invalid_plugin_version" or "state_commit_failed" &&
+            if (context is null && attempt.Reason is AttemptReasons.InvalidPluginVersion or AttemptReasons.StateCommitFailed &&
                 !IsManagedPlugin(attempt.Slug) && _plainPluginObserver is not null)
             {
                 // a plain plugin is recorded as it is enabled, so one retried as a deactivation is disabled first
-                if (attempt.TargetState == PersistedPluginState.Deactivated && attempt.Reason == "state_commit_failed" &&
+                if (attempt.TargetState == PersistedPluginState.Deactivated && attempt.Reason == AttemptReasons.StateCommitFailed &&
                     _host.IsPluginEnabled(attempt.Slug))
                 {
                     _host.SetPluginEnabled(attempt.Slug, false);

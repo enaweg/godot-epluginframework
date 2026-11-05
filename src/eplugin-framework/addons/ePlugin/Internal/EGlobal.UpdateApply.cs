@@ -272,7 +272,7 @@ internal sealed partial class EGlobal
             return;
         }
         var attempts = _stateStore.LocalAttempts.Where(a => a.AttemptId == journal.AttemptId).ToArray();
-        if (attempts.Any(a => a.Reason.StartsWith("update_", StringComparison.Ordinal)))
+        if (attempts.Any(a => a.Reason.StartsWith(AttemptReasons.UpdatePrefix, StringComparison.Ordinal)))
         {
             _ePluginContext?.Logger.Warn($"Update needs manual recovery: {journal.Directory}. Use Retry under Needs attention in the ePlugin Manager.");
             return;
@@ -327,7 +327,7 @@ internal sealed partial class EGlobal
     internal UpdateJournal? KeptUpdate(string slug)
     {
         if (_stateStore is null || _updateJournals is null) return null;
-        var attempts = _stateStore.LocalAttempts.Where(a => a.Reason == "update_kept_build_failed").Select(a => a.AttemptId).ToHashSet();
+        var attempts = _stateStore.LocalAttempts.Where(a => a.Reason == AttemptReasons.UpdateKeptBuildFailed).Select(a => a.AttemptId).ToHashSet();
         return _updateJournals.Read().LastOrDefault(j => j.State == UpdatePhase.CommittedWithErrors && attempts.Contains(j.AttemptId) && j.Plugins.Any(p => p.Slug == slug));
     }
 
