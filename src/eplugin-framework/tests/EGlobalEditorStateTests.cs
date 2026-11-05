@@ -104,6 +104,17 @@ public class EGlobalEditorStateTests : IDisposable
     }
 
     [TestCase]
+    public void TheToolbarStatusShowsAPluginWhosePluginCfgCannotBeRead()
+    {
+        _fixture.AddPlainPlugin("tool");
+        File.WriteAllText(Path.Combine(_fixture.Addon("tool"), "plugin.cfg"), "[plugin\nname=");
+        _fixture.Global.InvalidateManagerStatus();
+
+        // the manager lists it as needing attention, so the toolbar button shows it too
+        Assertions.AssertObject(_fixture.Global.CurrentManagerStatus()).IsEqual(ManagerStatus.NeedsAttention);
+    }
+
+    [TestCase]
     public void UpdateTargetsAreTheEnabledPluginsWithTheirRecordedState()
     {
         _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"), "1.2.0", "update_url=\"https://example.org/app/releases\"");
