@@ -237,7 +237,7 @@ internal sealed class PluginManagerViewModel
     /// the project does not build with it.
     /// </summary>
     /// <param name="buildFailurePolicy">The plugin's <c>eplugin/updates/on_build_failure</c>: ask, keep, or rollback.</param>
-    public static string VersionConfirmText(PluginRow row, VersionOption option, string buildFailurePolicy) =>
+    public static string VersionConfirmText(PluginRow row, VersionOption option, BuildFailurePolicy buildFailurePolicy) =>
         (option.IsReinstall
             ? $"Reinstall {row.Plugin.Name} {row.Plugin.Version}?\n\n{VersionSource(option)}. Its files replace the installed ones: " +
               "this brings in new commits of a git branch and undoes changes made to the plugin's folder in the project.\n\n"
@@ -250,8 +250,8 @@ internal sealed class PluginManagerViewModel
             : "") +
         "Open scenes are saved first; files and project references are backed up" + buildFailurePolicy switch
         {
-            "ask" => ". If the project does not build with it, you choose whether to keep it and fix the errors yourself or to restore the previous version.",
-            "keep" => ". If the project does not build with it, it is kept so you can fix the errors (project setting eplugin/updates/on_build_failure).",
+            BuildFailurePolicy.Ask => ". If the project does not build with it, you choose whether to keep it and fix the errors yourself or to restore the previous version.",
+            BuildFailurePolicy.Keep => ". If the project does not build with it, it is kept so you can fix the errors (project setting eplugin/updates/on_build_failure).",
             _ => " and restored if installation fails.",
         };
 

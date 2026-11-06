@@ -271,7 +271,7 @@ public class EGlobalUpdateApplyTests : IDisposable
     private sealed class RecordingUpdateHost(LifecycleFixture fixture) : IUpdateHost
     {
         public bool UiAvailable { get; set; }
-        public string BuildFailurePolicy => "ask";
+        public BuildFailurePolicy BuildFailurePolicy => BuildFailurePolicy.Ask;
         public bool RestartAlways => false;
         public Func<bool> BuildFails { get; set; } = () => false;
         public List<string> Toggles { get; } = [];

@@ -9,6 +9,8 @@ How ePlugin's updater is built, for maintainers of the framework. The user-facin
 transaction applier, recipe snapshots and diffs, journal and cache persistence, and early self-update recovery.
 `EGlobal.Updates.cs`, `EGlobal.UpdateApply.cs`, `EGlobal.UpdateRecipes.cs`, `EGlobal.RecipeOperations.cs`,
 `EGlobal.UpdateWorkflow.cs` (`IUpdateWorkflowHost`) and `EGlobal.AddonInstall.cs` (new add-ons) connect them to Godot. HTTP and git work runs off the editor thread; lifecycle and recipe changes stay on it.
+`UpdatePaths` names the updater's files (`.godot/eplugin/updates/<transaction>/journal.json`, `healthy.marker`, the
+`update-state.json` cache); early recovery reads them in another framework version, so they never move.
 
 The ePlugin Manager's workflows (checking, loading a plugin's versions, staging, reviewing and installing a batch) are in
 `Internal/Manager/UpdateFlow.cs`, which reaches the framework through `IUpdateWorkflowHost` and is tested without the
@@ -261,12 +263,14 @@ null and behaves exactly as before).
 A grouped journal never asks or keeps on a build failure; it rolls back. Only an update started from a plugin's details
 (`ApplyUpdatesAsync(askOnBuildFailure: true)`, persisted as `UpdateJournal.AskOnBuildFailure`) asks, for the interim and
 the final build (`UpdateFailureDecision.Policy`); the batch **Update** rolls back, unless `on_build_failure=keep` keeps a
-single group. The exception is a build that fails only in project code while the plugins compile on their own (below):
+single group. `IUpdateHost.BuildFailurePolicy` reads the setting once into the `BuildFailurePolicy` enum
+(`UpdateFailureDecision.Parse`: the stored values stay `ask`, `rollback` and `keep`, and any other value rolls back). The exception is a build that fails only in project code while the plugins compile on their own (below):
 it is kept, in a group too, because a later group then fails with the same project errors and is kept the same way.
 
 ## Build failures in project code
 
-`UpdateApplier.BuildPasses` wraps the interim, plain C# and final builds (not rollback and Retry builds). On failure,
+`UpdateBuildGate` runs every build of a transaction (its log in the journal folder, its result in `journal.Builds`) and
+decides what a failure means (`Decision`). Its `Passes` wraps the interim, plain C# and final builds (not rollback and Retry builds). On failure,
 `BuildDiagnostics.Classify` (pure) reads MSBuild's canonical `file(line,col): error CODE: message` lines; the `error`
 keyword is not localized. An error below `addons/` or `IUpdateHost.PluginCodeRoots` (link targets of addons, directories
 of recipe projects, never the project directory itself) is `PluginCode`; one without a `.cs` file, in `.godot/`, below
@@ -311,9 +315,10 @@ applied; resuming reloads each journal because an earlier group may have changed
 When a journal commits or rolls back, `RebasePending` refreshes the `backup-project` of every journal that has not
 reconciled yet and, on commit, its recipe baselines for plugins it does not update, so a later rollback keeps the earlier
 group's changes. A replaced `backup-project` is copied to `backup-project.new`, the old one moved to `.old` and the new
-one into place before the journal is saved; when a crash leaves neither in place, rollback and early recovery restore
-the new copy (`ProjectBackup.Find`). Both restore the files the backup folder holds rather than `ProjectFiles`, which the
-journal saved after the replacement may not list yet. Reconcile leaves the recipes of plugins in another active journal,
+one into place before the journal is saved (`ProjectBackup.Write`); when a crash leaves neither in place, rollback and
+early recovery restore the new copy (`ProjectBackup.Find`). Both restore the files the backup folder holds rather than
+`ProjectFiles`, which the journal saved after the replacement may not list yet, through `ProjectBackup.Restore` (only
+early recovery restores `project.godot`; a `nuget.config` the backup lacks is deleted). Reconcile leaves the recipes of plugins in another active journal,
 in a journal kept before reconciling whose marker Retry still resumes, or rolled back since the assembly was loaded
 alone (`UntouchedRecipes`).
 

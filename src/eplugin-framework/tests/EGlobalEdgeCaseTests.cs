@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Enaweg.Plugin.Internal;
+using Enaweg.Plugin.Internal.Update;
 using Enaweg.Plugin.Sample;
 using GdUnit4;
 using Godot;
@@ -647,15 +648,15 @@ public partial class EGlobalEdgeCaseTests : IDisposable
         try
         {
             ProjectSettings.SetSetting(key, "ask");
-            Assertions.AssertString(_fixture.Global.DetailsBuildFailurePolicy("app")).IsEqual("rollback");
+            Assertions.AssertObject(_fixture.Global.DetailsBuildFailurePolicy("app")).IsEqual(BuildFailurePolicy.Rollback);
 
             _fixture.Host.Dialogs = true;
-            Assertions.AssertString(_fixture.Global.DetailsBuildFailurePolicy("app")).IsEqual("ask");
+            Assertions.AssertObject(_fixture.Global.DetailsBuildFailurePolicy("app")).IsEqual(BuildFailurePolicy.Ask);
             // the framework itself cannot run code that does not build
-            Assertions.AssertString(_fixture.Global.DetailsBuildFailurePolicy("ePlugin")).IsEqual("rollback");
+            Assertions.AssertObject(_fixture.Global.DetailsBuildFailurePolicy("ePlugin")).IsEqual(BuildFailurePolicy.Rollback);
 
             ProjectSettings.SetSetting(key, "keep");
-            Assertions.AssertString(_fixture.Global.DetailsBuildFailurePolicy("app")).IsEqual("keep");
+            Assertions.AssertObject(_fixture.Global.DetailsBuildFailurePolicy("app")).IsEqual(BuildFailurePolicy.Keep);
         }
         finally
         {

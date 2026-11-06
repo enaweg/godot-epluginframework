@@ -450,7 +450,7 @@ public class PluginManagerDialogTests : IDisposable
     {
         public List<bool> LockedWhileApplying { get; } = [];
         public bool UiAvailable => false;
-        public string BuildFailurePolicy => "rollback";
+        public BuildFailurePolicy BuildFailurePolicy => BuildFailurePolicy.Rollback;
         public bool RestartAlways => false;
         public bool IsEnabled(string slug) => fixture.Host.IsPluginEnabled(slug);
         public bool IsManaged(string slug) => false;

@@ -105,17 +105,22 @@ public class UpdateTransactionTests
     [TestCase]
     public void BuildFailureAsksOnlyForAnUpdateFromTheDetailsAndHeadlessOrSelfUpdatesRollBack()
     {
-        Assertions.AssertString(UpdateFailureDecision.Choose(false, "keep", false)).IsEqual("rollback");
-        Assertions.AssertString(UpdateFailureDecision.Choose(true, "ask", true)).IsEqual("rollback");
-        Assertions.AssertString(UpdateFailureDecision.Choose(false, "ask", true)).IsEqual("ask");
-        Assertions.AssertString(UpdateFailureDecision.Choose(false, "keep", true)).IsEqual("keep");
+        // the stored values of eplugin/updates/on_build_failure; anything else rolls back
+        Assertions.AssertObject(UpdateFailureDecision.Parse("ask")).IsEqual(BuildFailurePolicy.Ask);
+        Assertions.AssertObject(UpdateFailureDecision.Parse("keep")).IsEqual(BuildFailurePolicy.Keep);
+        Assertions.AssertObject(UpdateFailureDecision.Parse("rollback")).IsEqual(BuildFailurePolicy.Rollback);
+        Assertions.AssertObject(UpdateFailureDecision.Parse("Keep")).IsEqual(BuildFailurePolicy.Rollback);
+        Assertions.AssertObject(UpdateFailureDecision.Choose(false, BuildFailurePolicy.Keep, false)).IsEqual(BuildFailurePolicy.Rollback);
+        Assertions.AssertObject(UpdateFailureDecision.Choose(true, BuildFailurePolicy.Ask, true)).IsEqual(BuildFailurePolicy.Rollback);
+        Assertions.AssertObject(UpdateFailureDecision.Choose(false, BuildFailurePolicy.Ask, true)).IsEqual(BuildFailurePolicy.Ask);
+        Assertions.AssertObject(UpdateFailureDecision.Choose(false, BuildFailurePolicy.Keep, true)).IsEqual(BuildFailurePolicy.Keep);
         // installing all updates never asks, a group of a batch never asks or keeps
-        Assertions.AssertString(UpdateFailureDecision.Policy("ask", false, false)).IsEqual("rollback");
-        Assertions.AssertString(UpdateFailureDecision.Policy("ask", false, true)).IsEqual("ask");
-        Assertions.AssertString(UpdateFailureDecision.Policy("rollback", false, true)).IsEqual("rollback");
-        Assertions.AssertString(UpdateFailureDecision.Policy("keep", false, false)).IsEqual("keep");
-        Assertions.AssertString(UpdateFailureDecision.Policy("keep", true, true)).IsEqual("rollback");
-        _host.HasUi = true; _host.Policy = "ask"; _host.Builds.Enqueue(new(1, ["error CS0246"]));
+        Assertions.AssertObject(UpdateFailureDecision.Policy(BuildFailurePolicy.Ask, false, false)).IsEqual(BuildFailurePolicy.Rollback);
+        Assertions.AssertObject(UpdateFailureDecision.Policy(BuildFailurePolicy.Ask, false, true)).IsEqual(BuildFailurePolicy.Ask);
+        Assertions.AssertObject(UpdateFailureDecision.Policy(BuildFailurePolicy.Rollback, false, true)).IsEqual(BuildFailurePolicy.Rollback);
+        Assertions.AssertObject(UpdateFailureDecision.Policy(BuildFailurePolicy.Keep, false, false)).IsEqual(BuildFailurePolicy.Keep);
+        Assertions.AssertObject(UpdateFailureDecision.Policy(BuildFailurePolicy.Keep, true, true)).IsEqual(BuildFailurePolicy.Rollback);
+        _host.HasUi = true; _host.Policy = BuildFailurePolicy.Ask; _host.Builds.Enqueue(new(1, ["error CS0246"]));
         var package = Package(true);
         Assertions.AssertObject(_applier.Apply([package.Package], package.Directory, askOnBuildFailure: true)).IsEqual(UpdateOutcome.AwaitingDecision);
         var journal = UpdateJournal.Load(package.Directory);
@@ -128,7 +133,7 @@ public class UpdateTransactionTests
     [TestCase]
     public void InstallingAllUpdatesRollsBackABuildFailureWithoutAsking()
     {
-        _host.HasUi = true; _host.Policy = "ask"; _host.Builds.Enqueue(new(1, ["error CS0246"]));
+        _host.HasUi = true; _host.Policy = BuildFailurePolicy.Ask; _host.Builds.Enqueue(new(1, ["error CS0246"]));
         var package = Package(true);
         Assertions.AssertObject(_applier.Apply([package.Package], package.Directory)).IsEqual(UpdateOutcome.RolledBack);
         Assertions.AssertBool(File.ReadAllText(Path.Combine(_root, "addons/plugin/plugin.cfg")).Contains("1.0.0")).IsTrue();
@@ -137,7 +142,7 @@ public class UpdateTransactionTests
     [TestCase]
     public void KeptInterimFailureResumesWithReconcilingOnceRetryBuilds()
     {
-        _host.Managed = true; _host.HasUi = true; _host.Policy = "ask";
+        _host.Managed = true; _host.HasUi = true; _host.Policy = BuildFailurePolicy.Ask;
         _host.OnPrepareJournal = journal => journal.Recipes["plugin"] = new() { Old = new(), Applied = new() };
         _host.OnReconcile = journal => journal.Recipes["plugin"].Target = new() { Nugets = [new("Needed", "1.0", null)] };
         _host.Builds.Enqueue(new(1, ["error CS0246"]));
@@ -256,7 +261,7 @@ public class UpdateTransactionTests
     }
     private BuildOutcome PluginError() => new(1, [$"{Path.Combine(_root, "addons", "plugin", "Plugin.cs")}(1,1): error CS0246: missing type"]);
     /// <summary>An update installed with the batch Update button, with the defaults: ask, keep on project errors.</summary>
-    private void Defaults() { _host.Managed = true; _host.HasUi = true; _host.Policy = "ask"; _host.KeepProjectErrors = true; }
+    private void Defaults() { _host.Managed = true; _host.HasUi = true; _host.Policy = BuildFailurePolicy.Ask; _host.KeepProjectErrors = true; }
 
     [TestCase]
     public void AnUpdateThatOnlyBreaksProjectCodeIsKeptWhenThePluginsCompileAlone()
@@ -322,7 +327,7 @@ public class UpdateTransactionTests
     [TestCase]
     public void ProjectErrorsRollBackWhenTheSettingsOrAHeadlessRunSaySo()
     {
-        foreach (var setup in new Action[] { () => _host.Policy = "rollback", () => _host.KeepProjectErrors = false, () => _host.HasUi = false })
+        foreach (var setup in new Action[] { () => _host.Policy = BuildFailurePolicy.Rollback, () => _host.KeepProjectErrors = false, () => _host.HasUi = false })
         {
             Cleanup(); Setup(); Defaults(); setup();
             _host.Builds.Enqueue(ProjectError());
@@ -500,7 +505,7 @@ public class UpdateTransactionTests
     [TestCase]
     public void AnUpdateThatCannotBeMarkedAsKeptIsRolledBack()
     {
-        _host.HasUi = true; _host.Policy = "ask"; _host.Builds.Enqueue(new(1, ["error CS0246"]));
+        _host.HasUi = true; _host.Policy = BuildFailurePolicy.Ask; _host.Builds.Enqueue(new(1, ["error CS0246"]));
         var package = Package(true);
         Assertions.AssertObject(_applier.Apply([package.Package], package.Directory, askOnBuildFailure: true)).IsEqual(UpdateOutcome.AwaitingDecision);
         var journal = UpdateJournal.Load(package.Directory);
@@ -516,7 +521,7 @@ public class UpdateTransactionTests
     [TestCase]
     public void ARollbackWithoutTheBackupLeavesTheNewFilesAndAsksForManualRepair()
     {
-        _host.HasUi = true; _host.Policy = "ask"; _host.Builds.Enqueue(new(1, ["error CS0246"]));
+        _host.HasUi = true; _host.Policy = BuildFailurePolicy.Ask; _host.Builds.Enqueue(new(1, ["error CS0246"]));
         var package = Package(true);
         Assertions.AssertObject(_applier.Apply([package.Package], package.Directory, askOnBuildFailure: true)).IsEqual(UpdateOutcome.AwaitingDecision);
         var journal = UpdateJournal.Load(package.Directory);
@@ -590,14 +595,14 @@ public class UpdateTransactionTests
     [TestCase]
     public static void ProjectCodeOnlyFailuresKeepUnlessTheSettingRollsBack()
     {
-        Assertions.AssertString(UpdateFailureDecision.Policy("ask", false, false, true)).IsEqual("keep");
-        Assertions.AssertString(UpdateFailureDecision.Policy("ask", false, true, true)).IsEqual("ask");
-        Assertions.AssertString(UpdateFailureDecision.Policy("ask", true, true, true)).IsEqual("keep");
-        Assertions.AssertString(UpdateFailureDecision.Policy("keep", true, false, true)).IsEqual("keep");
-        Assertions.AssertString(UpdateFailureDecision.Policy("rollback", false, true, true)).IsEqual("rollback");
+        Assertions.AssertObject(UpdateFailureDecision.Policy(BuildFailurePolicy.Ask, false, false, true)).IsEqual(BuildFailurePolicy.Keep);
+        Assertions.AssertObject(UpdateFailureDecision.Policy(BuildFailurePolicy.Ask, false, true, true)).IsEqual(BuildFailurePolicy.Ask);
+        Assertions.AssertObject(UpdateFailureDecision.Policy(BuildFailurePolicy.Ask, true, true, true)).IsEqual(BuildFailurePolicy.Keep);
+        Assertions.AssertObject(UpdateFailureDecision.Policy(BuildFailurePolicy.Keep, true, false, true)).IsEqual(BuildFailurePolicy.Keep);
+        Assertions.AssertObject(UpdateFailureDecision.Policy(BuildFailurePolicy.Rollback, false, true, true)).IsEqual(BuildFailurePolicy.Rollback);
         // A self-update or a headless run still rolls back.
-        Assertions.AssertString(UpdateFailureDecision.Choose(true, "keep", true)).IsEqual("rollback");
-        Assertions.AssertString(UpdateFailureDecision.Choose(false, "keep", false)).IsEqual("rollback");
+        Assertions.AssertObject(UpdateFailureDecision.Choose(true, BuildFailurePolicy.Keep, true)).IsEqual(BuildFailurePolicy.Rollback);
+        Assertions.AssertObject(UpdateFailureDecision.Choose(false, BuildFailurePolicy.Keep, false)).IsEqual(BuildFailurePolicy.Rollback);
     }
 
     /// <summary>A second plugin "other" 1.0.0 staged as 2.0.0 into the batch folder of <see cref="Package"/>.</summary>
@@ -619,7 +624,7 @@ public class UpdateTransactionTests
         var package = Package(true);
         var other = Other(package.Directory, true);
         // Asking would stop the batch; a group's failure always rolls back.
-        _host.HasUi = true; _host.Policy = "ask";
+        _host.HasUi = true; _host.Policy = BuildFailurePolicy.Ask;
         _host.Builds.Enqueue(new(0, [])); _host.Builds.Enqueue(new(1, ["error CS0246"])); _host.Builds.Enqueue(new(0, []));
         var started = new List<int>();
         var results = _applier.ApplyGroups([[package.Package], [other]], package.Directory, NewDirectory, false, (index, _) => started.Add(index));
@@ -788,7 +793,7 @@ public class UpdateTransactionTests
     private sealed class MemoryStore : IUpdateStateStore { public UpdateCache State { get; } = new(); public void Save() { } }
     private sealed class FakeHost(PluginStateStore store) : IUpdateHost
     {
-        public bool Managed; public HashSet<string> ManagedSlugs { get; } = []; public bool HasUi; public string Policy = "rollback"; public int Toggles; public bool MarkerBeforeToggle;
+        public bool Managed; public HashSet<string> ManagedSlugs { get; } = []; public bool HasUi; public BuildFailurePolicy Policy = BuildFailurePolicy.Rollback; public int Toggles; public bool MarkerBeforeToggle;
         public Action? OnScan; public Action? OnBeforeSwap; public Action? OnCloseScenes; public int Reloads; public int BuildCount; public int Rebases;
         public Action<UpdateJournal>? OnPrepareJournal; public Action<UpdatePluginJournal>? OnBridge; public Action<UpdateJournal>? OnReconcile;
         public Queue<BuildOutcome> Builds { get; } = new();
@@ -801,7 +806,7 @@ public class UpdateTransactionTests
             return PluginsOnly.Count > 0 ? PluginsOnly.Dequeue() : new(0, []);
         }
         public bool UiAvailable => HasUi;
-        public string BuildFailurePolicy => Policy;
+        public BuildFailurePolicy BuildFailurePolicy => Policy;
         public bool RestartAlways => false;
         public bool IsEnabled(string slug) => true;
         public bool IsManaged(string slug) => Managed || ManagedSlugs.Contains(slug);

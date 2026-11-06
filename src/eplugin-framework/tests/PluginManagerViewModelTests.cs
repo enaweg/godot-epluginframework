@@ -515,16 +515,16 @@ public class PluginManagerViewModelTests
         var options = PluginManagerViewModel.VersionOptions("1.5.0", [Version("2.0.0"), Version("1.5.0"), Version("1.0.0")], PluginKind.EPlugin);
         var (newer, installed, older) = (options[0], options[1], options[2]);
 
-        Assertions.AssertString(PluginManagerViewModel.VersionConfirmText(row, newer, "rollback"))
+        Assertions.AssertString(PluginManagerViewModel.VersionConfirmText(row, newer, BuildFailurePolicy.Rollback))
             .IsEqual("Replace beta 1.5.0 with version 2.0.0?\n\nOpen scenes are saved first; files and project references are backed up and restored if installation fails.");
-        Assertions.AssertString(PluginManagerViewModel.VersionConfirmText(row, newer, "ask")).EndsWith("you choose whether to keep it and fix the errors yourself or to restore the previous version.");
-        Assertions.AssertString(PluginManagerViewModel.VersionConfirmText(row, newer, "keep")).EndsWith("(project setting eplugin/updates/on_build_failure).");
-        Assertions.AssertString(PluginManagerViewModel.VersionConfirmText(row, older, "rollback")).Contains("\n\nUse this to undo an update that broke the project.");
-        Assertions.AssertString(PluginManagerViewModel.VersionConfirmText(row, installed, "rollback"))
+        Assertions.AssertString(PluginManagerViewModel.VersionConfirmText(row, newer, BuildFailurePolicy.Ask)).EndsWith("you choose whether to keep it and fix the errors yourself or to restore the previous version.");
+        Assertions.AssertString(PluginManagerViewModel.VersionConfirmText(row, newer, BuildFailurePolicy.Keep)).EndsWith("(project setting eplugin/updates/on_build_failure).");
+        Assertions.AssertString(PluginManagerViewModel.VersionConfirmText(row, older, BuildFailurePolicy.Rollback)).Contains("\n\nUse this to undo an update that broke the project.");
+        Assertions.AssertString(PluginManagerViewModel.VersionConfirmText(row, installed, BuildFailurePolicy.Rollback))
             .StartsWith("Reinstall beta 1.5.0?\n\nFrom the update site https://example.org/releases. Its files replace the installed ones: ");
         var addon = new PluginRow(new PluginInfo("beta", "beta", PluginKind.GDExtensionAddon, true), null);
         var unknown = PluginManagerViewModel.VersionOptions("", [Version("2.0.0")], PluginKind.GDExtensionAddon).Single();
-        Assertions.AssertString(PluginManagerViewModel.VersionConfirmText(addon, unknown, "rollback")).StartsWith("Install beta 2.0.0?\n\nFrom the update site");
+        Assertions.AssertString(PluginManagerViewModel.VersionConfirmText(addon, unknown, BuildFailurePolicy.Rollback)).StartsWith("Install beta 2.0.0?\n\nFrom the update site");
 
         Assertions.AssertString(PluginManagerViewModel.VersionInstallTooltip(row, newer)).IsEqual("Install version 2.0.0 of beta.");
         Assertions.AssertString(PluginManagerViewModel.VersionInstallTooltip(row, installed)).IsEqual("Install version 1.5.0 of beta again, replacing its files.");

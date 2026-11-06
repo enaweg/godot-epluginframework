@@ -229,7 +229,7 @@ public class PluginRepositoryTests
         public bool Verified { get; set; } = true;
         public int Reloads { get; private set; }
         public bool UiAvailable => false;
-        public string BuildFailurePolicy => "rollback";
+        public BuildFailurePolicy BuildFailurePolicy => BuildFailurePolicy.Rollback;
         public bool RestartAlways => false;
         public bool IsEnabled(string slug) => true;
         public bool IsManaged(string slug) => Managed;
