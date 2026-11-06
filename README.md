@@ -4,18 +4,19 @@ Line coverage of `src/eplugin-framework/addons/ePlugin` on `main`, recorded by t
 
 ![Line coverage](badge.svg)
 
-**90.89%** (12947 of 14245 lines) at [d4e83ea](https://github.com/enaweg/godot-epluginframework/commit/d4e83eaf411289041ca3be9b9b85516869441cf1), 2026-11-06.
+**91.09%** (12941 of 14207 lines) at [73feef2](https://github.com/enaweg/godot-epluginframework/commit/73feef2bbc230a826725adbacaf0a1a3156cc119), 2026-11-06.
 
 ```mermaid
 xychart-beta
     title "Line coverage on main (last 30 pushes)"
-    x-axis ["49f0047", "35f1ab2", "1011c5a", "a95f309", "f925263", "1eb920f", "ff45b6c", "7837a44", "cc27a96", "4b8c5cf", "35146b8", "c4eadb2", "8f57090", "ccff29c", "16e234a", "6656105", "7108433", "2489f40", "f7af6d5", "470e378", "46e62bd", "416075b", "a35cca1", "0e1982b", "a795c63", "5ab42f2", "30e45c5", "2556613", "e3e0a63", "d4e83ea"]
+    x-axis ["35f1ab2", "1011c5a", "a95f309", "f925263", "1eb920f", "ff45b6c", "7837a44", "cc27a96", "4b8c5cf", "35146b8", "c4eadb2", "8f57090", "ccff29c", "16e234a", "6656105", "7108433", "2489f40", "f7af6d5", "470e378", "46e62bd", "416075b", "a35cca1", "0e1982b", "a795c63", "5ab42f2", "30e45c5", "2556613", "e3e0a63", "d4e83ea", "73feef2"]
     y-axis "Line coverage (%)" 88 --> 94
-    line [91.15, 91.15, 90.58, 90.33, 90.33, 90.31, 90.31, 90.35, 90.41, 90.46, 90.49, 90.59, 90.66, 90.42, 90.74, 90.73, 90.73, 90.67, 90.67, 90.67, 90.67, 90.67, 90.67, 90.79, 90.82, 90.82, 90.78, 90.76, 90.87, 90.89]
+    line [91.15, 90.58, 90.33, 90.33, 90.31, 90.31, 90.35, 90.41, 90.46, 90.49, 90.59, 90.66, 90.42, 90.74, 90.73, 90.73, 90.67, 90.67, 90.67, 90.67, 90.67, 90.67, 90.79, 90.82, 90.82, 90.78, 90.76, 90.87, 90.89, 91.09]
 ```
 
 | Date | Commit | Line coverage | Change |
 |:--|:--|--:|--:|
+| 2026-11-06 | [73feef2](https://github.com/enaweg/godot-epluginframework/commit/73feef2bbc230a826725adbacaf0a1a3156cc119) | 91.09% | +0.20 pp |
 | 2026-11-06 | [d4e83ea](https://github.com/enaweg/godot-epluginframework/commit/d4e83eaf411289041ca3be9b9b85516869441cf1) | 90.89% | +0.02 pp |
 | 2026-11-06 | [e3e0a63](https://github.com/enaweg/godot-epluginframework/commit/e3e0a63d28287e241f9ed2b3d24cf725592330af) | 90.87% | +0.11 pp |
 | 2026-11-06 | [2556613](https://github.com/enaweg/godot-epluginframework/commit/2556613aea980557fe62fc4606bfdb1a177254a1) | 90.76% | -0.02 pp |
@@ -45,11 +46,10 @@ xychart-beta
 | 2026-10-28 | [a95f309](https://github.com/enaweg/godot-epluginframework/commit/a95f309c95449a422203860c2b867b7ec8442eb2) | 90.33% | -0.25 pp |
 | 2026-10-28 | [1011c5a](https://github.com/enaweg/godot-epluginframework/commit/1011c5a46a3ee8845656bab79350b5ef2bcf26ec) | 90.58% | -0.57 pp |
 | 2026-10-27 | [35f1ab2](https://github.com/enaweg/godot-epluginframework/commit/35f1ab2b2803c044388d06ccaa0fad748622ec2b) | 91.15% | +0.00 pp |
-| 2026-10-27 | [49f0047](https://github.com/enaweg/godot-epluginframework/commit/49f00479647b1966cbfc9ffa28a3936f5cd5bce4) | 91.15% | +0.01 pp |
 
 All measurements: [history.csv](history.csv).
 
-<details><summary>Files at d4e83ea (160)</summary>
+<details><summary>Files at 73feef2 (163)</summary>
 
 | File | Line coverage | Covered lines |
 |:--|--:|--:|
@@ -59,39 +59,38 @@ All measurements: [history.csv](history.csv).
 | `Internal/AssemblyUnloadCleanup.cs` | 38.9% | 7 of 18 |
 | `Internal/EditorHost.cs` | 56.6% | 47 of 83 |
 | `EPluginPlugin.cs` | 59.4% | 202 of 340 |
-| `Internal/Manager/EditorWindows.cs` | 61.8% | 42 of 68 |
+| `Internal/Manager/EPluginManagerDialog.Versions.cs` | 65.6% | 63 of 96 |
 | `Internal/EGlobal.UpdateApply.cs` | 65.8% | 200 of 304 |
-| `Internal/Manager/StartupFailureDialog.cs` | 71.1% | 32 of 45 |
-| `Internal/Manager/EPluginManagerDialog.Versions.cs` | 71.7% | 81 of 113 |
+| `Internal/Manager/EditorWindows.cs` | 68.8% | 55 of 80 |
+| `Internal/Manager/EPluginManagerDialog.Operations.cs` | 73.0% | 127 of 174 |
 | `Internal/PluginTypes.cs` | 73.9% | 17 of 23 |
-| `Internal/Manager/EPluginManagerDialog.Operations.cs` | 74.4% | 125 of 168 |
-| `Internal/Manager/GeneralSettingsTab.cs` | 74.7% | 56 of 75 |
+| `Internal/Manager/GeneralSettingsTab.cs` | 74.0% | 54 of 73 |
+| `Internal/Manager/CleanupSuggestionDialog.cs` | 75.0% | 21 of 28 |
 | `Logging/GodotConsoleLogger.cs` | 76.7% | 33 of 43 |
+| `Internal/Manager/StartupFailureDialog.cs` | 77.1% | 27 of 35 |
 | `Internal/ProgressSession.cs` | 78.8% | 171 of 217 |
-| `Internal/Manager/CleanupSuggestionDialog.cs` | 78.9% | 30 of 38 |
 | `Internal/EGlobal.LocalSources.cs` | 79.3% | 46 of 58 |
 | `Internal/StateFileProblem.cs` | 81.5% | 22 of 27 |
 | `Internal/Manager/EPluginManagerDialog.Updates.cs` | 81.7% | 49 of 60 |
 | `Internal/EGlobal.Transitions.cs` | 81.7% | 192 of 235 |
-| `Internal/Manager/UpdateReviewDialog.cs` | 82.1% | 78 of 95 |
 | `Internal/EGlobal.AddonInstall.cs` | 82.4% | 28 of 34 |
 | `Internal/ActivationProgress.cs` | 82.7% | 253 of 306 |
 | `Internal/EGlobal.Updates.cs` | 83.2% | 124 of 149 |
 | `Internal/Dotnet/DotnetFailure.cs` | 83.7% | 36 of 43 |
 | `Internal/Manager/EPluginManagerDialog.Zip.cs` | 84.5% | 71 of 84 |
-| `Internal/Manager/WelcomeDialog.cs` | 85.7% | 54 of 63 |
 | `Internal/Update/AddonInstaller.cs` | 85.9% | 61 of 71 |
 | `Internal/AssemblyReload.cs` | 86.2% | 25 of 29 |
 | `Internal/EGlobal.Retry.cs` | 86.2% | 138 of 160 |
 | `Internal/Update/UpdateErrors.cs` | 86.3% | 82 of 95 |
-| `Internal/Manager/UpdateFailureDialog.cs` | 87.3% | 69 of 79 |
+| `Internal/Manager/UpdateFailureDialog.cs` | 87.0% | 60 of 69 |
+| `Internal/Manager/EPluginManagerDialog.cs` | 87.5% | 349 of 399 |
 | `EditorPluginExtensions.cs` | 87.5% | 63 of 72 |
-| `Internal/Manager/EPluginManagerDialog.cs` | 88.0% | 380 of 432 |
+| `Internal/Manager/UpdateReviewDialog.cs` | 87.8% | 72 of 82 |
 | `Internal/Kinds/GDExtensionRules.cs` | 88.2% | 30 of 34 |
-| `Internal/Manager/SettingsDialog.cs` | 88.5% | 46 of 52 |
 | `Internal/EGlobal.Activation.cs` | 88.8% | 317 of 357 |
 | `Internal/EGlobal.UpdateWorkflow.cs` | 88.9% | 8 of 9 |
-| `Internal/Manager/ToolsTab.cs` | 89.3% | 208 of 233 |
+| `Internal/Manager/SettingsDialog.cs` | 88.9% | 48 of 54 |
+| `Internal/Manager/ToolsTab.cs` | 89.3% | 209 of 234 |
 | `Internal/PluginTextFile.cs` | 89.5% | 34 of 38 |
 | `Internal/Kinds/NativeExtensionStatus.cs` | 89.7% | 26 of 29 |
 | `Internal/EGlobal.RecipeOperations.cs` | 89.8% | 114 of 127 |
@@ -103,11 +102,9 @@ All measurements: [history.csv](history.csv).
 | `Internal/Update/AddonSwap.cs` | 92.1% | 129 of 140 |
 | `Internal/EGlobal.cs` | 92.5% | 272 of 294 |
 | `Internal/Update/UpdateStateStore.cs` | 92.6% | 50 of 54 |
-| `Internal/Manager/LicenseDialog.cs` | 93.1% | 175 of 188 |
-| `Internal/Manager/UpdateSourcesTab.cs` | 93.1% | 285 of 306 |
+| `Internal/Manager/UpdateSourcesTab.cs` | 93.2% | 286 of 307 |
 | `Internal/EGlobal.PluginManager.cs` | 93.2% | 96 of 103 |
 | `Internal/EGlobal.Welcomes.cs` | 93.2% | 69 of 74 |
-| `Internal/Manager/AttentionDialog.cs` | 93.6% | 117 of 125 |
 | `Internal/Licenses/PluginLicense.cs` | 93.8% | 15 of 16 |
 | `Internal/Manager/ManagerReopenMarker.cs` | 94.1% | 16 of 17 |
 | `Internal/AddonLayout.cs` | 94.3% | 100 of 106 |
@@ -115,10 +112,10 @@ All measurements: [history.csv](history.csv).
 | `Internal/Update/UpdateBuildGate.cs` | 94.6% | 70 of 74 |
 | `Internal/EGlobal.UnsavedState.cs` | 94.7% | 18 of 19 |
 | `Internal/Update/PluginCode.cs` | 94.7% | 18 of 19 |
-| `Internal/Manager/EditorIcons.cs` | 94.8% | 55 of 58 |
 | `Internal/Update/SubmoduleSwap.cs` | 94.9% | 37 of 39 |
 | `Internal/Update/PackageFetcher.cs` | 94.9% | 112 of 118 |
 | `Internal/Dotnet/ProjectReferences.cs` | 95.0% | 38 of 40 |
+| `Internal/Manager/EditorIcons.cs` | 95.0% | 57 of 60 |
 | `Internal/Update/SubmoduleSource.cs` | 95.1% | 97 of 102 |
 | `Internal/EGlobal.EditorThread.cs` | 95.5% | 21 of 22 |
 | `Internal/EGlobal.Deactivation.cs` | 95.6% | 152 of 159 |
@@ -126,6 +123,7 @@ All measurements: [history.csv](history.csv).
 | `Internal/Update/InterimBridge.cs` | 95.7% | 45 of 47 |
 | `Internal/Update/UpdateModels.cs` | 95.8% | 68 of 71 |
 | `Internal/EGlobal.Licenses.cs` | 95.9% | 278 of 290 |
+| `Internal/Manager/WelcomeDialog.cs` | 96.0% | 48 of 50 |
 | `Internal/Update/LocalIndexCache.cs` | 96.0% | 24 of 25 |
 | `Internal/Dotnet/NugetConfigManager.cs` | 96.2% | 200 of 208 |
 | `Internal/Update/BuildDiagnostics.cs` | 96.3% | 52 of 54 |
@@ -134,6 +132,7 @@ All measurements: [history.csv](history.csv).
 | `Internal/EGlobal.OptionalDependencies.cs` | 96.4% | 107 of 111 |
 | `Internal/Update/UpdateRecovery.cs` | 96.5% | 164 of 170 |
 | `Internal/Dotnet/XmlFile.cs` | 96.5% | 55 of 57 |
+| `Internal/Manager/LicenseDialog.cs` | 96.6% | 168 of 174 |
 | `Internal/Update/SafeZipExtractor.cs` | 96.7% | 88 of 91 |
 | `Internal/Update/UpdateService.cs` | 96.8% | 120 of 124 |
 | `Internal/PluginStateStore.Attempts.cs` | 97.0% | 131 of 135 |
@@ -144,10 +143,11 @@ All measurements: [history.csv](history.csv).
 | `Internal/Kinds/PluginKinds.cs` | 97.8% | 44 of 45 |
 | `Internal/Manager/ZipInstall.cs` | 97.8% | 44 of 45 |
 | `Internal/Update/LocalPackageIndex.cs` | 97.9% | 92 of 94 |
-| `Internal/Manager/PluginManagerViewModel.cs` | 98.0% | 299 of 305 |
 | `Internal/Update/RecipeReconciler.cs` | 98.0% | 50 of 51 |
 | `Internal/Dotnet/BuildOutputGuard.cs` | 98.1% | 52 of 53 |
 | `Internal/TransitionCoordinator.cs` | 98.2% | 54 of 55 |
+| `Internal/Manager/PluginManagerViewModel.cs` | 98.2% | 328 of 334 |
+| `Internal/Manager/AttentionDialog.cs` | 98.2% | 111 of 113 |
 | `Internal/Update/AddonPackageValidator.cs` | 98.4% | 179 of 182 |
 | `Internal/Dotnet/ReleaseConfiguration.cs` | 98.6% | 71 of 72 |
 | `Internal/Update/UpdateJournal.cs` | 98.7% | 78 of 79 |
@@ -186,12 +186,15 @@ All measurements: [history.csv](history.csv).
 | `Internal/Licenses/LicenseReview.cs` | 100.0% | 68 of 68 |
 | `Internal/Licenses/LicenseSettings.cs` | 100.0% | 2 of 2 |
 | `Internal/LoggingSettings.cs` | 100.0% | 2 of 2 |
-| `Internal/Manager/AboutTab.cs` | 100.0% | 58 of 58 |
+| `Internal/Manager/AboutTab.cs` | 100.0% | 57 of 57 |
+| `Internal/Manager/DialogLifetime.cs` | 100.0% | 25 of 25 |
 | `Internal/Manager/EditorSignalConnections.cs` | 100.0% | 12 of 12 |
+| `Internal/Manager/ManagerSession.cs` | 100.0% | 9 of 9 |
 | `Internal/Manager/ObservedTask.cs` | 100.0% | 4 of 4 |
-| `Internal/Manager/PluginCatalog.cs` | 100.0% | 11 of 11 |
-| `Internal/Manager/TextColors.cs` | 100.0% | 11 of 11 |
-| `Internal/Manager/UpdateReview.cs` | 100.0% | 71 of 71 |
+| `Internal/Manager/PluginCatalog.cs` | 100.0% | 10 of 10 |
+| `Internal/Manager/PluginOperationGate.cs` | 100.0% | 11 of 11 |
+| `Internal/Manager/TextColors.cs` | 100.0% | 15 of 15 |
+| `Internal/Manager/UpdateReview.cs` | 100.0% | 67 of 67 |
 | `Internal/PlainPluginObserver.cs` | 100.0% | 74 of 74 |
 | `Internal/PluginContext.cs` | 100.0% | 13 of 13 |
 | `Internal/PluginToggles.cs` | 100.0% | 13 of 13 |
