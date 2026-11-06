@@ -273,16 +273,18 @@ removing the last managed entry leaves nothing else in the file. It works on the
 `DotnetVersionManager` detects the installed `dotnet --version` and hands out either `DotnetCli10` or
 `DotnetCli9` (both `DotnetCliBase : ExecuteCliBase, IDotnetCli`) — the two dotnet CLI generations differ
 in the argument order of their package and reference commands (`dotnet add <project> package` vs `dotnet package add
-... --project`); their `sln`, build and test commands are the same. `ExecuteCliBase` runs commands
+... --project`); their `sln`, build and test commands are the same, so `DotnetCliBase` implements every operation and
+the two classes only give those argument lists. `ExecuteCliBase` runs commands
 through an `IProcessRunner` (`GodotProcessRunner` uses `OS.Execute`); tests record the arguments instead. The
 `dotnet --version` probe is cached until the assembly reloads. A CLI is created for a project root, assembly name and solution directory
 (`IEditorHost.ProjectRoot`/`AssemblyName`/`SolutionDirectory`, the last read from `dotnet/project/solution_directory`
 relative to `res://` like GodotTools; tests pass a scratch project), and the CLI classes never read
 `ProjectSettings` (only `user://` NuGet sources are globalized through it; the Godot project is the `.csproj` named
 after the assembly in the project root, the solution `<assembly>.sln`, else `<assembly>.slnx`, else the only one in the
-solution directory; local NuGet sources are relative to the project root like `nuget.config` records them). Any new dotnet CLI operation needs a corresponding
-abstract member on `DotnetCliBase`/`IDotnetCli` implemented in both `DotnetCli9` and `DotnetCli10`, with its arguments
-checked in `IDotnetCliTests`. Pass arguments one per element and unquoted (`OS.Execute` quotes them; outside Windows it runs them through `/bin/sh`
+solution directory; local NuGet sources are relative to the project root like `nuget.config` records them). A new dotnet CLI operation is implemented once in
+`DotnetCliBase`; only an argument list that differs between the generations is an abstract member (like
+`AddPackageArguments`) implemented in both `DotnetCli9` and `DotnetCli10`. Check its arguments for both generations in
+`IDotnetCliTests`. Pass arguments one per element and unquoted (`OS.Execute` quotes them; outside Windows it runs them through `/bin/sh`
 in double quotes, so `GodotProcessRunner` escapes `\ " $` and backticks), and project
 paths through `ProjectFile`, which accepts `res://`, project-relative and absolute paths and returns an absolute one, so
 nothing depends on the editor's working directory. `IDotnetCli.Execute(command, args)` runs `dotnet <command> <args>`. A
@@ -302,7 +304,7 @@ as before.
 After adding a project to the solution or referencing it, both CLIs call `DotnetCliBase.MapExportRelease`: unless
 `dotnet msbuild -getProperty:Optimize -p:Configuration=ExportRelease` says the project optimizes `ExportRelease` itself
 (`Godot.NET.Sdk` projects), the pure `ReleaseConfiguration` makes the reference (`SetConfiguration`) and the `.sln`/`.slnx`
-build it as `Release` there. Godot exports with `dotnet publish <csproj> -c ExportRelease`, which a reference inherits, and
+build it as `Release` there (finding the project in the solution with `ProjectReferences`' solution readers). Godot exports with `dotnet publish <csproj> -c ExportRelease`, which a reference inherits, and
 `Microsoft.NET.Sdk` optimizes only `Release`; `dotnet sln add` maps `ExportRelease` to the project's `Debug`. A failure
 there only warns, since the project was added. `XmlFile` reads and writes XML files the project commits (`nuget.config`,
 project files) keeping their formatting.

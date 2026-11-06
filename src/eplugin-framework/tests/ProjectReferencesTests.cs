@@ -1,6 +1,8 @@
 #if TOOLS
 using System;
 using System.IO;
+using System.Linq;
+using System.Xml.Linq;
 using Enaweg.Plugin.Internal.Dotnet;
 using GdUnit4;
 
@@ -83,6 +85,34 @@ public class ProjectReferencesTests
             """);
         Assertions.AssertBool(ProjectReferences.SolutionContains(slnx, Path.Combine(_root, "addons/tool/Tool.csproj")) == true).IsTrue();
         Assertions.AssertBool(ProjectReferences.SolutionContains(slnx, Path.Combine(_root, "addons/other/Other.csproj")) == false).IsTrue();
+    }
+
+    [TestCase]
+    public static void SolutionProjectsAreReadWithTheirPathsAndGuids()
+    {
+        var sln = ProjectReferences.SlnProjects("""
+            Microsoft Visual Studio Solution File, Format Version 12.00
+            Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Game", "Game.csproj", "{11111111-1111-1111-1111-111111111111}"
+            EndProject
+            Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Tool", "addons\tool\Tool.csproj"
+            EndProject
+            """).ToArray();
+        Assertions.AssertInt(sln.Length).IsEqual(2);
+        Assertions.AssertString(sln[0].Path).IsEqual("Game.csproj");
+        Assertions.AssertString(sln[0].Guid).IsEqual("{11111111-1111-1111-1111-111111111111}");
+        Assertions.AssertString(sln[1].Path).IsEqual(@"addons\tool\Tool.csproj");
+        Assertions.AssertBool(sln[1].Guid is null).IsTrue();
+
+        var slnx = ProjectReferences.SlnxProjects(XDocument.Parse("""
+            <Solution>
+              <Project Path="Game.csproj" />
+              <Project />
+              <Folder Name="/plugins/">
+                <Project Path="addons/tool/Tool.csproj" />
+              </Folder>
+            </Solution>
+            """)).Select(p => p.Path).ToArray();
+        Assertions.AssertThat(slnx).ContainsExactly("Game.csproj", "addons/tool/Tool.csproj");
     }
 
     [TestCase]
