@@ -116,19 +116,19 @@ public static class EditorPluginExtensions
     /// </summary>
     /// <param name="plugin">The editor plugin whose <c>plugin.cfg</c> should be parsed.</param>
     /// <returns>
-    /// The parsed <see cref="EEditorPluginMetadata"/>, or <see langword="null"/> when the file is
-    /// missing, fails to load, or throws while being read. Read failures are logged via
-    /// <see cref="GD.PrintErr(object[])"/>.
+    /// The parsed <see cref="EEditorPluginMetadata"/>, or <see langword="null"/> when the plugin's directory is unknown
+    /// (see <see cref="GetPluginDirectory"/>), or the file is missing, fails to load, or throws while being read. Read
+    /// failures are logged via <see cref="GD.PrintErr(object[])"/>.
     /// </returns>
     public static EEditorPluginMetadata? ReadMetadata(this EditorPlugin plugin)
     {
-        return ReadMetadata($"{plugin.GetPluginDirectory()}/plugin.cfg");
+        // without a directory the path would be "/plugin.cfg", a file in the root of the file system
+        return plugin.GetPluginDirectory() is { } directory ? ReadMetadata($"{directory}/plugin.cfg") : null;
     }
 
     /// <summary>Reads metadata directly from a plugin configuration path.</summary>
     public static EEditorPluginMetadata? ReadMetadata(string cfgFile)
     {
-
         if (!FileAccess.FileExists(cfgFile))
         {
             return null;
@@ -141,6 +141,7 @@ public static class EditorPluginExtensions
             var error = cfg.Load(cfgFile);
             if (error is not Error.Ok)
             {
+                GD.PrintErr($"Failed to read metadata of plugin at {cfgFile}. Godot reported {error}.");
                 return null;
             }
 
