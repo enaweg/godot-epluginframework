@@ -37,7 +37,7 @@ internal sealed partial class EGlobal
         get => _updateHost ??= new GodotUpdateHost(this);
         set => _updateHost = value;
     }
-    internal void InitializeUpdateJournals() => _updateJournals = new(Path.Combine(UpdateProjectRoot, ".godot/eplugin/updates"), message => _ePluginContext?.Logger.Error(message));
+    internal void InitializeUpdateJournals() => _updateJournals = new(UpdatePaths.TransactionsOf(UpdateProjectRoot), message => _ePluginContext?.Logger.Error(message));
 
     /// <summary>
     /// Whether an update journal on disk is active, i.e. an update is being applied or awaits its recovery. Reads the
@@ -139,8 +139,8 @@ internal sealed partial class EGlobal
         if (UpdateApplyBlocker is { } reason) throw new InvalidOperationException(reason + " Addon files were not changed.");
     }
 
-    /// <summary>What a build failure does to an update of this plugin started from its details: ask, keep or rollback.</summary>
-    internal string DetailsBuildFailurePolicy(string slug)
+    /// <summary>What a build failure does to an update of this plugin started from its details.</summary>
+    internal BuildFailurePolicy DetailsBuildFailurePolicy(string slug)
     {
         var host = UpdateHost;
         return UpdateFailureDecision.Choose(slug == Framework.Slug, UpdateFailureDecision.Policy(host.BuildFailurePolicy, false, true), host.UiAvailable);
@@ -233,7 +233,7 @@ internal sealed partial class EGlobal
     {
         if (_updateJournals is null || _stateStore is null) return;
         // Cache is needed by recovery before the first scheduled check.
-        _updateCache ??= new UpdateStateStore(Path.Combine(UpdateProjectRoot, ".godot/eplugin/update-state.json"), m => _ePluginContext?.Logger?.Warn(m));
+        _updateCache ??= new UpdateStateStore(UpdatePaths.CacheOf(UpdateProjectRoot), m => _ePluginContext?.Logger?.Warn(m));
         _updateCache.Load();
         // A batch is staged within minutes, so a folder this old without a journal is no longer in use.
         foreach (var folder in _updateJournals.AbandonedStaging(DateTime.UtcNow - TimeSpan.FromHours(6)))
@@ -374,7 +374,7 @@ internal sealed partial class EGlobal
         private static readonly StringName GetOpenSceneRoots = "get_open_scene_roots";
         private const int MaxClosedScenes = 1000;
         public bool UiAvailable => global.LicenseUiAvailable;
-        public string BuildFailurePolicy => ProjectSettings.GetSetting("eplugin/updates/on_build_failure", "ask").AsString();
+        public BuildFailurePolicy BuildFailurePolicy => UpdateFailureDecision.Parse(ProjectSettings.GetSetting("eplugin/updates/on_build_failure", "ask").AsString());
         public bool RestartAlways => ProjectSettings.GetSetting("eplugin/updates/restart_policy", "auto").AsString() == "always";
         // A GDExtension add-on is never enabled, but Godot always runs it.
         public bool IsEnabled(string slug) => global._host.IsPluginEnabled(slug) || global.IsExtensionAddon(slug);

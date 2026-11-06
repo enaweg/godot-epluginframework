@@ -50,14 +50,8 @@ internal sealed class SubmoduleSwap(IGitRunner git, UpdatePluginJournal plugin) 
             RefuseChanges(installed);
             SubmoduleGit.Checkout(git, installed, submodule.OldCommit);
         }
-        // Moved aside before it is deleted, so a repeated rollback finds no backup to restore again (see AddonFileSwap).
-        if (!Directory.Exists(backup)) return 0;
-        var restored = AddonFileSwap.Restored(backup);
-        Directory.CreateDirectory(Path.GetDirectoryName(restored)!);
-        for (var n = 1; Directory.Exists(restored); n++) restored = AddonFileSwap.Restored(backup) + "." + n;
-        AddonFiles.MoveDirectory(backup, restored);
-        try { AddonFiles.DeleteTree(restored); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        // Moved aside before it is deleted, so a repeated rollback finds no backup to restore again.
+        if (Directory.Exists(backup)) AddonFiles.DiscardBackup(backup);
         return 0;
     }
 

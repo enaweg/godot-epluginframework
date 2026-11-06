@@ -347,6 +347,11 @@ public class UpdatePackageTests
             Assertions.AssertString(ex.Message).Contains("'broken' was refused");
         }
         Assertions.AssertBool(Directory.Exists(all)).IsFalse();
+
+        // A plugin disabled since the check has no target any more.
+        var disabled = await new PackageFetcher(new(), new GitRunner()).FetchAsync(packages, targets.Skip(1).ToArray(), Path.Combine(_root, "disabled"), null, CancellationToken.None);
+        Assertions.AssertString(disabled.Refused.First(r => r.Candidate.Slug == "first").Reason)
+            .IsEqual("Cannot fetch the package for 'first': the plugin is no longer installed and enabled; check for updates again.");
     }
 
     [TestCase]

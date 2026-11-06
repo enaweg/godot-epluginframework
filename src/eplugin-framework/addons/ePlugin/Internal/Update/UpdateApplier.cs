@@ -19,7 +19,7 @@ internal sealed record UpdateGroupResult(IReadOnlyList<ValidatedPackage> Package
 internal interface IUpdateHost
 {
     bool UiAvailable { get; }
-    string BuildFailurePolicy { get; }
+    BuildFailurePolicy BuildFailurePolicy { get; }
     bool RestartAlways { get; }
     bool IsEnabled(string slug);
     bool IsManaged(string slug);
@@ -53,27 +53,11 @@ internal interface IUpdateHost
     bool Verify(UpdatePluginJournal plugin);
     void Log(string message);
 }
-internal static class UpdateFailureDecision
-{
-    public static string Choose(bool selfUpdate, string policy, bool uiAvailable) =>
-        selfUpdate || !uiAvailable ? "rollback" : policy is "keep" or "ask" ? policy : "rollback";
-
-    /// <summary>
-    /// The project's <c>on_build_failure</c> setting for one transaction: <c>ask</c> asks only for an update started from
-    /// a plugin's details, so installing all updates rolls back; a group of a larger batch always rolls back, because
-    /// keeping a project that does not build would fail every later group too.
-    /// </summary>
-    /// <param name="projectCodeOnly">The build failed only in the project's own code and the plugins compile on their
-    /// own: the update is kept unless the setting is <c>rollback</c>. That holds for a group, too: later groups fail with
-    /// the same project errors and are kept the same way. An update from a plugin's details still asks.</param>
-    public static string Policy(string setting, bool grouped, bool askOnBuildFailure, bool projectCodeOnly = false) =>
-        projectCodeOnly && setting != "rollback" ? (setting == "ask" && askOnBuildFailure && !grouped ? "ask" : "keep")
-        : grouped ? "rollback" : setting == "keep" ? "keep" : setting == "ask" && askOnBuildFailure ? "ask" : "rollback";
-}
 /// <param name="git">Runs git in the plugin folders that are git submodules; only local commands.</param>
 internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, IUpdateHost host, IUpdateStateStore cache, IGitRunner? git = null)
 {
     private readonly IGitRunner _git = git ?? new GitRunner(allowFileProtocol: true);
+    private readonly UpdateBuildGate _builds = new(projectRoot, host);
 
     private string Installed(string slug) => PackageFiles.Inside(Path.Combine(projectRoot, "addons"), slug);
 
@@ -146,11 +130,11 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             UpdateGroupResult result;
             try { result = Result(packages, directory, Apply(packages, directory, trustChangedSources, i)); }
             // Once its journal exists the transaction began and its marker blocks the plugins, so it needs recovery.
-            catch (Exception ex) { result = new(packages, directory, File.Exists(Path.Combine(directory, "journal.json")) ? UpdateOutcome.KeptWithErrors : null, ex.Message); }
+            catch (Exception ex) { result = new(packages, directory, File.Exists(UpdatePaths.JournalIn(directory)) ? UpdateOutcome.KeptWithErrors : null, ex.Message); }
             try
             {
                 // A group refused before its marker leaves only its staging behind.
-                if (!File.Exists(Path.Combine(directory, "journal.json"))) AddonFiles.DeleteTree(directory);
+                if (!File.Exists(UpdatePaths.JournalIn(directory))) AddonFiles.DeleteTree(directory);
             }
             catch (Exception ex) { host.Log($"Cannot remove the staging folder {directory}: {ex.Message}"); }
             results.Add(result);
@@ -199,7 +183,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                 {
                     var staging = PackageFiles.Inside(Path.Combine(directory, "staging"), package.Candidate.Slug);
                     System.IO.Directory.CreateDirectory(Path.GetDirectoryName(staging)!);
-                    Move(package.StagingDir, staging);
+                    AddonFiles.MoveDirectory(package.StagingDir, staging);
                     moved.Add(package with { StagingDir = staging });
                 }
             }
@@ -238,7 +222,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                 Uids = UidMap.Collect(Installed(slug)), AcceptedLicense = package.AcceptedLicense, Submodule = submodule });
         }
         host.PrepareJournal(journal);
-        BackupProject(journal);
+        ProjectBackup.Write(projectRoot, journal);
         if (!store.TryBeginAttempt(journal.Plugins[0].Slug, journal.Plugins[0].OldVersion, PersistedPluginState.Activated, out var attempt))
             throw new IOException("Cannot write the update marker; addon files were not touched.");
         journal.AttemptId = attempt;
@@ -280,27 +264,15 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             if (journal.Plugins.Any(p => p.ContainsCSharp) || host.RestartAlways)
             {
                 var managed = journal.Plugins.Any(p => p.IsEPlugin);
-                if (!BuildPasses(journal, managed ? "interim" : "final"))
-                {
-                    var decision = Decision(journal);
-                    if (decision == "rollback") return Rollback(journal, "Build failed.");
-                    foreach (var plugin in journal.Plugins.Where(p => PluginKinds.Workflow(p).DisabledDuringSwap)) host.SetPlainEnabled(plugin.Slug, true);
-                    // The editor cannot load the new code, so the recipes are reconciled once the project builds again.
-                    journal.BeforeReconcile = true;
-                    journal.Failure = journal.KeptForProjectCode ? ProjectCodeFailure(journal)
-                        : (managed ? "Interim build failed" : "Plain C# addon build failed") + "; the assembly cannot reload until the project compiles.";
-                    if (decision == "ask") { journal.Save(UpdatePhase.AwaitingDecision); return UpdateOutcome.AwaitingDecision; }
-                    // Saved before Keep marks it kept: a Retry of a kept update the editor stopped between the two then still
-                    // reconciles its recipes, rather than committing it without them.
-                    journal.Save();
-                    return Keep(journal);
-                }
+                if (!_builds.Passes(journal, managed ? "interim" : "final"))
+                    return BuildFailed(journal, "Build failed.", beforeReconcile: true,
+                        (managed ? "Interim build failed" : "Plain C# addon build failed") + "; the assembly cannot reload until the project compiles.");
                 journal.Save(UpdatePhase.InterimBuilt);
-                foreach (var plugin in journal.Plugins.Where(p => PluginKinds.Workflow(p).DisabledDuringSwap)) host.SetPlainEnabled(plugin.Slug, true);
+                RestorePlainPlugins(journal);
                 host.RequestReload(journal);
                 return UpdateOutcome.AwaitingReload;
             }
-            foreach (var plugin in journal.Plugins.Where(p => PluginKinds.Workflow(p).DisabledDuringSwap)) host.SetPlainEnabled(plugin.Slug, true);
+            RestorePlainPlugins(journal);
             journal.Save(UpdatePhase.InterimBuilt);
             return Resume(journal);
         }
@@ -314,24 +286,16 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             journal.Save(UpdatePhase.Reconciling);
             host.Reconcile(journal, false);
             journal.Save(UpdatePhase.Reconciled);
-            foreach (var plugin in journal.Plugins.Where(p => PluginKinds.Workflow(p).DisabledDuringSwap))
-                if (!host.IsEnabled(plugin.Slug)) host.SetPlainEnabled(plugin.Slug, true);
+            RestorePlainPlugins(journal, onlyDisabled: true);
             host.Scan();
             // A plain C# batch already passed its single build gate. Managed recipes need a final build, unless reconciling
             // left the build inputs of the interim build the editor runs unchanged.
             var managedCSharp = journal.Plugins.Any(p => p.IsEPlugin && p.ContainsCSharp);
             var finalBuild = managedCSharp && (host.RestartAlways || !RunsInterimBuild(journal) || ChangedSinceInterimBuild(journal));
             if (managedCSharp && !finalBuild) host.Log("The updated recipes do not change the build; the editor keeps the interim build without another restart.");
-            if (finalBuild && !BuildPasses(journal, "final"))
-            {
-                var decision = Decision(journal);
-                if (decision != "rollback") journal.Failure = journal.KeptForProjectCode ? ProjectCodeFailure(journal) : "Final build failed.";
-                if (decision == "ask") { journal.Save(UpdatePhase.AwaitingDecision); return UpdateOutcome.AwaitingDecision; }
-                if (decision == "keep") return Keep(journal);
-                return Rollback(journal, "Final build failed.");
-            }
+            if (finalBuild && !_builds.Passes(journal, "final")) return BuildFailed(journal, "Final build failed.", beforeReconcile: false, "Final build failed.");
             if (journal.Plugins.Any(p => !host.Verify(p))) return Rollback(journal, "Updated plugin verification failed.");
-            if (journal.Plugins.Any(p => p.Slug == Framework.Slug)) File.WriteAllText(Path.Combine(journal.Directory, "healthy.marker"), "verified");
+            if (journal.Plugins.Any(p => p.Slug == Framework.Slug)) File.WriteAllText(Path.Combine(journal.Directory, UpdatePaths.HealthyMarker), "verified");
             journal.Save(UpdatePhase.Verified);
             return Commit(journal);
         }
@@ -467,15 +431,16 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
             {
                 if (!journal.KeepProjectFiles)
                 {
-                    RestoreProject(journal);
+                    var (backup, files) = ProjectBackup.Find(journal.Directory, journal.ProjectFiles);
+                    ProjectBackup.Restore(projectRoot, backup, files, projectSettings: false);
                     // Once only: a retry after the build below failed must not write the backup over the repairs made since.
                     journal.KeepProjectFiles = true;
                     journal.Save();
                 }
             }
-            foreach (var plugin in journal.Plugins.Where(p => PluginKinds.Workflow(p).DisabledDuringSwap)) host.SetPlainEnabled(plugin.Slug, plugin.WasEnabled);
+            RestorePlainPlugins(journal, rollback: true);
             host.Scan();
-            if (journal.Plugins.Any(p => p.ContainsCSharp) && Build(journal, "rollback").ExitCode != 0) throw new IOException("Restored project failed to build.");
+            if (journal.Plugins.Any(p => p.ContainsCSharp) && _builds.Build(journal, "rollback").ExitCode != 0) throw new IOException("Restored project failed to build.");
             if (store.LocalAttempts.Any(a => a.AttemptId == journal.AttemptId) && !store.TryAbandonAttempt(journal.AttemptId)) throw new IOException("Cannot clear the rollback marker.");
             journal.Save(UpdatePhase.RolledBack);
         }
@@ -526,7 +491,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         if (journal.BeforeReconcile)
         {
             host.RebaseRecipes(journal);
-            BackupProject(journal, true);
+            ProjectBackup.Write(projectRoot, journal, true);
             journal.Save();
         }
         return Rollback(journal, "Rolled back on request after it was kept with build errors.");
@@ -539,17 +504,10 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         if (reason == AttemptReasons.UpdateCommitFailed) return journal.Plugins.All(host.Verify) ? Commit(journal) : Rollback(journal, "Retry verification failed.");
         if (reason == AttemptReasons.UpdateKeptBuildFailed)
         {
-            var retry = Build(journal, "retry");
+            var retry = _builds.Build(journal, "retry");
             if (retry.ExitCode != 0)
             {
-                // The project is being adapted: show the errors that are left.
-                var diagnosis = BuildDiagnostics.Classify(retry.Output, projectRoot, host.PluginCodeRoots(journal));
-                if (journal.KeptForProjectCode && diagnosis.Cause == BuildFailureCause.ProjectCode)
-                {
-                    journal.ProjectErrors = diagnosis.ProjectErrors.ToList();
-                    journal.Failure = ProjectCodeFailure(journal);
-                    journal.Save();
-                }
+                _builds.RetryFailed(journal, retry);
                 return UpdateOutcome.KeptWithErrors;
             }
             if (journal.BeforeReconcile) return ResumeAfterRestart(journal);
@@ -575,7 +533,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         try
         {
             host.RebaseRecipes(journal);
-            BackupProject(journal, true);
+            ProjectBackup.Write(projectRoot, journal, true);
             journal.BeforeReconcile = false;
             journal.Failure = null;
             journal.FailureCause = null; journal.PluginsBuildAlone = null; journal.ProjectErrors = [];
@@ -601,79 +559,42 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         journal.Plugins.Any(p => p.Preserved.Count > 0) ||
         journal.Recipes.Values.Any(r => r.Target is null || RecipeReconciler.ChangesBuild(r.Old, r.Target));
 
-    private BuildOutcome Build(UpdateJournal journal, string name)
-    {
-        var build = host.Build();
-        var log = "build-" + name + ".log";
-        File.WriteAllLines(Path.Combine(journal.Directory, log), build.Output);
-        journal.Builds.Add(new(name, build.ExitCode, log));
-        journal.Save();
-        return build;
-    }
-    private string Decision(UpdateJournal journal) =>
-        UpdateFailureDecision.Choose(journal.Plugins.Any(p => p.Slug == Framework.Slug),
-            UpdateFailureDecision.Policy(host.BuildFailurePolicy, journal.Group is not null, journal.AskOnBuildFailure, journal.KeptForProjectCode), host.UiAvailable);
-
     /// <summary>
-    /// Builds and, when that fails, finds out where: a transient failure is built once more, and errors only in project
-    /// code are followed by a plugins-only build. The journal keeps the cause, the project errors and whether the plugins
-    /// compile on their own (<see cref="UpdateJournal.KeptForProjectCode"/>), which decide what becomes of the update.
+    /// Enables the plugins whose kind is disabled while its files are swapped (<see cref="PluginKindWorkflow.DisabledDuringSwap"/>)
+    /// again; a rollback restores whether each was enabled before the update instead.
     /// </summary>
-    private bool BuildPasses(UpdateJournal journal, string name)
+    /// <param name="onlyDisabled">Leaves a plugin that is enabled already alone.</param>
+    private void RestorePlainPlugins(UpdateJournal journal, bool rollback = false, bool onlyDisabled = false)
     {
-        var build = Build(journal, name);
-        if (build.ExitCode == 0) return true;
-        var roots = host.PluginCodeRoots(journal);
-        var diagnosis = BuildDiagnostics.Classify(build.Output, projectRoot, roots);
-        if (diagnosis.Cause == BuildFailureCause.Transient)
+        foreach (var plugin in journal.Plugins.Where(p => PluginKinds.Workflow(p).DisabledDuringSwap))
         {
-            host.Log("The build failed for a reason that may pass on another attempt; building again.");
-            build = Build(journal, name + "-again");
-            if (build.ExitCode == 0) return true;
-            diagnosis = BuildDiagnostics.Classify(build.Output, projectRoot, roots);
+            if (onlyDisabled && host.IsEnabled(plugin.Slug)) continue;
+            host.SetPlainEnabled(plugin.Slug, !rollback || plugin.WasEnabled);
         }
-        journal.FailureCause = diagnosis.Cause;
-        journal.ProjectErrors = diagnosis.ProjectErrors.ToList();
-        journal.PluginsBuildAlone = diagnosis.Cause == BuildFailureCause.ProjectCode && MayKeepForProjectCode(journal) ? BuildPluginsOnly(journal, name, roots) : null;
-        journal.Save();
-        return false;
     }
 
     /// <summary>
-    /// Self-updates always roll back (a kept framework cannot load its new code, and early recovery would restore it),
-    /// so do headless runs; the plugins-only build is skipped when the settings would roll back anyway.
+    /// What becomes of a transaction whose build failed, as the build-failure policy decides (<see cref="UpdateBuildGate.Decision"/>):
+    /// rolled back for <paramref name="rollbackReason"/>, left for the user to decide, or kept with
+    /// <paramref name="failure"/> (or the project's own errors, when only they failed) as the reason.
     /// </summary>
-    private bool MayKeepForProjectCode(UpdateJournal journal) =>
-        host.KeepOnProjectErrors && host.UiAvailable && host.BuildFailurePolicy != "rollback" && journal.Plugins.All(p => p.Slug != Framework.Slug);
-
-    private bool BuildPluginsOnly(UpdateJournal journal, string name, IReadOnlyList<string> roots)
+    /// <param name="beforeReconcile">The interim or plain C# build failed: the editor cannot load the new code, so the
+    /// recipes are reconciled once the project builds again. The plain plugins are enabled again first, and the journal
+    /// is saved before <see cref="Keep"/> marks it kept, so a Retry of a kept update the editor stopped between the two
+    /// still reconciles its recipes rather than committing it without them.</param>
+    private UpdateOutcome BuildFailed(UpdateJournal journal, string rollbackReason, bool beforeReconcile, string failure)
     {
-        name += "-plugins-only";
-        host.Log("The build failed only in the project's own code; building the plugins on their own.");
-        var work = Path.Combine(journal.Directory, name);
-        var log = "build-" + name + ".log";
-        BuildOutcome build;
-        try { build = host.BuildPluginsOnly(new(work, [Path.Combine(projectRoot, "addons"), ..roots], Path.Combine(journal.Directory, "build-" + name + ".errors.log"))); }
-        catch (Exception ex) { build = new(1, ["The plugins-only build could not run: " + ex.Message]); }
-        finally
+        var decision = _builds.Decision(journal);
+        if (decision == BuildFailurePolicy.Rollback) return Rollback(journal, rollbackReason);
+        if (beforeReconcile)
         {
-            try { AddonFiles.DeleteTree(work); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { host.Log($"Cannot remove {work}: {ex.Message}"); }
+            RestorePlainPlugins(journal);
+            journal.BeforeReconcile = true;
         }
-        File.WriteAllLines(Path.Combine(journal.Directory, log), build.Output);
-        journal.Builds.Add(new(name, build.ExitCode, log));
-        journal.Save();
-        host.Log(build.ExitCode == 0 ? "The plugins compile on their own; the project's code has to be adapted to the update."
-            : "The plugins do not compile on their own either.");
-        return build.ExitCode == 0;
-    }
-
-    private static string ProjectCodeFailure(UpdateJournal journal)
-    {
-        var count = journal.ProjectErrors.Count;
-        var errors = count >= BuildDiagnostics.MaxProjectErrors ? $"{count}+ errors" : count == 1 ? "1 error" : $"{count} errors";
-        return $"The project's own code does not compile with the updated plugins ({errors}); the plugins compile on their own. " +
-               "Adapt the project's code, then use Retry under Needs attention in the ePlugin Manager to finish the update";
+        journal.Failure = journal.KeptForProjectCode ? UpdateBuildGate.ProjectCodeFailure(journal) : failure;
+        if (decision == BuildFailurePolicy.Ask) { journal.Save(UpdatePhase.AwaitingDecision); return UpdateOutcome.AwaitingDecision; }
+        if (beforeReconcile) journal.Save();
+        return Keep(journal);
     }
 
     /// <summary>
@@ -686,7 +607,7 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
         try
         {
             // a pending update that cannot be read keeps its old backup, which is what the warning below is about too
-            var journals = new UpdateJournals(Path.Combine(projectRoot, ".godot/eplugin/updates"), message => host.Log(message +
+            var journals = new UpdateJournals(UpdatePaths.TransactionsOf(projectRoot), message => host.Log(message +
                 " (its backups are not refreshed: rolling it back may undo this update's project changes)"));
             foreach (var pending in journals.Read()
                          .Where(j => j.Id != finished.Id && j.State is UpdatePhase.Staged or UpdatePhase.Swapped or UpdatePhase.InterimBuilt))
@@ -695,45 +616,11 @@ internal sealed class UpdateApplier(string projectRoot, PluginStateStore store, 
                     foreach (var (slug, record) in finished.Recipes)
                         if (pending.Plugins.All(p => p.Slug != slug) && pending.Recipes.TryGetValue(slug, out var own))
                         { own.Old = record.Applied.Clone(); own.Applied = record.Applied.Clone(); }
-                BackupProject(pending, true);
+                ProjectBackup.Write(projectRoot, pending, true);
                 pending.Save();
             }
         }
         catch (Exception ex) { host.Log("Cannot refresh the backups of the remaining plugin updates; rolling one of them back may undo this update's project changes: " + ex.Message); }
     }
-
-    private void BackupProject(UpdateJournal journal, bool replace = false)
-    {
-        var backup = Path.Combine(journal.Directory, ProjectBackup.Folder);
-        // A replaced backup is written next to the old one and swapped in, so it is never half written; see ProjectBackup.
-        var target = replace ? backup + ".new" : backup;
-        if (replace) AddonFiles.DeleteTree(target);
-        System.IO.Directory.CreateDirectory(target);
-        var files = new List<string>();
-        foreach (var file in System.IO.Directory.GetFiles(projectRoot).Where(f => ProjectBackup.Includes(Path.GetFileName(f))))
-        {
-            files.Add(Path.GetFileName(file));
-            File.Copy(file, Path.Combine(target, Path.GetFileName(file)), false);
-        }
-        // Informational: restoring lists the backup folder itself (ProjectBackup.Find), as the caller saves the journal later.
-        journal.ProjectFiles = files;
-        if (replace)
-        {
-            var old = backup + ".old";
-            AddonFiles.DeleteTree(old);
-            if (System.IO.Directory.Exists(backup)) Move(backup, old);
-            Move(target, backup);
-            AddonFiles.DeleteTree(old);
-        }
-    }
-    private void RestoreProject(UpdateJournal journal)
-    {
-        // The live editor owns project.godot; normal rollback restores autoloads via recipe operations.
-        // Its backup is reserved for independent early recovery, which reloads settings before restart.
-        var (backup, files) = ProjectBackup.Find(journal.Directory, journal.ProjectFiles);
-        foreach (var file in files.Where(f => f != "project.godot")) AddonFiles.Overwrite(PackageFiles.Inside(backup, file), PackageFiles.Inside(projectRoot, file));
-        if (!files.Any(p => p.Equals("nuget.config", StringComparison.OrdinalIgnoreCase))) AddonFiles.DeleteFile(Path.Combine(projectRoot, "nuget.config"));
-    }
-    private static void Move(string from, string to) => AddonFiles.MoveDirectory(from, to);
 }
 #endif
