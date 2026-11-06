@@ -269,6 +269,20 @@ public class EGlobalEditorStateTests : IDisposable
     }
 
     [TestCase]
+    public void AFrameworkDisabledWithoutAVersionIsRecordedAsAFailedDeactivation()
+    {
+        var context = _fixture.Global.Contexts.Single(c => c.PluginBase == _fixture.Framework);
+        context.RefreshMetadata(new EEditorPluginMetadata { Name = "ePlugin Framework", Version = "" });
+
+        _fixture.Global.RecordFrameworkDisabled(_fixture.Framework);
+
+        // a retry from Needs attention aims for what the user did, not for enabling the framework again
+        var attempt = _fixture.Store.GetLocal(context.Slug)!;
+        Assertions.AssertString(attempt.Reason).IsEqual(AttemptReasons.InvalidPluginVersion);
+        Assertions.AssertObject(attempt.TargetState).IsEqual(PersistedPluginState.Deactivated);
+    }
+
+    [TestCase]
     public void AFrameworkDisabledBeforeItInitializedIsRecordedInTheEditorsProject()
     {
         // an instance without a state store, like one dropped by an assembly reload before Initialize ran again

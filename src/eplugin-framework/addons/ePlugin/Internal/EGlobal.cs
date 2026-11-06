@@ -271,8 +271,9 @@ internal sealed partial class EGlobal
     /// <summary>Records <paramref name="state"/> for one plugin, in an attempt of its own that completes at once.</summary>
     private static void RecordSingleState(PluginStateStore store, PluginContext context, PersistedPluginState state)
     {
-        // an invalid version is recorded with the default target, whatever state was to be recorded
-        if (VersionOrRecordInvalid(store, context) is not { } version)
+        // An invalid version is recorded as a failed attempt towards this state: a retry from Needs attention then aims for
+        // it too, rather than enabling a framework the user disabled.
+        if (VersionOrRecordInvalid(store, context, target: state) is not { } version)
         {
             return;
         }
