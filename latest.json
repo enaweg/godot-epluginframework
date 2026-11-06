@@ -1,8 +1,8 @@
 {
- "commit": "e3e0a63d28287e241f9ed2b3d24cf725592330af",
- "date": "2026-11-06T06:03:17Z",
- "covered": 12925,
- "coverable": 14224,
+ "commit": "d4e83eaf411289041ca3be9b9b85516869441cf1",
+ "date": "2026-11-06T07:18:32Z",
+ "covered": 12947,
+ "coverable": 14245,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -181,8 +181,8 @@
    304
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateRecipes.cs": [
-   188,
-   190
+   192,
+   194
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateSites.cs": [
    28,
@@ -477,8 +477,8 @@
    182
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/AddonSwap.cs": [
-   126,
-   137
+   129,
+   140
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/BuildDiagnostics.cs": [
    52,
@@ -517,8 +517,8 @@
    56
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/PackageFetcher.cs": [
-   108,
-   113
+   112,
+   118
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/PackageFiles.cs": [
    105,
@@ -531,6 +531,10 @@
   "src/eplugin-framework/addons/ePlugin/Internal/Update/PluginRepository.cs": [
    135,
    149
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/ProjectBackup.cs": [
+   34,
+   34
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/RecipeReconciler.cs": [
    50,
@@ -557,16 +561,20 @@
    102
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/SubmoduleSwap.cs": [
-   42,
-   45
+   37,
+   39
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UidMap.cs": [
    16,
    16
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateApplier.cs": [
-   453,
-   493
+   376,
+   411
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateBuildGate.cs": [
+   70,
+   74
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateErrors.cs": [
    82,
@@ -588,9 +596,13 @@
    68,
    71
   ],
+  "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdatePaths.cs": [
+   3,
+   3
+  ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateRecovery.cs": [
-   178,
-   184
+   164,
+   170
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateService.cs": [
    120,
