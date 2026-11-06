@@ -13,10 +13,10 @@ internal sealed partial class EGlobal
 {
     private const int ManagerStatusCheckFrames = 30;
     private const int AddonProblemCheckFrames = 600;
-    private ulong _nextManagerStatusCheck;
+    private FrameThrottle _managerStatusChecks = new(ManagerStatusCheckFrames);
     private string? _managerStatusKey;
     private ManagerStatus _managerStatus;
-    private ulong _nextAddonProblemCheck;
+    private FrameThrottle _addonProblemChecks = new(AddonProblemCheckFrames);
     private string _addonProblems = "";
 
     /// <summary>
@@ -34,8 +34,8 @@ internal sealed partial class EGlobal
     internal ManagerStatus CurrentManagerStatus()
     {
         var frame = Engine.GetProcessFrames();
-        if (frame < _nextManagerStatusCheck || IsChangingPlugins || _recipeUpdateJournal is not null) return _managerStatus;
-        _nextManagerStatusCheck = frame + ManagerStatusCheckFrames;
+        // a check skipped while plugins change is not counted, so the next frame checks again
+        if (IsChangingPlugins || _recipeUpdateJournal is not null || !_managerStatusChecks.Due(frame)) return _managerStatus;
         var pending = PendingUpdates;
         var attempts = _stateStore?.LocalAttempts ?? [];
         var states = _contexts.Where(c => c.Plugin is not null).Select(c => $"{c.Slug}:{c.State}").ToArray();
@@ -67,7 +67,7 @@ internal sealed partial class EGlobal
     internal void SetPluginEnabled(string slug, bool enabled) => _host.SetPluginEnabled(slug, enabled);
 
     /// <summary>Reads the plugins again for the next <see cref="CurrentManagerStatus"/>, e.g. after the ePlugin Manager changed update sites.</summary>
-    internal void InvalidateManagerStatus() { _managerStatusKey = null; _nextManagerStatusCheck = 0; _nextAddonProblemCheck = 0; }
+    internal void InvalidateManagerStatus() { _managerStatusKey = null; _managerStatusChecks.Reset(); _addonProblemChecks.Reset(); }
 
     /// <summary>
     /// What makes a plugin need attention without any state of the framework telling: a <c>plugin.cfg</c> Godot cannot
@@ -77,8 +77,7 @@ internal sealed partial class EGlobal
     /// </summary>
     private string AddonProblems(ulong frame)
     {
-        if (frame < _nextAddonProblemCheck) return _addonProblems;
-        _nextAddonProblemCheck = frame + AddonProblemCheckFrames;
+        if (!_addonProblemChecks.Due(frame)) return _addonProblems;
         try
         {
             var layout = ScanAddons();

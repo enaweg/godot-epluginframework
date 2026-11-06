@@ -69,9 +69,8 @@ internal sealed partial class EGlobal
 
             if (optional.Version is not null)
             {
-                var optionalContext = _contexts.FirstOrDefault(c => c.Slug == optional.Slug);
-                // a plain plugin enabled in this session has no context
-                var optionalVersion = optionalContext?.Metadata?.Version ?? InstalledVersion(optional.Slug) ?? "0.0";
+                // unlike a hard dependency, one whose version is unknown is checked as 0.0 rather than failing
+                var optionalVersion = DependencyVersion(optional.Slug) ?? "0.0";
 
                 if (!MatchesVersion(optionalVersion, optional.Version, context.Logger))
                 {
@@ -149,7 +148,7 @@ internal sealed partial class EGlobal
 
     /// <summary>Whether the current transition disables the plugin, now or once its dependants are disabled.</summary>
     private bool IsBeingDeactivated(PluginContext context) =>
-        _transition?.Participants.GetValueOrDefault(context) == PersistedPluginState.Deactivated || _toCheckDisable.Contains(context);
+        _transition?.Participants.GetValueOrDefault(context) == PersistedPluginState.Deactivated || _coordinator.Deactivations.Contains(context);
 
     /// <summary>
     /// Reverses the nested recipes that other installed plugins got because the plugin

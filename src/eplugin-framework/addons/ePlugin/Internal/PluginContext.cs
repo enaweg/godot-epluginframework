@@ -6,21 +6,24 @@ using Godot;
 
 namespace Enaweg.Plugin.Internal;
 
-[Tool]
 internal sealed class PluginContext(IEEditorPlugin? plugin, EditorPlugin pluginBase, ILogger? logger)
 {
     public string Slug { get; init; } = pluginBase.GetPluginSlug();
-    
-    public string Name { get; private set; } = pluginBase.ReadMetadata()?.Name ?? pluginBase.GetPluginSlug();
 
-    public EEditorPluginMetadata? Metadata { get; set; } = pluginBase.ReadMetadata();
+    private EEditorPluginMetadata? _metadata = pluginBase.ReadMetadata();
+
+    /// <summary>The plugin's plugin.cfg, read once; null when it cannot be read. Changed only by <see cref="RefreshMetadata"/>.</summary>
+    public EEditorPluginMetadata? Metadata
+    {
+        get => _metadata;
+        init => _metadata = value;
+    }
+
+    /// <summary>The name in its <see cref="Metadata"/>, or its slug without one.</summary>
+    public string Name => Metadata?.Name ?? Slug;
 
     /// <summary>Takes the plugin.cfg read again, e.g. after it was repaired or updated.</summary>
-    public void RefreshMetadata(EEditorPluginMetadata? metadata)
-    {
-        Metadata = metadata;
-        Name = Metadata?.Name ?? Slug;
-    }
+    public void RefreshMetadata(EEditorPluginMetadata? metadata) => _metadata = metadata;
 
     public string? Directory { get; init; } = pluginBase.GetPluginDirectory();
 

@@ -193,7 +193,7 @@ internal sealed partial class EGlobal
         _host.SetPluginEnabled(dependency.Slug, true);
         var context = ManagedContext(dependency.Slug);
         if (context is not null && context.State != EEditorPluginState.Activated) EnableEPlugin(context, false, true);
-        if (!_host.IsPluginEnabled(dependency.Slug) || context?.State == EEditorPluginState.Error || _toCheckEnable.Count > 0)
+        if (!_host.IsPluginEnabled(dependency.Slug) || context?.State == EEditorPluginState.Error || !_coordinator.Activations.IsEmpty)
             throw new InvalidOperationException($"Dependency {dependency.Slug} could not be activated.");
     }
 }

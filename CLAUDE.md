@@ -139,8 +139,10 @@ because Godot otherwise asks to save modified resources first (plugins adding au
 
 `EGlobal` (`addons/ePlugin/Internal/EGlobal.cs`) is an internal singleton owning all plugin state. Its partials split it by
 concern: `EGlobal.Transitions.cs`, `.Activation.cs`, `.Deactivation.cs`, `.OptionalDependencies.cs` and `.Retry.cs` hold
-the plugin lifecycle, the others licenses, welcome pages, plain plugins, GDExtension add-ons and updates; put new code
-in the partial of its concern rather than in `EGlobal.cs`. It is the
+the plugin lifecycle; shared infrastructure has its own: `.EditorThread.cs` (`Post`, `PostForInstance`,
+`OnEditorThread`), `.Recipes.cs` (`RecipeOf`, the recipe of an enabled or disabled ePlugin) and `.UnsavedState.cs`
+(licenses and welcome pages the state file could not save yet); the others hold licenses, welcome pages, plain plugins,
+GDExtension add-ons and updates. Put new code in the partial of its concern rather than in `EGlobal.cs`. It is the
 brain of the framework: it tracks a `PluginContext` per managed `EditorPlugin`, drives the
 enable/disable state machine (`EEditorPluginState`: `Created → Activated`/`Deactivated`/`Error`), resolves
 plugin dependencies (enabling/version-checking them before the dependent plugin), and applies/reverses each
@@ -153,8 +155,12 @@ unfocused, restarting the editor, whether dialogs can show, loading/unloading GD
 keep new lifecycle code behind it so it stays testable. Recipes are created through `TryEnsureRecipe`, which puts the
 plugin in error and discards a half-built recipe when `CreateRecipe` throws. Scans that only read other plugins' recipes pass `scan: true`, which logs
 the failure but leaves that plugin's state alone, since no attempt of its own could resolve that error. `FindDependencyCycle` fails an activation
-whose hard dependencies lead back to the plugin (otherwise it waits for itself forever). A plugin waiting on
-`_toCheckEnable` has installed nothing: disabling it cancels its activation (`CancelWaitingActivation` takes it out of the
+whose hard dependencies lead back to the plugin (otherwise it waits for itself forever). What keeps a transition open
+besides its participants lives in `TransitionCoordinator` (`EGlobal._coordinator`, pure and unit-tested): the plugins
+whose activation (`Activations`) or deactivation (`Deactivations`) waits for other plugins, the plugins that enabled the
+framework, the holds (`Hold()`, disposable) and the stall watchdog; the participants and the recorded attempt stay in
+`EGlobal.Transitions.cs`. A plugin waiting in
+`Activations` has installed nothing: disabling it cancels its activation (`CancelWaitingActivation` takes it out of the
 transition and its `.user` entry), and disabling what it waits for fails it (`FailPluginsWaitingFor`, `dependency_disabled`),
 since resumed it would enable that plugin again. `CheckStalledTransition`, polled from `EPluginPlugin._Process` with the
 time and frame passed in, fails a transition without progress for `StallTimeout` (30 s) and `StallFrames` (`dependency_timed_out`,
@@ -249,7 +255,7 @@ known set lives in Engine metadata, so a toggle between a build and its reload i
 queued), then `ReevaluateOptionalDependencies`. A disabled one disables the activated ePlugins that require it (the
 optional snapshot of every plugin with an optional dependency on it is filled first, since the editor no longer has the
 plugin, also for plugins disabled further down the chain) and runs `UninstallOptionalDependenciesOn`,
-all in one transition: `_transitionHold` keeps `FinishTransition` from building in between. Toggles the framework makes
+all in one transition: a hold (`TransitionCoordinator.Hold`) keeps `FinishTransition` from building in between. Toggles the framework makes
 itself go through `NotePluginToggle`;
 nothing reacts while a reload is pending or an update is active. A hard dependency on a plain plugin is enabled
 synchronously by `EnablePlainDependency`, because no `EnableEPlugin` callback would resume the dependant, and versions of

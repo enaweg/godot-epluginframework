@@ -96,13 +96,13 @@ public class EGlobalTests : IDisposable
         var dependant = Context("dependant");
 
         // A plain plugin was disabled: its dependant is disabled while further plugins may still join.
-        global.TransitionHold = 1;
+        var hold = global.HoldTransition();
         global.JoinTransition(dependant, PersistedPluginState.Deactivated);
         dependant.State = EEditorPluginState.Deactivated;
         Assertions.AssertBool(global.FinishTransition()).IsFalse();
         Assertions.AssertString(_fixture.Store.GetLocal("dependant")!.Reason).IsEqual("attempt_in_progress");
 
-        global.TransitionHold = 0;
+        hold.Dispose();
         Assertions.AssertBool(global.FinishTransition()).IsTrue();
         Assertions.AssertObject(_fixture.Store.GetLocal("dependant")).IsNull();
         Assertions.AssertObject(_fixture.Store.GetShared("dependant")!.State).IsEqual(PersistedPluginState.Deactivated);

@@ -14,7 +14,6 @@ namespace Enaweg.Plugin.Internal;
 /// This is an internally used class by Enaweg.Plugin and should not be used by anything else. It manages plugin states
 /// as well as provides some global values.
 /// </summary>
-[Tool]
 [SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable",
     Justification = "The singleton lives as long as the assembly; its indexing token sources have no timer or wait handle to release.")]
 internal sealed partial class EGlobal
@@ -40,18 +39,13 @@ internal sealed partial class EGlobal
 
     private ILoggerFactory? _loggerFactory;
 
-    private readonly Stack<PluginContext> _toCheckEnable = new();
-    // Plugins that enabled the framework because it was disabled: unlike the ones a start finds enabled, they still
-    // have to be installed once the framework is initialized.
-    private readonly HashSet<PluginContext> _enabledWithFramework = [];
-    private readonly Stack<PluginContext> _toCheckDisable = new();
+    // The plugins waiting in a transition, its holds and its stall watchdog.
+    private readonly TransitionCoordinator _coordinator = new(StallTimeout, StallFrames);
     private readonly Queue<IInitialize> _toInitialize = new();
     // Set while Initialize runs: initializers wait for its end, also those registered or discovered meanwhile.
     private bool _starting;
     private PluginTransition? _transition;
     private bool _transitionFailed;
-    // While above zero the transition stays open, so several plugins toggled one after another are built once.
-    private int _transitionHold;
 
     private readonly IEditorHost _host;
 
@@ -82,6 +76,12 @@ internal sealed partial class EGlobal
     /// <summary>The editor this instance works with, e.g. for the project's folder.</summary>
     internal IEditorHost Host => _host;
 
+    /// <summary>The framework's own slug, also before it is initialized.</summary>
+    private string FrameworkSlug => _ePluginContext?.GetPluginSlug() ?? Framework.Slug;
+
+    /// <summary>Whether the editor can show the framework's dialogs, e.g. a license review or welcome pages.</summary>
+    private bool LicenseUiAvailable => _ePluginContext is not null && _host.CanShowDialogs(_ePluginContext);
+
     /// <summary>The plugin contexts, for tests.</summary>
     internal List<PluginContext> Contexts => _contexts;
 
@@ -98,12 +98,8 @@ internal sealed partial class EGlobal
         set => _plainPluginObserver = value;
     }
 
-    /// <summary>While above zero a transition stays open after its last participant finished.</summary>
-    internal int TransitionHold
-    {
-        get => _transitionHold;
-        set => _transitionHold = value;
-    }
+    /// <summary>Keeps a transition open after its last participant finished, until the result is disposed.</summary>
+    internal IDisposable HoldTransition() => _coordinator.Hold();
 
     /// <summary>
     /// Makes the instance valid without the editor: what <see cref="Initialize"/> does first, for tests of the plugin
@@ -113,7 +109,7 @@ internal sealed partial class EGlobal
     {
         _loggerFactory = loggerFactory;
         _ePluginContext = plugin;
-        plugin.Logger = loggerFactory.CreateLogger(plugin.GetType().FullName ?? "UNKNOWN");
+        plugin.Logger = CreateLogger(loggerFactory, plugin);
         GetOrCreateContext(plugin).Cli = cli;
     }
 
@@ -155,16 +151,16 @@ internal sealed partial class EGlobal
     private void InitializeCore(EPluginPlugin plugin, ILoggerFactory loggerFactory)
     {
         AssemblyReload.Capture();
-        using var progress = _toCheckEnable.Count > 0 ? ActivationProgress.Begin("Activating plugins...") : null;
+        using var progress = !_coordinator.Activations.IsEmpty ? ActivationProgress.Begin("Activating plugins...") : null;
         _loggerFactory = loggerFactory;
         _ePluginContext = plugin;
-        plugin.Logger = _loggerFactory.CreateLogger(_ePluginContext.GetType().FullName ?? "UNKNOWN");
+        plugin.Logger = CreateLogger(loggerFactory, plugin);
 
         CliService = new DotnetVersionManager(plugin.Logger, plugin.EnableDebugLogging);
         foreach (var context in _contexts)
         {
             // a plugin enabled before the framework (e.g. one that enabled it) got its context without a logger
-            context.Logger ??= _loggerFactory.CreateLogger(context.PluginBase.GetType().FullName ?? "UNKNOWN");
+            context.Logger ??= CreateLogger(loggerFactory, context.PluginBase);
             context.Cli = GetCli(context.Logger);
         }
 
@@ -172,7 +168,7 @@ internal sealed partial class EGlobal
         _stateStore.Load();
         RestoreUnsavedState();
         InitializeUpdateJournals();
-        ReloadContexts(_loggerFactory);
+        ReloadContexts();
         CreateStateBaseline();
         RecordFrameworkEnabled(plugin);
         ReviewMissingPluginsOncePerStart();
@@ -207,14 +203,14 @@ internal sealed partial class EGlobal
         }
 
         _loggerFactory = loggerFactory;
-        _ePluginContext!.Logger = _loggerFactory.CreateLogger(_ePluginContext.GetType().FullName ?? "UNKNOWN");
+        _ePluginContext!.Logger = CreateLogger(loggerFactory, _ePluginContext);
 
         CliService = new DotnetVersionManager(_ePluginContext.Logger, _ePluginContext.EnableDebugLogging);
 
         // every plugin logs through the new factory too, also the dotnet commands run for it
         foreach (var context in _contexts)
         {
-            context.Logger = _loggerFactory.CreateLogger(context.PluginBase.GetType().FullName ?? "UNKNOWN");
+            context.Logger = CreateLogger(loggerFactory, context.PluginBase);
             context.Cli = GetCli(context.Logger);
         }
     }
@@ -241,10 +237,8 @@ internal sealed partial class EGlobal
         var states = new List<SharedPluginState>();
         foreach (var context in active)
         {
-            var version = context.Metadata?.Version;
-            if (string.IsNullOrWhiteSpace(version))
+            if (VersionOrRecordInvalid(_stateStore, context) is not { } version)
             {
-                _stateStore.TryRecordInvalid(context.Slug, version, AttemptReasons.InvalidPluginVersion);
                 context.State = EEditorPluginState.Error;
                 context.Logger?.Error($"Cannot record {context.Slug}: plugin.cfg has no usable version.");
                 continue;
@@ -256,6 +250,39 @@ internal sealed partial class EGlobal
         _stateStore.TryCreateBaseline(states);
     }
 
+    /// <summary>
+    /// The version in the plugin.cfg of <paramref name="context"/>, which every state recorded for it needs. Null when it
+    /// has none or plugin.cfg cannot be read: that is recorded as a failed attempt of the plugin
+    /// (<see cref="AttemptReasons.InvalidPluginVersion"/>), which blocks it until plugin.cfg is repaired and it is retried.
+    /// </summary>
+    private static string? VersionOrRecordInvalid(PluginStateStore store, PluginContext context, bool manualRetry = false,
+        PersistedPluginState target = PersistedPluginState.Activated)
+    {
+        var version = context.Metadata?.Version;
+        if (!string.IsNullOrWhiteSpace(version))
+        {
+            return version;
+        }
+
+        store.TryRecordInvalid(context.Slug, version, AttemptReasons.InvalidPluginVersion, manualRetry, target);
+        return null;
+    }
+
+    /// <summary>Records <paramref name="state"/> for one plugin, in an attempt of its own that completes at once.</summary>
+    private static void RecordSingleState(PluginStateStore store, PluginContext context, PersistedPluginState state)
+    {
+        // an invalid version is recorded with the default target, whatever state was to be recorded
+        if (VersionOrRecordInvalid(store, context) is not { } version)
+        {
+            return;
+        }
+
+        if (store.TryBeginAttempt(context.Slug, version, state, out var id))
+        {
+            store.TryComplete(id, [new SharedPluginState(context.Slug, version, state)]);
+        }
+    }
+
     public void RecordFrameworkDisabled(EPluginPlugin plugin)
     {
         _stateStore ??= new PluginStateStore(StateFilePath, plugin.Logger);
@@ -264,22 +291,7 @@ internal sealed partial class EGlobal
             _stateStore.Load();
         }
 
-        var context = GetOrCreateContext(plugin);
-        var version = context.Metadata?.Version;
-        if (string.IsNullOrWhiteSpace(version))
-        {
-            _stateStore.TryRecordInvalid(context.Slug, version, AttemptReasons.InvalidPluginVersion);
-            return;
-        }
-
-        if (!_stateStore.TryBeginAttempt(context.Slug, version, PersistedPluginState.Deactivated, out var id))
-        {
-            return;
-        }
-
-        _stateStore.TryComplete(id, [
-            new SharedPluginState(context.Slug, version, PersistedPluginState.Deactivated)
-        ]);
+        RecordSingleState(_stateStore, GetOrCreateContext(plugin), PersistedPluginState.Deactivated);
     }
 
     /// <summary>
@@ -310,19 +322,7 @@ internal sealed partial class EGlobal
             return;
         }
 
-        var version = context.Metadata?.Version;
-        if (string.IsNullOrWhiteSpace(version))
-        {
-            _stateStore.TryRecordInvalid(context.Slug, version, AttemptReasons.InvalidPluginVersion);
-            return;
-        }
-
-        if (_stateStore.TryBeginAttempt(context.Slug, version, PersistedPluginState.Activated, out var id))
-        {
-            _stateStore.TryComplete(id, [
-                new SharedPluginState(context.Slug, version, PersistedPluginState.Activated)
-            ]);
-        }
+        RecordSingleState(_stateStore, context, PersistedPluginState.Activated);
     }
 
     /// <summary>Call before consuming persisted plugin state and after an update batch.</summary>
@@ -351,7 +351,7 @@ internal sealed partial class EGlobal
         if (context is null)
         {
             var ePlugin = pluginBase as IEEditorPlugin;
-            var pluginLogger = _loggerFactory?.CreateLogger(pluginBase.GetType().FullName ?? "UNKNOWN");
+            var pluginLogger = _loggerFactory is { } factory ? CreateLogger(factory, pluginBase) : null;
             context = new PluginContext(ePlugin, pluginBase, pluginLogger) { Cli = GetCli(pluginLogger) };
             AddContext(context);
         }
@@ -386,6 +386,10 @@ internal sealed partial class EGlobal
         return CliService?.Create(logger, _host.ProjectRoot, _host.AssemblyName, _host.SolutionDirectory);
     }
 
+    /// <summary>A logger of <paramref name="factory"/> named after the type of <paramref name="owner"/>.</summary>
+    private static ILogger CreateLogger(ILoggerFactory factory, object owner) =>
+        factory.CreateLogger(owner.GetType().FullName ?? "UNKNOWN");
+
     /// <summary>
     /// Scans the project once plugins changed, so the editor shows what their recipes added or removed. A transition
     /// builds the solution itself before it completes (<see cref="FinishTransition"/>), so nothing is built here.
@@ -406,9 +410,8 @@ internal sealed partial class EGlobal
     /// <summary>
     /// If assembly reload is triggered based on code changes the contexts are lost. Need to rebuild it from active plugins.
     /// </summary>
-    internal void ReloadContexts(ILoggerFactory? loggerFactory)
+    internal void ReloadContexts()
     {
-        var logger = loggerFactory?.CreateLogger(GetType().FullName ?? "UNKNOWN");
         var children = _host.PluginNodes();
 
         if (_ePluginContext is null)
@@ -417,7 +420,7 @@ internal sealed partial class EGlobal
             var ePluginNode = children.FirstOrDefault(c => c is EPluginPlugin);
             if (ePluginNode is null)
             {
-                logger?.Error($"ePlugin base node not found!");
+                if (_loggerFactory is { } factory) CreateLogger(factory, this).Error($"ePlugin base node not found!");
                 return;
             }
 
@@ -427,14 +430,7 @@ internal sealed partial class EGlobal
         // handle other plugins
         _ePluginContext.Logger.Log($"Refreshing plugins");
 
-        var deactivatedPlugins = _contexts.Where(c => c.State == EEditorPluginState.Deactivated).ToArray();
-        if (deactivatedPlugins.Length > 0)
-        {
-            foreach (var pluginContext in deactivatedPlugins)
-            {
-                _contexts.Remove(pluginContext);
-            }
-        }
+        _contexts.RemoveAll(c => c.State == EEditorPluginState.Deactivated);
 
         foreach (var childNode in children)
         {
@@ -454,7 +450,7 @@ internal sealed partial class EGlobal
 
                 var context = GetOrCreateContext(pluginBase);
 
-                context.State = _enabledWithFramework.Contains(context) || _toCheckEnable.Contains(context)
+                context.State = _coordinator.EnabledWithFramework.Contains(context) || _coordinator.Activations.Contains(context)
                     ?
                     // the plugin was enabled while the framework was not initialized and waits for its activation, so
                     // this is a new plugin need to bootstrap.
