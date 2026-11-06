@@ -13,14 +13,6 @@ internal static class WelcomeSettings
 
     public static bool Hide => ProjectSettings.GetSetting(HideKey, false).AsBool();
 
-    public static void Register()
-    {
-        if (!ProjectSettings.HasSetting(HideKey)) ProjectSettings.SetSetting(HideKey, false);
-        ProjectSettings.SetInitialValue(HideKey, false);
-        ProjectSettings.AddPropertyInfo(new Godot.Collections.Dictionary
-        {
-            { "name", HideKey }, { "type", (int)Variant.Type.Bool }, { "hint", (int)PropertyHint.None }, { "hint_string", "" }
-        });
-    }
+    public static void Register() => EPluginSettings.Register(HideKey, false, Variant.Type.Bool);
 }
 #endif

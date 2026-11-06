@@ -26,7 +26,6 @@ namespace Enaweg.Plugin.Internal;
 /// reloadable cannot be unloaded safely while the editor runs, so such a directory is refused when it is shown.
 /// </para>
 /// </summary>
-[Tool]
 internal static class ShowHideHelper
 {
     /// <param name="host">The editor, which loads the GDExtensions of the directory; null skips that.</param>

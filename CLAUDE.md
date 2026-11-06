@@ -411,7 +411,7 @@ Update sources lists the project's update sites, the user's local directories (e
 it; a local directory is one update source for any number of plugins) and the built-in list in one tree. Tab titles are the tab nodes' names, because Godot 4.4 ignores
 `metadata/_tab_name`. The General tab shows every `eplugin/*` project setting: a control names its setting in its
 `setting` metadata (an OptionButton its item values in `values`) and is saved to `project.godot` on change, so a new
-setting needs only a control in the scene; `SettingsDialogTests` checks that every registered setting is bound. Close dialogs with `EditorWindows.Release`, never `QueueFree` in the frame that hides them: freeing a window from its
+setting needs only a control in the scene (and its registration through `EPluginSettings.Register`); `SettingsDialogTests` checks that every registered setting is bound. Close dialogs with `EditorWindows.Release`, never `QueueFree` in the frame that hides them: freeing a window from its
 own button, or right after a reload while it has focus and the mouse, crashed Godot 4.7.2 on the next window message
 (use-after-free in its message handling). Release hides it now and frees it 0.25 s later through a native callable.
 Scene roots set `auto_translate_mode = 2`,
@@ -507,8 +507,11 @@ Readers skip fields they do not know, so a file written by a newer version does 
 fields they know: what an older version cannot represent is lost after a downgrade, and rolling the state back is not
 supported. Values older readers refuse go into new optional fields instead of existing ones: entries of plugins in
 subfolders (a slug with `/`) are written to `nestedPlugins`/`nestedLicenses`/`nestedWelcomes`/`nestedAttempts` and merged
-when read (`PluginStateStoreTests.PluginsInSubfoldersAreWrittenToListsOlderVersionsSkip`). A missing `plugins`/`attempts` list or another `schemaVersion` still makes the store read-only. A shared file that changed on disk since it was read (a git pull) is read again before a write
-(`PluginStateStore.Rebase`), which refuses only when the same entries changed there too, to other values than this write's. Licenses and welcome pages
+when read (`PluginStateStoreTests.PluginsInSubfoldersAreWrittenToListsOlderVersionsSkip`). A missing `plugins`/`attempts` list or another `schemaVersion` still makes the store read-only. The values of
+`PersistedPluginState` are frozen: they are written by name and read with `allowIntegerValues: false`, so an older
+reader fails on a value it does not know; a new state goes into a new optional field. The JSON documents are in
+`PluginStateDocuments`, the local attempts in `PluginStateStore.Attempts.cs`. A shared file that changed on disk since it was read (a git pull) is read again before a write
+(`PluginStateStore.Rebase`, merging through the pure `SharedStateMerge`), which refuses only when the same entries changed there too, to other values than this write's. Licenses and welcome pages
 recorded while the file could not be written stay recorded for the session, also when it is read again, and the next
 write that succeeds saves them; Engine metadata keeps them across assembly reloads (`RestoreUnsavedState`). Only an update's acknowledgement sets `lastCompletedAttemptId` (recovery and rollback compare
 it with the journal); lifecycle completions keep it and skip writing the shared file when no entry changed, because
@@ -538,7 +541,8 @@ skips the dialog.
 
 A plugin's welcome page comes from the recipe's `SetWelcome` (text, or a `res://` path), else `welcome_file` in
 `plugin.cfg`, else its root README (`README.md`, `README.txt`, `README`, case-insensitive); without any of these it has
-none. `Internal/Welcomes/PluginWelcome.cs` is pure and unit-tested and reuses `PluginLicense`'s path rules and display.
+none. `Internal/Welcomes/PluginWelcome.cs` is pure and unit-tested and shares the path rules, display and reading of files (at most 1 MiB) with `PluginLicense`
+(`Internal/PluginTextFile.cs`).
 Shown pages live in the optional `welcomes` list of the shared `eplugin-state.json` (`PluginStateStore.TryRecordWelcomes`),
 recorded by slug only, so a page is shown once per project and omitted while empty like `licenses`.
 `EGlobal.Welcomes.cs` has no lifecycle hook: `EPluginPlugin._Process` calls `TakeWelcomes` every frame, which every 30

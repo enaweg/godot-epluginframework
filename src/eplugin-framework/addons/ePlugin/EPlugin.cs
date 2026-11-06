@@ -16,7 +16,6 @@ namespace Enaweg.Plugin;
 /// Only available in editor builds (the type is guarded by <c>#if TOOLS</c>).
 /// </para>
 /// </remarks>
-[Tool]
 public static class EPlugin
 {
     private static IEPlugin? _instanceCache;

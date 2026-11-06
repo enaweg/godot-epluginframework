@@ -13,14 +13,6 @@ internal static class LicenseSettings
 
     public static bool AutoAccept => ProjectSettings.GetSetting(AutoAcceptKey, false).AsBool();
 
-    public static void Register()
-    {
-        if (!ProjectSettings.HasSetting(AutoAcceptKey)) ProjectSettings.SetSetting(AutoAcceptKey, false);
-        ProjectSettings.SetInitialValue(AutoAcceptKey, false);
-        ProjectSettings.AddPropertyInfo(new Godot.Collections.Dictionary
-        {
-            { "name", AutoAcceptKey }, { "type", (int)Variant.Type.Bool }, { "hint", (int)PropertyHint.None }, { "hint_string", "" }
-        });
-    }
+    public static void Register() => EPluginSettings.Register(AutoAcceptKey, false, Variant.Type.Bool);
 }
 #endif
