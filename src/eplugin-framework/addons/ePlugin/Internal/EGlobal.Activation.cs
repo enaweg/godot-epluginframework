@@ -18,35 +18,31 @@ internal sealed partial class EGlobal
     /// <summary>Activates the plugins that were enabled before the framework was initialized.</summary>
     internal void ResumeWaitingPlugins()
     {
-        _enabledWithFramework.Clear();
-        if (_toCheckEnable.Count == 0) return;
+        _coordinator.EnabledWithFramework.Clear();
+        if (_coordinator.Activations.IsEmpty) return;
 
         ResumeWaitingInRounds();
 
-        if (FinishTransition())
-        {
-            RefreshEditor();
-        }
+        CompleteTransition();
     }
 
     /// <summary>
-    /// Activates the plugins waiting on <see cref="_toCheckEnable"/>, in rounds: each takes them off the stack first,
+    /// Activates the plugins waiting on <see cref="TransitionCoordinator.Activations"/>, in rounds: each takes them off the stack first,
     /// because one whose dependency is still not activated pushes itself back, and popping until empty would never end.
     /// A later round resumes the plugins whose dependencies an earlier one activated; a round that resumes none of them
     /// leaves them waiting for their dependencies' activation callbacks.
     /// </summary>
     private void ResumeWaitingInRounds()
     {
-        while (_toCheckEnable.Count > 0)
+        while (!_coordinator.Activations.IsEmpty)
         {
-            var waiting = _toCheckEnable.ToArray();
-            _toCheckEnable.Clear();
+            var waiting = _coordinator.Activations.TakeAll();
             foreach (var nextPlugin in waiting)
             {
                 EnableEPlugin(nextPlugin, false);
             }
 
-            if (_toCheckEnable.ToHashSet().SetEquals(waiting) && waiting.All(c => c.State == EEditorPluginState.Created))
+            if (_coordinator.Activations.ToHashSet().SetEquals(waiting) && waiting.All(c => c.State == EEditorPluginState.Created))
             {
                 break;
             }
@@ -58,7 +54,7 @@ internal sealed partial class EGlobal
         if (!_host.IsPluginEnabled(FrameworkSlug))
         {
             // Waits on the stack below until the framework is initialized, which happens on its first frame.
-            _enabledWithFramework.Add(context);
+            _coordinator.EnabledWithFramework.Add(context);
             _host.SetPluginEnabled(FrameworkSlug, true);
         }
     }
@@ -74,7 +70,7 @@ internal sealed partial class EGlobal
 
         if (!IsValid())
         {
-            _toCheckEnable.Push(context);
+            _coordinator.Activations.Push(context);
             return;
         }
 
@@ -159,7 +155,7 @@ internal sealed partial class EGlobal
             context.Logger?.Error(reason);
             context.State = EEditorPluginState.Error;
             context.ErrorDetail = new InvalidOperationException(reason);
-            _toCheckEnable.Push(context);
+            _coordinator.Activations.Push(context);
             FailAllUncheckedPluginsAndRefresh(reason);
             return;
         }
@@ -206,10 +202,7 @@ internal sealed partial class EGlobal
             // trigger install for waiting plugins
             ResumeWaitingInRounds();
 
-            if (FinishTransition())
-            {
-                RefreshEditor();
-            }
+            CompleteTransition();
         }
     }
 
@@ -240,12 +233,12 @@ internal sealed partial class EGlobal
             // Godot cannot enable what is not there; saying so tells the user what to do.
             if (!HasPluginConfig(slug))
             {
-                return FailDependency(context, NotInstalled(context, dependency), NotInstalled(context, dependency));
+                return FailDependency(context, NotInstalled(context, dependency));
             }
 
             if (IsManagedPlugin(slug))
             {
-                _toCheckEnable.Push(context);
+                _coordinator.Activations.Push(context);
                 _host.SetPluginEnabled(slug, true);
                 if (_host.IsPluginEnabled(slug))
                 {
@@ -253,8 +246,8 @@ internal sealed partial class EGlobal
                     // activated. One that never called EnableEPlugin (e.g. it threw first) neither activated nor waits; the
                     // context of an earlier instance, freed without DisableEPlugin, does not count as started.
                     var started = _contexts.LastOrDefault(c => c.Slug == slug && c.Plugin is not null && GodotObject.IsInstanceValid(c.PluginBase));
-                    if (!_toCheckEnable.Contains(context) || started is not null &&
-                        (started.State == EEditorPluginState.Activated || _toCheckEnable.Contains(started)))
+                    if (!_coordinator.Activations.Contains(context) || started is not null &&
+                        (started.State == EEditorPluginState.Activated || _coordinator.Activations.Contains(started)))
                     {
                         return DependencyReadiness.Wait; // EnableEPlugin will be called by the newly enabled plugin
                     }
@@ -284,29 +277,29 @@ internal sealed partial class EGlobal
         var plain = managed is null ? _contexts.FirstOrDefault(c => c.Slug == slug) : null;
         if (dependency.Version is not null)
         {
-            var version = (managed ?? plain)?.Metadata?.Version ?? InstalledVersion(slug);
+            var version = DependencyVersion(slug);
             if (version is null)
             {
                 var unknown = $"The version of the GDExtension {slug} is unknown, so it cannot be checked against {dependency.Version}. Install a version of it in the ePlugin Manager.";
-                if (IsExtensionAddon(slug)) return FailDependency(context, unknown, unknown);
-                if (!HasPluginConfig(slug)) return FailDependency(context, NotInstalled(context, dependency), NotInstalled(context, dependency));
+                if (IsExtensionAddon(slug)) return FailDependency(context, unknown);
+                if (!HasPluginConfig(slug)) return FailDependency(context, NotInstalled(context, dependency));
                 var noVersion = $"Plugin dependency {slug} has no version in {_host.PluginDirectory(slug)}/plugin.cfg, so it cannot be checked " +
                                 $"against {dependency.Version}, which {context.Slug} requires. Install a released version of {slug}, then retry.";
-                return FailDependency(context, noVersion, noVersion);
+                return FailDependency(context, noVersion);
             }
 
             if (!MatchesVersion(version, dependency.Version, context.Logger))
             {
                 var mismatch = $"Dependency {slug} {version} does not match needed {dependency.Version} of {context.Slug}! " +
                                $"Install a matching version of {slug} in the ePlugin Manager (its details offer every version), then retry.";
-                return FailDependency(context, mismatch, mismatch);
+                return FailDependency(context, mismatch);
             }
         }
 
         if ((managed ?? plain)?.State == EEditorPluginState.Error)
         {
             var failed = $"Plugin dependency {slug} failed. Fix {slug} under Needs attention first; retrying {context.Slug} retries it too.";
-            return FailDependency(context, failed, failed);
+            return FailDependency(context, failed);
         }
 
         // A plain plugin is ready while the editor has it enabled; an ePlugin once its activation completed.
@@ -314,9 +307,9 @@ internal sealed partial class EGlobal
         {
             case EEditorPluginState.Deactivated:
                 var notReady = $"Plugin dependency {slug} not ready but needed by {context.Slug}!";
-                return FailDependency(context, notReady, notReady);
+                return FailDependency(context, notReady);
             case EEditorPluginState.Created:
-                _toCheckEnable.Push(context);
+                _coordinator.Activations.Push(context);
                 return DependencyReadiness.Wait; // its activation callback will resume the waiting plugin
         }
 
@@ -340,11 +333,14 @@ internal sealed partial class EGlobal
         $"Plugin dependency {slug} cannot be enabled: Godot refused it, which {context.Slug} needs. The Output panel shows Godot's " +
         $"error, usually a script of {slug} that does not load.";
 
-    /// <summary>Fails the activation of <paramref name="context"/> and of every plugin waiting with it.</summary>
-    private DependencyReadiness FailDependency(PluginContext context, string warning, string reason)
+    /// <summary>
+    /// Fails the activation of <paramref name="context"/> and of every plugin waiting with it; <paramref name="reason"/> is
+    /// logged and becomes the error of each of them that has none of its own.
+    /// </summary>
+    private DependencyReadiness FailDependency(PluginContext context, string reason)
     {
-        context.Logger?.Warn(warning);
-        _toCheckEnable.Push(context);
+        context.Logger?.Warn(reason);
+        _coordinator.Activations.Push(context);
         FailAllUncheckedPluginsAndRefresh(reason);
         return DependencyReadiness.Failed;
     }
@@ -360,7 +356,7 @@ internal sealed partial class EGlobal
         if (!_host.IsPluginEnabled(slug))
         {
             context.Logger?.Warn($"Plugin {slug} cannot be enabled!");
-            _toCheckEnable.Push(context);
+            _coordinator.Activations.Push(context);
             FailAllUncheckedPluginsAndRefresh(CannotEnable(context, slug));
             return false;
         }
@@ -382,6 +378,14 @@ internal sealed partial class EGlobal
         return true;
     }
 
+    /// <summary>
+    /// The version a hard or optional dependency is checked with: the one its context holds (an ePlugin's editor instance
+    /// first, else a plain plugin's; a plain plugin enabled in this session has none), else <see cref="InstalledVersion"/>.
+    /// Null when none is known; each caller decides what that means.
+    /// </summary>
+    private string? DependencyVersion(string slug) =>
+        (ManagedContext(slug) ?? _contexts.FirstOrDefault(c => c.Slug == slug))?.Metadata?.Version ?? InstalledVersion(slug);
+
     /// <summary>The version in a plugin's plugin.cfg, or the recorded one of a GDExtension add-on; null when neither is known.</summary>
     private string? InstalledVersion(string slug) => ReadInstalledMetadata(slug)?.Version ?? (IsExtensionAddon(slug) ? ExtensionAddonVersion(slug) : null);
 
@@ -401,13 +405,13 @@ internal sealed partial class EGlobal
     }
 
     /// <summary>
-    /// Fails the plugins waiting on <see cref="_toCheckEnable"/>, found waiting after other plugins of the transition
+    /// Fails the plugins waiting on <see cref="TransitionCoordinator.Activations"/>, found waiting after other plugins of the transition
     /// finished, e.g. because their dependency never activated or the user disabled it. They installed nothing, so they
     /// fail in an attempt of their own, and the others of the transition complete without them: built and recorded.
     /// </summary>
     private void FailWaitingPlugins(string reason, string code)
     {
-        var waiting = _toCheckEnable.ToHashSet();
+        var waiting = _coordinator.Activations.ToHashSet();
         var transition = _transition;
         if (transition is null || _stateStore is null || transition.Participants.Keys.All(waiting.Contains) ||
             waiting.Any(p => !transition.Participants.ContainsKey(p)))
@@ -432,23 +436,19 @@ internal sealed partial class EGlobal
         }
 
         DisableFailedLater(failed);
-        if (FinishTransition())
-        {
-            RefreshEditor();
-        }
+        CompleteTransition();
     }
 
     /// <summary>Puts the waiting plugins in error and takes them off the stack; returns them.</summary>
     private PluginContext[] MarkWaitingFailed(string reason)
     {
-        var failed = _toCheckEnable.ToArray();
+        var failed = _coordinator.Activations.TakeAll();
         foreach (var plugin in failed)
         {
             plugin.State = EEditorPluginState.Error;
             plugin.ErrorDetail ??= new InvalidOperationException(reason);
         }
 
-        _toCheckEnable.Clear();
         return failed;
     }
 

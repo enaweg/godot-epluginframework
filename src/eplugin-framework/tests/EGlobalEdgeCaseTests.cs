@@ -508,7 +508,7 @@ public partial class EGlobalEdgeCaseTests : IDisposable
                 global.Attach(_fixture.Framework, Loggers(), _fixture.Cli);
                 // valid from here on, but not started yet
                 Assertions.AssertBool(global.IsValid()).IsTrue();
-                global.ReloadContexts(null);
+                global.ReloadContexts();
                 // what ReloadContexts does for a plugin node that implements IInitialize
                 global.AddContext(new PluginContext(null, discovered, null));
                 // e.g. by the plugin the start resumes

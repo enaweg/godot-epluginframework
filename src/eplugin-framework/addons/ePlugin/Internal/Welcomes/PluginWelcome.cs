@@ -2,9 +2,7 @@
 using System;
 using System.IO;
 using System.Linq;
-using System.Text;
 using Enaweg.Plugin.Internal.Licenses;
-using Enaweg.Plugin.Internal.Update;
 
 namespace Enaweg.Plugin.Internal.Welcomes;
 
@@ -27,7 +25,10 @@ internal static class PluginWelcome
     public const string FileKey = "welcome_file";
     /// <summary>The README files used when nothing else is set, in this order. Their case does not matter.</summary>
     public static readonly string[] DefaultFiles = ["README.md", "README.txt", "README"];
-    public const long MaximumSize = 1024 * 1024;
+    public const long MaximumSize = PluginTextFile.MaximumSize;
+
+    private static readonly PluginTextFile<WelcomeEntry> Files =
+        new("welcome", FileKey, (slug, name, version, source, text, problem) => new(slug, name, version, source, text, problem));
 
     /// <summary>
     /// Reads the welcome_file named by plugin.cfg, or the README, from <paramref name="pluginDirectory"/>, an absolute
@@ -35,15 +36,9 @@ internal static class PluginWelcome
     /// </summary>
     public static WelcomeEntry? FromConfig(string slug, string name, string version, string? configuredFile, string pluginDirectory)
     {
+        // the README is searched below rather than taken as the default file, because its case does not matter
         if (!string.IsNullOrWhiteSpace(configuredFile))
-        {
-            var file = PluginLicense.ResolveFile(slug, configuredFile);
-            if (file is null)
-                return Entry(slug, name, version, configuredFile.Trim(), "",
-                    $"{FileKey} \"{configuredFile.Trim()}\" must be a relative path inside the plugin directory.");
-            try { return FromFile(slug, name, version, file, PackageFiles.Inside(pluginDirectory, file)); }
-            catch (InvalidDataException ex) { return Entry(slug, name, version, file, "", ex.Message); }
-        }
+            return Files.FromConfigured(slug, name, version, configuredFile, DefaultFiles[0], pluginDirectory);
 
         var files = Directory.Exists(pluginDirectory) ? Directory.GetFiles(pluginDirectory) : [];
         foreach (var candidate in DefaultFiles)
@@ -56,27 +51,11 @@ internal static class PluginWelcome
     }
 
     /// <summary>Reads a welcome file at an absolute path.</summary>
-    public static WelcomeEntry FromFile(string slug, string name, string version, string source, string path)
-    {
-        var display = PluginLicense.Display(slug, source);
-        try
-        {
-            if (!File.Exists(path)) return Entry(slug, name, version, source, "", $"The welcome file {display} is missing.");
-            if (new FileInfo(path).Length > MaximumSize)
-                return Entry(slug, name, version, source, "", $"The welcome file {display} is larger than {MaximumSize / 1024} KiB.");
-            return Entry(slug, name, version, source, File.ReadAllText(path, Encoding.UTF8));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return Entry(slug, name, version, source, "", $"Cannot read the welcome file {display}: {ex.Message}");
-        }
-    }
+    public static WelcomeEntry FromFile(string slug, string name, string version, string source, string path) =>
+        Files.FromFile(slug, name, version, source, path);
 
     /// <summary>A welcome text set by the recipe.</summary>
     public static WelcomeEntry FromText(string slug, string name, string version, string text) =>
-        Entry(slug, name, version, PluginLicense.TextPrefix, text);
-
-    private static WelcomeEntry Entry(string slug, string name, string version, string source, string text, string? problem = null) =>
-        new(slug, string.IsNullOrWhiteSpace(name) ? slug : name.Trim(), version.Trim(), source, text, problem);
+        Files.Entry(slug, name, version, PluginLicense.TextPrefix, text);
 }
 #endif

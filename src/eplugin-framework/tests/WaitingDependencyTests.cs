@@ -211,9 +211,9 @@ public class WaitingDependencyTests : IDisposable
 
         // a dialog that asks for a decision, or a held transition, pauses it, and the count starts again afterwards
         Assertions.AssertBool(_fixture.Global.CheckStalledTransition(joined + timeout * 3, 200 + frames * 3, paused: true)).IsFalse();
-        _fixture.Global.TransitionHold = 1;
+        var hold = _fixture.Global.HoldTransition();
         Assertions.AssertBool(_fixture.Global.CheckStalledTransition(joined + timeout * 4, 200 + frames * 4)).IsFalse();
-        _fixture.Global.TransitionHold = 0;
+        hold.Dispose();
         var resumed = joined + timeout * 5;
         Assertions.AssertBool(_fixture.Global.CheckStalledTransition(resumed, 200 + frames * 5)).IsFalse();
         Assertions.AssertBool(_fixture.Global.CheckStalledTransition(resumed + timeout - TimeSpan.FromSeconds(1), 200 + frames * 7)).IsFalse();

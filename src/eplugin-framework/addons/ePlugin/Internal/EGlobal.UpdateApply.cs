@@ -38,6 +38,14 @@ internal sealed partial class EGlobal
         set => _updateHost = value;
     }
     internal void InitializeUpdateJournals() => _updateJournals = new(UpdatePaths.TransactionsOf(UpdateProjectRoot), message => _ePluginContext?.Logger.Error(message));
+
+    /// <summary>
+    /// Whether an update journal on disk is active, i.e. an update is being applied or awaits its recovery. Reads the
+    /// journals. False while they are not initialized; a caller that must not start then checks
+    /// <see cref="_updateJournals"/> for null itself.
+    /// </summary>
+    private bool IsUpdateActive => _updateJournals?.Read().Any(j => j.IsActive) == true;
+
     private UpdateApplier Applier()
     {
         if (_stateStore is null || _updateCache is null) throw new InvalidOperationException("Update system is not initialized.");
@@ -50,7 +58,7 @@ internal sealed partial class EGlobal
     /// </summary>
     internal async Task<(IReadOnlyList<ValidatedPackage> Packages, IReadOnlyList<RefusedPackage> Refused, string Directory)> StageUpdatesAsync(IReadOnlyList<UpdateCandidate> candidates, IProgress<double>? progress, CancellationToken ct, bool allowDowngrade = false, bool allowReinstall = false)
     {
-        if (_fetchingUpdate || _updateJournals is null || _updateJournals.Read().Any(j => j.IsActive)) throw new InvalidOperationException("An update is already in progress.");
+        if (_fetchingUpdate || _updateJournals is null || IsUpdateActive) throw new InvalidOperationException("An update is already in progress.");
         _fetchingUpdate = true;
         var targets = CollectUpdateTargets();
         var directory = _updateJournals.NewDirectory();
@@ -383,7 +391,7 @@ internal sealed partial class EGlobal
             var findings = global.UpdatePreflightFindings(packages.Select(p => p.Candidate with { NewVersion = UpdateApplier.PackageVersion(p) }).ToArray());
             if (findings.Any(f => f.Severity == FindingSeverity.Error)) throw new InvalidOperationException(string.Join("; ", findings.Where(f => f.Severity == FindingSeverity.Error).Select(f => f.Message)));
             foreach (var warning in findings.Where(f => f.Severity == FindingSeverity.Warning)) Log(warning.Message);
-            if (global._toCheckEnable.Count > 0 || global._toCheckDisable.Count > 0) throw new InvalidOperationException("Finish plugin transitions before updating.");
+            if (global._coordinator.HasWaiting) throw new InvalidOperationException("Finish plugin transitions before updating.");
             if (packages.Any(p => p.ContainsCSharp) && global.GetOrCreateContext(global._ePluginContext!).Cli is not ICheckedDotnetCli)
                 throw new InvalidOperationException("A working dotnet CLI is required for C# updates.");
         }

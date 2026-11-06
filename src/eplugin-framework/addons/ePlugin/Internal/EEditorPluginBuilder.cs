@@ -1,10 +1,8 @@
 #if TOOLS
 using System;
-using Godot;
 
 namespace Enaweg.Plugin.Internal;
 
-[Tool]
 internal sealed class EEditorPluginBuilder : IEEditorPluginBuilder
 {
     public static EEditorPluginBuilder Create()
@@ -28,22 +26,27 @@ internal sealed class EEditorPluginBuilder : IEEditorPluginBuilder
 
     public IEEditorPluginBuilder SetLicense(string license)
     {
-        if (string.IsNullOrWhiteSpace(license)) throw new ArgumentException("The license must not be empty.", nameof(license));
-        var path = license.Trim();
-        PluginRecipe.PluginLicense = path.StartsWith("res://", StringComparison.Ordinal) && !path.Contains('\n')
-            ? new EEditorPluginRecipe.License(null, path)
-            : new EEditorPluginRecipe.License(license, null);
+        var (text, path) = TextOrPath(license, "license", nameof(license));
+        PluginRecipe.PluginLicense = new EEditorPluginRecipe.License(text, path);
         return this;
     }
 
     public IEEditorPluginBuilder SetWelcome(string welcome)
     {
-        if (string.IsNullOrWhiteSpace(welcome)) throw new ArgumentException("The welcome page must not be empty.", nameof(welcome));
-        var path = welcome.Trim();
-        PluginRecipe.PluginWelcome = path.StartsWith("res://", StringComparison.Ordinal) && !path.Contains('\n')
-            ? new EEditorPluginRecipe.Welcome(null, path)
-            : new EEditorPluginRecipe.Welcome(welcome, null);
+        var (text, path) = TextOrPath(welcome, "welcome page", nameof(welcome));
+        PluginRecipe.PluginWelcome = new EEditorPluginRecipe.Welcome(text, path);
         return this;
+    }
+
+    /// <summary>
+    /// A single-line <c>res://</c> path (trimmed) as the path, anything else as the text itself.
+    /// </summary>
+    /// <exception cref="ArgumentException"><paramref name="value"/> is empty.</exception>
+    private static (string? Text, string? Path) TextOrPath(string value, string what, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException($"The {what} must not be empty.", parameterName);
+        var path = value.Trim();
+        return path.StartsWith("res://", StringComparison.Ordinal) && !path.Contains('\n') ? (null, path) : (value, null);
     }
 
     public IEEditorPluginBuilder AddPluginDependency(string pluginSlug, string? version = null)

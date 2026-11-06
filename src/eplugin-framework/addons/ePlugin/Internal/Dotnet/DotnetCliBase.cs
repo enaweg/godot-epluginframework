@@ -1,10 +1,16 @@
 #if TOOLS
+using System.Collections.Generic;
 using System.IO;
 using Enaweg.Plugin.Logging;
 using Godot;
 
 namespace Enaweg.Plugin.Internal.Dotnet;
 
+/// <summary>
+/// Runs the dotnet CLI for the Godot project and its solution. The CLI generations differ only in how packages and
+/// project references are added and removed, so <see cref="DotnetCli9"/> and <see cref="DotnetCli10"/> give just those
+/// argument lists.
+/// </summary>
 internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotnetCli
 {
     /// <summary>
@@ -176,25 +182,139 @@ internal abstract class DotnetCliBase : ExecuteCliBase, IDotnetCli, ICheckedDotn
         : source.StartsWith("res://", System.StringComparison.Ordinal) || !source.Contains("://", System.StringComparison.Ordinal) ? Path.TrimEndingDirectorySeparator(ProjectFile(source))
         : source;
 
-    public abstract void RebuildSolution();
-    public abstract void RunTests();
-    public abstract void RemoveProjectFromSolution(string projectPath);
-    public abstract void AddProjectToSolution(string projectPath, string? virtualFolderName = null);
+    /// <summary>The arguments of <c>dotnet</c> that add <paramref name="nugetName"/> to the Godot project; the options follow them.</summary>
+    protected abstract string[] AddPackageArguments(string nugetName);
 
-    public abstract bool AddNugetToProject(string nugetName, string? version = null, string? source = null,
-        bool prerelease = false);
+    /// <summary>The arguments of <c>dotnet</c> that remove <paramref name="nugetName"/> from the Godot project.</summary>
+    protected abstract string[] RemovePackageArguments(string nugetName);
 
-    public abstract void RemoveNugetFromProject(string nugetName);
-    public abstract void AddProjectReference(string projectReference);
-    public abstract void RemoveProjectReference(string projectReference);
-    public abstract (int, string[]) Execute(string command, string[] args);
-    public abstract BuildOutcome TryBuild(bool keepNewAssembly = true);
-    public abstract BuildOutcome TryBuildPluginsOnly(PluginsOnlyBuild build);
-    public abstract bool TryRebuildSolution();
-    public abstract bool TryAddProjectToSolution(string projectPath, string? virtualFolderName);
-    public abstract bool TryRemoveProjectFromSolution(string projectPath);
-    public abstract bool TryAddProjectReference(string projectReference);
-    public abstract bool TryRemoveProjectReference(string projectReference);
-    public abstract bool TryRemoveNugetFromProject(string nugetName);
+    /// <summary>The arguments of <c>dotnet</c> that make the Godot project reference <paramref name="projectFile"/>.</summary>
+    /// <param name="projectFile">Absolute path of the referenced project, see <see cref="ProjectFile"/>.</param>
+    protected abstract string[] AddReferenceArguments(string projectFile);
+
+    /// <summary>The arguments of <c>dotnet</c> that remove the Godot project's reference to <paramref name="projectFile"/>.</summary>
+    /// <param name="projectFile">Absolute path of the referenced project, see <see cref="ProjectFile"/>.</param>
+    protected abstract string[] RemoveReferenceArguments(string projectFile);
+
+    public void RebuildSolution()
+    {
+        TryRebuildSolution();
+    }
+
+    public bool TryRebuildSolution() => TryBuild().ExitCode == 0;
+
+    public BuildOutcome TryBuild(bool keepNewAssembly = true) => BuildKeepingOutput(["build", SolutionPath, "--no-incremental"], keepNewAssembly);
+
+    public BuildOutcome TryBuildPluginsOnly(PluginsOnlyBuild build)
+    {
+        build.WriteTargets(GodotProjectPath);
+        var result = Execute(build.Arguments(GodotProjectPath));
+        return new BuildOutcome(result.Item1, result.Item2);
+    }
+
+    public void RunTests()
+    {
+        Execute(["test", SolutionPath]);
+    }
+
+    public void RemoveProjectFromSolution(string projectPath)
+    {
+        TryRemoveProjectFromSolution(projectPath);
+    }
+
+    public bool TryRemoveProjectFromSolution(string projectPath)
+    {
+        if (CheckSolutionRemoval(projectPath) is { } settled) return settled;
+        return Execute(["sln", SolutionPath, "remove", ProjectFile(projectPath)]).Item1 == 0;
+    }
+
+    public void AddProjectToSolution(string projectPath, string? virtualFolderName = null)
+    {
+        TryAddProjectToSolution(projectPath, virtualFolderName);
+    }
+
+    public bool TryAddProjectToSolution(string projectPath, string? virtualFolderName)
+    {
+        if (Execute(virtualFolderName is null
+            ? ["sln", SolutionPath, "add", ProjectFile(projectPath)]
+            : ["sln", SolutionPath, "add", "-s", virtualFolderName, ProjectFile(projectPath)]).Item1 != 0) return false;
+        MapExportRelease(projectPath, reference: false);
+        return true;
+    }
+
+    public bool AddNugetToProject(string nugetName, string? version = null, string? source = null,
+        bool prerelease = false)
+    {
+        var args = new List<string>(AddPackageArguments(nugetName));
+        if (version is not null)
+        {
+            args.Add("--version");
+            args.Add(version);
+        }
+
+        if (source is not null)
+        {
+            args.Add("--source");
+            args.Add(NugetSource(source));
+        }
+
+        if (prerelease)
+        {
+            args.Add("--prerelease");
+        }
+
+        var installSuccess = Execute(args.ToArray()).Item1 == 0;
+        if (!installSuccess)
+        {
+            // the command's output is logged with its exit code
+            Logger?.Error(version is not null ? $"Installing {nugetName} v{version} failed!" : $"Installing {nugetName} failed!");
+        }
+
+        return installSuccess;
+    }
+
+    public void RemoveNugetFromProject(string nugetName)
+    {
+        TryRemoveNugetFromProject(nugetName);
+    }
+
+    public bool TryRemoveNugetFromProject(string nugetName)
+    {
+        if (CheckPackageRemoval(nugetName) is { } settled) return settled;
+        return Execute(RemovePackageArguments(nugetName)).Item1 == 0;
+    }
+
+    public void AddProjectReference(string projectReference)
+    {
+        TryAddProjectReference(projectReference);
+    }
+
+    public bool TryAddProjectReference(string projectReference)
+    {
+        if (Execute(AddReferenceArguments(ProjectFile(projectReference))).Item1 != 0) return false;
+        MapExportRelease(projectReference, reference: true);
+        return true;
+    }
+
+    public void RemoveProjectReference(string projectReference)
+    {
+        TryRemoveProjectReference(projectReference);
+    }
+
+    public bool TryRemoveProjectReference(string projectReference)
+    {
+        if (CheckProjectReferenceRemoval(projectReference) is { } settled) return settled;
+        return Execute(RemoveReferenceArguments(ProjectFile(projectReference))).Item1 == 0;
+    }
+
+    public (int, string[]) Execute(string command, string[] args)
+    {
+        return Execute([command, ..args]);
+    }
+
+    private (int, string[]) Execute(string[] args)
+    {
+        return ExecuteCall(CmdDotNet, args);
+    }
 }
 #endif

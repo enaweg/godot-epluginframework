@@ -7,7 +7,6 @@ namespace Enaweg.Plugin;
 /// <summary>
 /// Extension methods that bridge a Godot <see cref="EditorPlugin"/> to the ePlugin framework.
 /// </summary>
-[Tool]
 public static class IEEditorPluginExtensions
 {
     /// <summary>

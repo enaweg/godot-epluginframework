@@ -13,14 +13,6 @@ internal static class LoggingSettings
 
     public static bool Debug => ProjectSettings.GetSetting(DebugKey, false).AsBool();
 
-    public static void Register()
-    {
-        if (!ProjectSettings.HasSetting(DebugKey)) ProjectSettings.SetSetting(DebugKey, false);
-        ProjectSettings.SetInitialValue(DebugKey, false);
-        ProjectSettings.AddPropertyInfo(new Godot.Collections.Dictionary
-        {
-            { "name", DebugKey }, { "type", (int)Variant.Type.Bool }, { "hint", (int)PropertyHint.None }, { "hint_string", "" }
-        });
-    }
+    public static void Register() => EPluginSettings.Register(DebugKey, false, Variant.Type.Bool);
 }
 #endif

@@ -12,7 +12,6 @@ namespace Enaweg.Plugin;
 /// from the plugin's on-disk layout (its <c>res://addons/&lt;slug&gt;/</c> directory, also in a subfolder, and
 /// <c>plugin.cfg</c>).
 /// </summary>
-[Tool]
 public static class EditorPluginExtensions
 {
     /// <summary>
@@ -23,7 +22,9 @@ public static class EditorPluginExtensions
     /// </summary>
     /// <param name="plugin">The editor plugin to inspect.</param>
     /// <returns>
-    /// The plugin's directory below <c>res://addons/</c>; for a plugin outside it, the name of its directory.
+    /// The plugin's directory below <c>res://addons/</c>; for a plugin outside it, the name of its directory. A plugin
+    /// whose script cannot be read (e.g. one without a script) gets its node's name, or <c>plugin-&lt;instance id&gt;</c>
+    /// when that is empty; such a name matches no plugin directory.
     /// </returns>
     public static string GetPluginSlug(this EditorPlugin plugin)
     {
@@ -116,19 +117,24 @@ public static class EditorPluginExtensions
     /// </summary>
     /// <param name="plugin">The editor plugin whose <c>plugin.cfg</c> should be parsed.</param>
     /// <returns>
-    /// The parsed <see cref="EEditorPluginMetadata"/>, or <see langword="null"/> when the file is
-    /// missing, fails to load, or throws while being read. Read failures are logged via
-    /// <see cref="GD.PrintErr(object[])"/>.
+    /// The parsed <see cref="EEditorPluginMetadata"/>, or <see langword="null"/> when the plugin's directory is unknown
+    /// (see <see cref="GetPluginDirectory"/>), or the file is missing, fails to load, or throws while being read. Read
+    /// failures are logged via <see cref="GD.PrintErr(object[])"/>.
     /// </returns>
     public static EEditorPluginMetadata? ReadMetadata(this EditorPlugin plugin)
     {
-        return ReadMetadata($"{plugin.GetPluginDirectory()}/plugin.cfg");
+        // without a directory the path would be "/plugin.cfg", a file in the root of the file system
+        return plugin.GetPluginDirectory() is { } directory ? ReadMetadata($"{directory}/plugin.cfg") : null;
     }
 
-    /// <summary>Reads metadata directly from a plugin configuration path.</summary>
+    /// <summary>Reads the metadata of a plugin from its <c>plugin.cfg</c>.</summary>
+    /// <param name="cfgFile">The path of the <c>plugin.cfg</c>: a <c>res://</c> path or an absolute one.</param>
+    /// <returns>
+    /// The parsed <see cref="EEditorPluginMetadata"/>, or <see langword="null"/> when the file is missing, fails to load,
+    /// or throws while being read. Read failures are logged via <see cref="GD.PrintErr(object[])"/>.
+    /// </returns>
     public static EEditorPluginMetadata? ReadMetadata(string cfgFile)
     {
-
         if (!FileAccess.FileExists(cfgFile))
         {
             return null;
@@ -141,6 +147,7 @@ public static class EditorPluginExtensions
             var error = cfg.Load(cfgFile);
             if (error is not Error.Ok)
             {
+                GD.PrintErr($"Failed to read metadata of plugin at {cfgFile}. Godot reported {error}.");
                 return null;
             }
 

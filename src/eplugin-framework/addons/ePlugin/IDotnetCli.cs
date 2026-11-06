@@ -10,6 +10,8 @@ namespace Enaweg.Plugin;
 /// assembly, else the only one in the project directory, else the one named after the solution. Project paths may be
 /// relative to the Godot project root, <c>res://</c> paths or absolute paths. Arguments are passed to the process one
 /// per element and must not be quoted, also when they contain spaces.
+/// The members without a result do not tell the caller whether they succeeded: a failure is only written to the logger.
+/// Only <see cref="AddNugetToProject"/> and <see cref="Execute"/> report their outcome.
 /// This interface is only available in editor builds.
 /// </remarks>
 public interface IDotnetCli
@@ -17,16 +19,28 @@ public interface IDotnetCli
     /// <summary>
     /// Rebuilds the entire solution.
     /// </summary>
+    /// <remarks>
+    /// A failed build is written to the logger, not reported to the caller. When the outcome matters, run the build
+    /// through <see cref="Execute"/>, which returns its exit code.
+    /// </remarks>
     void RebuildSolution();
 
     /// <summary>
     /// Runs all tests in the solution (<c>dotnet test</c> on the solution).
     /// </summary>
+    /// <remarks>
+    /// Failing tests and a failed run are written to the logger, not reported to the caller. When the outcome matters,
+    /// run <c>dotnet test</c> through <see cref="Execute"/>, which returns its exit code and output.
+    /// </remarks>
     void RunTests();
 
     /// <summary>
     /// Removes a project from the solution file.
     /// </summary>
+    /// <remarks>
+    /// A project the solution does not contain counts as removed. A failure is written to the logger, not reported to
+    /// the caller; when the outcome matters, run the command through <see cref="Execute"/>, which returns its exit code.
+    /// </remarks>
     /// <param name="projectPath">
     /// Path to the <c>.csproj</c> file to remove,
     /// relative to the Godot project root, as a <c>res://</c> path, or absolute.
@@ -36,6 +50,10 @@ public interface IDotnetCli
     /// <summary>
     /// Adds a project to the solution file.
     /// </summary>
+    /// <remarks>
+    /// A failure is written to the logger, not reported to the caller. When the outcome matters, run the command through
+    /// <see cref="Execute"/>, which returns its exit code.
+    /// </remarks>
     /// <param name="projectPath">
     /// Path to the <c>.csproj</c> file to add,
     /// relative to the Godot project root, as a <c>res://</c> path, or absolute.
@@ -69,12 +87,20 @@ public interface IDotnetCli
     /// <summary>
     /// Removes a NuGet package from the Godot project.
     /// </summary>
+    /// <remarks>
+    /// A package the project does not reference counts as removed. A failure is written to the logger, not reported to
+    /// the caller; when the outcome matters, run the command through <see cref="Execute"/>, which returns its exit code.
+    /// </remarks>
     /// <param name="nugetName">The package ID to remove.</param>
     void RemoveNugetFromProject(string nugetName);
 
     /// <summary>
     /// Adds a project-to-project reference to the Godot project.
     /// </summary>
+    /// <remarks>
+    /// A failure is written to the logger, not reported to the caller. When the outcome matters, run the command through
+    /// <see cref="Execute"/>, which returns its exit code.
+    /// </remarks>
     /// <param name="projectReference">
     /// Path to the referenced <c>.csproj</c> file,
     /// relative to the Godot project root, as a <c>res://</c> path, or absolute.
@@ -84,6 +110,10 @@ public interface IDotnetCli
     /// <summary>
     /// Removes a project-to-project reference from the Godot project.
     /// </summary>
+    /// <remarks>
+    /// A project the Godot project does not reference counts as removed. A failure is written to the logger, not reported
+    /// to the caller; when the outcome matters, run the command through <see cref="Execute"/>, which returns its exit code.
+    /// </remarks>
     /// <param name="projectReference">
     /// Path to the referenced <c>.csproj</c> file to remove,
     /// relative to the Godot project root, as a <c>res://</c> path, or absolute.
@@ -101,8 +131,8 @@ public interface IDotnetCli
     /// A tuple of <c>(exitCode, output)</c> where <c>exitCode</c> is the process exit code and <c>output</c> holds what
     /// the command wrote to standard output and standard error, as Godot's <c>OS.Execute</c> returns it: one element
     /// with the whole text, not one per line. When <c>dotnet</c> cannot be started, the exit code is <c>-1</c> and the
-    /// output is empty. A non-zero exit code is logged with the output.
+    /// output is empty or holds the reason it could not be started. A non-zero exit code is logged with the output.
     /// </returns>
-    public (int, string[]) Execute(string command, string[] args);
+    (int, string[]) Execute(string command, string[] args);
 }
 #endif

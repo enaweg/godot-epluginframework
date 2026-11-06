@@ -23,10 +23,6 @@ internal static partial class ReleaseConfiguration
     public const string Export = "ExportRelease";
     public const string Release = "Release";
 
-    // A project of a .sln; group 1 is its path, group 2 its GUID.
-    [GeneratedRegex(@"^\s*Project\(""\{[^}]+\}""\)\s*=\s*""[^""]*""\s*,\s*""([^""]+)""\s*,\s*""(\{[^}]+\})""", RegexOptions.Multiline | RegexOptions.CultureInvariant)]
-    private static partial Regex SolutionProject();
-
     // The project configuration a .sln maps ExportRelease to, in a {guid}.ExportRelease|<platform>.ActiveCfg or .Build.0 line.
     [GeneratedRegex(@"^(?<lead>[ \t]*(?<guid>\{[^}\r\n]+\})\.ExportRelease\|[^.\r\n]+\.(?:ActiveCfg|Build\.0)[ \t]*=[ \t]*)(?<configuration>[^|\r\n]+)(?<platform>\|[^\r\n]*)(?=\r?$)",
         RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
@@ -95,8 +91,8 @@ internal static partial class ReleaseConfiguration
         var bytes = File.ReadAllBytes(solutionFile);
         var byteOrderMark = bytes.AsSpan().StartsWith(Encoding.UTF8.Preamble);
         var text = new UTF8Encoding(false).GetString(byteOrderMark ? bytes[Encoding.UTF8.Preamble.Length..] : bytes);
-        var guids = SolutionProject().Matches(text).Where(m => ProjectReferences.SamePath(directory, m.Groups[1].Value, project))
-            .Select(m => m.Groups[2].Value).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var guids = ProjectReferences.SlnProjects(text).Where(p => p.Guid is not null && ProjectReferences.SamePath(directory, p.Path, project))
+            .Select(p => p.Guid!).ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (guids.Count == 0) return false;
         // only the lines of this project; the others are written back as they are
         var mapped = ExportReleaseMapping().Replace(text, m => guids.Contains(m.Groups["guid"].Value)
@@ -118,8 +114,8 @@ internal static partial class ReleaseConfiguration
     private static bool MapSlnx(string solutionFile, string directory, string project)
     {
         var file = XmlFile.Read(solutionFile);
-        var projects = file.Document.Descendants().Where(e => e.Name.LocalName == "Project" &&
-            (string?)e.Attribute("Path") is { } path && ProjectReferences.SamePath(directory, path, project)).ToArray();
+        var projects = ProjectReferences.SlnxProjects(file.Document).Where(p => ProjectReferences.SamePath(directory, p.Path, project))
+            .Select(p => p.Element).ToArray();
         if (projects.Length == 0) return false;
         var changed = false;
         foreach (var element in projects)

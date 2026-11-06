@@ -1,7 +1,6 @@
 #if TOOLS
 using System;
 using Enaweg.Plugin.Logging;
-using Godot;
 
 namespace Enaweg.Plugin.Internal.Dotnet;
 
@@ -9,10 +8,8 @@ namespace Enaweg.Plugin.Internal.Dotnet;
 /// Detects the installed dotnet CLI once per assembly load and hands out the <see cref="IDotnetCli"/> implementation
 /// for its generation.
 /// </summary>
-[Tool]
 internal sealed class DotnetVersionManager : ExecuteCliBase
 {
-    private const string CmdDotNet = "dotnet";
     private static readonly object ProbeLock = new();
     // Starting dotnet takes a while; Initialize, SwitchLogging and early recovery all ask for it.
     private static Probe? _cachedProbe;

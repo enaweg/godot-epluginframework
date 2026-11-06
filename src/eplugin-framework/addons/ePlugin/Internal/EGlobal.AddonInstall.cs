@@ -21,7 +21,7 @@ internal sealed partial class EGlobal
     /// <summary>Extracts and validates the add-on of a ZIP file in a new transaction folder, off the editor thread.</summary>
     internal async Task<(ValidatedPackage Package, string Directory)> StageNewAddonAsync(AddonArchive archive, CancellationToken ct)
     {
-        if (_fetchingUpdate || _updateJournals is null || _updateJournals.Read().Any(j => j.IsActive)) throw new InvalidOperationException("An update is already in progress.");
+        if (_fetchingUpdate || _updateJournals is null || IsUpdateActive) throw new InvalidOperationException("An update is already in progress.");
         _fetchingUpdate = true;
         var directory = _updateJournals.NewDirectory();
         try
@@ -48,7 +48,7 @@ internal sealed partial class EGlobal
     internal AddonInstallResult InstallNewAddon(ValidatedPackage package, string directory)
     {
         if (IsChangingPlugins) throw new InvalidOperationException("Finish plugin transitions before installing a plugin.");
-        if (_fetchingUpdate || _updateJournals?.Read().Any(j => j.IsActive) == true) throw new InvalidOperationException("An update is in progress; install the plugin once it finished.");
+        if (_fetchingUpdate || IsUpdateActive) throw new InvalidOperationException("An update is in progress; install the plugin once it finished.");
         if (_stateStore?.IsBlocked(package.Candidate.Slug) == true)
             throw new InvalidOperationException("Resolve the plugin's problem under Needs attention in the ePlugin Manager first.");
         if (package.ContainsCSharp && GetOrCreateContext(_ePluginContext!).Cli is not ICheckedDotnetCli)
