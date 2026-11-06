@@ -1,8 +1,8 @@
 {
- "commit": "5ab42f2d58348bebde8a42a6e59969ef386722a5",
- "date": "2026-11-06T06:01:52Z",
- "covered": 12975,
- "coverable": 14286,
+ "commit": "30e45c5c164e05b91811e51e1f02dafcbefaf0a2",
+ "date": "2026-11-06T06:02:13Z",
+ "covered": 12903,
+ "coverable": 14213,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -49,16 +49,16 @@
    53
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetCli10.cs": [
-   81,
-   82
+   5,
+   5
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetCli9.cs": [
-   81,
-   82
+   5,
+   5
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetCliBase.cs": [
-   80,
-   80
+   160,
+   161
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Dotnet/DotnetFailure.cs": [
    36,

@@ -4,18 +4,19 @@ Line coverage of `src/eplugin-framework/addons/ePlugin` on `main`, recorded by t
 
 ![Line coverage](badge.svg)
 
-**90.82%** (12975 of 14286 lines) at [5ab42f2](https://github.com/enaweg/godot-epluginframework/commit/5ab42f2d58348bebde8a42a6e59969ef386722a5), 2026-11-06.
+**90.78%** (12903 of 14213 lines) at [30e45c5](https://github.com/enaweg/godot-epluginframework/commit/30e45c5c164e05b91811e51e1f02dafcbefaf0a2), 2026-11-06.
 
 ```mermaid
 xychart-beta
     title "Line coverage on main (last 30 pushes)"
-    x-axis ["391098c", "15bd724", "a44cb96", "5055ec0", "49f0047", "35f1ab2", "1011c5a", "a95f309", "f925263", "1eb920f", "ff45b6c", "7837a44", "cc27a96", "4b8c5cf", "35146b8", "c4eadb2", "8f57090", "ccff29c", "16e234a", "6656105", "7108433", "2489f40", "f7af6d5", "470e378", "46e62bd", "416075b", "a35cca1", "0e1982b", "a795c63", "5ab42f2"]
+    x-axis ["15bd724", "a44cb96", "5055ec0", "49f0047", "35f1ab2", "1011c5a", "a95f309", "f925263", "1eb920f", "ff45b6c", "7837a44", "cc27a96", "4b8c5cf", "35146b8", "c4eadb2", "8f57090", "ccff29c", "16e234a", "6656105", "7108433", "2489f40", "f7af6d5", "470e378", "46e62bd", "416075b", "a35cca1", "0e1982b", "a795c63", "5ab42f2", "30e45c5"]
     y-axis "Line coverage (%)" 88 --> 94
-    line [91.10, 91.10, 91.11, 91.14, 91.15, 91.15, 90.58, 90.33, 90.33, 90.31, 90.31, 90.35, 90.41, 90.46, 90.49, 90.59, 90.66, 90.42, 90.74, 90.73, 90.73, 90.67, 90.67, 90.67, 90.67, 90.67, 90.67, 90.79, 90.82, 90.82]
+    line [91.10, 91.11, 91.14, 91.15, 91.15, 90.58, 90.33, 90.33, 90.31, 90.31, 90.35, 90.41, 90.46, 90.49, 90.59, 90.66, 90.42, 90.74, 90.73, 90.73, 90.67, 90.67, 90.67, 90.67, 90.67, 90.67, 90.79, 90.82, 90.82, 90.78]
 ```
 
 | Date | Commit | Line coverage | Change |
 |:--|:--|--:|--:|
+| 2026-11-06 | [30e45c5](https://github.com/enaweg/godot-epluginframework/commit/30e45c5c164e05b91811e51e1f02dafcbefaf0a2) | 90.78% | -0.04 pp |
 | 2026-11-06 | [5ab42f2](https://github.com/enaweg/godot-epluginframework/commit/5ab42f2d58348bebde8a42a6e59969ef386722a5) | 90.82% | +0.00 pp |
 | 2026-11-05 | [a795c63](https://github.com/enaweg/godot-epluginframework/commit/a795c63e7f365824f05f8417961256e8f7b56580) | 90.82% | +0.03 pp |
 | 2026-11-05 | [0e1982b](https://github.com/enaweg/godot-epluginframework/commit/0e1982b1d490eda2a58a73a5b940cfaa2eea43f5) | 90.79% | +0.12 pp |
@@ -45,11 +46,10 @@ xychart-beta
 | 2026-10-26 | [5055ec0](https://github.com/enaweg/godot-epluginframework/commit/5055ec0f97aa79d17390a792f963b84ae4c7f299) | 91.14% | +0.03 pp |
 | 2026-10-26 | [a44cb96](https://github.com/enaweg/godot-epluginframework/commit/a44cb963be80bead366f40c51dec50fc41c9e911) | 91.11% | +0.01 pp |
 | 2026-10-26 | [15bd724](https://github.com/enaweg/godot-epluginframework/commit/15bd724bedf34f9f33929ba566dc188b53f4e2c5) | 91.10% | +0.00 pp |
-| 2026-10-26 | [391098c](https://github.com/enaweg/godot-epluginframework/commit/391098c5badca5f2ce7155f5332658f7fd268380) | 91.10% | +0.00 pp |
 
 All measurements: [history.csv](history.csv).
 
-<details><summary>Files at 5ab42f2 (146)</summary>
+<details><summary>Files at 30e45c5 (146)</summary>
 
 | File | Line coverage | Covered lines |
 |:--|--:|--:|
@@ -143,18 +143,18 @@ All measurements: [history.csv](history.csv).
 | `Internal/Update/AddonPackageValidator.cs` | 98.4% | 179 of 182 |
 | `Internal/Dotnet/ReleaseConfiguration.cs` | 98.6% | 71 of 72 |
 | `Internal/Update/UpdateJournal.cs` | 98.7% | 78 of 79 |
-| `Internal/Dotnet/DotnetCli10.cs` | 98.8% | 81 of 82 |
-| `Internal/Dotnet/DotnetCli9.cs` | 98.8% | 81 of 82 |
 | `Internal/EGlobal.UpdateRecipes.cs` | 98.9% | 188 of 190 |
 | `Internal/Update/ReleaseSources.cs` | 99.0% | 195 of 197 |
 | `Internal/Update/LocalCleanup.cs` | 99.0% | 98 of 99 |
 | `Internal/Update/PackageFiles.cs` | 99.1% | 105 of 106 |
 | `Internal/Update/UpdateHttp.cs` | 99.2% | 120 of 121 |
+| `Internal/Dotnet/DotnetCliBase.cs` | 99.4% | 160 of 161 |
 | `Internal/Kinds/GDExtensionConfig.cs` | 99.4% | 166 of 167 |
 | `EEditorPluginMetadata.cs` | 100.0% | 4 of 4 |
 | `IEEditorPluginExtensions.cs` | 100.0% | 15 of 15 |
 | `Internal/AttemptReasons.cs` | 100.0% | 7 of 7 |
-| `Internal/Dotnet/DotnetCliBase.cs` | 100.0% | 80 of 80 |
+| `Internal/Dotnet/DotnetCli10.cs` | 100.0% | 5 of 5 |
+| `Internal/Dotnet/DotnetCli9.cs` | 100.0% | 5 of 5 |
 | `Internal/Dotnet/DotnetVersionManager.cs` | 100.0% | 39 of 39 |
 | `Internal/Dotnet/ICheckedDotnetCli.cs` | 100.0% | 1 of 1 |
 | `Internal/Dotnet/PluginsOnlyBuild.cs` | 100.0% | 32 of 32 |
