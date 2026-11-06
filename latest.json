@@ -1,8 +1,8 @@
 {
- "commit": "30e45c5c164e05b91811e51e1f02dafcbefaf0a2",
- "date": "2026-11-06T06:02:13Z",
- "covered": 12903,
- "coverable": 14213,
+ "commit": "2556613aea980557fe62fc4606bfdb1a177254a1",
+ "date": "2026-11-06T06:02:34Z",
+ "covered": 12898,
+ "coverable": 14211,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -97,8 +97,8 @@
    57
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EEditorPluginBuilder.cs": [
-   69,
-   69
+   68,
+   68
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EEditorPluginRecipe.cs": [
    13,
@@ -196,6 +196,10 @@
    1,
    1
   ],
+  "src/eplugin-framework/addons/ePlugin/Internal/EPluginSettings.cs": [
+   8,
+   8
+  ],
   "src/eplugin-framework/addons/ePlugin/Internal/EditorHost.cs": [
    47,
    83
@@ -257,16 +261,16 @@
    68
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Licenses/LicenseSettings.cs": [
-   9,
-   9
+   2,
+   2
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Licenses/PluginLicense.cs": [
-   41,
-   45
+   15,
+   16
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/LoggingSettings.cs": [
-   9,
-   9
+   2,
+   2
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/AboutTab.cs": [
    58,
@@ -392,9 +396,21 @@
    14,
    14
   ],
+  "src/eplugin-framework/addons/ePlugin/Internal/PluginStateDocuments.cs": [
+   138,
+   142
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/PluginStateStore.Attempts.cs": [
+   131,
+   135
+  ],
   "src/eplugin-framework/addons/ePlugin/Internal/PluginStateStore.cs": [
-   547,
-   566
+   243,
+   254
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/PluginTextFile.cs": [
+   34,
+   38
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PluginToggles.cs": [
    13,
@@ -416,9 +432,17 @@
    69,
    69
   ],
+  "src/eplugin-framework/addons/ePlugin/Internal/SharedStateMerge.cs": [
+   33,
+   34
+  ],
   "src/eplugin-framework/addons/ePlugin/Internal/ShowHideHelper.cs": [
    111,
    123
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/StateFileProblem.cs": [
+   22,
+   27
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/AddonArchive.cs": [
    48,
@@ -553,8 +577,8 @@
    124
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateSettings.cs": [
-   18,
-   18
+   10,
+   10
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/UpdateSiteSettings.cs": [
    52,
@@ -569,12 +593,12 @@
    25
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Welcomes/PluginWelcome.cs": [
-   29,
-   33
+   18,
+   18
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Welcomes/WelcomeSettings.cs": [
-   9,
-   9
+   2,
+   2
   ],
   "src/eplugin-framework/addons/ePlugin/Logging/GenericLoggerFactory.cs": [
    7,
