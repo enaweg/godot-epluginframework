@@ -17,53 +17,55 @@ internal sealed partial class EPluginManagerDialog
     /// </summary>
     private void RenderVersions(PluginRow? row)
     {
-        var visible = row is { IsUpdatable: true, Plugin.Missing: false };
-        _versionSeparator.Visible = _versionRow.Visible = visible;
+        var shown = row is { IsUpdatable: true, Plugin.Missing: false } ? row : null;
+        _versionSeparator.Visible = _versionRow.Visible = shown is not null;
         _versionSelect.Clear(); _versionOptions = []; _versionNote = null; _retryVersions.Visible = false;
-        var target = visible ? _targets.FirstOrDefault(t => t.Slug == row!.Plugin.Slug) : null;
-        if (!visible) { }
-        else if (!row!.Plugin.Enabled || target is null) SetVersionPlaceholder(PluginManagerViewModel.VersionText(row.Plugin) + " (installed)", "Enable the plugin to change its version.");
-        else
-        {
-            var local = _global.ListLocalVersions(target);
-            // Until the update site's versions are listed, or when they cannot be (e.g. a rate limit), an add-on of unknown
-            // version offers the latest release a check found.
-            IReadOnlyList<UpdateCandidate> remote = _updates.RemoteVersions.GetValueOrDefault(target.Slug)
-                ?? (_global.UpdateCache is { } cache && UpdateScheduler.CachedLatest(cache, target) is { } cached ? [cached] : []);
-            string? missing = null;
-            if (target.UpdateUrls.Count > 0 && !_updates.RemoteVersions.ContainsKey(target.Slug))
-            {
-                if (_updates.RemoteVersionErrors.TryGetValue(target.Slug, out var error))
-                {
-                    missing = "Versions from the update site are unavailable: " + error;
-                    _retryVersions.Visible = true;
-                }
-                else { missing = "Loading versions from the update site..."; Run(LoadVersionsAsync(target), "Loading versions", ownsWork: false); }
-            }
-            if (local.Count == 0 && remote.Count == 0 && missing is not null)
-            {
-                var loading = _updates.IsLoadingVersions(target.Slug);
-                SetVersionPlaceholder(loading ? "Loading versions..." : PluginManagerViewModel.VersionText(row.Plugin) + " (installed)", loading ? null : missing);
-            }
-            else
-            {
-                _versionOptions = PluginManagerViewModel.VersionOptions(row.Plugin.Version, UpdateService.MergeVersions(local, remote), row.Plugin.Kind);
-                var latest = _versionOptions.FirstOrDefault(o => !o.Installed && o.Candidate is not null && !o.IsDowngrade);
-                for (var i = 0; i < _versionOptions.Count; i++)
-                {
-                    var option = _versionOptions[i];
-                    _versionSelect.AddItem(PluginManagerViewModel.VersionLabel(option, option == latest), i);
-                    if (PluginManagerViewModel.VersionSource(option) is { } source) _versionSelect.SetItemTooltip(i, source);
-                    if (option.Installed) _versionSelect.Select(i);
-                }
-                // A GDExtension add-on of unknown version lists no installed version; the latest is preselected instead.
-                var installed = _versionOptions.Any(o => o.Installed);
-                if (!installed && latest is not null) _versionSelect.Select(_versionOptions.ToList().IndexOf(latest));
-                _versionSelect.Disabled = Busy || installed && _versionOptions.Count < 2 || _versionOptions.Count == 0;
-                _versionNote = missing;
-            }
-        }
+        if (shown is not null) RenderVersionChoice(shown);
         VersionButtons();
+    }
+
+    private void RenderVersionChoice(PluginRow row)
+    {
+        var target = _targets.FirstOrDefault(t => t.Slug == row.Plugin.Slug);
+        if (!row.Plugin.Enabled || target is null)
+        {
+            SetVersionPlaceholder(PluginManagerViewModel.VersionText(row.Plugin) + " (installed)", "Enable the plugin to change its version.");
+            return;
+        }
+        var local = _global.ListLocalVersions(target);
+        // Until the update site's versions are listed, or when they cannot be (e.g. a rate limit), an add-on of unknown
+        // version offers the latest release a check found.
+        IReadOnlyList<UpdateCandidate> remote = _updates.RemoteVersions.GetValueOrDefault(target.Slug)
+            ?? (_global.UpdateCache is { } cache && UpdateScheduler.CachedLatest(cache, target) is { } cached ? [cached] : []);
+        string? missing = null;
+        if (target.UpdateUrls.Count > 0 && !_updates.RemoteVersions.ContainsKey(target.Slug))
+        {
+            if (_updates.RemoteVersionErrors.TryGetValue(target.Slug, out var error))
+            {
+                missing = "Versions from the update site are unavailable: " + error;
+                _retryVersions.Visible = true;
+            }
+            else { missing = "Loading versions from the update site..."; Run(LoadVersionsAsync(target), "Loading versions", ownsWork: false); }
+        }
+        if (local.Count == 0 && remote.Count == 0 && missing is not null)
+        {
+            var loading = _updates.IsLoadingVersions(target.Slug);
+            SetVersionPlaceholder(loading ? "Loading versions..." : PluginManagerViewModel.VersionText(row.Plugin) + " (installed)", loading ? null : missing);
+            return;
+        }
+        _versionOptions = PluginManagerViewModel.VersionOptions(row.Plugin.Version, UpdateService.MergeVersions(local, remote), row.Plugin.Kind);
+        var latest = _versionOptions.FirstOrDefault(o => !o.Installed && o.Candidate is not null && !o.IsDowngrade);
+        for (var i = 0; i < _versionOptions.Count; i++)
+        {
+            var option = _versionOptions[i];
+            _versionSelect.AddItem(PluginManagerViewModel.VersionLabel(option, option == latest), i);
+            if (PluginManagerViewModel.VersionSource(option) is { } source) _versionSelect.SetItemTooltip(i, source);
+            if (option.Installed) _versionSelect.Select(i);
+        }
+        // A GDExtension add-on of unknown version lists no installed version; the latest is preselected instead.
+        if (!_versionOptions.Any(o => o.Installed) && latest is not null) _versionSelect.Select(_versionOptions.ToList().IndexOf(latest));
+        _versionSelect.Disabled = Busy || !PluginManagerViewModel.CanChooseVersion(_versionOptions);
+        _versionNote = missing;
     }
 
     /// <summary>Loads the selected plugin's published versions again after they could not be loaded.</summary>
@@ -89,7 +91,7 @@ internal sealed partial class EPluginManagerDialog
         if (changed && !Busy) Refresh();
         else
         {
-            if (changed) _refreshWhenIdle = true;
+            if (changed) _session.RefreshWhenIdle = true;
             if (_selectedSlug == slug) RenderVersions(_model.Find(slug));
         }
     }
@@ -114,9 +116,7 @@ internal sealed partial class EPluginManagerDialog
         var blocked = PluginManagerViewModel.VersionChangeBlocked(row, option);
         _installVersion.Text = option.Action; _installVersion.Icon = VersionIcon(option.IsDowngrade, option.IsReinstall);
         _installVersion.Disabled = blocked is not null || Busy;
-        _installVersion.TooltipText = blocked ?? (option.IsReinstall
-            ? $"Install version {option.Version} of {row.Plugin.Name} again, replacing its files."
-            : $"Install version {option.Version} of {row.Plugin.Name}.");
+        _installVersion.TooltipText = PluginManagerViewModel.VersionInstallTooltip(row, option);
         ShowVersionHint((option.Installed ? null : blocked) ?? _versionNote);
     }
 
@@ -138,23 +138,8 @@ internal sealed partial class EPluginManagerDialog
         _pendingVersion = option.Candidate with { InstalledVersion = row.Plugin.Version };
         _pendingDowngrade = option.IsDowngrade; _pendingReinstall = option.IsReinstall;
         _versionConfirm.OkButtonText = option.Action; _versionConfirm.GetOkButton().Icon = VersionIcon(option.IsDowngrade, option.IsReinstall);
-        _versionConfirm.DialogText = (option.IsReinstall
-                ? $"Reinstall {row.Plugin.Name} {row.Plugin.Version}?\n\n{PluginManagerViewModel.VersionSource(option)}. Its files replace the installed ones: " +
-                  "this brings in new commits of a git branch and undoes changes made to the plugin's folder in the project.\n\n"
-                : option.ReplacesUnknown
-                ? $"Install {row.Plugin.Name} {option.Version}?\n\n{PluginManagerViewModel.VersionSource(option)}. Its files replace the installed ones, " +
-                  "whose version ePlugin does not know because it did not install them. From then on, updates are found.\n\n"
-                : $"Replace {row.Plugin.Name} {row.Plugin.Version} with version {option.Version}?\n\n") +
-            (option.IsDowngrade
-                ? "Use this to undo an update that broke the project. Project code or saved data that already relies on the newer version may stop working. "
-                : "") +
-            "Open scenes are saved first; files and project references are backed up" + _global.DetailsBuildFailurePolicy(row.Plugin.Slug) switch
-            {
-                BuildFailurePolicy.Ask => ". If the project does not build with it, you choose whether to keep it and fix the errors yourself or to restore the previous version.",
-                BuildFailurePolicy.Keep => ". If the project does not build with it, it is kept so you can fix the errors (project setting eplugin/updates/on_build_failure).",
-                _ => " and restored if installation fails.",
-            };
-        _versionConfirm.PopupCentered();
+        _versionConfirm.DialogText = PluginManagerViewModel.VersionConfirmText(row, option, _global.DetailsBuildFailurePolicy(row.Plugin.Slug));
+        EditorWindows.PopupChild(_versionConfirm);
     }
 }
 #endif

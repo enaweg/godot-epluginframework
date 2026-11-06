@@ -19,7 +19,7 @@ internal sealed partial class EPluginManagerDialog
     private void ChooseZip()
     {
         if (Busy) return;
-        _zipDialog.PopupCentered();
+        EditorWindows.PopupChild(_zipDialog);
     }
 
     private void ZipChosen(string path) => Run(InstallZipAsync(path), "Installing from a ZIP file");
@@ -33,12 +33,16 @@ internal sealed partial class EPluginManagerDialog
         if (Busy) return;
         ClearNotice();
         var file = Path.GetFileName(path);
-        _working = true; RenderError(); Buttons(); _status.Text = $"Reading {file}...";
+        _session.Working = true; RenderError(); Buttons(); _status.Text = $"Reading {file}...";
         try { await ReadZipAsync(path, file); }
         // whatever failed, the manager must not stay locked
-        finally { _working = _installing = false; }
+        finally { _session.Working = _session.Installing = false; }
     }
 
+    /// <summary>
+    /// The work of <see cref="InstallZipAsync"/>, which ends it whatever happened. Where its outcome is rendered, the work
+    /// ends first, so the manager is not drawn locked.
+    /// </summary>
     private async Task ReadZipAsync(string path, string file)
     {
         // Closing the manager while the file is read or staged cancels; nothing is asked afterwards.
@@ -46,21 +50,21 @@ internal sealed partial class EPluginManagerDialog
         var ct = _cancel.Token;
         AddonArchive archive;
         try { archive = await Task.Run(() => AddonArchive.Read(path), ct); }
-        catch (OperationCanceledException) { _working = false; return; }
+        catch (OperationCanceledException) { return; }
         // any file can be chosen, so reading it may fail in more ways than a damaged ZIP file
         catch (Exception ex)
         {
-            _working = false;
+            _session.Working = false;
             if (IsShown) ShowZipNotice(new(InstallStep.Failed, $"Cannot install {file}: {ex.Message}", true));
             return;
         }
-        if (!IsShown || ct.IsCancellationRequested) { _working = false; return; }
+        if (!IsShown || ct.IsCancellationRequested) return;
         var sameExceptCase = _model.Plugins.FirstOrDefault(p => p.Plugin.Slug != archive.Slug &&
                                                                 p.Plugin.Slug.Equals(archive.Slug, StringComparison.OrdinalIgnoreCase))?.Plugin.Slug;
         var choice = ZipInstall.Choose(archive, _model.Find(archive.Slug), _targets.FirstOrDefault(t => t.Slug == archive.Slug), sameExceptCase);
         if (!choice.IsNew)
         {
-            _working = false;
+            _session.Working = false;
             if (choice.Version is { } version && _model.Find(archive.Slug) is { } row)
             {
                 // The installed plugin's details show what the confirmation is about.
@@ -71,7 +75,7 @@ internal sealed partial class EPluginManagerDialog
             else ShowZipNotice(new(InstallStep.Failed, $"Cannot install {file}: {choice.Refused}", true));
             return;
         }
-        _installing = true;
+        _session.Installing = true;
         Render();
         InstallOutcome outcome;
         try
@@ -82,7 +86,7 @@ internal sealed partial class EPluginManagerDialog
                 Status = text => _status.Text = text
             }, ct);
         }
-        finally { _working = _installing = false; }
+        finally { _session.Working = _session.Installing = false; }
         if (!IsShown || outcome.Step == InstallStep.Abandoned) return;
         if (outcome.Step != InstallStep.Staged || _updates.StagedAddon is not { } package)
         {
@@ -92,7 +96,7 @@ internal sealed partial class EPluginManagerDialog
         _installText.Text = ZipInstall.Describe(package, archive);
         _status.Text = $"Confirm the installation of {archive.Name}.";
         Buttons();
-        _installConfirm.PopupCentered();
+        EditorWindows.PopupChild(_installConfirm);
     }
 
     private void ConfirmAddon()
@@ -109,7 +113,7 @@ internal sealed partial class EPluginManagerDialog
 
     private void CancelAddon()
     {
-        if (_updates.StagedAddon is null || _pluginOperation.IsRunning) return;
+        if (_updates.StagedAddon is null || _session.Operation.IsRunning) return;
         _updates.Clear();
         if (IsShown) ShowZipNotice(new(InstallStep.Canceled, "Installation canceled. Addon files were not changed."));
     }
@@ -117,7 +121,7 @@ internal sealed partial class EPluginManagerDialog
     private void InstallAddon()
     {
         // An assembly reload replaced this dialog since the click; the staged add-on is gone with it.
-        if (!IsInitialized || !_pluginOperation.IsRunning || EndedByPendingReload()) return;
+        if (!IsInitialized || !_session.Operation.IsRunning || EndedByPendingReload()) return;
         var slug = _updates.StagedAddon?.Candidate.Slug;
         InstallOutcome outcome;
         try { outcome = _updates.StagedAddon is null ? new(InstallStep.Canceled) : _updates.InstallAddon(); }

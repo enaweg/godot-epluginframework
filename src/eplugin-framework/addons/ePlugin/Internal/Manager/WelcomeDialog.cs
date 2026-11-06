@@ -16,7 +16,7 @@ namespace Enaweg.Plugin.Internal.Manager;
 internal sealed partial class WelcomeDialog : AcceptDialog, ISerializationListener
 {
     internal const string ScenePath = "res://addons/ePlugin/Internal/Manager/WelcomeDialog.tscn";
-    private readonly EditorSignalConnections _signals = new();
+    private readonly DialogLifetime _lifetime = new();
     private WelcomeEntry[] _welcomes = [];
     private Action<IReadOnlyList<WelcomeEntry>>? _closed;
     private ItemList _list = null!;
@@ -24,7 +24,6 @@ internal sealed partial class WelcomeDialog : AcceptDialog, ISerializationListen
     private Label _name = null!;
     private Label _source = null!;
     private RichTextLabel _text = null!;
-    private bool _done;
 
     /// <summary>
     /// Shows <paramref name="welcomes"/>; <paramref name="closed"/> is called with them once the dialog is closed, but not
@@ -46,14 +45,11 @@ internal sealed partial class WelcomeDialog : AcceptDialog, ISerializationListen
         _welcomes = welcomes; _closed = closed;
         _list = GetNode<ItemList>("%WelcomeList"); _summary = GetNode<Label>("%Summary");
         _name = GetNode<Label>("%WelcomeName"); _source = GetNode<Label>("%WelcomeSource"); _text = GetNode<RichTextLabel>("%WelcomeText");
-        EditorWindows.Prepare(this, _signals, this, MethodName.QueueWindowIcon);
-        _signals.Connect(this, AcceptDialog.SignalName.Confirmed, Callable.From(Finish));
-        _signals.Connect(this, AcceptDialog.SignalName.Canceled, Callable.From(Finish));
-        _signals.Connect(_list, ItemList.SignalName.ItemSelected, Callable.From<long>(index => Display((int)index)));
-        _signals.Connect(_text, RichTextLabel.SignalName.MetaClicked, Callable.From<Variant>(meta =>
-        {
-            if (PluginManagerViewModel.IsWebUrl(meta.AsString())) OS.ShellOpen(meta.AsString());
-        }));
+        _lifetime.Prepare(this, MethodName.RefreshWindowIcons);
+        _lifetime.Signals.Connect(this, AcceptDialog.SignalName.Confirmed, Callable.From(Finish));
+        _lifetime.Signals.Connect(this, AcceptDialog.SignalName.Canceled, Callable.From(Finish));
+        _lifetime.Signals.Connect(_list, ItemList.SignalName.ItemSelected, Callable.From<long>(index => Display((int)index)));
+        _lifetime.OpenWebLinks(_text);
         _list.Visible = _summary.Visible = welcomes.Length > 1;
         if (closed is null) Title = "ePlugin — Welcome page";
         foreach (var welcome in welcomes) _list.AddItem(welcome.Name);
@@ -73,36 +69,24 @@ internal sealed partial class WelcomeDialog : AcceptDialog, ISerializationListen
         _text.ScrollToLine(0);
     }
 
-    private void Finish()
-    {
-        if (_done) return;
-        _done = true; Hide();
-        try { _closed?.Invoke(_welcomes); }
-        finally { EditorWindows.Release(this); }
-    }
+    private void Finish() => _lifetime.Finish(() => _closed?.Invoke(_welcomes));
 
-    private void QueueWindowIcon() => CallDeferred(MethodName.RefreshWindowIcon);
-    private void RefreshWindowIcon() => EditorWindows.ApplyIcon(this);
+    private void RefreshWindowIcons() => _lifetime.RefreshIcons();
 
     // An assembly reload drops the dialog without counting the pages as read, so they are shown again afterwards.
-    public void OnBeforeSerialize()
-    {
-        _signals.Dispose();
-        if (_done) return;
-        _done = true; EditorWindows.Release(this);
-    }
+    public void OnBeforeSerialize() => _lifetime.ReleaseForReload();
 
     public void OnAfterDeserialize() { }
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) _signals.Dispose();
+        if (disposing) _lifetime.ReleaseCallbacks();
         base.Dispose(disposing);
     }
 
     public override void _ExitTree()
     {
-        _signals.Dispose();
+        _lifetime.ReleaseCallbacks();
         base._ExitTree();
     }
 }

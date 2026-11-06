@@ -19,7 +19,7 @@ internal sealed partial class AttentionDialog : AcceptDialog, ISerializationList
 {
     internal const string ScenePath = "res://addons/ePlugin/Internal/Manager/AttentionDialog.tscn";
     private const string RetryAllAction = "retry_all";
-    private readonly EditorSignalConnections _signals = new();
+    private readonly DialogLifetime _lifetime = new();
     private IReadOnlyList<AttentionItem> _items = [];
     private ItemList _list = null!;
     private Label _name = null!;
@@ -48,26 +48,19 @@ internal sealed partial class AttentionDialog : AcceptDialog, ISerializationList
         _retry = GetNode<Button>("%RetryPluginButton"); _rollback = GetNode<Button>("%RollbackButton"); _disable = GetNode<Button>("%DisablePluginButton");
         _log = GetNode<Button>("%OpenLogButton"); _folder = GetNode<Button>("%OpenPluginFolderButton");
         _rollbackConfirm = GetNode<ConfirmationDialog>("%RollbackConfirm");
-        foreach (var window in new Window[] { this, _rollbackConfirm }) EditorWindows.Prepare(window, _signals, this, MethodName.QueueWindowIcons);
-        var scale = EditorWindows.Scale;
-        _text.AddThemeConstantOverride("line_separation", (int)(_text.GetThemeConstant("line_separation") * scale));
+        _lifetime.Prepare(this, MethodName.RefreshWindowIcons, _rollbackConfirm);
         _retryAll = AddButton("Retry all", false, RetryAllAction);
         _retryAll.TooltipText = "Retry every failed or interrupted plugin activation, deactivation and update.";
-        _signals.Connect(_list, ItemList.SignalName.ItemSelected, Callable.From<long>(index => Display(_items[(int)index].Slug)));
-        _signals.Connect(_text, RichTextLabel.SignalName.MetaClicked, Callable.From<Variant>(meta =>
-        {
-            if (PluginManagerViewModel.IsWebUrl(meta.AsString())) OS.ShellOpen(meta.AsString());
-        }));
-        _signals.Connect(_retry, BaseButton.SignalName.Pressed, Callable.From(() => Request(AttentionAction.Retry)));
-        _signals.Connect(_disable, BaseButton.SignalName.Pressed, Callable.From(() => Request(AttentionAction.Disable)));
-        _signals.Connect(_rollback, BaseButton.SignalName.Pressed, Callable.From(ConfirmRollback));
-        _signals.Connect(_rollbackConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(RollbackConfirmed));
-        _signals.Connect(_log, BaseButton.SignalName.Pressed, Callable.From(() => { if (Selected?.Log is { } log) OS.ShellOpen(log); }));
-        _signals.Connect(_folder, BaseButton.SignalName.Pressed, Callable.From(() =>
-        {
-            if (Selected is { } item) OS.ShellShowInFileManager(ProjectSettings.GlobalizePath(_pluginDirectory(item.Slug)), true);
-        }));
-        _signals.Connect(this, AcceptDialog.SignalName.CustomAction, Callable.From<StringName>(action =>
+        var signals = _lifetime.Signals;
+        signals.Connect(_list, ItemList.SignalName.ItemSelected, Callable.From<long>(index => Display(_items[(int)index].Slug)));
+        _lifetime.OpenWebLinks(_text);
+        signals.Connect(_retry, BaseButton.SignalName.Pressed, Callable.From(() => Request(AttentionAction.Retry)));
+        signals.Connect(_disable, BaseButton.SignalName.Pressed, Callable.From(() => Request(AttentionAction.Disable)));
+        signals.Connect(_rollback, BaseButton.SignalName.Pressed, Callable.From(ConfirmRollback));
+        signals.Connect(_rollbackConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(RollbackConfirmed));
+        signals.Connect(_log, BaseButton.SignalName.Pressed, Callable.From(() => { if (Selected?.Log is { } log) EditorWindows.ShowLog(log); }));
+        signals.Connect(_folder, BaseButton.SignalName.Pressed, Callable.From(() => { if (Selected is { } item) EditorWindows.ShowInFileManager(_pluginDirectory(item.Slug)); }));
+        signals.Connect(this, AcceptDialog.SignalName.CustomAction, Callable.From<StringName>(action =>
         {
             if (action == RetryAllAction && !_busy) Requested?.Invoke(AttentionAction.RetryAll, null);
         }));
@@ -81,7 +74,7 @@ internal sealed partial class AttentionDialog : AcceptDialog, ISerializationList
         if (items.Count == 0) return;
         _selected = slug;
         Update(items);
-        PopupCentered();
+        EditorWindows.PopupChild(this);
     }
 
     /// <summary>
@@ -96,12 +89,10 @@ internal sealed partial class AttentionDialog : AcceptDialog, ISerializationList
             return;
         }
         if (Selected is null) _selected = items[0].Slug;
-        var theme = EditorWindows.Theme;
-        Texture2D? Icon(string name) => theme is not null && theme.HasIcon(name, "EditorIcons") ? theme.GetIcon(name, "EditorIcons") : null;
         _list.Clear();
         foreach (var item in items)
         {
-            var index = _list.AddItem(item.Plugin.Name, Icon(item.CanRetry || item.Plugin.State == EEditorPluginState.Error ? "StatusError" : "StatusWarning"));
+            var index = _list.AddItem(item.Plugin.Name, EditorIcons.Builtin(item.CanRetry || item.Plugin.State == EEditorPluginState.Error ? "StatusError" : "StatusWarning"));
             _list.SetItemTooltip(index, item.Summary);
             if (item.Slug == _selected) _list.Select(index);
         }
@@ -155,7 +146,7 @@ internal sealed partial class AttentionDialog : AcceptDialog, ISerializationList
                 ? "Project files you changed since then (.csproj, .sln, nuget.config) stay as they are. "
                 : "Project files (.csproj, .sln, nuget.config) stay as they are; only the changes of the new version's recipe are undone. ") +
             "If you already adapted the project's code to the new version, it will not build with the old one.";
-        _rollbackConfirm.PopupCentered();
+        EditorWindows.PopupChild(_rollbackConfirm);
     }
 
     /// <summary>Rolls back the update the confirmation named, if it is still the one selected and still kept.</summary>
@@ -166,25 +157,22 @@ internal sealed partial class AttentionDialog : AcceptDialog, ISerializationList
         if (Selected is { Kept: { } kept } item && confirmed == (item.Slug, kept.Id)) Request(AttentionAction.Rollback);
     }
 
-    private void QueueWindowIcons() => CallDeferred(MethodName.RefreshWindowIcons);
-    private void RefreshWindowIcons()
-    {
-        foreach (var window in new Window[] { this, _rollbackConfirm }) EditorWindows.ApplyIcon(window);
-    }
+    private void RefreshWindowIcons() => _lifetime.RefreshIcons();
 
-    // Reload serializes every script before disposing any of them, so callback targets are still valid here.
-    public void OnBeforeSerialize() => _signals.Dispose();
+    // Reload serializes every script before disposing any of them, so callback targets are still valid here. The manager
+    // that owns this dialog is replaced after the reload, and this dialog with it.
+    public void OnBeforeSerialize() => _lifetime.ReleaseCallbacks();
     public void OnAfterDeserialize() { }
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) _signals.Dispose();
+        if (disposing) _lifetime.ReleaseCallbacks();
         base.Dispose(disposing);
     }
 
     public override void _ExitTree()
     {
-        _signals.Dispose();
+        _lifetime.ReleaseCallbacks();
         base._ExitTree();
     }
 }

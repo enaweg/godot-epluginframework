@@ -23,13 +23,14 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private const int EnabledColumn = 0, NameColumn = 1, VersionColumn = 2;
     private const int VersionMinimumWidth = 150;
 
-    private readonly EditorSignalConnections _signals = new();
+    private readonly DialogLifetime _dialogLifetime = new();
     private EGlobal _global = null!;
     private CancellationToken _lifetime;
     private CancellationTokenSource? _cancel;
     private Tree _tree = null!;
     private Label _status = null!;
     private Button _check = null!;
+    private Button _settingsButton = null!;
     private Button _attentionButton = null!;
     private Button _release = null!;
     private ConfirmationDialog _disableFrameworkConfirm = null!;
@@ -75,31 +76,17 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private Texture2D? _logo;
     private Texture2D? _updateIcon;
     private PluginManagerViewModel _model = null!;
-    // Whether the operation that ended while plugins were still changing reads the list again once they are done.
-    private bool _refreshOnCompletion = true;
     private string? _selectedSlug;
-    private bool _working;
-    // Only an installation can be cancelled; the dialog has no Close button otherwise.
-    private bool _installing;
-    private bool _swapping;
-    private readonly PluginOperationGate _pluginOperation = new();
-    // A build of this assembly waits for Godot's hot reload; see AssemblyReload. Plugin operations wait for it.
-    private bool _reloadPending;
+    // Which work runs, whether it waits for a reload, and what is done once it ended.
+    private readonly ManagerSession _session = new();
     private double _reloadPoll;
     private const double ReloadPollSeconds = 0.25;
-    private const string ReloadNotice = "Waiting for the editor to load the rebuilt C# code...";
-    private const string ReloadFailedNotice = "The editor has not finished loading the rebuilt C# code. Restart the editor to continue.";
     // Rendering runs after async operations and on theme changes; keep their result until the next update operation.
     private string? _operationNotice;
     // The notice reports a failure: it is shown in the error area, where it wraps and can be selected and copied.
     private bool _noticeIsError;
     // The folder or file with the logs of the failure the notice reports; null when there are none.
     private string? _noticeLog;
-    // The notice of work that ended while the manager was closed: Escape and the window's close button hide it also
-    // while its work goes on, so the next Open shows how it ended instead of dropping it.
-    private bool _keepNotice;
-    // The local index or a setting changed while plugins were changing or work ran; the list is read again afterwards.
-    private bool _refreshWhenIdle;
 
     /// <summary>False once an assembly reload dropped the C# state of this still existing editor node.</summary>
     public bool IsInitialized => _global is not null;
@@ -108,8 +95,16 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     /// An operation runs, or the editor is about to reload the assembly an earlier one built. Asked directly rather than
     /// from the last poll, so a click right after an operation finished cannot slip in before the reload.
     /// </summary>
-    private bool Busy => !IsInitialized || _working || _pluginOperation.IsBusy || _global.IsChangingPlugins ||
-        (_reloadPending = AssemblyReload.IsPending);
+    private bool Busy => !IsInitialized || _session.IsBusy(_global.IsChangingPlugins, AssemblyReload.IsPending);
+
+    /// <summary>
+    /// <see cref="Busy"/>, also remembering whether a reload is due, which the status line and the locked input show and
+    /// <see cref="_Process"/> compares with to notice a change.
+    /// </summary>
+    private bool PollBusy() => !IsInitialized || _session.IsBusy(_global.IsChangingPlugins, PollReload());
+
+    /// <summary>Asks whether a reload is due and remembers it, see <see cref="ManagerSession.ReloadPending"/>.</summary>
+    private bool PollReload() => _session.ReloadPending = AssemblyReload.IsPending;
 
     public static EPluginManagerDialog Create(EGlobal global, CancellationToken lifetime)
     {
@@ -123,7 +118,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _global = global; _lifetime = lifetime;
         _updates = new UpdateFlow(global, ReviewUpdates, ReviewLicenses, text => ActivationProgress.Begin(text));
         _tree = GetNode<Tree>("%PluginTree"); _status = GetNode<Label>("%Status");
-        _check = GetNode<Button>("%CheckButton"); _attentionButton = GetNode<Button>("%AttentionButton"); _release = GetNode<Button>("%ReleaseButton");
+        _check = GetNode<Button>("%CheckButton"); _settingsButton = GetNode<Button>("%SettingsButton"); _attentionButton = GetNode<Button>("%AttentionButton"); _release = GetNode<Button>("%ReleaseButton");
         _disableFrameworkConfirm = GetNode<ConfirmationDialog>("%DisableFrameworkConfirm");
         _detailsIcon = GetNode<TextureRect>("%DetailsIcon"); _detailsName = GetNode<Label>("%DetailsName"); _detailsText = GetNode<RichTextLabel>("%DetailsText");
         _versionSeparator = GetNode<Control>("%VersionSeparator"); _versionRow = GetNode<Control>("%VersionRow");
@@ -137,63 +132,54 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _attention = GetNode<AttentionDialog>("%AttentionDialog"); _attention.Initialize(global.Host.PluginDirectory);
         _locationRow = GetNode<Control>("%LocationRow"); _locationLink = GetNode<LinkButton>("%LocationLink"); _openFolder = GetNode<Button>("%OpenFolderButton");
         RefreshTheme();
-        _signals.Connect(this, Control.SignalName.ThemeChanged, Callable.From(() => CallDeferred(MethodName.RefreshTheme)));
+        _dialogLifetime.Signals.Connect(this, Control.SignalName.ThemeChanged, Callable.From(() => CallDeferred(MethodName.RefreshTheme)));
 
         // Column titles and sizing are not scene properties of Tree.
         _tree.SetColumnTitle(EnabledColumn, "On"); _tree.SetColumnTitle(NameColumn, "Plugin"); _tree.SetColumnTitle(VersionColumn, "Version");
         _tree.SetColumnExpand(EnabledColumn, false); _tree.SetColumnExpand(NameColumn, false); _tree.SetColumnExpand(VersionColumn, true);
-        foreach (var window in Windows) EditorWindows.Prepare(window, _signals, this, MethodName.QueueWindowIcons);
+        _dialogLifetime.Prepare(this, MethodName.RefreshWindowIcons, _versionConfirm, _disableFrameworkConfirm, _zipDialog, _installConfirm);
         var scale = EditorWindows.Scale;
         _tree.SetColumnCustomMinimumWidth(EnabledColumn, (int)(40 * scale));
         _tree.SetColumnCustomMinimumWidth(VersionColumn, (int)(VersionMinimumWidth * scale));
-        // The scene's line spacing of the details, which keeps their links apart, is for 100% editor scale.
-        _detailsText.AddThemeConstantOverride("line_separation", (int)(_detailsText.GetThemeConstant("line_separation") * scale));
 
-        _signals.Connect(_check, BaseButton.SignalName.Pressed, Callable.From(CheckNow));
-        _signals.Connect(GetNode<Button>("%SettingsButton"), BaseButton.SignalName.Pressed, Callable.From(() => OpenSettings(null)));
-        _signals.Connect(_attentionButton, BaseButton.SignalName.Pressed, Callable.From(() => OpenAttention(null)));
-        _signals.Connect(_release, BaseButton.SignalName.Pressed, Callable.From(OpenRelease));
-        _signals.Connect(_locationLink, BaseButton.SignalName.Pressed, Callable.From(() => { if (_selectedSlug is not null) EditorWindows.SelectFile(PluginDirectory(_selectedSlug)); }));
-        _signals.Connect(_openFolder, BaseButton.SignalName.Pressed, Callable.From(() => { if (_selectedSlug is not null) OS.ShellShowInFileManager(ProjectSettings.GlobalizePath(PluginDirectory(_selectedSlug)), true); }));
-        _signals.Connect(_detailsText, RichTextLabel.SignalName.MetaClicked, Callable.From<Variant>(DetailsLinkClicked));
-        _signals.Connect(_tree, Tree.SignalName.ItemEdited, Callable.From(ItemEdited));
-        _signals.Connect(_disableFrameworkConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(DisableFramework));
-        _signals.Connect(_versionSelect, OptionButton.SignalName.ItemSelected, Callable.From<long>(_ => VersionButtons()));
-        _signals.Connect(_installVersion, BaseButton.SignalName.Pressed, Callable.From(ConfirmVersion));
-        _signals.Connect(_retryVersions, BaseButton.SignalName.Pressed, Callable.From(RetryVersions));
-        _signals.Connect(GetNode<Button>("%CopyErrorButton"), BaseButton.SignalName.Pressed, Callable.From(() => DisplayServer.ClipboardSet(ErrorDetails())));
-        _signals.Connect(_openLog, BaseButton.SignalName.Pressed, Callable.From(OpenLog));
-        _signals.Connect(_versionConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(() =>
+        _dialogLifetime.Signals.Connect(_check, BaseButton.SignalName.Pressed, Callable.From(CheckNow));
+        _dialogLifetime.Signals.Connect(_settingsButton, BaseButton.SignalName.Pressed, Callable.From(() => OpenSettings(null)));
+        _dialogLifetime.Signals.Connect(_attentionButton, BaseButton.SignalName.Pressed, Callable.From(() => OpenAttention(null)));
+        _dialogLifetime.Signals.Connect(_release, BaseButton.SignalName.Pressed, Callable.From(OpenRelease));
+        _dialogLifetime.Signals.Connect(_locationLink, BaseButton.SignalName.Pressed, Callable.From(() => { if (_selectedSlug is not null) EditorWindows.SelectFile(PluginDirectory(_selectedSlug)); }));
+        _dialogLifetime.Signals.Connect(_openFolder, BaseButton.SignalName.Pressed, Callable.From(() => { if (_selectedSlug is not null) EditorWindows.ShowInFileManager(PluginDirectory(_selectedSlug)); }));
+        _dialogLifetime.Signals.Connect(_detailsText, RichTextLabel.SignalName.MetaClicked, Callable.From<Variant>(DetailsLinkClicked));
+        _dialogLifetime.Signals.Connect(_tree, Tree.SignalName.ItemEdited, Callable.From(ItemEdited));
+        _dialogLifetime.Signals.Connect(_disableFrameworkConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(DisableFramework));
+        _dialogLifetime.Signals.Connect(_versionSelect, OptionButton.SignalName.ItemSelected, Callable.From<long>(_ => VersionButtons()));
+        _dialogLifetime.Signals.Connect(_installVersion, BaseButton.SignalName.Pressed, Callable.From(ConfirmVersion));
+        _dialogLifetime.Signals.Connect(_retryVersions, BaseButton.SignalName.Pressed, Callable.From(RetryVersions));
+        _dialogLifetime.Signals.Connect(GetNode<Button>("%CopyErrorButton"), BaseButton.SignalName.Pressed, Callable.From(() => DisplayServer.ClipboardSet(ErrorDetails())));
+        _dialogLifetime.Signals.Connect(_openLog, BaseButton.SignalName.Pressed, Callable.From(OpenLog));
+        _dialogLifetime.Signals.Connect(_versionConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(() =>
         {
             if (_pendingVersion is { } version) Install(new([version], true, _pendingDowngrade, _pendingReinstall));
         }));
-        _signals.Connect(_installZip, BaseButton.SignalName.Pressed, Callable.From(ChooseZip));
-        _signals.Connect(_zipDialog, FileDialog.SignalName.FileSelected, Callable.From<string>(ZipChosen));
-        _signals.Connect(_installConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(ConfirmAddon));
-        _signals.Connect(_installConfirm, AcceptDialog.SignalName.Canceled, Callable.From(CancelAddon));
-        _signals.Connect(_tree, Tree.SignalName.ItemSelected, Callable.From(() => ShowDetails(SlugOf(_tree.GetSelected()))));
-        _signals.Connect(_tree, Tree.SignalName.ItemActivated, Callable.From(OpenRelease));
-        _signals.Connect(_tree, Tree.SignalName.ButtonClicked, Callable.From<TreeItem, long, long, long>((item, _, _, _) => item.Select(NameColumn)));
-        _signals.Connect(_tree, Tree.SignalName.Resized, Callable.From(() => { if (_model is not null) FitColumns(); }));
-        _signals.Connect(this, AcceptDialog.SignalName.Confirmed, Callable.From(Confirm));
-        _signals.Connect(this, AcceptDialog.SignalName.Canceled, Callable.From(Cancel));
-        _signals.Connect(this, Window.SignalName.CloseRequested, Callable.From(Cancel));
+        _dialogLifetime.Signals.Connect(_installZip, BaseButton.SignalName.Pressed, Callable.From(ChooseZip));
+        _dialogLifetime.Signals.Connect(_zipDialog, FileDialog.SignalName.FileSelected, Callable.From<string>(ZipChosen));
+        _dialogLifetime.Signals.Connect(_installConfirm, AcceptDialog.SignalName.Confirmed, Callable.From(ConfirmAddon));
+        _dialogLifetime.Signals.Connect(_installConfirm, AcceptDialog.SignalName.Canceled, Callable.From(CancelAddon));
+        _dialogLifetime.Signals.Connect(_tree, Tree.SignalName.ItemSelected, Callable.From(() => ShowDetails(SlugOf(_tree.GetSelected()))));
+        _dialogLifetime.Signals.Connect(_tree, Tree.SignalName.ItemActivated, Callable.From(OpenRelease));
+        _dialogLifetime.Signals.Connect(_tree, Tree.SignalName.ButtonClicked, Callable.From<TreeItem, long, long, long>((item, _, _, _) => item.Select(NameColumn)));
+        _dialogLifetime.Signals.Connect(_tree, Tree.SignalName.Resized, Callable.From(() => { if (_model is not null) FitColumns(); }));
+        _dialogLifetime.Signals.Connect(this, AcceptDialog.SignalName.Confirmed, Callable.From(Confirm));
+        _dialogLifetime.Signals.Connect(this, AcceptDialog.SignalName.Canceled, Callable.From(Cancel));
+        _dialogLifetime.Signals.Connect(this, Window.SignalName.CloseRequested, Callable.From(Cancel));
     }
 
-    private Window[] Windows => [this, _versionConfirm, _disableFrameworkConfirm, _zipDialog, _installConfirm];
-
-    private void QueueWindowIcons() => CallDeferred(MethodName.RefreshWindowIcons);
-    private void RefreshWindowIcons()
-    {
-        foreach (var window in Windows) EditorWindows.ApplyIcon(window);
-    }
+    private void RefreshWindowIcons() => _dialogLifetime.RefreshIcons();
 
     private void RefreshTheme()
     {
         if (!GodotObject.IsInstanceValid(this) || _global is null) return;
         var editorTheme = EditorWindows.Theme;
-        if (editorTheme is not null && editorTheme.HasIcon("Folder", "EditorIcons"))
-        { _openFolder.Icon = editorTheme.GetIcon("Folder", "EditorIcons"); _openFolder.Text = ""; }
+        if (EditorIcons.Builtin("Folder") is { } folder) { _openFolder.Icon = folder; _openFolder.Text = ""; }
         // The editor's labels indent their text; the details text starts where theirs does.
         var inset = editorTheme is not null && editorTheme.HasStylebox("normal", "Label") ? editorTheme.GetStylebox("normal", "Label").GetMargin(Side.Left) : 0;
         _detailsText.AddThemeStyleboxOverride("normal", new StyleBoxEmpty { ContentMarginLeft = inset });
@@ -201,7 +187,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _check.Icon = EditorIcons.Rescan;
         _installZip.Icon = EditorIcons.Install;
         _attentionButton.Icon = EditorIcons.Retry;
-        GetNode<Button>("%SettingsButton").Icon = EditorIcons.Settings;
+        _settingsButton.Icon = EditorIcons.Settings;
         _settings.RefreshTheme();
         TextColors.Use(EditorWindows.Theme);
         // Render the existing model rather than refreshing it: a theme change must preserve a staged update.
@@ -210,8 +196,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
 
     public void Open()
     {
-        if (!_keepNotice) ClearNotice();
-        _keepNotice = false;
+        if (!_session.KeepNotice) ClearNotice();
+        _session.KeepNotice = false;
         // Read on every open: the project may have been renamed in Project Settings since.
         Title = PluginManagerViewModel.WindowTitle(ProjectSettings.GetSetting("application/config/name").AsString(),
             ProjectSettings.GlobalizePath("res://"));
@@ -221,11 +207,11 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         if (_global.IsChangingPlugins || AssemblyReload.IsPending)
         {
             _model ??= new([], [], [], null, _ => []);
-            _refreshWhenIdle = true;
+            _session.RefreshWhenIdle = true;
             Render();
         }
         else Refresh();
-        PopupCenteredClamped(Size, 0.9f);
+        EditorWindows.PopupChild(this);
         _tree.GrabFocus();
         // Problems shown already in this editor session wait for the button; new ones open the list on top.
         if (_attentionItems.Any(i => !_global.ShownAttention.Contains(i.Key))) CallDeferred(MethodName.OpenAttention, "");
@@ -251,8 +237,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
 
     public void Refresh()
     {
-        if (_working) return;
-        _refreshWhenIdle = false;
+        if (_session.Working) return;
+        _session.RefreshWhenIdle = false;
         // A new add-on staged by Install from ZIP waits for its confirmation, which clears it; e.g. the local index
         // finishing in the meantime must not drop it. Installing checks its folder again.
         if (_updates.StagedAddon is null) _updates.Clear();
@@ -272,7 +258,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     {
         _tree.Clear(); var root = _tree.CreateItem();
         TreeItem? selected = null;
-        var editable = !Busy;
+        var editable = !PollBusy();
         foreach (var row in _model.Plugins)
         {
             var plugin = row.Plugin;
@@ -281,13 +267,10 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             item.SetCellMode(EnabledColumn, TreeItem.TreeCellMode.Check);
             item.SetChecked(EnabledColumn, plugin.Enabled);
             item.SetEditable(EnabledColumn, row.CanToggle && editable);
-            item.SetTooltipText(EnabledColumn, plugin.Kind == PluginKind.GDExtensionAddon ? "Godot always loads a GDExtension without plugin.cfg; there is nothing to enable or disable."
-                : !row.CanToggle ? "The plugin folder or its plugin.cfg is missing."
-                : plugin.Enabled ? "Enabled. Uncheck to disable the plugin." : "Disabled. Check to enable the plugin.");
+            item.SetTooltipText(EnabledColumn, PluginManagerViewModel.EnabledTooltip(row));
             item.SetText(NameColumn, PluginManagerViewModel.ListName(plugin));
             var updateState = PluginManagerViewModel.UpdateState(row);
-            item.SetTooltipText(NameColumn, $"{PluginManagerViewModel.ListName(plugin)} ({PluginDirectory(plugin.Slug)})\n{PluginCatalog.KindName(plugin.Kind)}" +
-                (updateState is null ? "" : "\n" + updateState));
+            item.SetTooltipText(NameColumn, PluginManagerViewModel.NameTooltip(row, PluginDirectory(plugin.Slug)));
             if (row.IsEPlugin && _ePluginIcon is not null) item.SetIcon(NameColumn, _ePluginIcon);
             if (updateState is not null && _updateIcon is not null)
             {
@@ -296,34 +279,19 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
             }
             if (!plugin.Enabled) item.SetCustomColor(NameColumn, EditorIcons.DisabledColor);
             if (row.NeedsAttention) item.SetCustomColor(NameColumn, EditorIcons.ErrorColor);
-            if (row.Update is { } update)
-            {
-                item.SetText(VersionColumn, $"{PluginManagerViewModel.VersionText(plugin)} → {update.Candidate.NewVersion}");
-                if (update.HasError) item.SetCustomColor(VersionColumn, EditorIcons.ErrorColor);
-                item.SetTooltipText(VersionColumn, update.HasError ? "This update cannot be installed, see details." : "Update installs this update.");
-            }
-            else
-            {
-                item.SetText(VersionColumn, PluginManagerViewModel.VersionText(plugin));
-                item.SetTooltipText(VersionColumn, PluginManagerViewModel.StatusText(plugin));
-            }
+            item.SetText(VersionColumn, PluginManagerViewModel.VersionColumnText(row));
+            item.SetTooltipText(VersionColumn, PluginManagerViewModel.VersionColumnTooltip(row));
+            if (row.Update is { HasError: true }) item.SetCustomColor(VersionColumn, EditorIcons.ErrorColor);
             if (plugin.Slug == _selectedSlug) selected = item;
         }
         FitColumns();
         if (selected is not null) { selected.Select(NameColumn); _tree.ScrollToItem(selected); }
         else ShowDetails(null);
-        var count = _model.Updates.Count;
         var next = _global.NextUpdateCheck;
-        // An error is shown in full in the error area; the status line keeps counting the updates, also those a check
-        // found while it failed for other plugins.
-        var notice = _noticeIsError ? null : _operationNotice;
-        var available = count == 0 ? null : $"{count} update{(count == 1 ? "" : "s")} available";
-        _status.Text = (notice is not null ? notice + (available is null ? "" : " · " + available)
-                           : (available is null ? "" : available + " · ") +
-                             PluginManagerViewModel.CheckSchedule(_global.LastUpdateCheck, next, DateTimeOffset.UtcNow, CultureInfo.CurrentCulture) +
-                             (_global.IsIndexingLocalSources ? " · Indexing local directories..." : "")) +
-                       ((_reloadPending = AssemblyReload.IsPending) ? " · " + ReloadNotice
-                           : _pluginOperation.IsAwaitingReload ? " · " + ReloadFailedNotice : "");
+        // An error is shown in full in the error area instead.
+        _status.Text = PluginManagerViewModel.StatusLine(_noticeIsError ? null : _operationNotice, _model.Updates.Count,
+            PluginManagerViewModel.CheckSchedule(_global.LastUpdateCheck, next, DateTimeOffset.UtcNow, CultureInfo.CurrentCulture),
+            _global.IsIndexingLocalSources, _session.ReloadPending, _session.Operation.IsAwaitingReload);
         _status.TooltipText = _status.Text + "\n" + PluginManagerViewModel.CheckScheduleHint(next);
         RenderError();
         Buttons();
@@ -348,7 +316,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _operationNotice = notice;
         _noticeIsError = isError && notice is not null;
         _noticeLog = _noticeIsError ? log : null;
-        _keepNotice = !Visible;
+        _session.KeepNotice = !Visible;
         if (_noticeIsError) GD.PushError(notice);
     }
 
@@ -366,9 +334,11 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         return _noticeLog is not null && !error.Contains(_noticeLog, StringComparison.Ordinal) ? error + "\nLogs: " + _noticeLog : error;
     }
 
+    // Its button is Open log folder: it shows where the failure's logs are, while the Open log buttons of the Needs
+    // attention and update failure dialogs open the build log itself (docs/eplugin-manager.md).
     private void OpenLog()
     {
-        if (_noticeLog is not null) OS.ShellShowInFileManager(_noticeLog);
+        if (_noticeLog is not null) EditorWindows.ShowInFileManager(_noticeLog);
     }
 
     private string PluginDirectory(string slug) => _global.Host.PluginDirectory(slug);
@@ -449,7 +419,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     private void DetailsLinkClicked(Variant meta)
     {
         var link = meta.AsString();
-        if (PluginManagerViewModel.IsWebUrl(link)) OS.ShellOpen(link);
+        if (PluginManagerViewModel.IsWebUrl(link)) EditorWindows.OpenWebLink(link);
         else if (link == PluginManagerViewModel.LicenseMeta && _selectedSlug is not null && _model.Find(_selectedSlug) is { } row &&
                  LicenseOf(row) is { Entry.Problem: null } license)
             LicenseDialog.CreateViewer(license).Open();
@@ -491,36 +461,36 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     {
         // An assembly reload dropped this dialog's state since, so the work went with the old one; or work beside an
         // operation failed, whose status must not be replaced. Either is only logged.
-        if (!IsInitialized || (!ownsWork && _working))
+        if (!IsInitialized || (!ownsWork && _session.Working))
         {
             GD.PushError($"{what} failed: {message}");
             return;
         }
         // A plugin operation the work began is completed by _Process once nothing works any more.
-        if (ownsWork) _working = _installing = _swapping = false;
+        if (ownsWork) _session.EndWork();
         SetNotice($"{what} failed unexpectedly: {message}", true);
         if (_model is not null) Render();
     }
 
     private void Buttons()
     {
-        var busy = Busy;
+        var busy = PollBusy();
         // Set native input state before queuing the operation. It remains locked even while C# state is reloaded.
-        GuiDisableInput = _pluginOperation.IsBusy || _global.IsChangingPlugins || _reloadPending;
+        GuiDisableInput = _session.LocksInput(_global.IsChangingPlugins, _session.ReloadPending);
         var editable = !busy;
         for (var item = _tree.GetRoot()?.GetFirstChild(); item is not null; item = item.GetNext())
         {
             var row = SlugOf(item) is { } slug ? _model.Find(slug) : null;
             item.SetEditable(EnabledColumn, editable && row is { CanToggle: true });
         }
-        GetNode<Button>("%SettingsButton").Disabled = busy;
-        _versionSelect.Disabled = busy || _versionOptions.Count < 2;
+        _settingsButton.Disabled = busy;
+        _versionSelect.Disabled = busy || !PluginManagerViewModel.CanChooseVersion(_versionOptions);
         GetOkButton().Text = _model.OkText;
         GetOkButton().Icon = EditorIcons.Upgrade;
         GetOkButton().Disabled = busy || !_model.CanApply;
         GetOkButton().Visible = _model.Updates.Count > 0;
-        GetCancelButton().Disabled = _swapping || _pluginOperation.IsBusy || _global.IsChangingPlugins || _reloadPending;
-        GetCancelButton().Visible = _installing && !_swapping;
+        GetCancelButton().Disabled = !_session.CanClose(_global.IsChangingPlugins, _session.ReloadPending);
+        GetCancelButton().Visible = _session.ShowsCancel;
         _check.Disabled = busy;
         _installZip.Disabled = busy;
         _attentionButton.Visible = _attentionItems.Count > 0;
@@ -535,8 +505,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
 
     private void OpenRelease()
     {
-        var url = _selectedSlug is null ? null : _model.Find(_selectedSlug)?.Update?.Candidate.ReleaseUrl;
-        if (PluginManagerViewModel.IsWebUrl(url)) OS.ShellOpen(url);
+        EditorWindows.OpenWebLink(_selectedSlug is null ? null : _model.Find(_selectedSlug)?.Update?.Candidate.ReleaseUrl);
     }
 
     /// <summary>A new local index can add or remove local versions and updates, so the lists are read again.</summary>
@@ -545,7 +514,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         if (!IsShown || !Visible) return;
         // Never interrupt work or read the plugins while they change (reading them records plain plugins in the shared
         // state file); the list is read again once that ended.
-        if (Busy) _refreshWhenIdle = true;
+        if (Busy) _session.RefreshWhenIdle = true;
         else if (_global.IsIndexingLocalSources) Render();
         else Refresh();
     }
@@ -553,12 +522,13 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     /// <summary>
     /// A plugin's update site or a setting changed: versions loaded from a source no longer used are dropped, and the
     /// list is read again so updates found there are no longer offered and the status line shows the next scheduled check.
+    /// While the settings are open, that waits until they close: every click on a number's arrows changes a setting.
     /// </summary>
     private void SettingsChanged(bool sourcesChanged)
     {
         if (sourcesChanged) _updates.ClearVersions();
         if (!IsShown) return;
-        if (Busy) _refreshWhenIdle = true;
+        if (Busy || _settings.Visible) _session.RefreshWhenIdle = true;
         else Refresh();
     }
 
@@ -570,20 +540,21 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         base._Process(delta);
         if (!IsInitialized || !Visible || (_reloadPoll += delta) < ReloadPollSeconds) return;
         _reloadPoll = 0;
-        if (_pluginOperation.IsRunning && !_working && !_global.IsChangingPlugins) CompletePluginOperation(_refreshOnCompletion);
+        if (_session.CanCompleteOperation(_global.IsChangingPlugins)) CompletePluginOperation(_session.RefreshOnCompletion);
         var pending = AssemblyReload.IsPending;
-        var locked = _pluginOperation.IsBusy || _global.IsChangingPlugins || pending;
-        if (_refreshWhenIdle && !locked && !_working)
+        var locked = _session.LocksInput(_global.IsChangingPlugins, pending);
+        // not while the settings are open, which change what the list shows (see SettingsChanged)
+        if (_session.ShouldRefresh(locked) && !_settings.Visible)
         {
-            _refreshWhenIdle = false;
-            _reloadPending = pending;
+            _session.RefreshWhenIdle = false;
+            _session.ReloadPending = pending;
             Refresh();
             return;
         }
-        if (pending == _reloadPending && locked == GuiDisableInput) return;
-        _reloadPending = pending;
+        if (pending == _session.ReloadPending && locked == GuiDisableInput) return;
+        _session.ReloadPending = pending;
         // Not while staging or installing: those render their own progress and refresh when done.
-        if (_working) Buttons();
+        if (_session.Working) Buttons();
         else Render();
     }
 
@@ -597,7 +568,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
 
     private void ReleaseCallbacks()
     {
-        _signals.Dispose();
+        _dialogLifetime.ReleaseCallbacks();
         _cancel?.Cancel(); _cancel?.Dispose(); _cancel = null;
         if (_global is not null) _global.LocalIndexChanged -= LocalIndexChanged;
         if (_settings is not null) _settings.Changed -= SettingsChanged;
@@ -622,30 +593,8 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     public override void _ExitTree()
     {
         ReleaseCallbacks();
-        if (!_swapping) _updates?.Clear();
+        if (!_session.Swapping) _updates?.Clear();
         base._ExitTree();
-    }
-}
-
-/// <summary>A plugin operation ends only when it needs no reload; a reload creates a new gate with the new dialog.</summary>
-internal sealed class PluginOperationGate
-{
-    public bool IsRunning { get; private set; }
-    public bool IsAwaitingReload { get; private set; }
-    public bool IsBusy => IsRunning || IsAwaitingReload;
-
-    public bool TryBegin()
-    {
-        if (IsBusy) return false;
-        IsRunning = true;
-        return true;
-    }
-
-    public void Complete(bool reloadPending)
-    {
-        if (!IsRunning) return;
-        IsRunning = false;
-        IsAwaitingReload = reloadPending;
     }
 }
 #endif

@@ -21,6 +21,7 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
     private const string DefaultHint = "GitHub, GitLab, Forgejo or Gitea (Codeberg) releases, a repository's tag page (.../tags), or a Git repository (.git, optionally with ?path=addons/<slug> and #branch).";
     private readonly EditorSignalConnections _signals = new();
     private EGlobal _global = null!;
+    private PluginSnapshot _plugins = null!;
     private Tree _tree = null!;
     private Label _status = null!;
     private Button _rescan = null!;
@@ -47,9 +48,9 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
     /// <summary>Raised after a site was added, changed or removed, so the plugin list can be read again.</summary>
     public event Action? Changed;
 
-    public void Initialize(EGlobal global)
+    public void Initialize(EGlobal global, PluginSnapshot plugins)
     {
-        _global = global;
+        _global = global; _plugins = plugins;
         _tree = GetNode<Tree>("%SourceTree"); _status = GetNode<Label>("%SourceStatus");
         _rescan = GetNode<Button>("%RescanLocalSourcesButton"); _addSite = GetNode<Button>("%AddSiteButton");
         _addDirectory = GetNode<Button>("%AddLocalSourceButton"); _edit = GetNode<Button>("%EditSiteButton"); _remove = GetNode<Button>("%RemoveSourceButton");
@@ -66,7 +67,7 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
             ObservedTask.Run(_global.RebuildLocalIndexAsync(), ex => GD.PushError($"Rescanning the local directories failed: {ex.Message}"));
         }));
         _signals.Connect(_addSite, BaseButton.SignalName.Pressed, Callable.From(() => OpenEditor(null)));
-        _signals.Connect(_addDirectory, BaseButton.SignalName.Pressed, Callable.From(() => _folderDialog.PopupCentered()));
+        _signals.Connect(_addDirectory, BaseButton.SignalName.Pressed, Callable.From(() => EditorWindows.PopupChild(_folderDialog)));
         _signals.Connect(_edit, BaseButton.SignalName.Pressed, Callable.From(() => OpenEditor(SelectedSlug())));
         _signals.Connect(_remove, BaseButton.SignalName.Pressed, Callable.From(RemoveSelected));
         _signals.Connect(_removeRepeated, BaseButton.SignalName.Pressed, Callable.From(RemoveRepeated));
@@ -98,7 +99,7 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
         _stale = false;
         var selectedSlug = SelectedSlug();
         var selectedDirectory = SelectedDirectory();
-        var plugins = _global.CollectPlugins().ToDictionary(p => p.Slug, StringComparer.Ordinal);
+        var plugins = _plugins.Plugins.ToDictionary(p => p.Slug, StringComparer.Ordinal);
         _tree.Clear();
         var root = _tree.CreateItem();
         var repeating = _repeating = _global.UpdateSitesRepeatingBuiltIn();
@@ -267,7 +268,7 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
         if (_global.UpdateSitesProblem is not null) return;
         _slug.Clear();
         var taken = _global.UpdateSites.Select(s => s.Slug).ToHashSet(StringComparer.Ordinal);
-        var all = _global.CollectPlugins();
+        var all = _plugins.Plugins;
         _configuredUrls = all.ToDictionary(p => p.Slug, p => p.UpdateUrl, StringComparer.Ordinal);
         // a plugin in a subfolder of res://addons is never updated, see EGlobal.CollectUpdateTargets
         var plugins = all.Where(p => !p.Missing && !AddonLayout.IsNested(p.Slug))
@@ -288,7 +289,7 @@ internal sealed partial class UpdateSourcesTab : VBoxContainer, ISerializationLi
         _url.Text = slug is null ? "" : _global.UpdateSiteOf(slug) ?? "";
         _editor.Title = slug is null ? "Add update site" : "Edit update site";
         ShowHint(null);
-        _editor.PopupCentered();
+        EditorWindows.PopupChild(_editor);
         _url.GrabFocus();
         _url.CaretColumn = _url.Text.Length;
     }

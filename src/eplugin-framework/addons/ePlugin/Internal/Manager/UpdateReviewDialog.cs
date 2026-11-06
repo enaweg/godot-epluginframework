@@ -15,14 +15,13 @@ internal sealed partial class UpdateReviewDialog : ConfirmationDialog, ISerializ
 {
     internal const string ScenePath = "res://addons/ePlugin/Internal/Manager/UpdateReviewDialog.tscn";
     private const int InstallColumn = 0, NameColumn = 1, VersionColumn = 2;
-    private readonly EditorSignalConnections _signals = new();
+    private readonly DialogLifetime _lifetime = new();
     private UpdateReview _review = null!;
     private Action<bool> _finished = null!;
     private Tree _tree = null!;
     private Label _name = null!;
     private RichTextLabel _text = null!;
     private string? _selected;
-    private bool _done;
 
     /// <summary>Calls <paramref name="finished"/> with true to install what the review selects, or false to cancel.</summary>
     public static UpdateReviewDialog Create(UpdateReview review, Action<bool> finished)
@@ -39,24 +38,21 @@ internal sealed partial class UpdateReviewDialog : ConfirmationDialog, ISerializ
     {
         _review = review; _finished = finished;
         _tree = GetNode<Tree>("%ReviewTree"); _name = GetNode<Label>("%ReviewName"); _text = GetNode<RichTextLabel>("%ReviewText");
-        EditorWindows.Prepare(this, _signals, this, MethodName.QueueWindowIcon);
+        _lifetime.Prepare(this, MethodName.RefreshWindowIcons);
         var scale = EditorWindows.Scale;
-        _text.AddThemeConstantOverride("line_separation", (int)(_text.GetThemeConstant("line_separation") * scale));
         // Column titles and sizing are not scene properties of Tree.
         _tree.SetColumnTitle(InstallColumn, "Decision"); _tree.SetColumnTitle(NameColumn, "Plugin"); _tree.SetColumnTitle(VersionColumn, "Version");
         _tree.SetColumnExpand(InstallColumn, false); _tree.SetColumnCustomMinimumWidth(InstallColumn, (int)(150 * scale));
         // Plugin names are longer than version changes.
         _tree.SetColumnExpandRatio(NameColumn, 2);
         GetNode<Label>("%Summary").Text = review.Summary;
-        _signals.Connect(_tree, Tree.SignalName.ItemSelected, Callable.From(() => Display(_tree.GetSelected()?.GetMetadata(NameColumn).AsString())));
-        _signals.Connect(_tree, Tree.SignalName.ItemEdited, Callable.From(ItemEdited));
-        _signals.Connect(_text, RichTextLabel.SignalName.MetaClicked, Callable.From<Variant>(meta =>
-        {
-            if (PluginManagerViewModel.IsWebUrl(meta.AsString())) OS.ShellOpen(meta.AsString());
-        }));
-        _signals.Connect(this, AcceptDialog.SignalName.Confirmed, Callable.From(() => Finish(_review.InstallCount > 0)));
-        _signals.Connect(this, AcceptDialog.SignalName.Canceled, Callable.From(() => Finish(false)));
-        _signals.Connect(this, Window.SignalName.CloseRequested, Callable.From(() => Finish(false)));
+        var signals = _lifetime.Signals;
+        signals.Connect(_tree, Tree.SignalName.ItemSelected, Callable.From(() => Display(_tree.GetSelected()?.GetMetadata(NameColumn).AsString())));
+        signals.Connect(_tree, Tree.SignalName.ItemEdited, Callable.From(ItemEdited));
+        _lifetime.OpenWebLinks(_text);
+        signals.Connect(this, AcceptDialog.SignalName.Confirmed, Callable.From(() => Finish(_review.InstallCount > 0)));
+        signals.Connect(this, AcceptDialog.SignalName.Canceled, Callable.From(() => Finish(false)));
+        signals.Connect(this, Window.SignalName.CloseRequested, Callable.From(() => Finish(false)));
         Render();
         // Another repository is the decision that matters most, so it is shown first.
         Display((_review.Entries.FirstOrDefault(e => e.NeedsTrust) ?? _review.Entries[0]).Slug);
@@ -107,36 +103,24 @@ internal sealed partial class UpdateReviewDialog : ConfirmationDialog, ISerializ
         GetOkButton().Disabled = _review.InstallCount == 0;
     }
 
-    private void Finish(bool install)
-    {
-        if (_done) return;
-        _done = true; Hide();
-        try { _finished(install); }
-        finally { EditorWindows.Release(this); }
-    }
+    private void Finish(bool install) => _lifetime.Finish(() => _finished(install));
 
-    private void QueueWindowIcon() => CallDeferred(MethodName.RefreshWindowIcon);
-    private void RefreshWindowIcon() => EditorWindows.ApplyIcon(this);
+    private void RefreshWindowIcons() => _lifetime.RefreshIcons();
 
     // An assembly reload drops the staged batch with the manager, so the dialog goes with it; nothing is installed.
-    public void OnBeforeSerialize()
-    {
-        _signals.Dispose();
-        if (_done) return;
-        _done = true; EditorWindows.Release(this);
-    }
+    public void OnBeforeSerialize() => _lifetime.ReleaseForReload();
 
     public void OnAfterDeserialize() { }
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) _signals.Dispose();
+        if (disposing) _lifetime.ReleaseCallbacks();
         base.Dispose(disposing);
     }
 
     public override void _ExitTree()
     {
-        _signals.Dispose();
+        _lifetime.ReleaseCallbacks();
         base._ExitTree();
     }
 }

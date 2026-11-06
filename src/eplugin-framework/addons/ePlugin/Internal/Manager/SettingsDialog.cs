@@ -1,5 +1,6 @@
 #if TOOLS
 using System;
+using System.Collections.Generic;
 using Godot;
 
 namespace Enaweg.Plugin.Internal.Manager;
@@ -13,13 +14,13 @@ namespace Enaweg.Plugin.Internal.Manager;
 [Tool]
 internal sealed partial class SettingsDialog : AcceptDialog, ISerializationListener
 {
-    private readonly EditorSignalConnections _signals = new();
+    private readonly DialogLifetime _lifetime = new();
     private TabContainer _tabs = null!;
     private GeneralSettingsTab _general = null!;
     private UpdateSourcesTab _updateSources = null!;
     private ToolsTab _tools = null!;
     private AboutTab _about = null!;
-    private Window[] _windows = [];
+    private PluginSnapshot _plugins = null!;
 
     /// <summary>
     /// Raised after a setting or an update source changed, so the plugin list can be read again: both decide where
@@ -30,13 +31,14 @@ internal sealed partial class SettingsDialog : AcceptDialog, ISerializationListe
     public void Initialize(EGlobal global)
     {
         _tabs = GetNode<TabContainer>("%SettingsTabs");
+        _plugins = new PluginSnapshot(global.CollectPlugins);
         // The tab titles are the names of these nodes: TabContainer reads no other title from a scene in Godot 4.4.
         _general = GetNode<GeneralSettingsTab>("%SettingsTabs/General"); _general.Initialize();
-        _updateSources = GetNode<UpdateSourcesTab>("%SettingsTabs/Update sources"); _updateSources.Initialize(global);
-        _tools = GetNode<ToolsTab>("%SettingsTabs/Tools"); _tools.Initialize(global);
+        _updateSources = GetNode<UpdateSourcesTab>("%SettingsTabs/Update sources"); _updateSources.Initialize(global, _plugins);
+        _tools = GetNode<ToolsTab>("%SettingsTabs/Tools"); _tools.Initialize(global, _plugins);
         _about = GetNode<AboutTab>("%SettingsTabs/About"); _about.Initialize();
-        _windows = [this, GetNode<Window>("%AutoAcceptConfirm"), GetNode<Window>("%CleanupConfirm"), GetNode<Window>("%SiteEditor"), GetNode<Window>("%LocalSourceFolderDialog")];
-        foreach (var window in _windows) EditorWindows.Prepare(window, _signals, this, MethodName.QueueWindowIcons);
+        _lifetime.Prepare(this, MethodName.RefreshWindowIcons, GetNode<Window>("%AutoAcceptConfirm"), GetNode<Window>("%CleanupConfirm"),
+            GetNode<Window>("%SiteEditor"), GetNode<Window>("%LocalSourceFolderDialog"));
     }
 
     /// <summary>
@@ -45,10 +47,11 @@ internal sealed partial class SettingsDialog : AcceptDialog, ISerializationListe
     /// </summary>
     public void Open(PluginInfo? framework, string? cleanupDirectory = null)
     {
-        // Update sources reads the local directories again, which Tools then shows.
+        // Update sources reads the local directories again, which Tools then shows; both read the plugins once.
+        _plugins.Invalidate();
         _general.Open(); _updateSources.Open(); _tools.Open(cleanupDirectory); _about.Open(framework);
         _tabs.CurrentTab = cleanupDirectory is null ? 0 : _tools.GetIndex();
-        PopupCentered();
+        EditorWindows.PopupChild(this);
     }
 
     /// <summary>Renders the icons for the current editor theme; the manager calls it when its theme changes.</summary>
@@ -71,15 +74,11 @@ internal sealed partial class SettingsDialog : AcceptDialog, ISerializationListe
 
     private void SourcesChanged() => Changed?.Invoke(true);
 
-    private void QueueWindowIcons() => CallDeferred(MethodName.RefreshWindowIcons);
-    private void RefreshWindowIcons()
-    {
-        foreach (var window in _windows) EditorWindows.ApplyIcon(window);
-    }
+    private void RefreshWindowIcons() => _lifetime.RefreshIcons();
 
     private void ReleaseCallbacks()
     {
-        _signals.Dispose();
+        _lifetime.ReleaseCallbacks();
         if (_general is not null) _general.Changed -= GeneralChanged;
         if (_updateSources is not null) _updateSources.Changed -= SourcesChanged;
     }
@@ -99,5 +98,20 @@ internal sealed partial class SettingsDialog : AcceptDialog, ISerializationListe
         ReleaseCallbacks();
         base._ExitTree();
     }
+}
+
+/// <summary>
+/// The project's plugins as the settings' tabs show them: read once when the settings open and shared by the tabs until
+/// one of them asks for them again, e.g. when the local index changed. Reading them is slow and records plain plugins in
+/// the shared state file.
+/// </summary>
+internal sealed class PluginSnapshot(Func<IReadOnlyList<PluginInfo>> collect)
+{
+    private IReadOnlyList<PluginInfo>? _plugins;
+
+    public IReadOnlyList<PluginInfo> Plugins => _plugins ??= collect();
+
+    /// <summary>Reads the plugins again when they are asked for next.</summary>
+    public void Invalidate() => _plugins = null;
 }
 #endif

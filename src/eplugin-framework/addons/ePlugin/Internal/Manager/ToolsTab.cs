@@ -42,13 +42,12 @@ internal sealed partial class ToolsTab : VBoxContainer, ISerializationListener
     private string? _message, _messageDetails;
     // The local index changed while the tab was hidden or plugins were changing; it is rendered once it is shown again.
     private bool _stale;
-    // The project's plugins, read when the tab is opened or the index changed rather than for every rule or size change:
-    // reading them is slow and records plain plugins in the shared state file.
-    private IReadOnlyList<PluginInfo>? _plugins;
+    // The project's plugins, read when the settings open or the index changed rather than for every rule or size change.
+    private PluginSnapshot _plugins = null!;
 
-    public void Initialize(EGlobal global)
+    public void Initialize(EGlobal global, PluginSnapshot plugins)
     {
-        _global = global;
+        _global = global; _plugins = plugins;
         _directory = GetNode<OptionButton>("%CleanupDirectory"); _statistics = GetNode<Label>("%CleanupStatistics");
         _tree = GetNode<Tree>("%CleanupTree");
         _versionRule = GetNode<OptionButton>("%CleanupVersionRule"); _versionButton = GetNode<Button>("%CleanupVersionButton");
@@ -95,12 +94,14 @@ internal sealed partial class ToolsTab : VBoxContainer, ISerializationListener
 
     private static CleanupRule Rule(OptionButton option) => (CleanupRule)option.GetSelectedId();
 
-    /// <summary>Reads the index again; with <paramref name="directory"/>, selects that local directory.</summary>
+    /// <summary>
+    /// Reads the index again; with <paramref name="directory"/>, selects that local directory. The settings read the plugins
+    /// again before their tabs open.
+    /// </summary>
     public void Open(string? directory = null)
     {
         _message = null; _messageDetails = null;
         if (directory is not null) _selected = directory;
-        _plugins = null;
         Render();
     }
 
@@ -124,7 +125,7 @@ internal sealed partial class ToolsTab : VBoxContainer, ISerializationListener
 
         var packages = _selected is null ? [] : _global.LocalIndex.In(_selected).ToArray();
         _statistics.Text = Statistics(packages);
-        var plugins = _plugins ??= _global.CollectPlugins();
+        var plugins = _plugins.Plugins;
         var names = plugins.ToDictionary(p => p.Slug, p => p.Name, StringComparer.Ordinal);
         RenderTree(packages, names);
         var installed = Installed(plugins);
@@ -210,7 +211,7 @@ internal sealed partial class ToolsTab : VBoxContainer, ISerializationListener
         _confirm.DialogText = $"Delete {Count(plan.Remove.Count, "plugin package")} ({LocalCleanup.FormatSize(plan.Bytes)}) from {_selected}?\n\n" +
                               $"Kept: {LocalCleanup.Describe(rule).ToLowerInvariant()}, the latest version of every plugin and the versions " +
                               "installed in this project. The files are deleted, not moved to the trash.";
-        _confirm.PopupCentered();
+        EditorWindows.PopupChild(_confirm);
     }
 
     private void CleanUp()
@@ -227,8 +228,9 @@ internal sealed partial class ToolsTab : VBoxContainer, ISerializationListener
         }
         // The index or the installed plugins may have changed while the confirmation was open, so the cleanup is planned
         // again: it deletes only what was confirmed and the rule still removes.
+        _plugins.Invalidate();
         var current = LocalCleanup.Plan(_global.LocalIndex.In(pending.Directory), pending.Rule, DateTime.UtcNow,
-            Installed(_plugins = _global.CollectPlugins())).Remove.ToHashSet();
+            Installed(_plugins.Plugins)).Remove.ToHashSet();
         var remove = pending.Plan.Remove.Where(current.Contains).ToArray();
         if (remove.Length == 0)
         {
@@ -285,7 +287,7 @@ internal sealed partial class ToolsTab : VBoxContainer, ISerializationListener
     /// </summary>
     private void LocalIndexChanged()
     {
-        _plugins = null;
+        _plugins.Invalidate();
         if (CanRender) Render();
         else _stale = true;
     }

@@ -90,9 +90,7 @@ internal sealed partial class GeneralSettingsTab : VBoxContainer, ISerialization
                 case OptionButton option: option.Select(Array.IndexOf(Values(option), value.AsString())); break;
             }
         }
-        var theme = EditorWindows.Theme;
-        _autoAcceptWarning.AddThemeColorOverride("font_color",
-            theme is not null && theme.HasColor("warning_color", "Editor") ? theme.GetColor("warning_color", "Editor") : new Color(1f, 0.87f, 0.4f));
+        _autoAcceptWarning.AddThemeColorOverride("font_color", EditorIcons.WarningColor);
     }
 
     // Accepting every license unread is asked for first; turning it off is not.
@@ -100,7 +98,7 @@ internal sealed partial class GeneralSettingsTab : VBoxContainer, ISerialization
     {
         if (!value) { Save(_autoAccept, false); return; }
         _autoAccept.SetPressedNoSignal(false);
-        _autoAcceptConfirm.PopupCentered();
+        EditorWindows.PopupChild(_autoAcceptConfirm);
     }
 
     private void Save(Control control, Variant value)

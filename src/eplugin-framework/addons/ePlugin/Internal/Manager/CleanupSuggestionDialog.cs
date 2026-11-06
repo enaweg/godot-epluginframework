@@ -13,9 +13,8 @@ namespace Enaweg.Plugin.Internal.Manager;
 internal sealed partial class CleanupSuggestionDialog : ConfirmationDialog, ISerializationListener
 {
     internal const string ScenePath = "res://addons/ePlugin/Internal/Manager/CleanupSuggestionDialog.tscn";
-    private readonly EditorSignalConnections _signals = new();
+    private readonly DialogLifetime _lifetime = new();
     private Action<bool>? _decided;
-    private bool _done;
 
     /// <summary>
     /// Shows <paramref name="suggestion"/>; <paramref name="decided"/> is called with whether to clean up once the dialog
@@ -35,45 +34,31 @@ internal sealed partial class CleanupSuggestionDialog : ConfirmationDialog, ISer
     {
         _decided = decided;
         GetNode<Label>("%CleanupMessage").Text = Message(suggestion);
-        EditorWindows.Prepare(this, _signals, this, MethodName.QueueWindowIcon);
-        _signals.Connect(this, AcceptDialog.SignalName.Confirmed, Callable.From(() => Finish(true)));
-        _signals.Connect(this, AcceptDialog.SignalName.Canceled, Callable.From(() => Finish(false)));
+        _lifetime.Prepare(this, MethodName.RefreshWindowIcons);
+        _lifetime.Signals.Connect(this, AcceptDialog.SignalName.Confirmed, Callable.From(() => Finish(true)));
+        _lifetime.Signals.Connect(this, AcceptDialog.SignalName.Canceled, Callable.From(() => Finish(false)));
     }
 
     internal static string Message(CleanupSuggestion suggestion) =>
         $"The plugin packages in your local directory {suggestion.Directory} take {LocalCleanup.FormatSize(suggestion.Bytes)}, " +
         $"more than the {LocalCleanup.FormatSize(suggestion.Limit)} above which you want to clean it up. Clean it up now?";
 
-    private void Finish(bool cleanUp)
-    {
-        if (_done) return;
-        _done = true; Hide();
-        try { _decided?.Invoke(cleanUp); }
-        finally { EditorWindows.Release(this); }
-    }
+    private void Finish(bool cleanUp) => _lifetime.Finish(() => _decided?.Invoke(cleanUp));
 
-    private void QueueWindowIcon() => CallDeferred(MethodName.RefreshWindowIcon);
-    private void RefreshWindowIcon() => EditorWindows.ApplyIcon(this);
+    private void RefreshWindowIcons() => _lifetime.RefreshIcons();
 
-    // Reload serializes every script before disposing any of them, so callback targets are still valid here. The dialog
-    // closes without a decision, as its buttons would do nothing after the reload.
-    public void OnBeforeSerialize()
-    {
-        _signals.Dispose();
-        if (_done) return;
-        _done = true; EditorWindows.Release(this);
-    }
+    public void OnBeforeSerialize() => _lifetime.ReleaseForReload();
     public void OnAfterDeserialize() { }
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) _signals.Dispose();
+        if (disposing) _lifetime.ReleaseCallbacks();
         base.Dispose(disposing);
     }
 
     public override void _ExitTree()
     {
-        _signals.Dispose();
+        _lifetime.ReleaseCallbacks();
         base._ExitTree();
     }
 }

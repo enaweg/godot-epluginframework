@@ -60,9 +60,15 @@ internal static class EditorIcons
     public static Color WarningColor => ThemeColor(EditorWindows.Theme, Accents[1].Name, Accents[1].Fallback);
     /// <summary>The editor's color for errors.</summary>
     public static Color ErrorColor => ThemeColor(EditorWindows.Theme, Accents[2].Name, Accents[2].Fallback);
+    /// <summary>The editor's accent color, e.g. for a note that stands out without being a warning.</summary>
+    public static Color AccentColor => ThemeColor(EditorWindows.Theme, "accent_color", new Color(0.44f, 0.73f, 0.98f));
     /// <summary>The editor's color for disabled text, e.g. a plugin that is not enabled.</summary>
     public static Color DisabledColor => EditorWindows.Theme is { } theme && theme.HasColor("font_disabled_color", "Button")
         ? theme.GetColor("font_disabled_color", "Button") : new Color(0.5f, 0.5f, 0.5f);
+
+    /// <summary>An icon of the editor's own theme, e.g. <c>StatusError</c>; null without an editor or when its theme has none.</summary>
+    public static Texture2D? Builtin(string name) =>
+        EditorWindows.Theme is { } theme && theme.HasIcon(name, "EditorIcons") ? theme.GetIcon(name, "EditorIcons") : null;
 
     /// <summary>
     /// The ePlugin icon of the toolbar button: its puzzle piece is green while updates can be installed and red while an

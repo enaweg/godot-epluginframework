@@ -109,7 +109,7 @@ internal sealed class UpdateReview
             text.Append(CultureInfo.CurrentCulture, $"\n[color={TextColors.Error}]Refused:[/color] {Escape(reason)}\nIt is not installed; its files are not changed.\n");
         if (entry.Findings.Count > 0) text.Append('\n');
         foreach (var finding in entry.Findings)
-            text.Append(CultureInfo.CurrentCulture, $"[color={Color(finding.Severity)}]{finding.Severity}:[/color] {Escape(finding.Message)}\n");
+            text.Append(CultureInfo.CurrentCulture, $"[color={TextColors.For(finding.Severity)}]{finding.Severity}:[/color] {Escape(finding.Message)}\n");
         if (!entry.NeedsTrust) return text.ToString().TrimEnd();
         if (entry.Findings.Any(f => f.Code == "R9" && f.RequiresTrust) && entry.Package is { NewUpdateUrl: var url } && string.IsNullOrWhiteSpace(url))
             text.Append("\n[b]The plugin no longer names its update site.[/b] ")
@@ -125,9 +125,5 @@ internal sealed class UpdateReview
 
     private static string Link(string url) => PluginManagerViewModel.IsWebUrl(url) ? $"[url={url}]{Escape(url)}[/url]" : Escape(url);
     private static string Escape(string value) => PluginManagerViewModel.Escape(value);
-    private static string Color(FindingSeverity severity) => severity switch
-    {
-        FindingSeverity.Error => TextColors.Error, FindingSeverity.Warning => TextColors.Warning, _ => TextColors.Info
-    };
 }
 #endif

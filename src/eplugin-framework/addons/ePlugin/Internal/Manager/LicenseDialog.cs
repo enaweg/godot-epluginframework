@@ -16,7 +16,7 @@ internal sealed partial class LicenseDialog : AcceptDialog, ISerializationListen
 {
     internal const string ScenePath = "res://addons/ePlugin/Internal/Manager/LicenseDialog.tscn";
     private const string DeclineAction = "decline", AcceptAllAction = "accept_all";
-    private readonly EditorSignalConnections _signals = new();
+    private readonly DialogLifetime _lifetime = new();
     private LicenseReview _review = null!;
     private Action<LicenseReview>? _finished;
     private ItemList _list = null!;
@@ -28,7 +28,6 @@ internal sealed partial class LicenseDialog : AcceptDialog, ISerializationListen
     private Button? _decline;
     private Button? _acceptAll;
     private string? _selected;
-    private bool _done;
     private bool _required;
     private bool ViewOnly => _finished is null;
 
@@ -58,28 +57,26 @@ internal sealed partial class LicenseDialog : AcceptDialog, ISerializationListen
         _list = GetNode<ItemList>("%LicenseList"); _summary = GetNode<Label>("%Summary");
         _name = GetNode<Label>("%LicenseName"); _source = GetNode<Label>("%LicenseSource");
         _neededBy = GetNode<Label>("%NeededBy"); _text = GetNode<RichTextLabel>("%LicenseText");
-        EditorWindows.Prepare(this, _signals, this, MethodName.QueueWindowIcon);
+        _lifetime.Prepare(this, MethodName.RefreshWindowIcons);
+        var signals = _lifetime.Signals;
         if (ViewOnly)
         {
             Title = "ePlugin — License";
             OkButtonText = "Close";
-            _signals.Connect(this, AcceptDialog.SignalName.Confirmed, Callable.From(Finish));
-            _signals.Connect(this, AcceptDialog.SignalName.Canceled, Callable.From(Finish));
+            signals.Connect(this, AcceptDialog.SignalName.Confirmed, Callable.From(Finish));
+            signals.Connect(this, AcceptDialog.SignalName.Canceled, Callable.From(Finish));
         }
         else
         {
             _decline = AddButton("Decline", false, DeclineAction);
             _acceptAll = AddButton("Accept all", true, AcceptAllAction);
             _acceptAll.TooltipText = "Accept every license that is not decided yet.";
-            _signals.Connect(this, AcceptDialog.SignalName.Confirmed, Callable.From(Confirm));
-            _signals.Connect(this, AcceptDialog.SignalName.CustomAction, Callable.From<StringName>(HandleCustomAction));
-            _signals.Connect(this, AcceptDialog.SignalName.Canceled, Callable.From(DeclineRemaining));
+            signals.Connect(this, AcceptDialog.SignalName.Confirmed, Callable.From(Confirm));
+            signals.Connect(this, AcceptDialog.SignalName.CustomAction, Callable.From<StringName>(HandleCustomAction));
+            signals.Connect(this, AcceptDialog.SignalName.Canceled, Callable.From(DeclineRemaining));
         }
-        _signals.Connect(_list, ItemList.SignalName.ItemSelected, Callable.From<long>(index => Display(_review.Entries[(int)index].Slug)));
-        _signals.Connect(_text, RichTextLabel.SignalName.MetaClicked, Callable.From<Variant>(meta =>
-        {
-            if (PluginManagerViewModel.IsWebUrl(meta.AsString())) OS.ShellOpen(meta.AsString());
-        }));
+        signals.Connect(_list, ItemList.SignalName.ItemSelected, Callable.From<long>(index => Display(_review.Entries[(int)index].Slug)));
+        _lifetime.OpenWebLinks(_text);
         _summary.Text = summary;
         _list.Visible = review.Entries.Count > 1;
         Display(review.NextPending()?.Slug ?? review.Entries[0].Slug);
@@ -157,17 +154,15 @@ internal sealed partial class LicenseDialog : AcceptDialog, ISerializationListen
 
     private void Render()
     {
-        var theme = EditorWindows.Theme;
-        Texture2D? Icon(string name) => theme is not null && theme.HasIcon(name, "EditorIcons") ? theme.GetIcon(name, "EditorIcons") : null;
         _list.Clear();
         foreach (var entry in _review.Entries)
         {
             var decision = _review.DecisionOf(entry.Slug);
             var index = _list.AddItem(entry.Name, decision switch
             {
-                LicenseDecision.Accepted => Icon("StatusSuccess"),
-                LicenseDecision.Declined => Icon("StatusError"),
-                LicenseDecision.Unreadable => Icon("StatusWarning"),
+                LicenseDecision.Accepted => EditorIcons.Builtin("StatusSuccess"),
+                LicenseDecision.Declined => EditorIcons.Builtin("StatusError"),
+                LicenseDecision.Unreadable => EditorIcons.Builtin("StatusWarning"),
                 _ => null
             });
             _list.SetItemTooltip(index, decision switch
@@ -222,43 +217,31 @@ internal sealed partial class LicenseDialog : AcceptDialog, ISerializationListen
 
     private void DeclineRemaining()
     {
-        if (_done) return;
+        if (_lifetime.IsDone) return;
         _review.DeclineRemaining();
         Finish();
     }
 
-    private void Finish()
-    {
-        if (_done) return;
-        _done = true; Hide();
-        try { _finished?.Invoke(_review); }
-        finally { EditorWindows.Release(this); }
-    }
+    private void Finish() => _lifetime.Finish(() => _finished?.Invoke(_review));
 
-    private void QueueWindowIcon() => CallDeferred(MethodName.RefreshWindowIcon);
-    private void RefreshWindowIcon() => EditorWindows.ApplyIcon(this);
+    private void RefreshWindowIcons() => _lifetime.RefreshIcons();
 
     // An assembly reload drops the review, so the dialog goes with it. A review the license gate queued is queued again
     // after the reload (EGlobal.ResumeLicenseReviews), so its dialog reappears; the ePlugin Manager's own one is not,
     // and the reloaded manager shows the plugin still disabled.
-    public void OnBeforeSerialize()
-    {
-        _signals.Dispose();
-        if (_done) return;
-        _done = true; EditorWindows.Release(this);
-    }
+    public void OnBeforeSerialize() => _lifetime.ReleaseForReload();
 
     public void OnAfterDeserialize() { }
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) _signals.Dispose();
+        if (disposing) _lifetime.ReleaseCallbacks();
         base.Dispose(disposing);
     }
 
     public override void _ExitTree()
     {
-        _signals.Dispose();
+        _lifetime.ReleaseCallbacks();
         base._ExitTree();
     }
 }

@@ -71,7 +71,7 @@ internal static class ZipInstall
         var findings = package.Findings.Where(f => f.Severity != FindingSeverity.Error).ToArray();
         if (findings.Length > 0) text.Append('\n');
         foreach (var finding in findings)
-            text.Append(CultureInfo.CurrentCulture, $"[color={(finding.Severity == FindingSeverity.Warning ? TextColors.Warning : TextColors.Info)}]{finding.Severity}:[/color] {Escape(finding.Message)}\n");
+            text.Append(CultureInfo.CurrentCulture, $"[color={TextColors.For(finding.Severity)}]{finding.Severity}:[/color] {Escape(finding.Message)}\n");
         return text.ToString().TrimEnd();
     }
 
@@ -79,7 +79,7 @@ internal static class ZipInstall
     /// The kind validation could tell from the files: an ePlugin is a C# plugin until its code is compiled, which is when
     /// the list shows it as one.
     /// </summary>
-    private static string KindName(PluginKind kind) => kind is PluginKind.CSharp ? "C# plugin or ePlugin" : PluginCatalog.KindName(kind);
+    private static string KindName(PluginKind kind) => kind is PluginKind.CSharp ? "C# plugin or ePlugin" : PluginKinds.Name(kind);
 
     private static string Escape(string value) => PluginManagerViewModel.Escape(value);
 }

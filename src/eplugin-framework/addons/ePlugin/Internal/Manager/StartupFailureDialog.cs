@@ -14,9 +14,8 @@ internal sealed partial class StartupFailureDialog : AcceptDialog, ISerializatio
     internal const string ScenePath = "res://addons/ePlugin/Internal/Manager/StartupFailureDialog.tscn";
     private const string RetryAction = "retry";
     private const string CopyAction = "copy";
-    private readonly EditorSignalConnections _signals = new();
+    private readonly DialogLifetime _lifetime = new();
     private Action? _retry;
-    private bool _done;
 
     /// <param name="error">The exception's message, shown in the dialog.</param>
     /// <param name="details">Everything known about the failure, which the user can copy.</param>
@@ -38,10 +37,10 @@ internal sealed partial class StartupFailureDialog : AcceptDialog, ISerializatio
         GetNode<TextEdit>("%StartupDetails").Text = details;
         AddButton("Copy details", false, CopyAction);
         AddButton("Retry now", true, RetryAction);
-        EditorWindows.Prepare(this, _signals, this, MethodName.QueueWindowIcon);
-        _signals.Connect(this, AcceptDialog.SignalName.Confirmed, Callable.From(() => Finish(false)));
-        _signals.Connect(this, AcceptDialog.SignalName.Canceled, Callable.From(() => Finish(false)));
-        _signals.Connect(this, AcceptDialog.SignalName.CustomAction, Callable.From<StringName>(action =>
+        _lifetime.Prepare(this, MethodName.RefreshWindowIcons);
+        _lifetime.Signals.Connect(this, AcceptDialog.SignalName.Confirmed, Callable.From(() => Finish(false)));
+        _lifetime.Signals.Connect(this, AcceptDialog.SignalName.Canceled, Callable.From(() => Finish(false)));
+        _lifetime.Signals.Connect(this, AcceptDialog.SignalName.CustomAction, Callable.From<StringName>(action =>
         {
             if (action == CopyAction) DisplayServer.ClipboardSet(GetNode<TextEdit>("%StartupDetails").Text);
             else if (action == RetryAction) Finish(true);
@@ -50,35 +49,22 @@ internal sealed partial class StartupFailureDialog : AcceptDialog, ISerializatio
 
     internal static string Message(string error) => $"ePlugin could not start: {error}";
 
-    private void Finish(bool retry)
-    {
-        if (_done) return;
-        _done = true; Hide();
-        try { if (retry) _retry?.Invoke(); }
-        finally { EditorWindows.Release(this); }
-    }
+    private void Finish(bool retry) => _lifetime.Finish(retry ? _retry : null);
 
-    private void QueueWindowIcon() => CallDeferred(MethodName.RefreshWindowIcon);
-    private void RefreshWindowIcon() => EditorWindows.ApplyIcon(this);
+    private void RefreshWindowIcons() => _lifetime.RefreshIcons();
 
-    // Reload serializes every script before disposing any of them, so callback targets are still valid here.
-    public void OnBeforeSerialize()
-    {
-        _signals.Dispose();
-        if (_done) return;
-        _done = true; EditorWindows.Release(this);
-    }
+    public void OnBeforeSerialize() => _lifetime.ReleaseForReload();
     public void OnAfterDeserialize() { }
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) _signals.Dispose();
+        if (disposing) _lifetime.ReleaseCallbacks();
         base.Dispose(disposing);
     }
 
     public override void _ExitTree()
     {
-        _signals.Dispose();
+        _lifetime.ReleaseCallbacks();
         base._ExitTree();
     }
 }

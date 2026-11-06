@@ -218,7 +218,7 @@ public class PluginManagerViewModelTests
         Assertions.AssertObject(PluginKinds.Classify("res://addons/native/plugin.gd", false, types, true)).IsEqual(PluginKind.GDExtension);
         Assertions.AssertObject(PluginKinds.Classify("res://addons/none/Missing.cs", false, types, true)).IsEqual(PluginKind.GDExtension);
         Assertions.AssertObject(PluginKinds.Classify("res://addons/sample_plugin/SamplePlugin.cs", false, types, true)).IsEqual(PluginKind.EPlugin);
-        Assertions.AssertString(PluginCatalog.KindName(PluginKind.GDExtension)).IsEqual("GDExtension plugin");
+        Assertions.AssertString(PluginKinds.Name(PluginKind.GDExtension)).IsEqual("GDExtension plugin");
         Assertions.AssertString(PluginCatalog.ResolveScript("res://addons/x", "Plugin.cs")).IsEqual("res://addons/x/Plugin.cs");
         Assertions.AssertString(PluginCatalog.ResolveScript("res://addons/x", "res://other/Plugin.cs")).IsEqual("res://other/Plugin.cs");
     }
@@ -227,8 +227,8 @@ public class PluginManagerViewModelTests
     {
         var kinds = Enum.GetValues<PluginKind>();
         Assertions.AssertInt(kinds.Select(k => PluginKinds.Workflow(k).Kind).Distinct().Count()).IsEqual(kinds.Length);
-        Assertions.AssertInt(kinds.Select(PluginCatalog.KindName).Distinct().Count()).IsEqual(kinds.Length);
-        Assertions.AssertString(PluginCatalog.KindName(PluginKind.CSharp)).IsEqual("C# plugin");
+        Assertions.AssertInt(kinds.Select(PluginKinds.Name).Distinct().Count()).IsEqual(kinds.Length);
+        Assertions.AssertString(PluginKinds.Name(PluginKind.CSharp)).IsEqual("C# plugin");
         // Godot runs a plain plugin's code from its folder, so it is disabled while the folder is swapped; the framework
         // swaps ePlugins and add-ons that are never enabled without disabling them
         Assertions.AssertThat(kinds.Where(k => PluginKinds.Workflow(k).DisabledDuringSwap).ToArray()).ContainsExactlyInAnyOrder(
@@ -447,6 +447,91 @@ public class PluginManagerViewModelTests
         }
         finally { manager.Free(); }
     }
+    [TestCase]
+    public static void TheListsTooltipsSayWhatACheckBoxDoesAndWhatAPluginIs()
+    {
+        var enabled = new PluginRow(Plugin("beta", PluginKind.GDExtension), null);
+        var disabled = new PluginRow(Plugin("beta", PluginKind.GDScript, enabled: false), null);
+        var missing = new PluginRow(Plugin("beta", PluginKind.EPlugin) with { Missing = true }, null);
+        var addon = new PluginRow(new PluginInfo("ext", "ext", PluginKind.GDExtensionAddon, true), null);
+        Assertions.AssertString(PluginManagerViewModel.EnabledTooltip(enabled)).IsEqual("Enabled. Uncheck to disable the plugin.");
+        Assertions.AssertString(PluginManagerViewModel.EnabledTooltip(disabled)).IsEqual("Disabled. Check to enable the plugin.");
+        Assertions.AssertString(PluginManagerViewModel.EnabledTooltip(missing)).IsEqual("The plugin folder or its plugin.cfg is missing.");
+        Assertions.AssertString(PluginManagerViewModel.EnabledTooltip(addon)).StartsWith("Godot always loads a GDExtension without plugin.cfg");
+
+        Assertions.AssertString(PluginManagerViewModel.NameTooltip(enabled, "res://addons/beta")).IsEqual("beta (res://addons/beta)\nGDExtension plugin");
+        var updatable = new PluginRow(Plugin("beta", PluginKind.GDExtension, "https://example.org/releases"), null);
+        Assertions.AssertString(PluginManagerViewModel.NameTooltip(updatable, "res://addons/beta")).IsEqual("beta (res://addons/beta)\nGDExtension plugin\nUpdatable");
+        var update = new PluginRow(Plugin("beta", PluginKind.GDExtension), new UpdateRow(Candidate("beta"), [], null));
+        Assertions.AssertString(PluginManagerViewModel.NameTooltip(update, "res://addons/beta")).EndsWith("\nUpdate available: 1.0.0 → 2.0.0");
+    }
+
+    [TestCase]
+    public static void TheVersionColumnShowsAnUpdateAndWhetherItCanBeInstalled()
+    {
+        var plain = new PluginRow(Plugin("beta", PluginKind.GDScript), null);
+        Assertions.AssertString(PluginManagerViewModel.VersionColumnText(plain)).IsEqual("1.0.0");
+        Assertions.AssertString(PluginManagerViewModel.VersionColumnTooltip(plain)).IsEqual(PluginManagerViewModel.StatusText(plain.Plugin));
+
+        var update = new PluginRow(Plugin("beta", PluginKind.GDScript), new UpdateRow(Candidate("beta"), [], null));
+        Assertions.AssertString(PluginManagerViewModel.VersionColumnText(update)).IsEqual("1.0.0 → 2.0.0");
+        Assertions.AssertString(PluginManagerViewModel.VersionColumnTooltip(update)).IsEqual("Update installs this update.");
+        var failing = new PluginRow(Plugin("beta", PluginKind.GDScript), new UpdateRow(Candidate("beta"), [new("x", FindingSeverity.Error, "Bad.")], null));
+        Assertions.AssertString(PluginManagerViewModel.VersionColumnTooltip(failing)).IsEqual("This update cannot be installed, see details.");
+
+        var unknown = new PluginRow(new PluginInfo("ext", "ext", PluginKind.GDExtensionAddon, true), new UpdateRow(Candidate("ext") with { InstalledVersion = "" }, [], null));
+        Assertions.AssertString(PluginManagerViewModel.VersionColumnText(unknown)).IsEqual("unknown → 2.0.0");
+    }
+
+    [TestCase]
+    public static void TheStatusLineShowsTheOutcomeOrTheScheduleWithTheUpdatesAndAPendingReload()
+    {
+        const string schedule = "Last checked: never · Next check: off";
+        Assertions.AssertString(PluginManagerViewModel.StatusLine(null, 0, schedule, false, false, false)).IsEqual(schedule);
+        Assertions.AssertString(PluginManagerViewModel.StatusLine(null, 2, schedule, true, false, false))
+            .IsEqual("2 updates available · " + schedule + " · Indexing local directories...");
+        // an outcome replaces the schedule, but the updates are still counted
+        Assertions.AssertString(PluginManagerViewModel.StatusLine("Installed beta 2.0.0.", 1, schedule, true, false, false))
+            .IsEqual("Installed beta 2.0.0. · 1 update available");
+        Assertions.AssertString(PluginManagerViewModel.StatusLine("Done.", 0, schedule, false, true, true)).IsEqual("Done. · " + PluginManagerViewModel.ReloadNotice);
+        Assertions.AssertString(PluginManagerViewModel.StatusLine("Done.", 0, schedule, false, false, true)).IsEqual("Done. · " + PluginManagerViewModel.ReloadFailedNotice);
+    }
+
+    [TestCase]
+    public static void AVersionCanBeChosenOnlyFromTwoVersions()
+    {
+        Assertions.AssertBool(PluginManagerViewModel.CanChooseVersion([])).IsFalse();
+        // only the installed version
+        Assertions.AssertBool(PluginManagerViewModel.CanChooseVersion(PluginManagerViewModel.VersionOptions("1.5.0", [], PluginKind.EPlugin))).IsFalse();
+        // an add-on of unknown version with the one version found, which is preselected
+        Assertions.AssertBool(PluginManagerViewModel.CanChooseVersion(PluginManagerViewModel.VersionOptions("", [Version("2.0.0")], PluginKind.GDExtensionAddon))).IsFalse();
+        Assertions.AssertBool(PluginManagerViewModel.CanChooseVersion(PluginManagerViewModel.VersionOptions("1.5.0", [Version("2.0.0")], PluginKind.EPlugin))).IsTrue();
+    }
+
+    [TestCase]
+    public static void InstallingAVersionSaysWhatItReplacesAndWhatABuildFailureDoes()
+    {
+        var row = new PluginRow(Plugin("beta", PluginKind.EPlugin, "https://example.org/releases") with { Version = "1.5.0" }, null);
+        var options = PluginManagerViewModel.VersionOptions("1.5.0", [Version("2.0.0"), Version("1.5.0"), Version("1.0.0")], PluginKind.EPlugin);
+        var (newer, installed, older) = (options[0], options[1], options[2]);
+
+        Assertions.AssertString(PluginManagerViewModel.VersionConfirmText(row, newer, BuildFailurePolicy.Rollback))
+            .IsEqual("Replace beta 1.5.0 with version 2.0.0?\n\nOpen scenes are saved first; files and project references are backed up and restored if installation fails.");
+        Assertions.AssertString(PluginManagerViewModel.VersionConfirmText(row, newer, BuildFailurePolicy.Ask)).EndsWith("you choose whether to keep it and fix the errors yourself or to restore the previous version.");
+        Assertions.AssertString(PluginManagerViewModel.VersionConfirmText(row, newer, BuildFailurePolicy.Keep)).EndsWith("(project setting eplugin/updates/on_build_failure).");
+        Assertions.AssertString(PluginManagerViewModel.VersionConfirmText(row, older, BuildFailurePolicy.Rollback)).Contains("\n\nUse this to undo an update that broke the project.");
+        Assertions.AssertString(PluginManagerViewModel.VersionConfirmText(row, installed, BuildFailurePolicy.Rollback))
+            .StartsWith("Reinstall beta 1.5.0?\n\nFrom the update site https://example.org/releases. Its files replace the installed ones: ");
+        var addon = new PluginRow(new PluginInfo("beta", "beta", PluginKind.GDExtensionAddon, true), null);
+        var unknown = PluginManagerViewModel.VersionOptions("", [Version("2.0.0")], PluginKind.GDExtensionAddon).Single();
+        Assertions.AssertString(PluginManagerViewModel.VersionConfirmText(addon, unknown, BuildFailurePolicy.Rollback)).StartsWith("Install beta 2.0.0?\n\nFrom the update site");
+
+        Assertions.AssertString(PluginManagerViewModel.VersionInstallTooltip(row, newer)).IsEqual("Install version 2.0.0 of beta.");
+        Assertions.AssertString(PluginManagerViewModel.VersionInstallTooltip(row, installed)).IsEqual("Install version 1.5.0 of beta again, replacing its files.");
+        var disabled = new PluginRow(row.Plugin with { Enabled = false }, null);
+        Assertions.AssertString(PluginManagerViewModel.VersionInstallTooltip(disabled, newer)).IsEqual("Enable the plugin to change its version.");
+    }
+
     private static ValidatedPackage Package(string slug)
     {
         Assertions.AssertBool(SemVer.TryParse("2.0.0", out var version)).IsTrue();

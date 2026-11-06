@@ -40,5 +40,52 @@ public class EditorWindowsTests
         EditorWindows.Release(window);
         Assertions.AssertBool(window.IsQueuedForDeletion()).IsTrue();
     }
+
+    [TestCase]
+    public static void AScaledSceneScalesItsMinimumSizesAndTheSpacingItOverrides()
+    {
+        var window = new Window { Visible = false };
+        var box = new VBoxContainer { CustomMinimumSize = new Vector2(100, 0) };
+        box.AddThemeConstantOverride("separation", 8);
+        var text = new RichTextLabel();
+        text.AddThemeConstantOverride("line_separation", 6);
+        // prepared on its own
+        var confirm = new ConfirmationDialog();
+        var inner = new VBoxContainer();
+        inner.AddThemeConstantOverride("separation", 4);
+        confirm.AddChild(inner);
+        box.AddChild(text);
+        window.AddChild(box);
+        window.AddChild(confirm);
+        try
+        {
+            EditorWindows.ScaleMinimumSizes(window, 2f);
+
+            Assertions.AssertFloat(box.CustomMinimumSize.X).IsEqual(200f);
+            Assertions.AssertInt(box.GetThemeConstant("separation")).IsEqual(16);
+            Assertions.AssertInt(text.GetThemeConstant("line_separation")).IsEqual(12);
+            // a constant the scene leaves to the theme stays the theme's
+            Assertions.AssertBool(text.HasThemeConstantOverride("separation")).IsFalse();
+            Assertions.AssertInt(inner.GetThemeConstant("separation")).IsEqual(4);
+        }
+        finally { window.Free(); }
+    }
+
+    [TestCase]
+    public static void AChildWindowOpensNoLargerThanItsParent()
+    {
+        var tree = (SceneTree)Engine.GetMainLoop();
+        var window = new AcceptDialog { Visible = false, Size = new Vector2I(100000, 100000) };
+        tree.Root.AddChild(window);
+        try
+        {
+            EditorWindows.PopupChild(window);
+
+            Assertions.AssertBool(window.Visible).IsTrue();
+            Assertions.AssertInt(window.Size.X).IsLess(100000);
+            Assertions.AssertInt(window.Size.Y).IsLess(100000);
+        }
+        finally { window.Free(); }
+    }
 }
 #endif

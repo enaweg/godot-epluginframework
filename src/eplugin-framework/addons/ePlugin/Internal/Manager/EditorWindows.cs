@@ -40,10 +40,35 @@ internal static class EditorWindows
     }
 
     /// <summary>
-    /// Scales the sizes a scene authored for 100% editor scale, takes the theme's status colors for its texts, and shows the
-    /// ePlugin icon whenever it opens.
+    /// Opens a window of a dialog's scene, e.g. a confirmation or the Needs attention dialog, centered on its parent like
+    /// <see cref="Window.PopupCentered"/>, but never larger than 90% of it, so it fits on the screen at a high editor scale.
     /// </summary>
-    public static void Prepare(Window window, EditorSignalConnections signals, GodotObject owner, StringName visibilityChanged)
+    public static void PopupChild(Window window) => window.PopupCenteredClamped(window.Size, 0.9f);
+
+    /// <summary>
+    /// Opens a log for the Open log buttons of the dialogs: a log file in the application the system opens it with, a log
+    /// folder (an update's, when it has no build log) in the system file manager.
+    /// </summary>
+    public static void ShowLog(string path) => OS.ShellOpen(path);
+
+    /// <summary>
+    /// Shows a folder, or the folder of a file with the file selected, in the system file manager; <paramref name="path"/>
+    /// may be a res:// path.
+    /// </summary>
+    public static void ShowInFileManager(string path) => OS.ShellShowInFileManager(ProjectSettings.GlobalizePath(path), true);
+
+    /// <summary>Opens <paramref name="url"/> in the system browser if it is a web link, see <see cref="PluginManagerViewModel.IsWebUrl"/>.</summary>
+    public static void OpenWebLink(string? url)
+    {
+        if (PluginManagerViewModel.IsWebUrl(url)) OS.ShellOpen(url);
+    }
+
+    /// <summary>
+    /// Scales the sizes a scene authored for 100% editor scale, takes the theme's status colors for its texts, and shows the
+    /// ePlugin icon whenever it opens: <paramref name="refreshIcons"/>, a method of <paramref name="owner"/>, runs deferred
+    /// after each visibility change, once Godot created the OS window.
+    /// </summary>
+    public static void Prepare(Window window, EditorSignalConnections signals, GodotObject owner, StringName refreshIcons)
     {
         var scale = Scale;
         TextColors.Use(Theme);
@@ -52,20 +77,28 @@ internal static class EditorWindows
         ScaleMinimumSizes(window, scale);
         if (DisplayServer.Singleton.HasMethod(WindowSetIcon))
             // A closure capturing Window cannot be serialized by Godot on reload. Use a native method callable.
-            signals.Connect(window, Window.SignalName.VisibilityChanged, new Callable(owner, visibilityChanged));
+            signals.Connect(window, Window.SignalName.VisibilityChanged, new Callable(owner, refreshIcons), GodotObject.ConnectFlags.Deferred);
     }
 
+    // The spacing constants a scene overrides, e.g. between the boxes of a dialog or the lines of its details.
+    private static readonly StringName[] Separations = ["separation", "h_separation", "v_separation", "line_separation"];
+
     /// <summary>
-    /// The minimum sizes of the window's controls, e.g. a list's width or an autowrapping label's. A window inside the
-    /// scene is prepared on its own, so it is left out here.
+    /// The minimum sizes of the window's controls, e.g. a list's width or an autowrapping label's, and the spacing their
+    /// scene overrides. A window inside the scene is prepared on its own, so it is left out here.
     /// </summary>
-    private static void ScaleMinimumSizes(Node parent, float scale)
+    internal static void ScaleMinimumSizes(Node parent, float scale)
     {
         if (Math.Abs(scale - 1f) < 0.01f) return;
         foreach (var child in parent.GetChildren())
         {
             if (child is Window) continue;
-            if (child is Control control) control.CustomMinimumSize *= scale;
+            if (child is Control control)
+            {
+                control.CustomMinimumSize *= scale;
+                foreach (var name in Separations)
+                    if (control.HasThemeConstantOverride(name)) control.AddThemeConstantOverride(name, (int)(control.GetThemeConstant(name) * scale));
+            }
             ScaleMinimumSizes(child, scale);
         }
     }
