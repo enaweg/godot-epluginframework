@@ -14,7 +14,7 @@ internal sealed partial class EGlobal
     private readonly List<WelcomeEntry> _pendingWelcomes = [];
     // Plugins checked this session that have no welcome page, so their files are not read again every check.
     private readonly HashSet<string> _welcomeChecked = new(StringComparer.Ordinal);
-    private ulong _nextWelcomeCheck;
+    private FrameThrottle _welcomeChecks = new(WelcomeCheckFrames);
 
     /// <summary>
     /// No plugin is being enabled, disabled or updated, so the welcome pages of the installed plugins can be shown.
@@ -28,13 +28,11 @@ internal sealed partial class EGlobal
     /// </summary>
     internal IReadOnlyList<WelcomeEntry>? TakeWelcomes()
     {
-        var frame = Engine.GetProcessFrames();
-        if (frame < _nextWelcomeCheck)
+        if (!_welcomeChecks.Due(Engine.GetProcessFrames()))
         {
             return null;
         }
 
-        _nextWelcomeCheck = frame + WelcomeCheckFrames;
         if (WelcomeSettings.Hide || _stateStore is null || _stateStore.IsReadOnly || !LicenseUiAvailable || !WelcomeQuiet)
         {
             return null;
@@ -58,7 +56,7 @@ internal sealed partial class EGlobal
                            _pendingWelcomes.All(w => w.Slug != slug) && IsInstalled(slug))
             .Order(StringComparer.Ordinal).ToArray();
         // read from disk only when there is something to show
-        if (ready.Length == 0 || _updateJournals?.Read().Any(j => j.IsActive) == true)
+        if (ready.Length == 0 || IsUpdateActive)
         {
             return;
         }

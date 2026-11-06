@@ -229,6 +229,41 @@ public class IDotnetCliTests
     }
 
     [TestCase]
+    public static void BothGenerationsRemoveAReferencedProjectWithTheirOwnArguments()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "eplugin-cli-" + Path.GetRandomFileName());
+        Directory.CreateDirectory(root);
+        try
+        {
+            var project = Path.Combine(root, "Game.csproj");
+            var absolute = Path.Combine(root, "addons", "my lib", "Lib.csproj");
+            File.WriteAllText(project, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <ItemGroup>
+                    <ProjectReference Include="addons\my lib\Lib.csproj" />
+                  </ItemGroup>
+                </Project>
+                """);
+            foreach (var generation in new[] { 9, 10 })
+            {
+                var runner = new RecordingRunner();
+                DotnetCliBase cli = generation == 9
+                    ? new DotnetCli9(new NullLogger(), false, root, "Game", runner)
+                    : new DotnetCli10(new NullLogger(), false, root, "Game", runner);
+                Assertions.AssertBool(cli.TryRemoveProjectReference("res://addons/my lib/Lib.csproj")).IsTrue();
+                string[] expected = generation == 9
+                    ? ["dotnet", "remove", project, "reference", absolute]
+                    : ["dotnet", "reference", "remove", absolute, "--project", project];
+                AssertCalls(runner, expected);
+            }
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [TestCase]
     public static void RemovingWhatIsAlreadyGoneDoesNotRunTheCli()
     {
         foreach (var generation in new[] { 9, 10 })

@@ -7,13 +7,14 @@ using Godot.NativeInterop;
 namespace Enaweg.Plugin.Logging;
 
 /// <summary>
-/// This logger logs to the default Godot Console. This can be used to debug problems.
+/// Logs to Godot's output: messages with <c>GD.Print</c>, warnings and errors through Godot's error printer like
+/// <c>GD.PushWarning</c> and <c>GD.PushError</c>. ePlugin logs through it unless a logging plugin takes over.
 /// </summary>
 /// <remarks>
 /// Errors and warnings name the code that logged them rather than this logger: <c>GD.PushError</c> always reports its
 /// direct caller, so the location is passed to Godot's error printer explicitly.
 /// </remarks>
-/// <param name="prefix"></param>
+/// <param name="prefix">Put before every message, followed by <c> | </c>, e.g. the category of the logger.</param>
 public sealed class GodotConsoleLogger(string prefix) : ILogger
 {
     private delegate void ErrPrintError(in godot_string function, in godot_string file, int line, in godot_string error,
@@ -26,18 +27,21 @@ public sealed class GodotConsoleLogger(string prefix) : ILogger
     /// <summary>Whether errors and warnings name the code that logged them; without it they name this logger.</summary>
     internal static bool NamesCallers => Printer is not null;
 
+    /// <inheritdoc/>
     [StackTraceHidden]
     public void Log(string message)
     {
         GD.Print($"{prefix} | {message}");
     }
 
+    /// <inheritdoc/>
     [StackTraceHidden]
     public void Warn(string message)
     {
         if (!Print($"{prefix} | {message}", godot_error_handler_type.ERR_HANDLER_WARNING)) GD.PushWarning($"{prefix} | {message}");
     }
 
+    /// <inheritdoc/>
     [StackTraceHidden]
     public void Error(string message)
     {

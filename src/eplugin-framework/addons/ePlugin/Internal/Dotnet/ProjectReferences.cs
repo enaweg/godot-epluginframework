@@ -1,5 +1,6 @@
 #if TOOLS
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -12,13 +13,17 @@ namespace Enaweg.Plugin.Internal.Dotnet;
 /// Reads whether a project or solution still holds a reference before the dotnet CLI is asked to remove it: removing
 /// something that is already gone is what an uninstall wants, but the CLI reports it as a failure. Every check answers
 /// null when it cannot tell (missing or unreadable file, MSBuild properties in a path), so the caller runs the CLI as
-/// before.
+/// before. Its solution readers (<see cref="SlnProjects"/>, <see cref="SlnxProjects"/>) are shared with
+/// <see cref="ReleaseConfiguration"/>.
 /// </summary>
-internal static class ProjectReferences
+internal static partial class ProjectReferences
 {
     private static readonly Regex PackageId = new(@"^[A-Za-z0-9_][A-Za-z0-9_.\-]{0,99}$", RegexOptions.CultureInvariant);
-    private static readonly Regex SolutionProject = new(@"^\s*Project\(""\{[^}]+\}""\)\s*=\s*""[^""]*""\s*,\s*""([^""]+)""",
-        RegexOptions.Multiline | RegexOptions.CultureInvariant);
+
+    // A project of a .sln; "path" is its path, "guid" its GUID when the line has one.
+    [GeneratedRegex(@"^\s*Project\(""\{[^}]+\}""\)\s*=\s*""[^""]*""\s*,\s*""(?<path>[^""]+)""(?:\s*,\s*""(?<guid>\{[^}]+\})"")?",
+        RegexOptions.Multiline | RegexOptions.CultureInvariant)]
+    private static partial Regex SolutionProject();
 
     // NuGet ids are case-insensitive everywhere; paths only where the file system is.
     private static StringComparison PathComparison => OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
@@ -49,14 +54,22 @@ internal static class ProjectReferences
             if (!File.Exists(solutionFile)) return null;
             var directory = Path.GetDirectoryName(Path.GetFullPath(solutionFile))!;
             var paths = Path.GetExtension(solutionFile).Equals(".slnx", StringComparison.OrdinalIgnoreCase)
-                ? XDocument.Load(solutionFile).Descendants().Where(e => e.Name.LocalName == "Project")
-                    .Select(e => (string?)e.Attribute("Path")).Where(p => p is not null).Cast<string>().ToArray()
-                : SolutionProject.Matches(File.ReadAllText(solutionFile)).Select(m => m.Groups[1].Value).ToArray();
+                ? SlnxProjects(XDocument.Load(solutionFile)).Select(p => p.Path).ToArray()
+                : SlnProjects(File.ReadAllText(solutionFile)).Select(p => p.Path).ToArray();
             if (paths.Any(p => p.Contains("$("))) return null;
             return paths.Any(p => SamePath(directory, p, project));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or XmlException) { return null; }
     }
+
+    /// <summary>The projects of a <c>.sln</c>'s text: each path as the solution writes it, and its GUID, or null without one.</summary>
+    internal static IEnumerable<(string Path, string? Guid)> SlnProjects(string text) =>
+        SolutionProject().Matches(text).Select(m => (m.Groups["path"].Value, m.Groups["guid"].Success ? m.Groups["guid"].Value : null));
+
+    /// <summary>The <c>Project</c> elements of a <c>.slnx</c> that have a <c>Path</c>, with that path as the solution writes it.</summary>
+    internal static IEnumerable<(XElement Element, string Path)> SlnxProjects(XDocument solution) =>
+        solution.Descendants().Where(e => e.Name.LocalName == "Project" && e.Attribute("Path") is not null)
+            .Select(e => (e, e.Attribute("Path")!.Value));
 
     /// <summary>The Include values of an item type, or null when the file cannot be read or uses MSBuild properties there.</summary>
     private static string[]? Items(string projectFile, string itemType)

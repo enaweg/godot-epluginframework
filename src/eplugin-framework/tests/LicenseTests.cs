@@ -298,8 +298,8 @@ public class LicenseTests
         var welcome = Path.Combine(directory, "README.md");
         File.WriteAllBytes(welcome, new byte[PluginWelcome.MaximumSize + 1]);
 
-        Assertions.AssertString(PluginLicense.FromFile("plugin", "Plugin", "1.0.0", "LICENSE", license).Problem!).Contains("is larger than 1024 KiB");
-        Assertions.AssertString(PluginWelcome.FromFile("plugin", "Plugin", "1.0.0", "README.md", welcome).Problem!).Contains("is larger than 1024 KiB");
+        Assertions.AssertString(PluginLicense.FromFile("plugin", "Plugin", "1.0.0", "LICENSE", license).Problem!).Contains("is larger than 1 MiB");
+        Assertions.AssertString(PluginWelcome.FromFile("plugin", "Plugin", "1.0.0", "README.md", welcome).Problem!).Contains("is larger than 1 MiB");
         // a recipe path that leaves the plugin directory keeps its res:// form as the source
         Assertions.AssertString(PluginLicense.SourceOfPath("plugin", "res://addons/plugin/../other/LICENSE")).IsEqual("res://addons/plugin/../other/LICENSE");
         Assertions.AssertBool(PluginLicense.IsTrue(" TRUE ")).IsTrue();

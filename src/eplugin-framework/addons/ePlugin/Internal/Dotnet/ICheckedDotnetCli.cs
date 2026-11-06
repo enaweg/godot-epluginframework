@@ -1,9 +1,10 @@
 #if TOOLS
 namespace Enaweg.Plugin.Internal.Dotnet;
 
-/// <summary>Exit-status reporting for recipe operations without changing the public IDotnetCli API.</summary>
+/// <summary>A build's exit code and the output dotnet wrote, see <see cref="IDotnetCli.Execute"/>.</summary>
 internal sealed record BuildOutcome(int ExitCode, string[] Output);
 
+/// <summary>Exit-status reporting for recipe operations without changing the public <see cref="IDotnetCli"/> API.</summary>
 internal interface ICheckedDotnetCli
 {
     /// <param name="keepNewAssembly">See <see cref="BuildOutputGuard.Run"/>.</param>

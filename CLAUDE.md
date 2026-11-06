@@ -139,8 +139,10 @@ because Godot otherwise asks to save modified resources first (plugins adding au
 
 `EGlobal` (`addons/ePlugin/Internal/EGlobal.cs`) is an internal singleton owning all plugin state. Its partials split it by
 concern: `EGlobal.Transitions.cs`, `.Activation.cs`, `.Deactivation.cs`, `.OptionalDependencies.cs` and `.Retry.cs` hold
-the plugin lifecycle, the others licenses, welcome pages, plain plugins, GDExtension add-ons and updates; put new code
-in the partial of its concern rather than in `EGlobal.cs`. It is the
+the plugin lifecycle; shared infrastructure has its own: `.EditorThread.cs` (`Post`, `PostForInstance`,
+`OnEditorThread`), `.Recipes.cs` (`RecipeOf`, the recipe of an enabled or disabled ePlugin) and `.UnsavedState.cs`
+(licenses and welcome pages the state file could not save yet); the others hold licenses, welcome pages, plain plugins,
+GDExtension add-ons and updates. Put new code in the partial of its concern rather than in `EGlobal.cs`. It is the
 brain of the framework: it tracks a `PluginContext` per managed `EditorPlugin`, drives the
 enable/disable state machine (`EEditorPluginState`: `Created → Activated`/`Deactivated`/`Error`), resolves
 plugin dependencies (enabling/version-checking them before the dependent plugin), and applies/reverses each
@@ -153,8 +155,12 @@ unfocused, restarting the editor, whether dialogs can show, loading/unloading GD
 keep new lifecycle code behind it so it stays testable. Recipes are created through `TryEnsureRecipe`, which puts the
 plugin in error and discards a half-built recipe when `CreateRecipe` throws. Scans that only read other plugins' recipes pass `scan: true`, which logs
 the failure but leaves that plugin's state alone, since no attempt of its own could resolve that error. `FindDependencyCycle` fails an activation
-whose hard dependencies lead back to the plugin (otherwise it waits for itself forever). A plugin waiting on
-`_toCheckEnable` has installed nothing: disabling it cancels its activation (`CancelWaitingActivation` takes it out of the
+whose hard dependencies lead back to the plugin (otherwise it waits for itself forever). What keeps a transition open
+besides its participants lives in `TransitionCoordinator` (`EGlobal._coordinator`, pure and unit-tested): the plugins
+whose activation (`Activations`) or deactivation (`Deactivations`) waits for other plugins, the plugins that enabled the
+framework, the holds (`Hold()`, disposable) and the stall watchdog; the participants and the recorded attempt stay in
+`EGlobal.Transitions.cs`. A plugin waiting in
+`Activations` has installed nothing: disabling it cancels its activation (`CancelWaitingActivation` takes it out of the
 transition and its `.user` entry), and disabling what it waits for fails it (`FailPluginsWaitingFor`, `dependency_disabled`),
 since resumed it would enable that plugin again. `CheckStalledTransition`, polled from `EPluginPlugin._Process` with the
 time and frame passed in, fails a transition without progress for `StallTimeout` (30 s) and `StallFrames` (`dependency_timed_out`,
@@ -249,7 +255,7 @@ known set lives in Engine metadata, so a toggle between a build and its reload i
 queued), then `ReevaluateOptionalDependencies`. A disabled one disables the activated ePlugins that require it (the
 optional snapshot of every plugin with an optional dependency on it is filled first, since the editor no longer has the
 plugin, also for plugins disabled further down the chain) and runs `UninstallOptionalDependenciesOn`,
-all in one transition: `_transitionHold` keeps `FinishTransition` from building in between. Toggles the framework makes
+all in one transition: a hold (`TransitionCoordinator.Hold`) keeps `FinishTransition` from building in between. Toggles the framework makes
 itself go through `NotePluginToggle`;
 nothing reacts while a reload is pending or an update is active. A hard dependency on a plain plugin is enabled
 synchronously by `EnablePlainDependency`, because no `EnableEPlugin` callback would resume the dependant, and versions of
@@ -273,16 +279,18 @@ removing the last managed entry leaves nothing else in the file. It works on the
 `DotnetVersionManager` detects the installed `dotnet --version` and hands out either `DotnetCli10` or
 `DotnetCli9` (both `DotnetCliBase : ExecuteCliBase, IDotnetCli`) — the two dotnet CLI generations differ
 in the argument order of their package and reference commands (`dotnet add <project> package` vs `dotnet package add
-... --project`); their `sln`, build and test commands are the same. `ExecuteCliBase` runs commands
+... --project`); their `sln`, build and test commands are the same, so `DotnetCliBase` implements every operation and
+the two classes only give those argument lists. `ExecuteCliBase` runs commands
 through an `IProcessRunner` (`GodotProcessRunner` uses `OS.Execute`); tests record the arguments instead. The
 `dotnet --version` probe is cached until the assembly reloads. A CLI is created for a project root, assembly name and solution directory
 (`IEditorHost.ProjectRoot`/`AssemblyName`/`SolutionDirectory`, the last read from `dotnet/project/solution_directory`
 relative to `res://` like GodotTools; tests pass a scratch project), and the CLI classes never read
 `ProjectSettings` (only `user://` NuGet sources are globalized through it; the Godot project is the `.csproj` named
 after the assembly in the project root, the solution `<assembly>.sln`, else `<assembly>.slnx`, else the only one in the
-solution directory; local NuGet sources are relative to the project root like `nuget.config` records them). Any new dotnet CLI operation needs a corresponding
-abstract member on `DotnetCliBase`/`IDotnetCli` implemented in both `DotnetCli9` and `DotnetCli10`, with its arguments
-checked in `IDotnetCliTests`. Pass arguments one per element and unquoted (`OS.Execute` quotes them; outside Windows it runs them through `/bin/sh`
+solution directory; local NuGet sources are relative to the project root like `nuget.config` records them). A new dotnet CLI operation is implemented once in
+`DotnetCliBase`; only an argument list that differs between the generations is an abstract member (like
+`AddPackageArguments`) implemented in both `DotnetCli9` and `DotnetCli10`. Check its arguments for both generations in
+`IDotnetCliTests`. Pass arguments one per element and unquoted (`OS.Execute` quotes them; outside Windows it runs them through `/bin/sh`
 in double quotes, so `GodotProcessRunner` escapes `\ " $` and backticks), and project
 paths through `ProjectFile`, which accepts `res://`, project-relative and absolute paths and returns an absolute one, so
 nothing depends on the editor's working directory. `IDotnetCli.Execute(command, args)` runs `dotnet <command> <args>`. A
@@ -302,7 +310,7 @@ as before.
 After adding a project to the solution or referencing it, both CLIs call `DotnetCliBase.MapExportRelease`: unless
 `dotnet msbuild -getProperty:Optimize -p:Configuration=ExportRelease` says the project optimizes `ExportRelease` itself
 (`Godot.NET.Sdk` projects), the pure `ReleaseConfiguration` makes the reference (`SetConfiguration`) and the `.sln`/`.slnx`
-build it as `Release` there. Godot exports with `dotnet publish <csproj> -c ExportRelease`, which a reference inherits, and
+build it as `Release` there (finding the project in the solution with `ProjectReferences`' solution readers). Godot exports with `dotnet publish <csproj> -c ExportRelease`, which a reference inherits, and
 `Microsoft.NET.Sdk` optimizes only `Release`; `dotnet sln add` maps `ExportRelease` to the project's `Debug`. A failure
 there only warns, since the project was added. `XmlFile` reads and writes XML files the project commits (`nuget.config`,
 project files) keeping their formatting.
@@ -409,7 +417,7 @@ Update sources lists the project's update sites, the user's local directories (e
 it; a local directory is one update source for any number of plugins) and the built-in list in one tree. Tab titles are the tab nodes' names, because Godot 4.4 ignores
 `metadata/_tab_name`. The General tab shows every `eplugin/*` project setting: a control names its setting in its
 `setting` metadata (an OptionButton its item values in `values`) and is saved to `project.godot` on change, so a new
-setting needs only a control in the scene; `SettingsDialogTests` checks that every registered setting is bound. The
+setting needs only a control in the scene (and its registration through `EPluginSettings.Register`); `SettingsDialogTests` checks that every registered setting is bound. The
 settings read the plugins once when they open and share them with their tabs (`PluginSnapshot`). Close dialogs with `EditorWindows.Release`, never `QueueFree` in the frame that hides them: freeing a window from its
 own button, or right after a reload while it has focus and the mouse, crashed Godot 4.7.2 on the next window message
 (use-after-free in its message handling). Release hides it now and frees it 0.25 s later through a native callable.
@@ -519,8 +527,11 @@ Readers skip fields they do not know, so a file written by a newer version does 
 fields they know: what an older version cannot represent is lost after a downgrade, and rolling the state back is not
 supported. Values older readers refuse go into new optional fields instead of existing ones: entries of plugins in
 subfolders (a slug with `/`) are written to `nestedPlugins`/`nestedLicenses`/`nestedWelcomes`/`nestedAttempts` and merged
-when read (`PluginStateStoreTests.PluginsInSubfoldersAreWrittenToListsOlderVersionsSkip`). A missing `plugins`/`attempts` list or another `schemaVersion` still makes the store read-only. A shared file that changed on disk since it was read (a git pull) is read again before a write
-(`PluginStateStore.Rebase`), which refuses only when the same entries changed there too, to other values than this write's. Licenses and welcome pages
+when read (`PluginStateStoreTests.PluginsInSubfoldersAreWrittenToListsOlderVersionsSkip`). A missing `plugins`/`attempts` list or another `schemaVersion` still makes the store read-only. The values of
+`PersistedPluginState` are frozen: they are written by name and read with `allowIntegerValues: false`, so an older
+reader fails on a value it does not know; a new state goes into a new optional field. The JSON documents are in
+`PluginStateDocuments`, the local attempts in `PluginStateStore.Attempts.cs`. A shared file that changed on disk since it was read (a git pull) is read again before a write
+(`PluginStateStore.Rebase`, merging through the pure `SharedStateMerge`), which refuses only when the same entries changed there too, to other values than this write's. Licenses and welcome pages
 recorded while the file could not be written stay recorded for the session, also when it is read again, and the next
 write that succeeds saves them; Engine metadata keeps them across assembly reloads (`RestoreUnsavedState`). Only an update's acknowledgement sets `lastCompletedAttemptId` (recovery and rollback compare
 it with the journal); lifecycle completions keep it and skip writing the shared file when no entry changed, because
@@ -550,7 +561,8 @@ skips the dialog.
 
 A plugin's welcome page comes from the recipe's `SetWelcome` (text, or a `res://` path), else `welcome_file` in
 `plugin.cfg`, else its root README (`README.md`, `README.txt`, `README`, case-insensitive); without any of these it has
-none. `Internal/Welcomes/PluginWelcome.cs` is pure and unit-tested and reuses `PluginLicense`'s path rules and display.
+none. `Internal/Welcomes/PluginWelcome.cs` is pure and unit-tested and shares the path rules, display and reading of files (at most 1 MiB) with `PluginLicense`
+(`Internal/PluginTextFile.cs`).
 Shown pages live in the optional `welcomes` list of the shared `eplugin-state.json` (`PluginStateStore.TryRecordWelcomes`),
 recorded by slug only, so a page is shown once per project and omitted while empty like `licenses`.
 `EGlobal.Welcomes.cs` has no lifecycle hook: `EPluginPlugin._Process` calls `TakeWelcomes` every frame, which every 30
