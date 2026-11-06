@@ -1,8 +1,8 @@
 {
- "commit": "2556613aea980557fe62fc4606bfdb1a177254a1",
- "date": "2026-11-06T06:02:34Z",
- "covered": 12898,
- "coverable": 14211,
+ "commit": "e3e0a63d28287e241f9ed2b3d24cf725592330af",
+ "date": "2026-11-06T06:03:17Z",
+ "covered": 12925,
+ "coverable": 14224,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -109,24 +109,28 @@
    35
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Activation.cs": [
-   327,
-   367
+   317,
+   357
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.AddonInstall.cs": [
    28,
    34
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Deactivation.cs": [
-   165,
-   172
+   152,
+   159
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.EditorThread.cs": [
+   21,
+   22
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.ExtensionAddons.cs": [
    17,
    17
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Licenses.cs": [
-   326,
-   339
+   278,
+   290
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.LocalCleanup.cs": [
    20,
@@ -141,12 +145,12 @@
    32
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.OptionalDependencies.cs": [
-   108,
-   112
+   107,
+   111
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.PlainPlugins.cs": [
    128,
-   141
+   140
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.PluginManager.cs": [
    96,
@@ -156,17 +160,25 @@
    114,
    127
   ],
+  "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Recipes.cs": [
+   25,
+   25
+  ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Retry.cs": [
    138,
    160
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Transitions.cs": [
-   197,
-   241
+   192,
+   235
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UnsavedState.cs": [
+   18,
+   19
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateApply.cs": [
-   199,
-   303
+   200,
+   304
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.UpdateRecipes.cs": [
    188,
@@ -181,16 +193,16 @@
    9
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Updates.cs": [
-   145,
-   171
+   124,
+   149
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Welcomes.cs": [
-   70,
-   75
+   69,
+   74
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.cs": [
-   273,
-   308
+   272,
+   294
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EPluginProgress.cs": [
    1,
@@ -211,6 +223,10 @@
   "src/eplugin-framework/addons/ePlugin/Internal/ExportFilter.cs": [
    0,
    4
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/FrameThrottle.cs": [
+   9,
+   9
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Kinds/CSharpPluginWorkflow.cs": [
    4,
@@ -393,8 +409,8 @@
    74
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PluginContext.cs": [
-   14,
-   14
+   13,
+   13
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/PluginStateDocuments.cs": [
    138,
@@ -443,6 +459,10 @@
   "src/eplugin-framework/addons/ePlugin/Internal/StateFileProblem.cs": [
    22,
    27
+  ],
+  "src/eplugin-framework/addons/ePlugin/Internal/TransitionCoordinator.cs": [
+   54,
+   55
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Update/AddonArchive.cs": [
    48,
