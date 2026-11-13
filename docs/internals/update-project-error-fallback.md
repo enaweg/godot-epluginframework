@@ -15,8 +15,8 @@ Where the implementation differs from the plan below:
   `...\"` escapes its quote on Windows), and errors-only logs of parallel builds prefix lines with the node (`1:7>`).
 - Names: the causes are `ProjectCode`/`PluginCode` (not `ProjectOnly`/`Plugin`/`Project`); the probe is the
   *plugins-only build*: `ICheckedDotnetCli.TryBuildPluginsOnly(PluginsOnlyBuild)` and `IUpdateHost.BuildPluginsOnly`
-  (not `TryProbeBuild(ProbeBuild)`/`IUpdateHost.ProbeBuild`), run from `UpdateApplier.BuildPasses` (not
-  `BuildFailureFallback`) and recorded in `journal.Builds` as `<name>-plugins-only`, e.g. `interim-plugins-only` (not
+  (not `TryProbeBuild(ProbeBuild)`/`IUpdateHost.ProbeBuild`), run from `UpdateBuildGate` (not
+  `BuildFailureFallback`; `UpdateApplier.BuildPasses` until the build gate was split out of the applier) and recorded in `journal.Builds` as `<name>-plugins-only`, e.g. `interim-plugins-only` (not
   `probe-interim`), with its errors in `build-<name>-plugins-only.errors.log`. Its targets file and outputs are in
   `<journal>/<name>-plugins-only/` (`plugins-only.targets`, `bin/`), not `<journal>/probe/`, which is deleted after it.
 - Journal fields: `PluginsBuildAlone` records the plugins-only build's result, and `KeepProjectFiles` (e4c8ee6) skips
