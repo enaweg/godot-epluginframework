@@ -1,8 +1,8 @@
 {
- "commit": "a0f933d32d71c96f3f663a47062a2aeb4e1de240",
- "date": "2026-11-13T08:53:31Z",
- "covered": 12943,
- "coverable": 14207,
+ "commit": "4da2566edc71f717ea5842f38e3e45b834a53db7",
+ "date": "2026-11-13T09:33:15Z",
+ "covered": 12960,
+ "coverable": 14228,
  "files": {
   "src/eplugin-framework/addons/ePlugin/EEditorPluginMetadata.cs": [
    4,
@@ -153,16 +153,16 @@
    140
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.PluginManager.cs": [
-   96,
-   103
+   95,
+   102
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.RecipeOperations.cs": [
    114,
    127
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Recipes.cs": [
-   25,
-   25
+   26,
+   26
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/EGlobal.Retry.cs": [
    138,
@@ -321,8 +321,8 @@
    84
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EPluginManagerDialog.cs": [
-   349,
-   399
+   353,
+   407
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/EditorIcons.cs": [
    57,
@@ -365,8 +365,8 @@
    10
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/PluginManagerViewModel.cs": [
-   328,
-   334
+   341,
+   347
   ],
   "src/eplugin-framework/addons/ePlugin/Internal/Manager/PluginOperationGate.cs": [
    11,
