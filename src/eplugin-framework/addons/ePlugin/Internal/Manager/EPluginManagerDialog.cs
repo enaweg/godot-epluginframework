@@ -69,6 +69,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
     // Read on selection rather than for every row: a disabled ePlugin's recipe needs a throw-away instance of its plugin.
     private readonly Dictionary<string, LicenseInfo?> _licenses = [];
     private readonly Dictionary<string, WelcomeEntry?> _welcomes = [];
+    private readonly Dictionary<string, EEditorPluginRecipe?> _recipes = [];
     private UpdateCandidate? _pendingVersion;
     private bool _pendingDowngrade;
     private bool _pendingReinstall;
@@ -242,7 +243,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         // A new add-on staged by Install from ZIP waits for its confirmation, which clears it; e.g. the local index
         // finishing in the meantime must not drop it. Installing checks its folder again.
         if (_updates.StagedAddon is null) _updates.Clear();
-        _licenses.Clear(); _welcomes.Clear();
+        _licenses.Clear(); _welcomes.Clear(); _recipes.Clear();
         var plugins = _global.CollectPlugins();
         _targets = _global.CollectUpdateTargets();
         _model = new(plugins, _global.PendingUpdates, _targets, _global.UpdateCache, candidate => _global.UpdatePreflightFindings([candidate]));
@@ -385,7 +386,7 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         _detailsIcon.Visible = _detailsIcon.Texture is not null;
         _detailsName.Text = row is null ? "No plugin selected" : PluginManagerViewModel.DetailsTitle(row.Plugin);
         _keptUpdate = row is null ? null : _global.KeptUpdate(row.Plugin.Slug);
-        _detailsText.Text = row is null ? "Select a plugin to see its details." : PluginManagerViewModel.Describe(row, LicenseOf(row), WelcomeOf(row), _keptUpdate);
+        _detailsText.Text = row is null ? "Select a plugin to see its details." : PluginManagerViewModel.Describe(row, LicenseOf(row), WelcomeOf(row), _keptUpdate, RecipeOf(row));
         // the same links the details text offers
         _release.Visible = PluginManagerViewModel.IsWebUrl(row?.Update?.Candidate.ReleaseUrl);
         _locationRow.Visible = row is not null;
@@ -414,6 +415,15 @@ internal sealed partial class EPluginManagerDialog : ConfirmationDialog, ISerial
         try { welcome = _global.DescribeWelcome(row.Plugin.Slug); }
         catch (Exception ex) { GD.PushError($"Cannot read the welcome page of {row.Plugin.Slug}: {ex.Message}"); welcome = null; }
         return _welcomes[row.Plugin.Slug] = welcome;
+    }
+
+    private EEditorPluginRecipe? RecipeOf(PluginRow row)
+    {
+        if (row.Plugin.Missing || row.Plugin.Kind != PluginKind.EPlugin) return null;
+        if (_recipes.TryGetValue(row.Plugin.Slug, out var recipe)) return recipe;
+        try { recipe = _global.DescribeRecipe(row.Plugin.Slug); }
+        catch (Exception ex) { GD.PushError($"Cannot read the recipe of {row.Plugin.Slug}: {ex.Message}"); recipe = null; }
+        return _recipes[row.Plugin.Slug] = recipe;
     }
 
     private void DetailsLinkClicked(Variant meta)
