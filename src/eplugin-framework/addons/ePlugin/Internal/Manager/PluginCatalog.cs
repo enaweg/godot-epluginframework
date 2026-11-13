@@ -37,8 +37,6 @@ internal sealed record PluginInfo(string Slug, string Name, PluginKind Kind, boo
     public string? ConfigProblem { get; init; }
     /// <summary>A local attempt that failed or was interrupted and is retried, rolled back or given up on under Needs attention.</summary>
     public LocalPluginAttempt? FailedAttempt { get; init; }
-    /// <summary>The recipe, when the plugin already created it in this session.</summary>
-    public EEditorPluginRecipe? Recipe { get; init; }
     public bool Missing { get; init; }
     /// <summary>
     /// The plugin whose folder holds this one, a sub-plugin Godot does not list and that is listed only while it is

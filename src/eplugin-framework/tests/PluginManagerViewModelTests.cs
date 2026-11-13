@@ -151,14 +151,13 @@ public class PluginManagerViewModelTests
         var recipe = new EEditorPluginRecipe();
         recipe.PluginDependencies.Add(new("ePlugin", null)); recipe.PluginDependencies.Add(new("other", "1.2"));
         recipe.Nugets.Add(new("Newtonsoft.Json", "13.0.3", null));
-        var model = new PluginManagerViewModel([Plugin("beta", PluginKind.EPlugin) with { Description = "[b]bold[/b]", Recipe = recipe }],
+        var model = new PluginManagerViewModel([Plugin("beta", PluginKind.EPlugin) with { Description = "[b]bold[/b]" }],
             [candidate], [new("beta", "beta", "1.0.0", candidate.SourceUrl, "/unused")], null, _ => []);
-        var details = PluginManagerViewModel.Describe(model.Plugins[0]);
+        var details = PluginManagerViewModel.Describe(model.Plugins[0], recipe: recipe);
         Assertions.AssertString(details).Contains("1.0.0 → [color=#70e070]2.0.0[/color]");
         Assertions.AssertString(details).Contains("[lb]b]bold[lb]/b]");
-        Assertions.AssertString(details).Contains("• other 1.2");
-        Assertions.AssertString(details).Contains("• Newtonsoft.Json 13.0.3");
-        Assertions.AssertString(details).NotContains("• ePlugin");
+        Assertions.AssertString(details).Contains("Requires: other 1.2\n");
+        Assertions.AssertString(details).EndsWith("NuGet: Newtonsoft.Json 13.0.3");
         Assertions.AssertString(details).Contains("[b]Update site:[/b] [url=https://example.org/releases]https://example.org/releases[/url]");
         var git = new PluginRow(Plugin("git", PluginKind.GDScript, "git@host:owner/repo.git"), null);
         Assertions.AssertString(PluginManagerViewModel.Describe(git)).Contains("[b]Update site:[/b] git@host:owner/repo.git");
@@ -166,6 +165,39 @@ public class PluginManagerViewModelTests
         foreach (var unsafeUrl in new[] { "git@host:owner/repo.git", "ssh://host/repo.git", "https://user:pw@host/x", "https://host/a]b", "file:///etc" })
             Assertions.AssertBool(PluginManagerViewModel.IsWebUrl(unsafeUrl)).IsFalse();
         Assertions.AssertString(PluginManagerViewModel.Describe(new(Plugin("plain", PluginKind.GDScript), null))).Contains("no update_url");
+    }
+    [TestCase]
+    public static void DetailsSummarizeWhatTheRecipeInstalls()
+    {
+        var recipe = new EEditorPluginRecipe();
+        recipe.PluginDependencies.Add(new("ePlugin", null));
+        recipe.Nugets.Add(new("Newtonsoft.Json", "13.0.3", null)); recipe.Nugets.Add(new("Local.Package", null, "res://packages"));
+        recipe.Projects.Add(new("res://lib/Lib.csproj", null, true)); recipe.Projects.Add(new("res://tools/Tool.csproj", "Tools", false));
+        recipe.Autoloads.Add(new("Hub", "res://addons/beta/Hub.cs"));
+        recipe.Directories.Add("res://addons/beta/.src");
+        var nested = new EEditorPluginRecipe();
+        nested.Nugets.Add(new("Bridge", "1.0", null)); nested.Autoloads.Add(new("BridgeHub", "res://addons/beta/BridgeHub.cs"));
+        recipe.OptionalPluginDependencies.Add(new("other", ">=2.0", nested));
+        recipe.OptionalPluginDependencies.Add(new("empty", null, new EEditorPluginRecipe()));
+
+        var disabled = PluginManagerViewModel.RecipeSection(recipe, Plugin("beta", PluginKind.EPlugin, enabled: false));
+        Assertions.AssertString(disabled).IsEqual(
+            "\n[b]Recipe[/b] (installed when enabled)\n" +
+            "Optional: other >=2.0 (adds NuGet Bridge 1.0; autoload BridgeHub), empty\n" +
+            "NuGet: Newtonsoft.Json 13.0.3, Local.Package\n" +
+            "Projects: res://lib/Lib.csproj (referenced), res://tools/Tool.csproj (solution only)\n" +
+            "Autoloads: Hub\n" +
+            "Directories: res://addons/beta/.src\n");
+        var active = Plugin("beta", PluginKind.EPlugin) with { State = EEditorPluginState.Activated };
+        Assertions.AssertString(PluginManagerViewModel.RecipeSection(recipe, active)).StartsWith("\n[b]Recipe[/b] (installed)\n");
+        var waiting = active with { State = EEditorPluginState.Created };
+        Assertions.AssertString(PluginManagerViewModel.RecipeSection(recipe, waiting)).StartsWith("\n[b]Recipe[/b]\n");
+
+        var bare = new EEditorPluginRecipe();
+        bare.PluginDependencies.Add(new("ePlugin", null));
+        Assertions.AssertString(PluginManagerViewModel.RecipeSection(bare, active)).EndsWith("\nInstalls nothing.\n");
+        var row = new PluginRow(Plugin("beta", PluginKind.EPlugin), null);
+        Assertions.AssertString(PluginManagerViewModel.Describe(row)).NotContains("[b]Recipe[/b]");
     }
     [TestCase]
     public static void PluginPagesScaleTheirFontSizesWithTheEditor()

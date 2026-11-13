@@ -39,6 +39,9 @@ internal sealed partial class EGlobal
         }
     }
 
+    /// <summary>The recipe the ePlugin Manager summarizes in a plugin's details; null for other plugins.</summary>
+    internal EEditorPluginRecipe? DescribeRecipe(string slug) => RecipeOf(slug);
+
     /// <summary>
     /// A disabled ePlugin has no editor instance, but its script type is compiled. A throw-away instance creates the
     /// recipe, which is deterministic and side-effect free.

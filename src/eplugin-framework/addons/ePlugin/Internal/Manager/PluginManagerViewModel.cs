@@ -434,7 +434,9 @@ internal sealed class PluginManagerViewModel
     /// is escaped.
     /// </summary>
     /// <param name="kept">The plugin's update kept with build errors, see <see cref="KeptUpdateSection"/>.</param>
-    public static string Describe(PluginRow row, LicenseInfo? license = null, WelcomeEntry? welcome = null, UpdateJournal? kept = null)
+    /// <param name="recipe">The recipe of an ePlugin, see <see cref="RecipeSection"/>.</param>
+    public static string Describe(PluginRow row, LicenseInfo? license = null, WelcomeEntry? welcome = null, UpdateJournal? kept = null,
+        EEditorPluginRecipe? recipe = null)
     {
         var plugin = row.Plugin; var text = new StringBuilder();
         void Line(string label, string? value) { if (!string.IsNullOrWhiteSpace(value)) text.Append(CultureInfo.CurrentCulture, $"[b]{label}:[/b] {Escape(value)}\n"); }
@@ -505,26 +507,47 @@ internal sealed class PluginManagerViewModel
         }
         if (plugin.LocalPackages > 0 && !submodule) Line("Local packages", plugin.LocalPackages.ToString(CultureInfo.CurrentCulture));
 
-        if (plugin.Recipe is { } recipe)
-        {
-            var hard = recipe.PluginDependencies.Where(d => d.Slug != Framework.Slug).Select(d => d.Slug + Version(d.Version)).ToArray();
-            List("Plugin dependencies", hard);
-            List("Optional dependencies", recipe.OptionalPluginDependencies.Select(d => d.Slug + Version(d.Version)));
-            List("NuGet packages", recipe.Nugets.Select(n => n.Name + Version(n.Version)));
-            List("Projects", recipe.Projects.Select(p => p.Path));
-            List("Autoloads", recipe.Autoloads.Select(a => a.Name));
-            List("Managed directories", recipe.Directories);
-        }
+        if (recipe is not null) text.Append(RecipeSection(recipe, plugin));
         return text.ToString().TrimEnd();
-
-        void List(string title, IEnumerable<string> items)
-        {
-            var values = items.ToArray();
-            if (values.Length == 0) return;
-            text.Append(CultureInfo.CurrentCulture, $"\n[b]{title}[/b]\n");
-            foreach (var value in values) text.Append("• ").Append(Escape(value)).Append('\n');
-        }
     }
+
+    /// <summary>
+    /// What an ePlugin's recipe installs, one short line per kind: required and optional plugins (with what an optional
+    /// dependency adds while that plugin is enabled), NuGet packages, projects, autoloads and managed directories.
+    /// </summary>
+    public static string RecipeSection(EEditorPluginRecipe recipe, PluginInfo plugin)
+    {
+        var state = plugin.State == EEditorPluginState.Activated ? " (installed)" : !plugin.Enabled ? " (installed when enabled)" : "";
+        var text = new StringBuilder("\n[b]Recipe[/b]").Append(state).Append('\n');
+        var empty = true;
+        void Line(string label, IEnumerable<string> items)
+        {
+            var values = string.Join(", ", items);
+            if (values.Length == 0) return;
+            text.Append(CultureInfo.CurrentCulture, $"{label}: {Escape(values)}\n");
+            empty = false;
+        }
+        Line("Requires", recipe.PluginDependencies.Where(d => d.Slug != Framework.Slug).Select(d => d.Slug + Version(d.Version)));
+        Line("Optional", recipe.OptionalPluginDependencies.Select(d => d.Slug + Version(d.Version) +
+            (RecipeResources(d.Recipe) is { Length: > 0 } adds ? $" (adds {adds})" : "")));
+        Line("NuGet", recipe.Nugets.Select(Nuget));
+        Line("Projects", recipe.Projects.Select(Project));
+        Line("Autoloads", recipe.Autoloads.Select(a => a.Name));
+        Line("Directories", recipe.Directories);
+        if (empty) text.Append("Installs nothing.\n");
+        return text.ToString();
+    }
+
+    /// <summary>The resources of a nested recipe in one phrase, e.g. "NuGet A 1.0, autoload B"; empty without any.</summary>
+    private static string RecipeResources(EEditorPluginRecipe recipe) => string.Join("; ", new[]
+    {
+        Phrase("NuGet", recipe.Nugets.Select(Nuget)), Phrase("project", recipe.Projects.Select(Project)),
+        Phrase("autoload", recipe.Autoloads.Select(a => a.Name)), Phrase("directory", recipe.Directories)
+    }.Where(p => p.Length > 0));
+
+    private static string Phrase(string label, IEnumerable<string> items) => string.Join(", ", items) is { Length: > 0 } values ? $"{label} {values}" : "";
+    private static string Nuget(EEditorPluginRecipe.Nuget nuget) => nuget.Name + Version(nuget.Version);
+    private static string Project(EEditorPluginRecipe.Project project) => project.Path + (project.Reference ? " (referenced)" : " (solution only)");
     private static string Version(string? version) => string.IsNullOrWhiteSpace(version) ? "" : " " + version;
     internal static string Escape(string value) => value.Replace("[", "[lb]");
     /// <summary>

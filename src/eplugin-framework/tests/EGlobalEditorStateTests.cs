@@ -56,13 +56,14 @@ public class EGlobalEditorStateTests : IDisposable
         _fixture.AddEPlugin("app", b => b.AddNuget("App.Package"), "1.2.0",
             "author=\"Someone\"\ndescription=\"Does things\"\nupdate_url=\"https://example.org/app/releases\"\ndocumentation_url=\"https://example.org/docs\"");
         _fixture.AddPlainPlugin("tool", "0.5");
+        _fixture.AddEPlugin("off", b => b.AddNuget("Off.Package"));
         Directory.CreateDirectory(Path.Combine(_fixture.Root, "addons", "assets"));
         _fixture.Enable("app");
         FailAttempt("gone");
 
         var plugins = _fixture.Global.CollectPlugins().ToDictionary(p => p.Slug);
 
-        Assertions.AssertThat(plugins.Keys.Order(StringComparer.Ordinal).ToArray()).ContainsExactly("app", "gone", "tool");
+        Assertions.AssertThat(plugins.Keys.Order(StringComparer.Ordinal).ToArray()).ContainsExactly("app", "gone", "off", "tool");
         var app = plugins["app"];
         Assertions.AssertBool(app.Enabled).IsTrue();
         Assertions.AssertString(app.Version).IsEqual("1.2.0");
@@ -72,7 +73,10 @@ public class EGlobalEditorStateTests : IDisposable
         Assertions.AssertString(app.DocumentationUrl).IsEqual("https://example.org/docs");
         Assertions.AssertObject(app.SourceUrl).IsNull();
         Assertions.AssertObject(app.State).IsEqual(EEditorPluginState.Activated);
-        Assertions.AssertString(app.Recipe!.Nugets.Single().Name).IsEqual("App.Package");
+        Assertions.AssertString(_fixture.Global.DescribeRecipe("app")!.Nugets.Single().Name).IsEqual("App.Package");
+        // the manager's details summarize a disabled ePlugin's recipe too
+        Assertions.AssertString(_fixture.Global.DescribeRecipe("off")!.Nugets.Single().Name).IsEqual("Off.Package");
+        Assertions.AssertObject(_fixture.Global.DescribeRecipe("tool")).IsNull();
         var tool = plugins["tool"];
         Assertions.AssertBool(tool.Enabled).IsFalse();
         Assertions.AssertString(tool.Version).IsEqual("0.5");
