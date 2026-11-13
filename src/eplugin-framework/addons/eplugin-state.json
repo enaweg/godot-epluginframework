@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "lastCompletedAttemptId": "bbe35dce-89a5-42f3-a9a5-21e850463c8d",
+  "lastCompletedAttemptId": "bf5ae392-b576-46fd-9fc1-2fa6e6d9cc3b",
   "plugins": [
     {
       "slug": "ePlugin",
@@ -9,7 +9,7 @@
     },
     {
       "slug": "gdUnit4",
-      "version": "6.2.2",
+      "version": "6.2.3",
       "state": "activated"
     },
     {
@@ -38,6 +38,11 @@
       "slug": "ePlugin",
       "version": "1.0",
       "shownUtc": "2026-10-10T08:05:33.9704884+00:00"
+    },
+    {
+      "slug": "gdUnit4",
+      "version": "6.2.3",
+      "shownUtc": "2026-11-04T14:58:38.5625188+00:00"
     },
     {
       "slug": "sample_dependant_plugin",
