@@ -16,6 +16,7 @@
 ![Godot 4.5](https://img.shields.io/badge/Godot-v4.5-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
 ![Godot 4.6](https://img.shields.io/badge/Godot-v4.6-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
 ![Godot 4.7](https://img.shields.io/badge/Godot-v4.7-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
+![Godot 4.8](https://img.shields.io/badge/Godot-v4.8-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
 
 ![Dotnet 8](https://img.shields.io/badge/8-202020?logo=dotnet&logoSize=auto&logoColor=purple&color=darkgreen&labelColor=E0E0E0)
 ![Dotnet 10](https://img.shields.io/badge/10-202020?logo=dotnet&logoSize=auto&logoColor=purple&color=darkgreen&labelColor=E0E0E0)
@@ -26,7 +27,7 @@ ePlugin Framework adds declarative dependency and resource management to Godot e
 
 ## Requirements and installation
 
-The project targets `net8.0`. The current CI-tested setup is [Godot 4.7.2 .NET](https://godotengine.org/download/archive/4.7.2-stable/) with the [.NET 8](https://dotnet.microsoft.com/download/dotnet/8.0) and [.NET 10](https://dotnet.microsoft.com/download/dotnet/10.0) SDKs. Other tested combinations are listed under [Testing](#testing).
+The project targets `net8.0`. The current CI-tested setup is [Godot 4.7.2 .NET](https://godotengine.org/download/archive/4.7.2-stable/) with the [.NET 8](https://dotnet.microsoft.com/download/dotnet/8.0) and [.NET 10](https://dotnet.microsoft.com/download/dotnet/10.0) SDKs. Godot 4.8 works as well (tested with 4.8.0-beta4). Other tested combinations are listed under [Testing](#testing).
 
 Install [ePlugin Framework from the Godot Asset Store](https://store.godotengine.org/asset/enaweg/eplugin-framework/), or download a [release](https://github.com/enaweg/godot-epluginframework/releases) and copy its `addons/ePlugin` directory into your project's `addons` folder. Open the project in the Godot .NET editor and build it (**Build** at the top right; a project without C# code needs **Project > Tools > C# > Create C# solution** first), so Godot can load the plugin's C# script. Then enable **ePlugin** under **Project > Project Settings > Plugins**, followed by the ePlugins you want to use (enabling an ePlugin first enables ePlugin too).
 
@@ -108,7 +109,7 @@ Updates replace whole addon folders, except git submodules, which are checked ou
 
 ## Testing
 
-CI tests pull requests and pushes to `main` with Godot 4.7.2 and both the .NET 8 and the .NET 10 SDK, which use different dotnet command forms, and builds the framework against the Godot 4.6.2, 4.5.1 and 4.4.1 SDKs. Running it on those older Godot versions is tested by hand.
+CI tests pull requests and pushes to `main` with Godot 4.7.2 and both the .NET 8 and the .NET 10 SDK, which use different dotnet command forms, and builds the framework against the Godot 4.6.2, 4.5.1 and 4.4.1 SDKs. Running it on those older Godot versions is tested by hand. Godot 4.8 is tested by hand too, with 4.8.0-beta4: the framework builds against its SDK, and the framework tests pass in its editor. They are built against the 4.7.2 SDK for that, because gdUnit4 does not build against the 4.8 SDK yet.
 
 Static analysis also runs SDK analyzers, dependency vulnerability auditing, workflow lint and CodeQL security checks on pull requests and `main`. Counts appear in the PR's CI comment and workflow summaries, and findings appear in code-scanning views. See [Static analysis in CI](docs/static-analysis.md) for the policy, reports and local commands.
 
